@@ -324,14 +324,7 @@
   .breach-day .bd-name{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;}
   .breach-day .bd-val{font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;}
 
-  /* ── AI FEATURES ── */
-  .ai-chat-btn{position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#00ccff,#8855ff);border:none;cursor:pointer;z-index:1000;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 20px rgba(0,204,255,0.4);transition:transform 0.2s;}
-  .ai-chat-btn:hover{transform:scale(1.1);}
-  .ai-panel{position:fixed;bottom:90px;right:24px;width:420px;max-height:600px;background:var(--bg2);border:1px solid var(--cyan);border-radius:8px;z-index:1000;display:none;flex-direction:column;box-shadow:0 8px 40px rgba(0,204,255,0.2);}
-  .ai-panel.open{display:flex;}
-  .ai-panel-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
-  .ai-panel-title{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);}
-  .ai-panel-close{background:none;border:none;color:var(--text2);cursor:pointer;font-size:18px;padding:0;}
+  /* AI features removed */
   .ai-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;max-height:400px;}
   .ai-msg{padding:10px 12px;border-radius:6px;font-size:13px;line-height:1.5;}
   .ai-msg.user{background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.2);margin-left:20px;color:var(--cyan);}
@@ -399,8 +392,9 @@
   <div class="tab" onclick="switchTab('volhistory')">VOLUME HISTORY</div>
   <div class="tab" onclick="switchTab('media')">▶ MEDIA</div>
   <div class="tab" onclick="switchTab('journal')">⬡ JOURNAL</div>
-  <div class="tab" onclick="switchTab('ai')">⬡ AI</div>
+
   <div class="tab" onclick="switchTab('edgestats')">STATS</div>
+  <div class="tab" onclick="switchTab('analog')">⬡ 2015 ANALOG</div>
 </div>
 
 <div class="content">
@@ -428,7 +422,7 @@
     </div>
     <div class="panel">
       <div class="panel-label">⬡ EVENT IMPACT </div>
-      <div id="aiEventImpact"><div class="no-data">Analyzing events...</div></div>
+
     </div>
     <div class="panel">
       <div class="panel-label">⬡ ECONOMIC CALENDAR</div>
@@ -455,7 +449,7 @@
     </div>
     <div class="panel" style="display:flex;flex-direction:column;overflow:hidden;height:420px;">
       <div class="panel-label" style="flex-shrink:0;">⬡ MARKET OUTLOOK</div>
-      <div id="hubNarrative" style="flex:1;overflow-y:auto;font-size:14px;line-height:1.7;color:var(--text2);"><div class="no-data">Generating outlook...</div></div>
+      <div id="hubNarrative" style="flex:1;overflow-y:auto;font-size:14px;line-height:1.7;color:var(--text2);"></div>
     </div>
   </div>
   <!-- Row 5: News full width -->
@@ -538,16 +532,51 @@
      VOLATILITY
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-volatility">
+  <!-- Row 1: Big vol cards -->
   <div id="volMainRow" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:10px;"></div>
-  <div class="grid-2" style="margin-bottom:10px;">
+
+  <!-- Row 2: Intraday Range Dashboard -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+    <div class="panel">
+      <div class="panel-label">⬡ INTRADAY RANGE vs ATR</div>
+      <div id="volRangeATR"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">⬡ EXPECTED MOVE CALCULATOR</div>
+      <div id="volExpectedMove"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">⬡ IV RANK &amp; PERCENTILE</div>
+      <div id="volIVRank"></div>
+    </div>
+  </div>
+
+  <!-- Row 3: VIX Term + Options Flow + Signals -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
     <div class="panel">
       <div class="panel-label">⬡ VIX TERM STRUCTURE</div>
       <div style="padding:8px 0;" id="volVixTerm"></div>
       <div style="margin-top:12px;" id="contangoBox"></div>
     </div>
     <div class="panel">
-      <div class="panel-label">⬡ VOLATILITY SIGNALS </div>
+      <div class="panel-label">⬡ OPTIONS FLOW — P/C RATIO</div>
+      <div id="volOptionsFlow"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">⬡ VOLATILITY SIGNALS</div>
       <div id="volSignals"></div>
+    </div>
+  </div>
+
+  <!-- Row 4: Session Vol Profile + Intraday Context -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+    <div class="panel">
+      <div class="panel-label">⬡ SESSION VOLATILITY PROFILE</div>
+      <div id="volSessionProfile"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">⬡ DAY RANGE HISTORY — LAST 15 SESSIONS</div>
+      <div id="volRangeHistory"></div>
     </div>
   </div>
 </div>
@@ -946,42 +975,47 @@
   </div>
 </div>
 
+
+
 <!-- ═══════════════════════════════════════════════════════
-     AI
+     2015 ANALOG
 ════════════════════════════════════════════════════════ -->
-<div class="tab-panel" id="panel-ai">
-  <!-- Row 1: 3 columns -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
-    <div class="panel">
-      <div class="panel-label">⬡ DAILY MARKET SUMMARY</div>
-      <div id="aiSummary" class="ai-summary-box loading">⟳ Generating summary...</div>
-    </div>
-    <div class="panel">
-      <div class="panel-label">⬡ PATTERN ALERTS</div>
-      <div id="aiAlerts"><div class="no-data">Scanning for patterns...</div></div>
-    </div>
-    <div class="panel">
-      <div class="panel-label">⬡ TRADE IDEAS</div>
-      <div id="aiTradeIdeas"><div class="no-data">Analyzing setups...</div></div>
-    </div>
+<div class="tab-panel" id="panel-analog">
+  <!-- Row 1: Header cards -->
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:10px;" id="analogCards"></div>
+  <!-- Row 2: Overlay chart -->
+  <div class="panel" style="margin-bottom:10px;">
+    <div class="panel-label">⬡ 2015 vs 2026 — % RETURN FROM CYCLE LOW · DAY BY DAY OVERLAY</div>
+    <div id="analogChart" style="position:relative;height:320px;"></div>
   </div>
-  <!-- Row 2: 3 columns -->
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
-    <div class="panel">
-      <div class="panel-label">⬡ LEVEL ANALYSIS</div>
-      <div id="aiLevelAnalysis"><div class="no-data">Analyzing levels...</div></div>
-    </div>
-    <div class="panel">
-      <div class="panel-label">⬡ VOLUME ANALYSIS</div>
-      <div id="aiVolumeAnalysis"><div class="no-data">Analyzing volume...</div></div>
-    </div>
-    <div class="panel">
-      <div class="panel-label">⬡ RISK ASSESSMENT</div>
-      <div id="aiRiskAssessment"><div class="no-data">Assessing risks...</div></div>
+  <!-- Row 3: Milestone roadmap -->
+  <div class="panel" style="margin-bottom:10px;">
+    <div class="panel-label">⬡ 2015 ROADMAP — PROJECTED LEVELS IF ANALOG HOLDS</div>
+    <div id="analogRoadmap"></div>
+  </div>
+  <!-- Row 4: Day by day table -->
+  <div class="panel" style="margin-bottom:10px;">
+    <div class="panel-label">⬡ DAY-BY-DAY COMPARISON — HISTORICAL (DAYS 1–86) + PROJECTION</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;" id="analogTableControls"></div>
+    <div style="max-height:400px;overflow-y:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;" id="analogTable">
+        <thead style="position:sticky;top:0;background:var(--bg2);">
+          <tr>
+            <th style="padding:6px 8px;text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DAY</th>
+            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">2015 DATE</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">SPY 2015</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">% FROM LOW</th>
+            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">2026 DATE</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">SPY 2026</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">% FROM LOW</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DIVERGENCE</th>
+          </tr>
+        </thead>
+        <tbody id="analogTableBody"></tbody>
+      </table>
     </div>
   </div>
 </div>
-
 <!-- ═══════════════════════════════════════════════════════
      GEX
 ════════════════════════════════════════════════════════ -->
@@ -1097,10 +1131,7 @@
         <textarea id="journalNote" placeholder="Add a note about this chart (optional)..."
           style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;resize:none;height:60px;outline:none;margin-bottom:8px;"></textarea>
         <div style="display:flex;gap:8px;">
-          <button id="journalAnalyzeBtn" onclick="analyzeChart()" disabled
-            style="flex:1;background:var(--cyan);color:#000;border:none;border-radius:3px;padding:10px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;cursor:not-allowed;opacity:0.5;font-weight:bold;">
-            ⬡ ANALYZE WITH AI
-          </button>
+          
           <button onclick="clearJournalUpload()"
             style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);border-radius:3px;padding:10px 16px;font-family:'Orbitron',monospace;font-size:10px;cursor:pointer;">
             CLEAR
@@ -1131,20 +1162,7 @@
 </div><!-- /content -->
 
 <!-- FLOATING CHAT -->
-<button class="ai-chat-btn" onclick="toggleChat()" title="Ask AI">🤖</button>
-<div class="ai-panel" id="aiPanel">
-  <div class="ai-panel-header">
-    <span class="ai-panel-title">⬡ ASK ABOUT YOUR DATA</span>
-    <button class="ai-panel-close" onclick="toggleChat()">✕</button>
-  </div>
-  <div class="ai-messages" id="aiMessages">
-    <div class="ai-msg assistant">Hey! I have access to all your SPY dashboard data. Ask me anything — VIX levels, WEM position, sector performance, trade setups, whatever you want to know.</div>
-  </div>
-  <div class="ai-input-row">
-    <input class="ai-input" id="aiInput" placeholder="Ask about the data..." onkeydown="if(event.key==='Enter')sendChat()">
-    <button class="ai-send" id="aiSendBtn" onclick="sendChat()">SEND</button>
-  </div>
-</div>
+
 
 <script src="dashboard1.js"></script><script src="dashboard2.js"></script>
 
