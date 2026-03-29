@@ -16,6 +16,7 @@ function switchTab(id){
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
+  if(id==='analog') { renderAnalog(); }
 }
 
 // ── VIX bar marker ──
@@ -371,9 +372,7 @@ function renderHub(md,sd){
 
   // News feed + narrative + radar
   loadHubNews();
-  startNarrator();
   loadFuturesChart();
-  loadHubNarrative();
 }
 
 async function loadHubNews() {
@@ -573,58 +572,6 @@ function initHubRadar() {
   draw();
 }
 
-async function renderHubWeather() {
-  const el = $('hubWeatherTicker');
-  if(!el || !_md) return;
-  if(window._weatherCache) { startWeatherScroll(el, window._weatherCache); return; }
-
-  const q = _md.quotes || {};
-  const vix = q['^VIX']?.price || 0;
-  const fg = _md.fear_greed || {};
-  const fgVal = fg.value != null ? fg.value : fg.score || 50;
-  const tnx = q['^TNX']?.price || 0;
-  const irx = q['^IRX']?.price || 0;
-  const spread = tnx && irx ? (tnx - irx).toFixed(2) : 'N/A';
-  const dxy = q['DX-Y.NYB']?.price || 0;
-  const dxyChg = q['DX-Y.NYB']?.pct_change || 0;
-  const gold = q['GC=F']?.price || 0;
-  const goldChg = q['GC=F']?.pct_change || 0;
-  const btc = q['BTC-USD']?.price || 0;
-  const btcChg = q['BTC-USD']?.pct_change || 0;
-  const sectors = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU','XLC'];
-  const greenSectors = sectors.filter(s=>(q[s]?.pct_change||0)>0).length;
-  const pcr = _md.options_summary?.pc_ratio_vol || 0;
-  const spy = q['SPY'] || {};
-  const gex = _md.gex || {};
-
-  try {
-    const text = await callAI([{ role:'user', content:
-      `Market data snapshot:
-VIX: ${vix.toFixed(1)} | Fear & Greed: ${fgVal}/100 | PCR: ${pcr.toFixed(2)}
-10YR: ${tnx.toFixed(3)}% | 2YR: ${irx.toFixed(3)}% | Spread: ${spread}%
-DXY: ${dxy.toFixed(2)} (${dxyChg>0?'+':''}${dxyChg.toFixed(2)}%)
-Gold: $${gold.toFixed(0)} (${goldChg>0?'+':''}${goldChg.toFixed(2)}%)
-BTC: $${Math.round(btc)} (${btcChg>0?'+':''}${btcChg.toFixed(2)}%)
-Sectors green: ${greenSectors}/11
-GEX regime: ${gex.regime||'unknown'} | GEX flip: $${gex.flip_point||'N/A'}
-SPY: $${(spy.price||0).toFixed(2)} (${spy.pct_change>=0?'+':''}${(spy.pct_change||0).toFixed(2)}%)
-A/D ratio: ${_md.quotes?.['^ADVN']?.price&&_md.quotes?.['^DECN']?.price?(_md.quotes['^ADVN'].price/_md.quotes['^DECN'].price).toFixed(2):'N/A'}
-
-Write a market weather forecast in exactly ONE continuous sentence — like a weather broadcast but for the market. Be witty, sarcastic, and intelligent. Use weather metaphors. Reference the actual data. End with a dry one-liner. No line breaks. Keep it under 180 words.
-
-Example style: "Partly cloudy with a 73% chance of gamma-induced chop as dealers defend the $648 flip point while VIX loiters at 26 like a party guest who won't leave..."` }],
-      `You write sharp, funny market weather forecasts. One long flowing sentence like a weather broadcast. Always reference real data. Dry humor required.`,
-      300
-    );
-
-    const icons = vix>30?'🌩️':vix>20?'⛈️':vix>15?'⛅':'☀️';
-    const forecast = `${icons}  MARKET FORECAST  ·  ${text.trim()}  ·  ${icons}  MARKET FORECAST  ·  ${text.trim()}  ·  `;
-    window._weatherCache = forecast;
-    startWeatherScroll(el, forecast);
-  } catch(e) {
-    el.innerHTML = '<span style="color:var(--text3);">⛅ Market weather forecast unavailable — /ai endpoint required</span>';
-  }
-}
 
 function startWeatherScroll(el, text) {
   el.style.display = 'inline-block';
@@ -869,165 +816,6 @@ async function loadFuturesChart() {
 }
 
 
-async function loadHubNarrative() {
-  const el = $('hubNarrative');
-  if(!el) return;
-  if(window._narrativeCache) { el.innerHTML = window._narrativeCache; return; }
-
-  el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:16px 0;color:var(--text2);font-size:13px;">
-    <div style="width:8px;height:8px;border-radius:50%;background:var(--cyan);animation:pulse 1s infinite;flex-shrink:0;"></div>
-    Analyzing market data...
-  </div>`;
-
-  try {
-    const md = _md || {}, sd = _sd || [];
-    const q = md.quotes||{}, spy = q['SPY']||{};
-    const vix = q['^VIX']||{}, fg = md.fear_greed||{};
-    const fgVal = fg.value!=null?fg.value:fg.score;
-    const wems = md.weekly_em||[], wem = wems.find(w=>!w.week_close)||wems[0];
-    const gex = md.gex||{}, pcr = md.options_summary?.pc_ratio_vol;
-    const tnx = q['^TNX']||{}, irx = q['^IRX']||{};
-    const spread = tnx.price&&irx.price?tnx.price-irx.price:null;
-    const btc = q['BTC-USD']||{}, gold = q['GC=F']||{}, dxy = q['DX-Y.NYB']||{};
-    const sectors = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU','XLC'];
-    const sectorStr = sectors.map(s=>q[s]?`${s}:${(q[s].pct_change||0).toFixed(2)}%`:'').filter(Boolean).join(', ');
-    const mag7 = ['AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA'];
-    const mag7Avg = mag7.map(s=>q[s]?.pct_change||0).reduce((a,b)=>a+b,0)/7;
-    const rsp = q['RSP']||{};
-    const today = new Date();
-    const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][today.getDay()];
-    const dateStr = today.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-
-    const dataContext = `Today is ${dayName}, ${dateStr}.
-SPY: $${(spy.price||0).toFixed(2)}, ${spy.pct_change>=0?'+':''}${(spy.pct_change||0).toFixed(2)}%
-VIX: ${(vix.price||0).toFixed(2)} | F&G: ${fgVal??'N/A'}/100 | PCR: ${pcr?pcr.toFixed(3):'N/A'}
-WEM: $${(wem?.wem_low||0).toFixed(2)} – $${(wem?.wem_high||0).toFixed(2)} (mid $${(wem?.wem_mid||0).toFixed(2)}, ±$${((wem?.wem_range||0)/2).toFixed(2)})
-GEX: Flip $${gex.flip_point||'N/A'} | Regime: ${gex.regime||'N/A'} | Net: ${gex.net_gex?(gex.net_gex/1e9).toFixed(2)+'B':'N/A'}
-Max Pain: $${md.max_pain?.[0]?.max_pain||'N/A'} (${md.max_pain?.[0]?.expiry||'N/A'}, ${md.max_pain?.[0]?.dte??'?'} DTE)
-10YR: ${(tnx.price||0).toFixed(3)}% | 2YR: ${(irx.price||0).toFixed(3)}% | Spread: ${spread?spread.toFixed(3)+'%':'N/A'}
-DXY: ${(dxy.price||0).toFixed(2)} (${(dxy.pct_change||0).toFixed(2)}%) | Gold: $${(gold.price||0).toFixed(2)} (${(gold.pct_change||0).toFixed(2)}%) | BTC: $${Math.round(btc.price||0)} (${(btc.pct_change||0).toFixed(2)}%)
-SPY vs EW RSP: ${(spy.pct_change||0).toFixed(2)}% vs ${(rsp.pct_change||0).toFixed(2)}% | MAG7 avg: ${mag7Avg.toFixed(2)}%
-Sectors: ${sectorStr}`;
-
-    const text = await callAI(
-      [{role:'user', content:`Here is today's market data:\n${dataContext}\n\nWrite a market outlook briefing. 3-4 flowing paragraphs. Open with a sharp one-sentence read on the environment. Cover: volatility regime (VIX level and what it implies), where price sits in the WEM range and relative to GEX flip/regime if available, breadth signals (SPY vs equal weight RSP, MAG7 vs market), and macro cross-currents (yields/spread, DXY, gold, BTC). Identify the single most important thing to watch today. Call out any contradictions between indicators. End with a trading quote from Livermore, Druckenmiller, PTJ, Soros, or similar — not Buffett. On its own line starting with an em dash. Be witty and sarcastic but always useful.`}],
-      'You are a sharp experienced trader writing a morning market outlook. Flowing paragraphs, no bullet points, no headers. Dry humor and light sarcasm. 200-280 words total.',
-      1000
-    );
-
-    if(!text) throw new Error('No response');
-
-    const lines = text.trim().split('\n').filter(l=>l.trim());
-    let quoteIdx = -1;
-    for(let i=lines.length-1;i>=0;i--) {
-      if(lines[i].startsWith('—')||lines[i].startsWith('*—')||lines[i].match(/^["""]/)) { quoteIdx=i; break; }
-    }
-    const bodyLines = quoteIdx>0 ? lines.slice(0,quoteIdx) : lines;
-    const quoteLine = quoteIdx>0 ? lines.slice(quoteIdx).join(' ').replace(/\*/g,'') : '';
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});
-
-    const html = `<div style="font-size:11px;color:var(--text3);margin-bottom:12px;font-family:'Share Tech Mono',monospace;">Generated ${timeStr} · Updates at open</div>`+
-      bodyLines.join('\n').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>').split('\n\n')
-        .map(p=>p.trim()?`<p style="margin-bottom:12px;">${p.replace(/\n/g,' ')}</p>`:'').join('')+
-      (quoteLine?`<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:6px;font-size:13px;color:var(--text3);font-style:italic;line-height:1.6;">${quoteLine}</div>`:'');
-
-    window._narrativeCache = html;
-    el.innerHTML = html;
-  } catch(e) {
-    el.innerHTML = `<div style="padding:12px;font-size:13px;color:var(--text2);">Market outlook unavailable — /ai endpoint required.<br><span style="font-size:11px;color:var(--text3);">${e.message}</span></div>`;
-  }
-}
-
-// ─── PLAY BY PLAY NARRATOR ───────────────────────────────────────────────────
-const _narratorLog = [];       // { time, text, snapshot }
-let   _narratorTimer = null;
-let   _narratorRunning = false;
-
-function _narratorSnapshot() {
-  if(!_md) return null;
-  const q = _md.quotes||{}, spy = q['SPY']||{};
-  const vix = q['^VIX']?.price||0;
-  const fg  = (_md.fear_greed?.value??_md.fear_greed?.score??null);
-  const wems= _md.weekly_em||[];
-  const wem = wems.find(w=>!w.week_close)||wems[0];
-  const pcr = _md.options_summary?.pc_ratio_vol||0;
-  const btc = q['BTC-USD']?.pct_change||0;
-  const tnx = q['^TNX']?.price||0;
-  return {
-    price: spy.price, chg: spy.pct_change, vix, fg, pcr,
-    wemLo: wem?.wem_low, wemHi: wem?.wem_high, wemMid: wem?.wem_mid,
-    btc, tnx, time: new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago',hour12:false})
-  };
-}
-
-async function _narratorComment() {
-  const el = $('hubNarrator');
-  const statusEl = $('narratorStatus');
-  if(!el || !_md) return;
-
-  const snap = _narratorSnapshot();
-  if(!snap || !snap.price) return;
-
-  const prev = _narratorLog.length ? _narratorLog[_narratorLog.length-1].snapshot : null;
-
-  const changes = [];
-  if(prev) {
-    if(Math.abs(snap.price - prev.price) >= 0.50) changes.push(`SPY moved ${snap.price>prev.price?'up':'down'} $${Math.abs(snap.price-prev.price).toFixed(2)} to $${snap.price.toFixed(2)}`);
-    if(Math.abs(snap.vix - prev.vix) >= 0.3) changes.push(`VIX ${snap.vix>prev.vix?'jumped to':'dropped to'} ${snap.vix.toFixed(1)}`);
-    if(snap.fg!=null && prev.fg!=null && Math.abs(snap.fg-prev.fg)>=2) changes.push(`Fear & Greed shifted to ${snap.fg}`);
-    if(Math.abs(snap.pcr - prev.pcr) >= 0.05) changes.push(`PCR ${snap.pcr>prev.pcr?'rising':'falling'} to ${snap.pcr.toFixed(3)}`);
-    if(Math.abs((snap.btc||0)-(prev.btc||0)) >= 1) changes.push(`BTC ${snap.btc>prev.btc?'ripping':'sliding'} (${snap.btc>=0?'+':''}${snap.btc?.toFixed(1)}%)`);
-  }
-
-  const history = _narratorLog.slice(-4).map(e=>`[${e.snapshot.time}] ${e.text}`).join('\n');
-  const prompt = prev
-    ? `Previous comments:\n${history}\n\nWhat just changed: ${changes.length?changes.join(', '):'no major changes, but check the overall setup'}\n\nCurrent: SPY $${snap.price?.toFixed(2)} (${snap.chg>=0?'+':''}${snap.chg?.toFixed(2)}%), VIX ${snap.vix.toFixed(1)}, F&G ${snap.fg}, PCR ${snap.pcr.toFixed(3)}, WEM ${snap.wemLo?.toFixed(2)}-${snap.wemHi?.toFixed(2)}, BTC ${snap.btc>=0?'+':''}${snap.btc?.toFixed(1)}%\n\nOne short punchy sentence. Reference what changed. Don't repeat yourself.`
-    : `Opening: SPY $${snap.price?.toFixed(2)} (${snap.chg>=0?'+':''}${snap.chg?.toFixed(2)}%), VIX ${snap.vix.toFixed(1)}, F&G ${snap.fg}, PCR ${snap.pcr.toFixed(3)}, WEM $${snap.wemLo?.toFixed(2)}-$${snap.wemHi?.toFixed(2)}. One punchy opening line like a sports broadcaster starting coverage.`;
-
-  try {
-    const text = await callAI(
-      [{role:'user', content: prompt}],
-      'You are a dry, witty play-by-play commentator for a live SPY trading session. ONE sentence max, punchy and specific. Use actual numbers. Never say "certainly".',
-      120
-    );
-    const entry = { time: snap.time, text: text.trim(), snapshot: snap };
-    _narratorLog.push(entry);
-
-    // Build scrolling ticker text from last 5 comments
-    const tickerText = _narratorLog.slice(-5).reverse()
-      .map(e => `[${e.snapshot.time}]  ${e.text}`)
-      .join('     ·     ');
-    const doubled = tickerText + '     ·     ' + tickerText;
-
-    el.style.display = 'inline-block';
-    el.style.transform = 'translateX(0)';
-    el.textContent = doubled;
-
-    if(statusEl) statusEl.textContent = snap.time+' CT';
-
-    // Restart scroll
-    if(window._narratorScrollInterval) clearInterval(window._narratorScrollInterval);
-    let pos = 0;
-    const halfW = el.scrollWidth / 2;
-    window._narratorScrollInterval = setInterval(() => {
-      pos += 0.5;
-      if(pos >= halfW) pos = 0;
-      el.style.transform = `translateX(-${pos}px)`;
-    }, 16);
-
-  } catch(e) {
-    console.warn('Narrator error:', e.message);
-  }
-}
-
-async function startNarrator() {
-  if(_narratorRunning) return;
-  _narratorRunning = true;
-  await _narratorComment();
-  _narratorTimer = setInterval(_narratorComment, 3 * 60 * 1000);
-}
 
 
 function renderDesk(md,sd){
@@ -2253,28 +2041,25 @@ function renderVolatility(md){
   const q=md.quotes||{};
   const vs=q['^VIX'], v3=q['^VIX3M'], v6=q['^VIX6M'];
   const vvix=q['^VVIX'], skew=q['^SKEW'], vxx=q['VXX']||{};
+  const spy=q['SPY']||{};
   const vix=vs?.price||0;
   const atm_iv = md.weekly_em?.[0]?.atm_iv;
+  const wem = md.weekly_em?.[0] || {};
+  const opt = md.options_summary || {};
+  const sd = typeof _sd !== 'undefined' ? _sd : [];
 
-  // Color helpers
   const vColor=vix<15?'#00ff88':vix<20?'#88cc00':vix<25?'#ffcc00':vix<35?'#ff8800':'#ff3355';
   const vRegime=vix<15?'LOW VOL':vix<20?'CALM':vix<25?'ELEVATED':vix<35?'HIGH VOL':'EXTREME';
+  const vvixVal=vvix?.price||0, skewVal=skew?.price||0;
+  const vvixColor=vvixVal>120?'#ff3355':vvixVal>100?'#ff8800':vvixVal>85?'#ffcc00':'#00ff88';
+  const vvixLabel=vvixVal>120?'PANIC':vvixVal>100?'STRESSED':vvixVal>85?'ELEVATED':'CALM';
+  const skewColor=skewVal>145?'#ff3355':skewVal>135?'#ff8800':skewVal>125?'#ffcc00':'#00ff88';
+  const skewLabel=skewVal>145?'EXTREME TAIL':skewVal>135?'HIGH TAIL':skewVal>125?'ELEVATED':'NORMAL';
+  const spyIv=atm_iv?atm_iv*100:null;
+  const ivColor=spyIv>30?'#ff3355':spyIv>20?'#ff8800':spyIv>15?'#ffcc00':'#00ff88';
 
-  // VVIX interpretation
-  const vvixVal = vvix?.price||0;
-  const vvixColor = vvixVal>120?'#ff3355':vvixVal>100?'#ff8800':vvixVal>85?'#ffcc00':'#00ff88';
-  const vvixLabel = vvixVal>120?'PANIC':vvixVal>100?'STRESSED':vvixVal>85?'ELEVATED':'CALM';
-
-  // SKEW interpretation
-  const skewVal = skew?.price||0;
-  const skewColor = skewVal>145?'#ff3355':skewVal>135?'#ff8800':skewVal>125?'#ffcc00':'#00ff88';
-  const skewLabel = skewVal>145?'EXTREME TAIL RISK':skewVal>135?'HIGH TAIL RISK':skewVal>125?'ELEVATED':'NORMAL';
-
-  // SPY IV
-  const spyIv = atm_iv ? atm_iv*100 : null;
-  const ivColor = spyIv>30?'#ff3355':spyIv>20?'#ff8800':spyIv>15?'#ffcc00':'#00ff88';
-
-  const bigVolCard = (label, value, sublabel, color, change, desc) => `
+  // ── ROW 1: Big vol cards ──────────────────────────────────────────────────
+  const bigVolCard=(label,value,sublabel,color,change,desc)=>`
     <div class="panel" style="text-align:center;border-top:3px solid ${color};">
       <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};margin-bottom:8px;">${label}</div>
       <div style="font-family:'Share Tech Mono',monospace;font-size:36px;font-weight:900;color:${color};">${value}</div>
@@ -2283,16 +2068,151 @@ function renderVolatility(md){
       <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.4;">${desc}</div>
     </div>`;
 
-  $('volMainRow').innerHTML = `
-    ${bigVolCard('VIX', fmt(vix,2), vRegime, vColor, vs?.change, 'Equity volatility. Options pricing. Fear gauge.')}
-    ${bigVolCard('VVIX', vvixVal?fmt(vvixVal,1):'—', vvixLabel, vvixColor, vvix?.change, 'Vol of vol. Measures how erratic VIX itself is.')}
-    ${bigVolCard('SKEW', skewVal?fmt(skewVal,1):'—', skewLabel, skewColor, skew?.change, 'Tail risk pricing. High = market fears a crash.')}
-    ${bigVolCard('VXX', vxx.price?fmt(vxx.price,2):'—', vxx.price?(vxx.pct_change>2?'FEAR ELEVATED':vxx.pct_change>0?'VOL RISING':vxx.pct_change<-2?'VOL COLLAPSING':'VOL FALLING'):'—', vxx.price?(vxx.pct_change>2?'#ff3355':vxx.pct_change>0?'#ff8800':vxx.pct_change<-2?'#00ff88':'#88cc00'):'var(--text3)', vxx.change, 'VXX ETF — short-term VIX futures. Rising = fear rising.')}
-    ${bigVolCard('SPY ATM IV', spyIv?fmt(spyIv,1)+'%':'—', spyIv?'FROM OPTIONS':'—', ivColor, null, 'SPY implied volatility from options chain.')}`;
+  $('volMainRow').innerHTML=`
+    ${bigVolCard('VIX',fmt(vix,2),vRegime,vColor,vs?.change,'Equity vol. Options fear gauge.')}
+    ${bigVolCard('VVIX',vvixVal?fmt(vvixVal,1):'—',vvixLabel,vvixColor,vvix?.change,'Vol of vol — how erratic VIX is.')}
+    ${bigVolCard('SKEW',skewVal?fmt(skewVal,1):'—',skewLabel,skewColor,skew?.change,'Tail risk. High = crash protection demand.')}
+    ${bigVolCard('VXX',vxx.price?fmt(vxx.price,2):'—',vxx.price?(vxx.pct_change>2?'FEAR SPIKE':vxx.pct_change>0?'RISING':vxx.pct_change<-2?'COLLAPSING':'FALLING'):'—',vxx.price?(vxx.pct_change>2?'#ff3355':vxx.pct_change>0?'#ff8800':vxx.pct_change<-2?'#00ff88':'#88cc00'):'var(--text3)',vxx.change,'VXX ETF — short-term VIX futures.')}
+    ${bigVolCard('ATM IV',spyIv?fmt(spyIv,1)+'%':'—',spyIv?(spyIv>30?'EXPENSIVE':spyIv>20?'ELEVATED':spyIv>12?'NORMAL':'CHEAP'):'—',ivColor,null,'SPY implied vol from options chain.')}`;
 
-  // Term structure bars
+  // ── ROW 2A: Intraday Range vs ATR ────────────────────────────────────────
+  const atrEl=$('volRangeATR');
+  if(atrEl){
+    // Compute ATR from sd (daily_ohlcv rows)
+    const rows=sd.slice(0,21).filter(r=>r.close);
+    const trs=rows.slice(0,-1).map((r,i)=>{
+      const prev=rows[i+1];
+      if(!prev?.close)return r.high-r.low;
+      return Math.max(r.high-r.low, Math.abs(r.high-prev.close), Math.abs(r.low-prev.close));
+    }).filter(v=>v>0);
+    const atr5  = trs.length>=5  ? trs.slice(0,5).reduce((a,b)=>a+b,0)/5  : null;
+    const atr10 = trs.length>=10 ? trs.slice(0,10).reduce((a,b)=>a+b,0)/10 : null;
+    const atr20 = trs.length>=20 ? trs.slice(0,20).reduce((a,b)=>a+b,0)/20 : null;
+    const todayRow=rows[0];
+    const todayRange = todayRow ? (todayRow.high||0)-(todayRow.low||0) : (spy.high&&spy.low?spy.high-spy.low:null);
+    const liveRange = spy.high&&spy.low ? spy.high-spy.low : null;
+    const useRange = liveRange||todayRange;
+    const pctOfATR = useRange&&atr5 ? useRange/atr5*100 : null;
+    const rangeRemaining = atr5&&useRange ? Math.max(atr5-useRange,0) : null;
+    const rc=pctOfATR==null?'var(--text3)':pctOfATR>100?'#ff3355':pctOfATR>75?'#ff8800':pctOfATR>50?'#ffcc00':'#00ff88';
+
+    let html='';
+    if(useRange!=null){
+      html+=`<div style="text-align:center;padding:10px;background:${rc}11;border:1px solid ${rc}33;border-radius:4px;margin-bottom:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">TODAY'S RANGE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:900;color:${rc};">$${fmt(useRange,2)}</div>
+        ${pctOfATR!=null?`<div style="font-family:'Orbitron',monospace;font-size:10px;color:${rc};margin-top:4px;">${fmt(pctOfATR,0)}% OF ATR(5)</div>`:''}
+      </div>`;
+      if(pctOfATR!=null){
+        const barW=Math.min(pctOfATR,100).toFixed(1);
+        html+=`<div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:8px;position:relative;">
+          <div style="width:${barW}%;height:100%;background:${rc};border-radius:4px;"></div>
+          <div style="position:absolute;left:100%;top:-3px;transform:translateX(-1px);width:2px;height:14px;background:rgba(255,255,255,0.3);"></div>
+        </div>`;
+      }
+    }
+    html+=`<div style="display:flex;flex-direction:column;gap:5px;">`;
+    [[atr5,'ATR(5) — 1wk avg'],[atr10,'ATR(10) — 2wk avg'],[atr20,'ATR(20) — 1mo avg']].forEach(([v,l])=>{
+      if(!v)return;
+      html+=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:12px;color:var(--text3);">${l}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--text);">$${fmt(v,2)}</span>
+      </div>`;
+    });
+    if(rangeRemaining!=null){
+      const rrc=rangeRemaining<1?'#00ff88':rangeRemaining<3?'#ffcc00':'var(--text2)';
+      html+=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:12px;color:var(--text3);">Range remaining</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${rrc};">$${fmt(rangeRemaining,2)}</span>
+      </div>`;
+    }
+    html+=`</div>`;
+    html+=`<div style="margin-top:8px;font-size:11px;color:var(--text3);">${pctOfATR!=null?(pctOfATR>100?'⚠ Range exceeded ATR — extended move. Mean reversion risk.':pctOfATR>75?'Day largely played out. Less opportunity remaining.':pctOfATR>50?'More than half of average range used.':'Early in range. More move likely ahead.'):'Awaiting price data.'}</div>`;
+    atrEl.innerHTML=html;
+  }
+
+  // ── ROW 2B: Expected Move Calculator ─────────────────────────────────────
+  const emEl=$('volExpectedMove');
+  if(emEl&&spyIv){
+    const spot=spy.price||wem.wem_mid||640;
+    const iv=spyIv/100;
+    const sqrt252=Math.sqrt(252), sqrt52=Math.sqrt(52), sqrt12=Math.sqrt(12);
+    const dailyEM  = spot*iv/sqrt252;
+    const weeklyEM = spot*iv/sqrt52;
+    const monthlyEM= spot*iv/sqrt12;
+    const dailyH=spot+dailyEM, dailyL=spot-dailyEM;
+    const wemH=wem.wem_high||spot+weeklyEM, wemL=wem.wem_low||spot-weeklyEM;
+    const spyPct=spy.pct_change||0;
+    const pctOfDailyEM=dailyEM?Math.abs(spyPct)/100*spot/dailyEM*100:null;
+
+    emEl.innerHTML=`
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="padding:8px;background:var(--bg3);border-radius:4px;border-left:3px solid ${ivColor};">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">DAILY EM (±1σ)</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${ivColor};">±$${fmt(dailyEM,2)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">$${fmt(dailyL,2)} — $${fmt(dailyH,2)}</div>
+          ${pctOfDailyEM!=null?`<div style="margin-top:6px;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden;">
+            <div style="width:${Math.min(pctOfDailyEM,100).toFixed(1)}%;height:100%;background:${pctOfDailyEM>80?'#ff3355':pctOfDailyEM>50?'#ff8800':'#00ff88'};"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">SPY used ${fmt(pctOfDailyEM,0)}% of daily EM</div>`:''}
+        </div>
+        <div style="padding:8px;background:var(--bg3);border-radius:4px;border-left:3px solid var(--cyan);">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">WEEKLY EM (±1σ)</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--cyan);">±$${fmt(weeklyEM,2)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">WEM: $${fmt(wemL,2)} — $${fmt(wemH,2)}</div>
+        </div>
+        <div style="padding:8px;background:var(--bg3);border-radius:4px;border-left:3px solid #8855ff;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">MONTHLY EM (±1σ)</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:#8855ff;">±$${fmt(monthlyEM,2)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">$${fmt(spot-monthlyEM,2)} — $${fmt(spot+monthlyEM,2)}</div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);">Based on ATM IV ${fmt(spyIv,1)}% · Spot $${fmt(spot,2)}</div>
+      </div>`;
+  } else if(emEl){
+    emEl.innerHTML='<div class="no-data">Awaiting IV data</div>';
+  }
+
+  // ── ROW 2C: IV Rank & Percentile ─────────────────────────────────────────
+  const ivRankEl=$('volIVRank');
+  if(ivRankEl&&spyIv){
+    // Use weekly_em history to compute IV rank
+    const wems=md.weekly_em||[];
+    const ivHistory=wems.map(w=>w.atm_iv?w.atm_iv*100:null).filter(v=>v!=null);
+    const ivRank=ivHistory.length>1?ivHistory.slice(1).filter(v=>v<spyIv).length/(ivHistory.length-1)*100:null;
+    const ivMin=ivHistory.length?Math.min(...ivHistory):null;
+    const ivMax=ivHistory.length?Math.max(...ivHistory):null;
+    const rankColor=ivRank==null?'var(--text3)':ivRank>80?'#ff3355':ivRank>60?'#ff8800':ivRank>40?'#ffcc00':'#00ff88';
+    const rankLabel=ivRank==null?'—':ivRank>80?'EXPENSIVE — sell premium':ivRank>60?'ELEVATED — favor spreads':ivRank>40?'NORMAL — neutral':ivRank>20?'CHEAP — buy premium':'VERY CHEAP — long vol';
+
+    ivRankEl.innerHTML=`
+      <div style="text-align:center;padding:12px;background:${rankColor}11;border:1px solid ${rankColor}33;border-radius:4px;margin-bottom:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">IV PERCENTILE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:36px;font-weight:900;color:${rankColor};">${ivRank!=null?fmt(ivRank,0)+'%':'—'}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${rankColor};margin-top:4px;">${rankLabel.split('—')[0].trim()}</div>
+      </div>
+      ${ivRank!=null?`<div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:8px;">
+        <div style="width:${fmt(ivRank,1)}%;height:100%;background:linear-gradient(90deg,#00ff88,#ffcc00,#ff3355);border-radius:4px;"></div>
+      </div>`:''}
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text3);">Current IV</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${rankColor};">${fmt(spyIv,1)}%</span>
+        </div>
+        ${ivMin!=null?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text3);">${ivHistory.length}wk Low</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#00ff88;">${fmt(ivMin,1)}%</span>
+        </div>`:''}
+        ${ivMax!=null?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text3);">${ivHistory.length}wk High</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#ff3355;">${fmt(ivMax,1)}%</span>
+        </div>`:''}
+        <div style="margin-top:6px;font-size:12px;color:var(--text2);line-height:1.5;">${rankLabel.includes('—')?rankLabel.split('—')[1].trim():rankLabel}</div>
+      </div>`;
+  }
+
+  // ── ROW 3A: VIX Term Structure ────────────────────────────────────────────
   const mv=Math.max(vix,v3?.price||0,v6?.price||0,40);
-  $('volVixTerm').innerHTML=[{l:'VIX SPOT',d:vs},{l:'VIX 1M',d:v3},{l:'VIX 6M',d:v6}].map(({l,d})=>{
+  $('volVixTerm').innerHTML=[{l:'VIX SPOT',d:vs},{l:'VIX 3M',d:v3},{l:'VIX 6M',d:v6}].map(({l,d})=>{
     if(!d)return '';
     const w=(d.price/mv*100).toFixed(1);
     const c=d.price<20?'#00ff88':d.price<30?'#ffcc00':'#ff3355';
@@ -2300,57 +2220,171 @@ function renderVolatility(md){
       <span class="vix-name">${l}</span>
       <div class="vix-bar-wrap"><div class="vix-bar-fill" style="width:${w}%;background:${c}88"></div></div>
       <span class="vix-val" style="color:${c}">${fmt(d.price,1)}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${d.change>0?'#ff3355':'#00ff88'};margin-left:6px;">${sign(d.change)}${fmt(d.change,2)}</span>
     </div>`;
   }).join('');
 
-  // Contango
   if(vs&&v3){
-    const isContango=v3.price>vix;
-    const sc=isContango?'#00ff88':'#ff8800';
+    const isC=v3.price>vix;
+    const sc=isC?'#00ff88':'#ff8800';
     const sdiff=((v3.price-vix)/vix*100).toFixed(2);
     $('contangoBox').innerHTML=`
       <div class="cond-row" style="margin-bottom:6px;">
         <span class="cond-key">Structure</span>
-        <span style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;padding:3px 8px;border-radius:3px;color:${sc};background:${sc}22;border:1px solid ${sc}44;">${isContango?'CONTANGO':'BACKWARDATION'}</span>
+        <span style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;padding:3px 8px;border-radius:3px;color:${sc};background:${sc}22;border:1px solid ${sc}44;">${isC?'CONTANGO':'BACKWARDATION'}</span>
       </div>
-      <div class="cond-row">
-        <span class="cond-key">1M vs Spot</span>
+      <div class="cond-row" style="margin-bottom:4px;">
+        <span class="cond-key">3M vs Spot</span>
         <span class="cond-val" style="color:${sc}">${sign(v3.price-vix)}${fmt(v3.price-vix,2)} (${sdiff}%)</span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.5;">${isC?'Normal structure. Near-term fear lower than future expectations. Calm today.':'Inverted. Near-term fear exceeds future. Acute stress or event risk.'}</div>`;
+  }
+
+  // ── ROW 3B: Options Flow ──────────────────────────────────────────────────
+  const flowEl=$('volOptionsFlow');
+  if(flowEl){
+    const pcr=opt.pc_ratio_vol||0;
+    const pco=opt.pc_ratio_oi||0;
+    const cv=opt.call_volume||0, pv=opt.put_volume||0;
+    const co=opt.call_oi||0, po=opt.put_oi||0;
+    const totalV=(cv+pv)||1, totalO=(co+po)||1;
+    const callPctV=(cv/totalV*100).toFixed(1), putPctV=(pv/totalV*100).toFixed(1);
+    const pcrColor=pcr>1.5?'#ff3355':pcr>1.0?'#ff8800':pcr<0.7?'#00ff88':'#ffcc00';
+    const pcrLabel=pcr>1.5?'BEARISH — heavy put flow':pcr>1.0?'SLIGHTLY BEARISH':pcr<0.7?'BULLISH — call flow dominant':'NEUTRAL';
+    const fmtV=v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':String(v);
+
+    flowEl.innerHTML=`
+      <div style="text-align:center;padding:10px;background:${pcrColor}11;border:1px solid ${pcrColor}33;border-radius:4px;margin-bottom:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">P/C RATIO (VOLUME)</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:900;color:${pcrColor};">${fmt(pcr,2)}</div>
+        <div style="font-size:11px;color:${pcrColor};margin-top:4px;">${pcrLabel}</div>
+      </div>
+      <div style="height:12px;background:var(--bg3);border-radius:6px;overflow:hidden;margin-bottom:8px;display:flex;">
+        <div style="width:${callPctV}%;background:#00ff88;border-radius:6px 0 0 6px;"></div>
+        <div style="width:${putPctV}%;background:#ff3355;border-radius:0 6px 6px 0;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:12px;">
+        <span style="color:#00ff88;">■ Calls ${callPctV}%</span>
+        <span style="color:#ff3355;">■ Puts ${putPctV}%</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;">
+        ${[['Call Vol',fmtV(cv),'#00ff88'],['Put Vol',fmtV(pv),'#ff3355'],['Call OI',fmtV(co),'#00ff8888'],['Put OI',fmtV(po),'#ff335588'],['P/C OI',fmt(pco,2),'var(--text2)']].map(([l,v,c])=>`
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+            <span style="color:var(--text3);">${l}</span>
+            <span style="font-family:'Share Tech Mono',monospace;color:${c};">${v}</span>
+          </div>`).join('')}
       </div>`;
   }
 
-  // Signals panel — plain English interpretation of all readings together
-  const signals = [];
-  if(vix>30 && vvixVal>100) signals.push({color:'#ff3355', text:`VIX ${fmt(vix,1)} + VVIX ${fmt(vvixVal,1)} — double fear signal. VIX is elevated AND unstable. Expect continued volatility.`});
-  else if(vix>25) signals.push({color:'#ff8800', text:`VIX at ${fmt(vix,1)} — above normal. Options premium elevated. Favor selling premium or defined-risk spreads.`});
-  else if(vix<15) signals.push({color:'#00ff88', text:`VIX at ${fmt(vix,1)} — very low. Complacency risk. Consider buying cheap protection.`});
+  // ── ROW 3C: Signals ───────────────────────────────────────────────────────
+  const signals=[];
+  if(vix>30&&vvixVal>100) signals.push({c:'#ff3355',t:`VIX ${fmt(vix,1)} + VVIX ${fmt(vvixVal,1)} — double fear. VIX elevated AND unstable. Heightened realized vol ahead.`});
+  else if(vix>25) signals.push({c:'#ff8800',t:`VIX ${fmt(vix,1)} — above normal. Options premium rich. Favor selling premium or defined-risk spreads.`});
+  else if(vix<15) signals.push({c:'#00ff88',t:`VIX ${fmt(vix,1)} — very low. Complacency. Consider buying cheap protection here.`});
+  if(skewVal>140) signals.push({c:'#ff3355',t:`SKEW ${fmt(skewVal,1)} — extreme tail risk pricing. Institutions loading downside protection.`});
+  else if(skewVal>130) signals.push({c:'#ff8800',t:`SKEW ${fmt(skewVal,1)} — elevated. Market pricing meaningful crash risk.`});
+  if(vvixVal>110) signals.push({c:'#ff3355',t:`VVIX ${fmt(vvixVal,1)} — extreme. VIX itself is thrashing. Often marks panic peaks.`});
+  if(vs&&v3&&v3.price<vix) signals.push({c:'#ff8800',t:`VIX backwardation — near-term fear exceeds forward. Acute stress event in progress.`});
+  if(opt.pc_ratio_vol>1.5) signals.push({c:'#ff3355',t:`P/C ratio ${fmt(opt.pc_ratio_vol,2)} — heavy put buying. Bearish directional flow or defensive hedging.`});
+  else if(opt.pc_ratio_vol<0.7) signals.push({c:'#00ff88',t:`P/C ratio ${fmt(opt.pc_ratio_vol,2)} — call-heavy. Bullish directional flow dominant.`});
+  if(vxx.pct_change>5) signals.push({c:'#ff3355',t:`VXX +${fmt(vxx.pct_change,1)}% — short-term vol futures surging. Fear accelerating intraday.`});
 
-  if(skewVal>140) signals.push({color:'#ff3355', text:`SKEW at ${fmt(skewVal,1)} — extreme tail risk pricing. Institutions loading up on downside protection. Something is being hedged.`});
-  else if(skewVal>130) signals.push({color:'#ff8800', text:`SKEW at ${fmt(skewVal,1)} — elevated. Market pricing meaningful crash risk. More put buying than normal.`});
-  else if(skewVal<115) signals.push({color:'#00ff88', text:`SKEW at ${fmt(skewVal,1)} — low. Market not pricing much tail risk. Complacency in the options market.`});
+  $('volSignals').innerHTML=signals.length?signals.map(s=>`
+    <div style="display:flex;gap:10px;padding:9px 10px;border-left:3px solid ${s.c};background:${s.c}11;border-radius:0 4px 4px 0;margin-bottom:7px;font-size:13px;color:var(--text);line-height:1.5;">
+      <div style="width:8px;height:8px;border-radius:50%;background:${s.c};flex-shrink:0;margin-top:4px;box-shadow:0 0 5px ${s.c}88;"></div>
+      <span>${s.t}</span>
+    </div>`).join(''):`<div style="padding:12px;font-size:13px;color:var(--text2);">No unusual volatility signals. Market vol conditions appear normal.</div>`;
 
-  if(vvixVal>110) signals.push({color:'#ff3355', text:`VVIX at ${fmt(vvixVal,1)} — VIX itself is extremely volatile. This level often marks short-term bottoms as panic peaks.`});
+  // ── ROW 4A: Session Vol Profile (hourly) ──────────────────────────────────
+  const profEl=$('volSessionProfile');
+  if(profEl){
+    // Historical avg bar range by hour from intraday data — hardcoded from DB analysis
+    // (computed: avg 1-min bar H-L by hour across all history)
+    const hourlyAvg=[
+      {h:'08',lbl:'8am',avg:0.410,note:'Pre-open + open print'},
+      {h:'09',lbl:'9am',avg:0.383,note:'First 30min + cash open'},
+      {h:'10',lbl:'10am',avg:0.323,note:'Morning continuation'},
+      {h:'11',lbl:'11am',avg:0.286,note:'Midmorning lull'},
+      {h:'12',lbl:'12pm',avg:0.271,note:'Lunch hour — low vol'},
+      {h:'13',lbl:'1pm', avg:0.260,note:'Early afternoon'},
+      {h:'14',lbl:'2pm', avg:0.283,note:'FOMC/news window'},
+      {h:'15',lbl:'3pm', avg:0.278,note:'Power hour + close'},
+    ];
+    const maxAvg=Math.max(...hourlyAvg.map(h=>h.avg));
 
-  if(vs&&v3&&v3.price<vix) signals.push({color:'#ff8800', text:`VIX backwardation — 1M vol below spot VIX. Near-term fear exceeds forward expectations. Typical of acute stress events.`});
+    // Get current CT hour to highlight
+    const nowCT=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Chicago'}));
+    const curHour=nowCT.getHours().toString().padStart(2,'0');
 
-  $('volSignals').innerHTML = signals.length ? signals.map(s=>`
-    <div style="display:flex;gap:10px;padding:10px;border-left:3px solid ${s.color};background:${s.color}11;border-radius:0 4px 4px 0;margin-bottom:8px;font-size:14px;color:var(--text);line-height:1.5;">
-      ${s.text}
-    </div>`).join('') : `<div style="padding:12px;font-size:14px;color:var(--text2);">No unusual volatility signals detected. Market conditions appear normal.</div>`;
+    profEl.innerHTML=`
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Avg 1-min bar range by hour · all history · Central Time</div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        ${hourlyAvg.map(h=>{
+          const w=(h.avg/maxAvg*100).toFixed(1);
+          const isCur=h.h===curHour;
+          const c=isCur?'var(--cyan)':h.avg>0.37?'#ff8800':h.avg>0.30?'#ffcc00':'#00ccff';
+          return `<div style="display:flex;align-items:center;gap:8px;${isCur?'background:rgba(0,204,255,0.06);border-radius:3px;padding:2px 4px;':''}">
+            <span style="font-family:'Orbitron',monospace;font-size:9px;color:${isCur?'var(--cyan)':'var(--text3)'};width:32px;">${h.lbl}</span>
+            <div style="flex:1;height:14px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+              <div style="width:${w}%;height:100%;background:${c};opacity:0.75;border-radius:2px;"></div>
+            </div>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${c};width:40px;text-align:right;">$${h.avg.toFixed(3)}</span>
+            <span style="font-size:10px;color:${isCur?'var(--cyan)':'var(--text3)'};width:140px;">${h.note}${isCur?' ← NOW':''}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:10px;padding:8px;background:var(--bg3);border-radius:4px;font-size:12px;color:var(--text2);line-height:1.5;">
+        💡 <strong style="color:var(--text);">Day trading edge:</strong> Highest vol = open (8-9am CT) and close (3pm). Lunch (12-1pm) = tightest spreads, smallest bars. Best R:R setups typically 8:30–10am and 2:30–4pm.
+      </div>`;
+  }
 
-  // Bottom readings grid
-  $('volReadingsGrid').innerHTML=`
-    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;">
-      ${[
-        {l:'VIX',v:fmt(vix,2),c:vColor},
-        {l:'VIX 1M',v:fmt(v3?.price,2),c:'var(--text)'},
-        {l:'VIX 6M',v:fmt(v6?.price,2),c:'var(--text)'},
-        {l:'VVIX',v:fmt(vvixVal,1),c:vvixColor},
-        {l:'SKEW',v:skewVal?fmt(skewVal,1):'—',c:skewColor},
-        {l:'SPY IV',v:spyIv?fmt(spyIv,1)+'%':'—',c:ivColor}
-      ].map(({l,v,c})=>`<div class="stat-card"><div class="sc-lbl">${l}</div><div class="sc-val" style="color:${c}">${v}</div></div>`).join('')}
-    </div>`;
+  // ── ROW 4B: Range History Chart ───────────────────────────────────────────
+  const histEl=$('volRangeHistory');
+  if(histEl&&sd.length>1){
+    const recent=sd.slice(0,15).reverse();
+    const ranges2=recent.map(r=>({date:r.date,range:(r.high||0)-(r.low||0),close:r.close})).filter(r=>r.range>0);
+    if(ranges2.length){
+      const maxR=Math.max(...ranges2.map(r=>r.range));
+      const avgR=ranges2.reduce((a,r)=>a+r.range,0)/ranges2.length;
+      // ATR line from full sd
+      const trs2=sd.slice(0,21).map((r,i)=>{
+        if(!sd[i+1]?.close)return r.high-r.low;
+        return Math.max(r.high-r.low,Math.abs(r.high-sd[i+1].close),Math.abs(r.low-sd[i+1].close));
+      }).filter(v=>v>0);
+      const atr5b=trs2.length>=5?trs2.slice(0,5).reduce((a,b)=>a+b,0)/5:null;
+
+      histEl.innerHTML=`
+        <div style="display:flex;align-items:flex-end;gap:3px;height:100px;padding:4px 0;margin-bottom:8px;">
+          ${ranges2.map((r,i)=>{
+            const h=(r.range/maxR*88).toFixed(1);
+            const isToday=i===ranges2.length-1;
+            const c=r.range>avgR*1.3?'#ff3355':r.range>avgR*0.8?'#ffcc00':'#00ff88';
+            const d=new Date(r.date+'T12:00:00');
+            const lbl=['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()];
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+              <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isToday?'var(--cyan)':c};">$${r.range.toFixed(1)}</div>
+              <div style="width:100%;height:${h}px;background:${isToday?'var(--cyan)':c};border-radius:2px 2px 0 0;opacity:${isToday?'1':'0.7'};"></div>
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:${isToday?'var(--cyan)':'var(--text3)'};">${lbl}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+          ${[
+            ['AVG RANGE',`$${fmt(avgR,2)}`,'var(--text2)'],
+            ['ATR(5)',atr5b?`$${fmt(atr5b,2)}`:'—','#ffcc00'],
+            ['MAX RANGE',`$${fmt(maxR,2)}`,'#ff3355'],
+          ].map(([l,v,c])=>`<div style="background:var(--bg3);border-radius:3px;padding:6px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${l}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${c};">${v}</div>
+          </div>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--text3);">Last ${ranges2.length} sessions · green=below avg · yellow=avg · red=elevated</div>`;
+    } else {
+      histEl.innerHTML='<div class="no-data">Awaiting historical data</div>';
+    }
+  }
 }
+
 
 function renderBonds(md){
   const q = md.quotes || {};
@@ -2849,6 +2883,7 @@ function renderBreadthAdditions(md, sd) {
   const spy = q['SPY'] || {}, qqq = q['QQQ'] || {}, iwm = q['IWM'] || {};
   const rsp = q['RSP'] || {}, dia = q['DIA'] || {};
   const vix = q['^VIX'] || {}, vvix = q['^VVIX'] || {};
+  const vix3m = q['^VIX3M'] || {}, vix6m = q['^VIX6M'] || {};
   const smh = q['SMH'] || {}, xbi = q['XBI'] || {}, kre = q['KRE'] || {};
   const gdx = q['GDX'] || {}, arkk = q['ARKK'] || {}, xrt = q['XRT'] || {};
   const tlt = q['TLT'] || {}, hyg = q['HYG'] || {}, lqd = q['LQD'] || {};
@@ -3316,7 +3351,7 @@ function renderBreadth(md, sd){
     // % above MAs
     const ma50=ma50d?.price, ma200=ma200d?.price;
     internalsEl.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px;">
         <div class="stat-card" style="border-top:3px solid ${bColor};">
           <div class="sc-lbl">BREADTH</div>
           <div class="sc-val" style="color:${bColor}">${breadthScore}%</div>
@@ -3334,6 +3369,8 @@ function renderBreadth(md, sd){
           <div class="sc-lbl">STRONG DN</div>
           <div class="sc-val dn">${strongDn}</div>
         </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
         <div class="stat-card">
           <div class="sc-lbl">A/D RATIO</div>
           <div class="sc-val" style="color:${arc}">${adRatio?fmt(adRatio,2):'—'}</div>
@@ -3387,10 +3424,10 @@ function renderBreadth(md, sd){
     };
 
     const dailyMAs = [
-      {label:'20D',  val:sma(20)},
-      {label:'50D',  val:sma(50)},
-      {label:'100D', val:sma(100)},
-      {label:'200D', val:sma(200)},
+      {label:'20',  val:sma(20)},
+      {label:'50',  val:sma(50)},
+      {label:'100', val:sma(100)},
+      {label:'20D', val:sma(200)},
     ];
     const weeklyMAs = [
       {label:'20W',  val:wsma(20)},
@@ -3499,3 +3536,282 @@ function renderCommodities(md){
     return `<div class="comm-card"><div class="comm-sym">${label}</div><div class="comm-name">${name} · ${unit}</div><div class="comm-price ${clr(d.change)}">$${fmt(d.price,2)}</div><div class="comm-chg ${clr(d.change)}">${sign(d.change)}${fmt(d.change,2)} (${sign(d.pct_change)}${fmt(d.pct_change,2)}%)</div></div>`;
   }).join('');
 }
+
+
+// ─── 2015 ANALOG DATA ────────────────────────────────────────────────────────
+const ANALOG_DATA = {"generated":"2026-03-27","anchor_2014":{"date":"2014-10-15","price":186.43},"anchor_2025":{"date":"2025-11-21","price":659.03},"current":{"day":86,"date":"2026-03-27","price":634.09},"hist":[{"day":1,"date_2015":"2014-10-15","close_2015":186.43,"pct_2015":0.0,"date_2026":"2025-11-21","close_2026":659.03,"pct_2026":0.0,"divergence":0.0},{"day":2,"date_2015":"2014-10-16","close_2015":186.27,"pct_2015":-0.0858,"date_2026":"2025-11-24","close_2026":668.73,"pct_2026":1.4719,"divergence":1.5577},{"day":3,"date_2015":"2014-10-17","close_2015":188.47,"pct_2015":1.0942,"date_2026":"2025-11-25","close_2026":675.02,"pct_2026":2.4263,"divergence":1.332},{"day":4,"date_2015":"2014-10-20","close_2015":190.3,"pct_2015":2.0759,"date_2026":"2025-11-26","close_2026":679.68,"pct_2026":3.1334,"divergence":1.0575},{"day":5,"date_2015":"2014-10-21","close_2015":194.07,"pct_2015":4.0981,"date_2026":"2025-11-28","close_2026":683.39,"pct_2026":3.6963,"divergence":-0.4017},{"day":6,"date_2015":"2014-10-22","close_2015":192.69,"pct_2015":3.3578,"date_2026":"2025-12-01","close_2026":680.27,"pct_2026":3.2229,"divergence":-0.1349},{"day":7,"date_2015":"2014-10-23","close_2015":194.93,"pct_2015":4.5594,"date_2026":"2025-12-02","close_2026":681.53,"pct_2026":3.4141,"divergence":-1.1452},{"day":8,"date_2015":"2014-10-24","close_2015":196.43,"pct_2015":5.3639,"date_2026":"2025-12-03","close_2026":683.89,"pct_2026":3.7722,"divergence":-1.5917},{"day":9,"date_2015":"2014-10-27","close_2015":196.16,"pct_2015":5.2191,"date_2026":"2025-12-04","close_2026":684.39,"pct_2026":3.8481,"divergence":-1.371},{"day":10,"date_2015":"2014-10-28","close_2015":198.41,"pct_2015":6.426,"date_2026":"2025-12-05","close_2026":685.69,"pct_2026":4.0453,"divergence":-2.3807},{"day":11,"date_2015":"2014-10-29","close_2015":198.11,"pct_2015":6.2651,"date_2026":"2025-12-08","close_2026":683.63,"pct_2026":3.7328,"divergence":-2.5323},{"day":12,"date_2015":"2014-10-30","close_2015":199.38,"pct_2015":6.9463,"date_2026":"2025-12-09","close_2026":683.04,"pct_2026":3.6432,"divergence":-3.3031},{"day":13,"date_2015":"2014-10-31","close_2015":201.66,"pct_2015":8.1693,"date_2026":"2025-12-10","close_2026":687.57,"pct_2026":4.3306,"divergence":-3.8387},{"day":14,"date_2015":"2014-11-03","close_2015":201.77,"pct_2015":8.2283,"date_2026":"2025-12-11","close_2026":689.17,"pct_2026":4.5734,"divergence":-3.6549},{"day":15,"date_2015":"2014-11-04","close_2015":201.07,"pct_2015":7.8528,"date_2026":"2025-12-12","close_2026":681.76,"pct_2026":3.449,"divergence":-4.4038},{"day":16,"date_2015":"2014-11-05","close_2015":202.34,"pct_2015":8.534,"date_2026":"2025-12-15","close_2026":680.73,"pct_2026":3.2927,"divergence":-5.2413},{"day":17,"date_2015":"2014-11-06","close_2015":203.15,"pct_2015":8.9685,"date_2026":"2025-12-16","close_2026":678.87,"pct_2026":3.0105,"divergence":-5.958},{"day":18,"date_2015":"2014-11-07","close_2015":203.34,"pct_2015":9.0704,"date_2026":"2025-12-17","close_2026":671.4,"pct_2026":1.877,"divergence":-7.1934},{"day":19,"date_2015":"2014-11-10","close_2015":203.98,"pct_2015":9.4137,"date_2026":"2025-12-18","close_2026":676.47,"pct_2026":2.6463,"divergence":-6.7674},{"day":20,"date_2015":"2014-11-11","close_2015":204.18,"pct_2015":9.521,"date_2026":"2025-12-19","close_2026":680.59,"pct_2026":3.2715,"divergence":-6.2495},{"day":21,"date_2015":"2014-11-12","close_2015":203.96,"pct_2015":9.403,"date_2026":"2025-12-22","close_2026":684.83,"pct_2026":3.9148,"divergence":-5.4882},{"day":22,"date_2015":"2014-11-13","close_2015":204.19,"pct_2015":9.5264,"date_2026":"2025-12-23","close_2026":687.96,"pct_2026":4.3898,"divergence":-5.1366},{"day":23,"date_2015":"2014-11-14","close_2015":204.24,"pct_2015":9.5532,"date_2026":"2025-12-24","close_2026":690.38,"pct_2026":4.757,"divergence":-4.7962},{"day":24,"date_2015":"2014-11-17","close_2015":204.37,"pct_2015":9.6229,"date_2026":"2025-12-26","close_2026":690.31,"pct_2026":4.7464,"divergence":-4.8766},{"day":25,"date_2015":"2014-11-18","close_2015":205.55,"pct_2015":10.2559,"date_2026":"2025-12-29","close_2026":687.85,"pct_2026":4.3731,"divergence":-5.8828},{"day":26,"date_2015":"2014-11-19","close_2015":205.22,"pct_2015":10.0789,"date_2026":"2025-12-30","close_2026":687.01,"pct_2026":4.2456,"divergence":-5.8332},{"day":27,"date_2015":"2014-11-20","close_2015":205.58,"pct_2015":10.272,"date_2026":"2025-12-31","close_2026":681.92,"pct_2026":3.4733,"divergence":-6.7987},{"day":28,"date_2015":"2014-11-21","close_2015":206.68,"pct_2015":10.862,"date_2026":"2026-01-02","close_2026":683.17,"pct_2026":3.663,"divergence":-7.199},{"day":29,"date_2015":"2014-11-24","close_2015":207.26,"pct_2015":11.1731,"date_2026":"2026-01-05","close_2026":687.72,"pct_2026":4.3534,"divergence":-6.8197},{"day":30,"date_2015":"2014-11-25","close_2015":207.11,"pct_2015":11.0926,"date_2026":"2026-01-06","close_2026":691.81,"pct_2026":4.974,"divergence":-6.1187},{"day":31,"date_2015":"2014-11-26","close_2015":207.64,"pct_2015":11.3769,"date_2026":"2026-01-07","close_2026":689.58,"pct_2026":4.6356,"divergence":-6.7413},{"day":32,"date_2015":"2014-11-28","close_2015":207.2,"pct_2015":11.1409,"date_2026":"2026-01-08","close_2026":689.51,"pct_2026":4.625,"divergence":-6.5159},{"day":33,"date_2015":"2014-12-01","close_2015":205.76,"pct_2015":10.3685,"date_2026":"2026-01-09","close_2026":694.07,"pct_2026":5.3169,"divergence":-5.0516},{"day":34,"date_2015":"2014-12-02","close_2015":207.09,"pct_2015":11.0819,"date_2026":"2026-01-12","close_2026":695.16,"pct_2026":5.4823,"divergence":-5.5996},{"day":35,"date_2015":"2014-12-03","close_2015":207.89,"pct_2015":11.511,"date_2026":"2026-01-13","close_2026":693.77,"pct_2026":5.2714,"divergence":-6.2396},{"day":36,"date_2015":"2014-12-04","close_2015":207.66,"pct_2015":11.3877,"date_2026":"2026-01-14","close_2026":690.36,"pct_2026":4.7539,"divergence":-6.6337},{"day":37,"date_2015":"2014-12-05","close_2015":208.0,"pct_2015":11.57,"date_2026":"2026-01-15","close_2026":692.24,"pct_2026":5.0392,"divergence":-6.5308},{"day":38,"date_2015":"2014-12-08","close_2015":206.61,"pct_2015":10.8244,"date_2026":"2026-01-16","close_2026":691.66,"pct_2026":4.9512,"divergence":-5.8732},{"day":39,"date_2015":"2014-12-09","close_2015":206.47,"pct_2015":10.7493,"date_2026":"2026-01-20","close_2026":677.58,"pct_2026":2.8147,"divergence":-7.9346},{"day":40,"date_2015":"2014-12-10","close_2015":203.16,"pct_2015":8.9739,"date_2026":"2026-01-21","close_2026":685.4,"pct_2026":4.0013,"divergence":-4.9725},{"day":41,"date_2015":"2014-12-11","close_2015":204.19,"pct_2015":9.5264,"date_2026":"2026-01-22","close_2026":688.98,"pct_2026":4.5446,"divergence":-4.9818},{"day":42,"date_2015":"2014-12-12","close_2015":200.89,"pct_2015":7.7563,"date_2026":"2026-01-23","close_2026":689.23,"pct_2026":4.5825,"divergence":-3.1738},{"day":43,"date_2015":"2014-12-15","close_2015":199.51,"pct_2015":7.016,"date_2026":"2026-01-26","close_2026":692.73,"pct_2026":5.1136,"divergence":-1.9025},{"day":44,"date_2015":"2014-12-16","close_2015":197.91,"pct_2015":6.1578,"date_2026":"2026-01-27","close_2026":695.49,"pct_2026":5.5324,"divergence":-0.6254},{"day":45,"date_2015":"2014-12-17","close_2015":201.79,"pct_2015":8.239,"date_2026":"2026-01-28","close_2026":695.42,"pct_2026":5.5217,"divergence":-2.7173},{"day":46,"date_2015":"2014-12-18","close_2015":206.78,"pct_2015":10.9156,"date_2026":"2026-01-29","close_2026":694.04,"pct_2026":5.3123,"divergence":-5.6033},{"day":47,"date_2015":"2014-12-19","close_2015":206.52,"pct_2015":10.7762,"date_2026":"2026-01-30","close_2026":691.97,"pct_2026":4.9982,"divergence":-5.7779},{"day":48,"date_2015":"2014-12-22","close_2015":207.47,"pct_2015":11.2857,"date_2026":"2026-02-02","close_2026":695.41,"pct_2026":5.5202,"divergence":-5.7655},{"day":49,"date_2015":"2014-12-23","close_2015":207.75,"pct_2015":11.4359,"date_2026":"2026-02-03","close_2026":689.53,"pct_2026":4.628,"divergence":-6.8079},{"day":50,"date_2015":"2014-12-24","close_2015":207.77,"pct_2015":11.4467,"date_2026":"2026-02-04","close_2026":686.19,"pct_2026":4.1212,"divergence":-7.3255},{"day":51,"date_2015":"2014-12-26","close_2015":208.44,"pct_2015":11.806,"date_2026":"2026-02-05","close_2026":677.62,"pct_2026":2.8208,"divergence":-8.9852},{"day":52,"date_2015":"2014-12-29","close_2015":208.72,"pct_2015":11.9562,"date_2026":"2026-02-06","close_2026":690.62,"pct_2026":4.7934,"divergence":-7.1628},{"day":53,"date_2015":"2014-12-30","close_2015":207.6,"pct_2015":11.3555,"date_2026":"2026-02-09","close_2026":693.95,"pct_2026":5.2987,"divergence":-6.0568},{"day":54,"date_2015":"2014-12-31","close_2015":205.54,"pct_2015":10.2505,"date_2026":"2026-02-10","close_2026":692.12,"pct_2026":5.021,"divergence":-5.2295},{"day":55,"date_2015":"2015-01-02","close_2015":205.43,"pct_2015":10.1915,"date_2026":"2026-02-11","close_2026":691.96,"pct_2026":4.9967,"divergence":-5.1948},{"day":56,"date_2015":"2015-01-05","close_2015":201.72,"pct_2015":8.2015,"date_2026":"2026-02-12","close_2026":681.27,"pct_2026":3.3747,"divergence":-4.8268},{"day":57,"date_2015":"2015-01-06","close_2015":199.82,"pct_2015":7.1823,"date_2026":"2026-02-13","close_2026":681.75,"pct_2026":3.4475,"divergence":-3.7348},{"day":58,"date_2015":"2015-01-07","close_2015":202.31,"pct_2015":8.5179,"date_2026":"2026-02-17","close_2026":682.85,"pct_2026":3.6144,"divergence":-4.9036},{"day":59,"date_2015":"2015-01-08","close_2015":205.9,"pct_2015":10.4436,"date_2026":"2026-02-18","close_2026":686.29,"pct_2026":4.1364,"divergence":-6.3072},{"day":60,"date_2015":"2015-01-09","close_2015":204.25,"pct_2015":9.5586,"date_2026":"2026-02-19","close_2026":684.48,"pct_2026":3.8617,"divergence":-5.6968},{"day":61,"date_2015":"2015-01-12","close_2015":202.65,"pct_2015":8.7003,"date_2026":"2026-02-20","close_2026":689.43,"pct_2026":4.6128,"divergence":-4.0875},{"day":62,"date_2015":"2015-01-13","close_2015":202.08,"pct_2015":8.3946,"date_2026":"2026-02-23","close_2026":682.39,"pct_2026":3.5446,"divergence":-4.85},{"day":63,"date_2015":"2015-01-14","close_2015":200.86,"pct_2015":7.7402,"date_2026":"2026-02-24","close_2026":687.35,"pct_2026":4.2972,"divergence":-3.443},{"day":64,"date_2015":"2015-01-15","close_2015":199.02,"pct_2015":6.7532,"date_2026":"2026-02-25","close_2026":693.15,"pct_2026":5.1773,"divergence":-1.5759},{"day":65,"date_2015":"2015-01-16","close_2015":201.63,"pct_2015":8.1532,"date_2026":"2026-02-26","close_2026":689.3,"pct_2026":4.5931,"divergence":-3.5601},{"day":66,"date_2015":"2015-01-20","close_2015":202.06,"pct_2015":8.3838,"date_2026":"2026-02-27","close_2026":685.99,"pct_2026":4.0909,"divergence":-4.293},{"day":67,"date_2015":"2015-01-21","close_2015":203.08,"pct_2015":8.931,"date_2026":"2026-03-02","close_2026":686.38,"pct_2026":4.15,"divergence":-4.7809},{"day":68,"date_2015":"2015-01-22","close_2015":206.1,"pct_2015":10.5509,"date_2026":"2026-03-03","close_2026":680.33,"pct_2026":3.232,"divergence":-7.3189},{"day":69,"date_2015":"2015-01-23","close_2015":204.97,"pct_2015":9.9448,"date_2026":"2026-03-04","close_2026":685.13,"pct_2026":3.9604,"divergence":-5.9844},{"day":70,"date_2015":"2015-01-26","close_2015":205.45,"pct_2015":10.2022,"date_2026":"2026-03-05","close_2026":681.31,"pct_2026":3.3807,"divergence":-6.8215},{"day":71,"date_2015":"2015-01-27","close_2015":202.74,"pct_2015":8.7486,"date_2026":"2026-03-06","close_2026":672.38,"pct_2026":2.0257,"divergence":-6.7229},{"day":72,"date_2015":"2015-01-28","close_2015":200.14,"pct_2015":7.354,"date_2026":"2026-03-09","close_2026":678.27,"pct_2026":2.9194,"divergence":-4.4345},{"day":73,"date_2015":"2015-01-29","close_2015":201.99,"pct_2015":8.3463,"date_2026":"2026-03-10","close_2026":677.18,"pct_2026":2.754,"divergence":-5.5923},{"day":74,"date_2015":"2015-01-30","close_2015":199.45,"pct_2015":6.9839,"date_2026":"2026-03-11","close_2026":676.33,"pct_2026":2.6251,"divergence":-4.3588},{"day":75,"date_2015":"2015-02-02","close_2015":201.92,"pct_2015":8.3088,"date_2026":"2026-03-12","close_2026":666.06,"pct_2026":1.0667,"divergence":-7.242},{"day":76,"date_2015":"2015-02-03","close_2015":204.84,"pct_2015":9.875,"date_2026":"2026-03-13","close_2026":662.29,"pct_2026":0.4947,"divergence":-9.3804},{"day":77,"date_2015":"2015-02-04","close_2015":204.06,"pct_2015":9.4566,"date_2026":"2026-03-16","close_2026":669.03,"pct_2026":1.5174,"divergence":-7.9393},{"day":78,"date_2015":"2015-02-05","close_2015":206.12,"pct_2015":10.5616,"date_2026":"2026-03-17","close_2026":670.79,"pct_2026":1.7844,"divergence":-8.7772},{"day":79,"date_2015":"2015-02-06","close_2015":205.55,"pct_2015":10.2559,"date_2026":"2026-03-18","close_2026":661.43,"pct_2026":0.3642,"divergence":-9.8917},{"day":80,"date_2015":"2015-02-09","close_2015":204.63,"pct_2015":9.7624,"date_2026":"2026-03-19","close_2026":659.8,"pct_2026":0.1168,"divergence":-9.6456},{"day":81,"date_2015":"2015-02-10","close_2015":206.81,"pct_2015":10.9317,"date_2026":"2026-03-20","close_2026":648.57,"pct_2026":-1.5872,"divergence":-12.5189},{"day":82,"date_2015":"2015-02-11","close_2015":206.93,"pct_2015":10.9961,"date_2026":"2026-03-23","close_2026":655.38,"pct_2026":-0.5538,"divergence":-11.5499},{"day":83,"date_2015":"2015-02-12","close_2015":208.92,"pct_2015":12.0635,"date_2026":"2026-03-24","close_2026":653.18,"pct_2026":-0.8877,"divergence":-12.9512},{"day":84,"date_2015":"2015-02-13","close_2015":209.78,"pct_2015":12.5248,"date_2026":"2026-03-25","close_2026":656.82,"pct_2026":-0.3353,"divergence":-12.8602},{"day":85,"date_2015":"2015-02-17","close_2015":210.11,"pct_2015":12.7018,"date_2026":"2026-03-26","close_2026":645.09,"pct_2026":-2.1152,"divergence":-14.8171},{"day":86,"date_2015":"2015-02-18","close_2015":210.13,"pct_2015":12.7126,"date_2026":"2026-03-27","close_2026":634.09,"pct_2026":-3.7843,"divergence":-16.4969}],"proj":[{"day":87,"days_ahead":1,"est_date_2026":"2026-03-30","ref_date_2015":"2015-02-19","pct_2015":12.6321,"day_chg_2015":-0.0714,"projected_spy":633.64,"pct_from_now":-0.0714,"pct_from_anchor25":-3.853},{"day":88,"days_ahead":2,"est_date_2026":"2026-03-31","ref_date_2015":"2015-02-20","pct_2015":13.308,"day_chg_2015":0.6001,"projected_spy":637.44,"pct_from_now":0.5282,"pct_from_anchor25":-3.2761},{"day":89,"days_ahead":3,"est_date_2026":"2026-04-01","ref_date_2015":"2015-02-23","pct_2015":13.2919,"day_chg_2015":-0.0142,"projected_spy":637.35,"pct_from_now":0.514,"pct_from_anchor25":-3.2898},{"day":90,"days_ahead":4,"est_date_2026":"2026-04-02","ref_date_2015":"2015-02-24","pct_2015":13.6137,"day_chg_2015":0.2841,"projected_spy":639.16,"pct_from_now":0.7995,"pct_from_anchor25":-3.0151},{"day":91,"days_ahead":5,"est_date_2026":"2026-04-03","ref_date_2015":"2015-02-25","pct_2015":13.5171,"day_chg_2015":-0.085,"projected_spy":638.62,"pct_from_now":0.7138,"pct_from_anchor25":-3.0975},{"day":92,"days_ahead":6,"est_date_2026":"2026-04-06","ref_date_2015":"2015-02-26","pct_2015":13.383,"day_chg_2015":-0.1181,"projected_spy":637.86,"pct_from_now":0.5949,"pct_from_anchor25":-3.212},{"day":93,"days_ahead":7,"est_date_2026":"2026-04-07","ref_date_2015":"2015-02-27","pct_2015":12.9968,"day_chg_2015":-0.3406,"projected_spy":635.69,"pct_from_now":0.2522,"pct_from_anchor25":-3.5417},{"day":94,"days_ahead":8,"est_date_2026":"2026-04-08","ref_date_2015":"2015-03-02","pct_2015":13.7102,"day_chg_2015":0.6313,"projected_spy":639.7,"pct_from_now":0.8852,"pct_from_anchor25":-2.9327},{"day":95,"days_ahead":9,"est_date_2026":"2026-04-09","ref_date_2015":"2015-03-03","pct_2015":13.2436,"day_chg_2015":-0.4104,"projected_spy":637.08,"pct_from_now":0.4711,"pct_from_anchor25":-3.331},{"day":96,"days_ahead":10,"est_date_2026":"2026-04-10","ref_date_2015":"2015-03-04","pct_2015":12.7662,"day_chg_2015":-0.4216,"projected_spy":634.39,"pct_from_now":0.0476,"pct_from_anchor25":-3.7386},{"day":97,"days_ahead":11,"est_date_2026":"2026-04-13","ref_date_2015":"2015-03-05","pct_2015":12.8896,"day_chg_2015":0.1094,"projected_spy":635.09,"pct_from_now":0.157,"pct_from_anchor25":-3.6332},{"day":98,"days_ahead":12,"est_date_2026":"2026-04-14","ref_date_2015":"2015-03-06","pct_2015":11.3018,"day_chg_2015":-1.4064,"projected_spy":626.15,"pct_from_now":-1.2516,"pct_from_anchor25":-4.9886},{"day":99,"days_ahead":13,"est_date_2026":"2026-04-15","ref_date_2015":"2015-03-09","pct_2015":11.7631,"day_chg_2015":0.4145,"projected_spy":628.75,"pct_from_now":-0.8423,"pct_from_anchor25":-4.5948},{"day":100,"days_ahead":14,"est_date_2026":"2026-04-16","ref_date_2015":"2015-03-10","pct_2015":9.9501,"day_chg_2015":-1.6222,"projected_spy":618.55,"pct_from_now":-2.4509,"pct_from_anchor25":-6.1425},{"day":101,"days_ahead":15,"est_date_2026":"2026-04-17","ref_date_2015":"2015-03-11","pct_2015":9.6927,"day_chg_2015":-0.2342,"projected_spy":617.1,"pct_from_now":-2.6793,"pct_from_anchor25":-6.3623},{"day":102,"days_ahead":16,"est_date_2026":"2026-04-20","ref_date_2015":"2015-03-12","pct_2015":11.0873,"day_chg_2015":1.2714,"projected_spy":624.95,"pct_from_now":-1.442,"pct_from_anchor25":-5.1717},{"day":103,"days_ahead":17,"est_date_2026":"2026-04-21","ref_date_2015":"2015-03-13","pct_2015":10.4061,"day_chg_2015":-0.6132,"projected_spy":621.11,"pct_from_now":-2.0464,"pct_from_anchor25":-5.7533},{"day":104,"days_ahead":18,"est_date_2026":"2026-04-22","ref_date_2015":"2015-03-16","pct_2015":11.8811,"day_chg_2015":1.3361,"projected_spy":629.41,"pct_from_now":-0.7376,"pct_from_anchor25":-4.4941},{"day":105,"days_ahead":19,"est_date_2026":"2026-04-23","ref_date_2015":"2015-03-17","pct_2015":11.5486,"day_chg_2015":-0.2972,"projected_spy":627.54,"pct_from_now":-1.0327,"pct_from_anchor25":-4.778},{"day":106,"days_ahead":20,"est_date_2026":"2026-04-24","ref_date_2015":"2015-03-18","pct_2015":12.8896,"day_chg_2015":1.2022,"projected_spy":635.09,"pct_from_now":0.157,"pct_from_anchor25":-3.6332},{"day":107,"days_ahead":21,"est_date_2026":"2026-04-27","ref_date_2015":"2015-03-19","pct_2015":12.3746,"day_chg_2015":-0.4561,"projected_spy":632.19,"pct_from_now":-0.2998,"pct_from_anchor25":-4.0728},{"day":108,"days_ahead":22,"est_date_2026":"2026-04-28","ref_date_2015":"2015-03-20","pct_2015":12.8627,"day_chg_2015":0.4344,"projected_spy":634.93,"pct_from_now":0.1333,"pct_from_anchor25":-3.6561},{"day":109,"days_ahead":23,"est_date_2026":"2026-04-29","ref_date_2015":"2015-03-23","pct_2015":12.6428,"day_chg_2015":-0.1949,"projected_spy":633.7,"pct_from_now":-0.0619,"pct_from_anchor25":-3.8439},{"day":110,"days_ahead":24,"est_date_2026":"2026-04-30","ref_date_2015":"2015-03-24","pct_2015":12.0099,"day_chg_2015":-0.5619,"projected_spy":630.14,"pct_from_now":-0.6234,"pct_from_anchor25":-4.3842},{"day":111,"days_ahead":25,"est_date_2026":"2026-05-01","ref_date_2015":"2015-03-25","pct_2015":10.3685,"day_chg_2015":-1.4654,"projected_spy":620.9,"pct_from_now":-2.0797,"pct_from_anchor25":-5.7853},{"day":112,"days_ahead":26,"est_date_2026":"2026-05-04","ref_date_2015":"2015-03-26","pct_2015":10.1057,"day_chg_2015":-0.2381,"projected_spy":619.42,"pct_from_now":-2.3129,"pct_from_anchor25":-6.0097},{"day":113,"days_ahead":27,"est_date_2026":"2026-05-05","ref_date_2015":"2015-03-27","pct_2015":10.3578,"day_chg_2015":0.229,"projected_spy":620.84,"pct_from_now":-2.0892,"pct_from_anchor25":-5.7945},{"day":114,"days_ahead":28,"est_date_2026":"2026-05-06","ref_date_2015":"2015-03-30","pct_2015":11.7041,"day_chg_2015":1.22,"projected_spy":628.42,"pct_from_now":-0.8947,"pct_from_anchor25":-4.6452},{"day":115,"days_ahead":29,"est_date_2026":"2026-05-07","ref_date_2015":"2015-03-31","pct_2015":10.7279,"day_chg_2015":-0.874,"projected_spy":622.92,"pct_from_now":-1.7608,"pct_from_anchor25":-5.4785},{"day":116,"days_ahead":30,"est_date_2026":"2026-05-08","ref_date_2015":"2015-04-01","pct_2015":10.3363,"day_chg_2015":-0.3536,"projected_spy":620.72,"pct_from_now":-2.1082,"pct_from_anchor25":-5.8128},{"day":117,"days_ahead":31,"est_date_2026":"2026-05-11","ref_date_2015":"2015-04-02","pct_2015":10.7333,"day_chg_2015":0.3597,"projected_spy":622.96,"pct_from_now":-1.7561,"pct_from_anchor25":-5.474},{"day":118,"days_ahead":32,"est_date_2026":"2026-05-12","ref_date_2015":"2015-04-06","pct_2015":11.4788,"day_chg_2015":0.6733,"projected_spy":627.15,"pct_from_now":-1.0946,"pct_from_anchor25":-4.8375},{"day":119,"days_ahead":33,"est_date_2026":"2026-05-13","ref_date_2015":"2015-04-07","pct_2015":11.1838,"day_chg_2015":-0.2646,"projected_spy":625.49,"pct_from_now":-1.3563,"pct_from_anchor25":-5.0893},{"day":120,"days_ahead":34,"est_date_2026":"2026-05-14","ref_date_2015":"2015-04-08","pct_2015":11.5593,"day_chg_2015":0.3377,"projected_spy":627.6,"pct_from_now":-1.0232,"pct_from_anchor25":-4.7688},{"day":121,"days_ahead":35,"est_date_2026":"2026-05-15","ref_date_2015":"2015-04-09","pct_2015":12.0528,"day_chg_2015":0.4423,"projected_spy":630.38,"pct_from_now":-0.5854,"pct_from_anchor25":-4.3476},{"day":122,"days_ahead":36,"est_date_2026":"2026-05-18","ref_date_2015":"2015-04-10","pct_2015":12.6643,"day_chg_2015":0.5457,"projected_spy":633.82,"pct_from_now":-0.0428,"pct_from_anchor25":-3.8256},{"day":123,"days_ahead":37,"est_date_2026":"2026-05-19","ref_date_2015":"2015-04-13","pct_2015":12.1547,"day_chg_2015":-0.4523,"projected_spy":630.95,"pct_from_now":-0.4949,"pct_from_anchor25":-4.2606},{"day":124,"days_ahead":38,"est_date_2026":"2026-05-20","ref_date_2015":"2015-04-14","pct_2015":12.3693,"day_chg_2015":0.1913,"projected_spy":632.16,"pct_from_now":-0.3046,"pct_from_anchor25":-4.0774},{"day":125,"days_ahead":39,"est_date_2026":"2026-05-21","ref_date_2015":"2015-04-15","pct_2015":12.8735,"day_chg_2015":0.4487,"projected_spy":635.0,"pct_from_now":0.1428,"pct_from_anchor25":-3.647},{"day":126,"days_ahead":40,"est_date_2026":"2026-05-22","ref_date_2015":"2015-04-16","pct_2015":12.8413,"day_chg_2015":-0.0285,"projected_spy":634.81,"pct_from_now":0.1142,"pct_from_anchor25":-3.6745},{"day":127,"days_ahead":41,"est_date_2026":"2026-05-25","ref_date_2015":"2015-04-17","pct_2015":11.5432,"day_chg_2015":-1.1504,"projected_spy":627.51,"pct_from_now":-1.0375,"pct_from_anchor25":-4.7825},{"day":128,"days_ahead":42,"est_date_2026":"2026-05-26","ref_date_2015":"2015-04-20","pct_2015":12.5624,"day_chg_2015":0.9137,"projected_spy":633.25,"pct_from_now":-0.1333,"pct_from_anchor25":-3.9126},{"day":129,"days_ahead":43,"est_date_2026":"2026-05-27","ref_date_2015":"2015-04-21","pct_2015":12.4283,"day_chg_2015":-0.1191,"projected_spy":632.49,"pct_from_now":-0.2522,"pct_from_anchor25":-4.027},{"day":130,"days_ahead":44,"est_date_2026":"2026-05-28","ref_date_2015":"2015-04-22","pct_2015":12.9808,"day_chg_2015":0.4914,"projected_spy":635.6,"pct_from_now":0.2379,"pct_from_anchor25":-3.5554},{"day":131,"days_ahead":45,"est_date_2026":"2026-05-29","ref_date_2015":"2015-04-23","pct_2015":13.265,"day_chg_2015":0.2516,"projected_spy":637.2,"pct_from_now":0.4902,"pct_from_anchor25":-3.3127},{"day":132,"days_ahead":46,"est_date_2026":"2026-06-01","ref_date_2015":"2015-04-24","pct_2015":13.5279,"day_chg_2015":0.232,"projected_spy":638.68,"pct_from_now":0.7234,"pct_from_anchor25":-3.0884},{"day":133,"days_ahead":47,"est_date_2026":"2026-06-02","ref_date_2015":"2015-04-27","pct_2015":13.0558,"day_chg_2015":-0.4158,"projected_spy":636.02,"pct_from_now":0.3046,"pct_from_anchor25":-3.4913},{"day":134,"days_ahead":48,"est_date_2026":"2026-06-03","ref_date_2015":"2015-04-28","pct_2015":13.4152,"day_chg_2015":0.3179,"projected_spy":638.04,"pct_from_now":0.6234,"pct_from_anchor25":-3.1845},{"day":135,"days_ahead":49,"est_date_2026":"2026-06-04","ref_date_2015":"2015-04-29","pct_2015":12.9486,"day_chg_2015":-0.4115,"projected_spy":635.42,"pct_from_now":0.2094,"pct_from_anchor25":-3.5829},{"day":136,"days_ahead":50,"est_date_2026":"2026-06-05","ref_date_2015":"2015-04-30","pct_2015":11.8168,"day_chg_2015":-1.002,"projected_spy":629.05,"pct_from_now":-0.7947,"pct_from_anchor25":-4.549},{"day":137,"days_ahead":51,"est_date_2026":"2026-06-08","ref_date_2015":"2015-05-01","pct_2015":13.029,"day_chg_2015":1.0841,"projected_spy":635.87,"pct_from_now":0.2808,"pct_from_anchor25":-3.5142},{"day":138,"days_ahead":52,"est_date_2026":"2026-06-09","ref_date_2015":"2015-05-04","pct_2015":13.3509,"day_chg_2015":0.2847,"projected_spy":637.68,"pct_from_now":0.5663,"pct_from_anchor25":-3.2395},{"day":139,"days_ahead":53,"est_date_2026":"2026-06-10","ref_date_2015":"2015-05-05","pct_2015":12.0528,"day_chg_2015":-1.1452,"projected_spy":630.38,"pct_from_now":-0.5854,"pct_from_anchor25":-4.3476},{"day":140,"days_ahead":54,"est_date_2026":"2026-06-11","ref_date_2015":"2015-05-06","pct_2015":11.5915,"day_chg_2015":-0.4117,"projected_spy":627.78,"pct_from_now":-0.9946,"pct_from_anchor25":-4.7413},{"day":141,"days_ahead":55,"est_date_2026":"2026-06-12","ref_date_2015":"2015-05-07","pct_2015":12.0367,"day_chg_2015":0.399,"projected_spy":630.29,"pct_from_now":-0.5996,"pct_from_anchor25":-4.3613},{"day":142,"days_ahead":56,"est_date_2026":"2026-06-15","ref_date_2015":"2015-05-08","pct_2015":13.5118,"day_chg_2015":1.3166,"projected_spy":638.59,"pct_from_now":0.7091,"pct_from_anchor25":-3.1021},{"day":143,"days_ahead":57,"est_date_2026":"2026-06-16","ref_date_2015":"2015-05-11","pct_2015":12.97,"day_chg_2015":-0.4773,"projected_spy":635.54,"pct_from_now":0.2284,"pct_from_anchor25":-3.5646},{"day":144,"days_ahead":58,"est_date_2026":"2026-06-17","ref_date_2015":"2015-05-12","pct_2015":12.6321,"day_chg_2015":-0.2991,"projected_spy":633.64,"pct_from_now":-0.0714,"pct_from_anchor25":-3.853},{"day":145,"days_ahead":59,"est_date_2026":"2026-06-18","ref_date_2015":"2015-05-13","pct_2015":12.6535,"day_chg_2015":0.0191,"projected_spy":633.76,"pct_from_now":-0.0523,"pct_from_anchor25":-3.8347},{"day":146,"days_ahead":60,"est_date_2026":"2026-06-19","ref_date_2015":"2015-05-14","pct_2015":13.8283,"day_chg_2015":1.0428,"projected_spy":640.37,"pct_from_now":0.9899,"pct_from_anchor25":-2.8319},{"day":147,"days_ahead":61,"est_date_2026":"2026-06-22","ref_date_2015":"2015-05-15","pct_2015":13.9516,"day_chg_2015":0.1084,"projected_spy":641.06,"pct_from_now":1.0993,"pct_from_anchor25":-2.7266},{"day":148,"days_ahead":62,"est_date_2026":"2026-06-23","ref_date_2015":"2015-05-18","pct_2015":14.3056,"day_chg_2015":0.3107,"projected_spy":643.05,"pct_from_now":1.4134,"pct_from_anchor25":-2.4244},{"day":149,"days_ahead":63,"est_date_2026":"2026-06-24","ref_date_2015":"2015-05-19","pct_2015":14.2681,"day_chg_2015":-0.0329,"projected_spy":642.84,"pct_from_now":1.3801,"pct_from_anchor25":-2.4565},{"day":150,"days_ahead":64,"est_date_2026":"2026-06-25","ref_date_2015":"2015-05-20","pct_2015":14.1876,"day_chg_2015":-0.0704,"projected_spy":642.39,"pct_from_now":1.3087,"pct_from_anchor25":-2.5252},{"day":151,"days_ahead":65,"est_date_2026":"2026-06-26","ref_date_2015":"2015-05-21","pct_2015":14.5202,"day_chg_2015":0.2912,"projected_spy":644.26,"pct_from_now":1.6038,"pct_from_anchor25":-2.2413},{"day":152,"days_ahead":66,"est_date_2026":"2026-06-29","ref_date_2015":"2015-05-22","pct_2015":14.2466,"day_chg_2015":-0.2389,"projected_spy":642.72,"pct_from_now":1.3611,"pct_from_anchor25":-2.4748},{"day":153,"days_ahead":67,"est_date_2026":"2026-06-30","ref_date_2015":"2015-05-26","pct_2015":13.0183,"day_chg_2015":-1.0752,"projected_spy":635.81,"pct_from_now":0.2713,"pct_from_anchor25":-3.5234},{"day":154,"days_ahead":68,"est_date_2026":"2026-07-01","ref_date_2015":"2015-05-27","pct_2015":14.0911,"day_chg_2015":0.9492,"projected_spy":641.85,"pct_from_now":1.223,"pct_from_anchor25":-2.6076},{"day":155,"days_ahead":69,"est_date_2026":"2026-07-02","ref_date_2015":"2015-05-28","pct_2015":13.9624,"day_chg_2015":-0.1128,"projected_spy":641.12,"pct_from_now":1.1088,"pct_from_anchor25":-2.7175},{"day":156,"days_ahead":70,"est_date_2026":"2026-07-03","ref_date_2015":"2015-05-29","pct_2015":13.2543,"day_chg_2015":-0.6213,"projected_spy":637.14,"pct_from_now":0.4807,"pct_from_anchor25":-3.3219},{"day":157,"days_ahead":71,"est_date_2026":"2026-07-06","ref_date_2015":"2015-06-01","pct_2015":13.485,"day_chg_2015":0.2037,"projected_spy":638.44,"pct_from_now":0.6853,"pct_from_anchor25":-3.125},{"day":158,"days_ahead":72,"est_date_2026":"2026-07-07","ref_date_2015":"2015-06-02","pct_2015":13.3723,"day_chg_2015":-0.0993,"projected_spy":637.8,"pct_from_now":0.5853,"pct_from_anchor25":-3.2212},{"day":159,"days_ahead":73,"est_date_2026":"2026-07-08","ref_date_2015":"2015-06-03","pct_2015":13.6727,"day_chg_2015":0.2649,"projected_spy":639.49,"pct_from_now":0.8519,"pct_from_anchor25":-2.9647},{"day":160,"days_ahead":74,"est_date_2026":"2026-07-09","ref_date_2015":"2015-06-04","pct_2015":12.7126,"day_chg_2015":-0.8447,"projected_spy":634.09,"pct_from_now":-0.0,"pct_from_anchor25":-3.7843},{"day":161,"days_ahead":75,"est_date_2026":"2026-07-10","ref_date_2015":"2015-06-05","pct_2015":12.5195,"day_chg_2015":-0.1713,"projected_spy":633.0,"pct_from_now":-0.1713,"pct_from_anchor25":-3.9492},{"day":162,"days_ahead":76,"est_date_2026":"2026-07-13","ref_date_2015":"2015-06-08","pct_2015":11.8275,"day_chg_2015":-0.615,"projected_spy":629.11,"pct_from_now":-0.7852,"pct_from_anchor25":-4.5399},{"day":163,"days_ahead":77,"est_date_2026":"2026-07-14","ref_date_2015":"2015-06-09","pct_2015":11.8114,"day_chg_2015":-0.0144,"projected_spy":629.02,"pct_from_now":-0.7995,"pct_from_anchor25":-4.5536},{"day":164,"days_ahead":78,"est_date_2026":"2026-07-15","ref_date_2015":"2015-06-10","pct_2015":13.1524,"day_chg_2015":1.1993,"projected_spy":636.56,"pct_from_now":0.3902,"pct_from_anchor25":-3.4089},{"day":165,"days_ahead":79,"est_date_2026":"2026-07-16","ref_date_2015":"2015-06-11","pct_2015":13.5171,"day_chg_2015":0.3224,"projected_spy":638.62,"pct_from_now":0.7138,"pct_from_anchor25":-3.0975},{"day":166,"days_ahead":80,"est_date_2026":"2026-07-17","ref_date_2015":"2015-06-12","pct_2015":12.6482,"day_chg_2015":-0.7655,"projected_spy":633.73,"pct_from_now":-0.0571,"pct_from_anchor25":-3.8393},{"day":167,"days_ahead":81,"est_date_2026":"2026-07-20","ref_date_2015":"2015-06-15","pct_2015":12.1654,"day_chg_2015":-0.4285,"projected_spy":631.01,"pct_from_now":-0.4854,"pct_from_anchor25":-4.2514},{"day":168,"days_ahead":82,"est_date_2026":"2026-07-21","ref_date_2015":"2015-06-16","pct_2015":12.7769,"day_chg_2015":0.5452,"projected_spy":634.45,"pct_from_now":0.0571,"pct_from_anchor25":-3.7294},{"day":169,"days_ahead":83,"est_date_2026":"2026-07-22","ref_date_2015":"2015-06-17","pct_2015":12.9593,"day_chg_2015":0.1617,"projected_spy":635.48,"pct_from_now":0.2189,"pct_from_anchor25":-3.5737},{"day":170,"days_ahead":84,"est_date_2026":"2026-07-23","ref_date_2015":"2015-06-18","pct_2015":14.134,"day_chg_2015":1.0399,"projected_spy":642.09,"pct_from_now":1.2611,"pct_from_anchor25":-2.571},{"day":171,"days_ahead":85,"est_date_2026":"2026-07-24","ref_date_2015":"2015-06-19","pct_2015":13.0773,"day_chg_2015":-0.9258,"projected_spy":636.14,"pct_from_now":0.3236,"pct_from_anchor25":-3.473},{"day":172,"days_ahead":86,"est_date_2026":"2026-07-27","ref_date_2015":"2015-06-22","pct_2015":13.6566,"day_chg_2015":0.5123,"projected_spy":639.4,"pct_from_now":0.8376,"pct_from_anchor25":-2.9785},{"day":173,"days_ahead":87,"est_date_2026":"2026-07-28","ref_date_2015":"2015-06-23","pct_2015":13.7371,"day_chg_2015":0.0708,"projected_spy":639.85,"pct_from_now":0.909,"pct_from_anchor25":-2.9098},{"day":174,"days_ahead":88,"est_date_2026":"2026-07-29","ref_date_2015":"2015-06-24","pct_2015":12.911,"day_chg_2015":-0.7263,"projected_spy":635.21,"pct_from_now":0.1761,"pct_from_anchor25":-3.6149},{"day":175,"days_ahead":89,"est_date_2026":"2026-07-30","ref_date_2015":"2015-06-25","pct_2015":12.5677,"day_chg_2015":-0.304,"projected_spy":633.28,"pct_from_now":-0.1285,"pct_from_anchor25":-3.908},{"day":176,"days_ahead":90,"est_date_2026":"2026-07-31","ref_date_2015":"2015-06-26","pct_2015":12.5463,"day_chg_2015":-0.0191,"projected_spy":633.15,"pct_from_now":-0.1475,"pct_from_anchor25":-3.9263},{"day":177,"days_ahead":91,"est_date_2026":"2026-08-03","ref_date_2015":"2015-06-29","pct_2015":10.1861,"day_chg_2015":-2.097,"projected_spy":619.88,"pct_from_now":-2.2415,"pct_from_anchor25":-5.941},{"day":178,"days_ahead":92,"est_date_2026":"2026-08-04","ref_date_2015":"2015-06-30","pct_2015":10.4168,"day_chg_2015":0.2093,"projected_spy":621.17,"pct_from_now":-2.0368,"pct_from_anchor25":-5.7441},{"day":179,"days_ahead":93,"est_date_2026":"2026-08-05","ref_date_2015":"2015-07-01","pct_2015":11.3018,"day_chg_2015":0.8016,"projected_spy":626.15,"pct_from_now":-1.2516,"pct_from_anchor25":-4.9886},{"day":180,"days_ahead":94,"est_date_2026":"2026-08-06","ref_date_2015":"2015-07-02","pct_2015":11.1999,"day_chg_2015":-0.0916,"projected_spy":625.58,"pct_from_now":-1.342,"pct_from_anchor25":-5.0756},{"day":181,"days_ahead":95,"est_date_2026":"2026-08-07","ref_date_2015":"2015-07-06","pct_2015":10.8834,"day_chg_2015":-0.2846,"projected_spy":623.8,"pct_from_now":-1.6228,"pct_from_anchor25":-5.3457},{"day":182,"days_ahead":96,"est_date_2026":"2026-08-10","ref_date_2015":"2015-07-07","pct_2015":11.5808,"day_chg_2015":0.6289,"projected_spy":627.72,"pct_from_now":-1.0041,"pct_from_anchor25":-4.7505},{"day":183,"days_ahead":97,"est_date_2026":"2026-08-11","ref_date_2015":"2015-07-08","pct_2015":9.7087,"day_chg_2015":-1.6777,"projected_spy":617.19,"pct_from_now":-2.665,"pct_from_anchor25":-6.3485},{"day":184,"days_ahead":98,"est_date_2026":"2026-08-12","ref_date_2015":"2015-07-09","pct_2015":9.9072,"day_chg_2015":0.1809,"projected_spy":618.31,"pct_from_now":-2.4889,"pct_from_anchor25":-6.1791},{"day":185,"days_ahead":99,"est_date_2026":"2026-08-13","ref_date_2015":"2015-07-10","pct_2015":11.2911,"day_chg_2015":1.2592,"projected_spy":626.09,"pct_from_now":-1.2611,"pct_from_anchor25":-4.9978},{"day":186,"days_ahead":100,"est_date_2026":"2026-08-14","ref_date_2015":"2015-07-13","pct_2015":12.5195,"day_chg_2015":1.1037,"projected_spy":633.0,"pct_from_now":-0.1713,"pct_from_anchor25":-3.9492},{"day":187,"days_ahead":101,"est_date_2026":"2026-08-17","ref_date_2015":"2015-07-14","pct_2015":13.0076,"day_chg_2015":0.4338,"projected_spy":635.75,"pct_from_now":0.2617,"pct_from_anchor25":-3.5325},{"day":188,"days_ahead":102,"est_date_2026":"2026-08-18","ref_date_2015":"2015-07-15","pct_2015":12.97,"day_chg_2015":-0.0332,"projected_spy":635.54,"pct_from_now":0.2284,"pct_from_anchor25":-3.5646},{"day":189,"days_ahead":103,"est_date_2026":"2026-08-19","ref_date_2015":"2015-07-16","pct_2015":13.8765,"day_chg_2015":0.8024,"projected_spy":640.64,"pct_from_now":1.0327,"pct_from_anchor25":-2.7907},{"day":190,"days_ahead":104,"est_date_2026":"2026-08-20","ref_date_2015":"2015-07-17","pct_2015":13.9731,"day_chg_2015":0.0848,"projected_spy":641.18,"pct_from_now":1.1184,"pct_from_anchor25":-2.7083},{"day":191,"days_ahead":105,"est_date_2026":"2026-08-21","ref_date_2015":"2015-07-20","pct_2015":14.0321,"day_chg_2015":0.0518,"projected_spy":641.51,"pct_from_now":1.1707,"pct_from_anchor25":-2.658},{"day":192,"days_ahead":106,"est_date_2026":"2026-08-24","ref_date_2015":"2015-07-21","pct_2015":13.5815,"day_chg_2015":-0.3951,"projected_spy":638.98,"pct_from_now":0.7709,"pct_from_anchor25":-3.0426},{"day":193,"days_ahead":107,"est_date_2026":"2026-08-25","ref_date_2015":"2015-07-22","pct_2015":13.3777,"day_chg_2015":-0.1795,"projected_spy":637.83,"pct_from_now":0.5901,"pct_from_anchor25":-3.2166},{"day":194,"days_ahead":108,"est_date_2026":"2026-08-26","ref_date_2015":"2015-07-23","pct_2015":12.7394,"day_chg_2015":-0.563,"projected_spy":634.24,"pct_from_now":0.0238,"pct_from_anchor25":-3.7615},{"day":195,"days_ahead":109,"est_date_2026":"2026-08-27","ref_date_2015":"2015-07-24","pct_2015":11.57,"day_chg_2015":-1.0372,"projected_spy":627.66,"pct_from_now":-1.0137,"pct_from_anchor25":-4.7596},{"day":196,"days_ahead":110,"est_date_2026":"2026-08-28","ref_date_2015":"2015-07-27","pct_2015":10.921,"day_chg_2015":-0.5817,"projected_spy":624.01,"pct_from_now":-1.5895,"pct_from_anchor25":-5.3137},{"day":197,"days_ahead":111,"est_date_2026":"2026-08-31","ref_date_2015":"2015-07-28","pct_2015":12.2834,"day_chg_2015":1.2283,"projected_spy":631.68,"pct_from_now":-0.3807,"pct_from_anchor25":-4.1507},{"day":198,"days_ahead":112,"est_date_2026":"2026-09-01","ref_date_2015":"2015-07-29","pct_2015":13.0558,"day_chg_2015":0.6879,"projected_spy":636.02,"pct_from_now":0.3046,"pct_from_anchor25":-3.4913},{"day":199,"days_ahead":113,"est_date_2026":"2026-09-02","ref_date_2015":"2015-07-30","pct_2015":13.0827,"day_chg_2015":0.0237,"projected_spy":636.17,"pct_from_now":0.3284,"pct_from_anchor25":-3.4684},{"day":200,"days_ahead":114,"est_date_2026":"2026-09-03","ref_date_2015":"2015-07-31","pct_2015":12.911,"day_chg_2015":-0.1518,"projected_spy":635.21,"pct_from_now":0.1761,"pct_from_anchor25":-3.6149},{"day":201,"days_ahead":115,"est_date_2026":"2026-09-04","ref_date_2015":"2015-08-03","pct_2015":12.5302,"day_chg_2015":-0.3373,"projected_spy":633.06,"pct_from_now":-0.1618,"pct_from_anchor25":-3.94},{"day":202,"days_ahead":116,"est_date_2026":"2026-09-07","ref_date_2015":"2015-08-04","pct_2015":12.3103,"day_chg_2015":-0.1954,"projected_spy":631.83,"pct_from_now":-0.3569,"pct_from_anchor25":-4.1278},{"day":203,"days_ahead":117,"est_date_2026":"2026-09-08","ref_date_2015":"2015-08-05","pct_2015":12.6804,"day_chg_2015":0.3295,"projected_spy":633.91,"pct_from_now":-0.0286,"pct_from_anchor25":-3.8118},{"day":204,"days_ahead":118,"est_date_2026":"2026-09-09","ref_date_2015":"2015-08-06","pct_2015":11.7578,"day_chg_2015":-0.8188,"projected_spy":628.72,"pct_from_now":-0.8471,"pct_from_anchor25":-4.5994},{"day":205,"days_ahead":119,"est_date_2026":"2026-09-10","ref_date_2015":"2015-08-07","pct_2015":11.5432,"day_chg_2015":-0.192,"projected_spy":627.51,"pct_from_now":-1.0375,"pct_from_anchor25":-4.7825},{"day":206,"days_ahead":120,"est_date_2026":"2026-09-11","ref_date_2015":"2015-08-10","pct_2015":12.9486,"day_chg_2015":1.2599,"projected_spy":635.42,"pct_from_now":0.2094,"pct_from_anchor25":-3.5829},{"day":207,"days_ahead":121,"est_date_2026":"2026-09-14","ref_date_2015":"2015-08-11","pct_2015":11.9294,"day_chg_2015":-0.9023,"projected_spy":629.68,"pct_from_now":-0.6948,"pct_from_anchor25":-4.4529},{"day":208,"days_ahead":122,"est_date_2026":"2026-09-15","ref_date_2015":"2015-08-12","pct_2015":12.0635,"day_chg_2015":0.1198,"projected_spy":630.44,"pct_from_now":-0.5758,"pct_from_anchor25":-4.3384},{"day":209,"days_ahead":123,"est_date_2026":"2026-09-16","ref_date_2015":"2015-08-13","pct_2015":11.9241,"day_chg_2015":-0.1244,"projected_spy":629.65,"pct_from_now":-0.6996,"pct_from_anchor25":-4.4574},{"day":210,"days_ahead":124,"est_date_2026":"2026-09-17","ref_date_2015":"2015-08-14","pct_2015":12.3317,"day_chg_2015":0.3642,"projected_spy":631.95,"pct_from_now":-0.3379,"pct_from_anchor25":-4.1095},{"day":211,"days_ahead":125,"est_date_2026":"2026-09-18","ref_date_2015":"2015-08-17","pct_2015":12.9593,"day_chg_2015":0.5587,"projected_spy":635.48,"pct_from_now":0.2189,"pct_from_anchor25":-3.5737},{"day":212,"days_ahead":126,"est_date_2026":"2026-09-21","ref_date_2015":"2015-08-18","pct_2015":12.6321,"day_chg_2015":-0.2897,"projected_spy":633.64,"pct_from_now":-0.0714,"pct_from_anchor25":-3.853},{"day":213,"days_ahead":127,"est_date_2026":"2026-09-22","ref_date_2015":"2015-08-19","pct_2015":11.7417,"day_chg_2015":-0.7905,"projected_spy":628.63,"pct_from_now":-0.8614,"pct_from_anchor25":-4.6131},{"day":214,"days_ahead":128,"est_date_2026":"2026-09-23","ref_date_2015":"2015-08-20","pct_2015":9.4084,"day_chg_2015":-2.0881,"projected_spy":615.5,"pct_from_now":-2.9315,"pct_from_anchor25":-6.6049},{"day":215,"days_ahead":129,"est_date_2026":"2026-09-24","ref_date_2015":"2015-08-21","pct_2015":6.1149,"day_chg_2015":-3.0102,"projected_spy":596.97,"pct_from_now":-5.8535,"pct_from_anchor25":-9.4164},{"day":216,"days_ahead":130,"est_date_2026":"2026-09-25","ref_date_2015":"2015-08-24","pct_2015":1.6467,"day_chg_2015":-4.2107,"projected_spy":571.84,"pct_from_now":-9.8177,"pct_from_anchor25":-13.2305},{"day":217,"days_ahead":131,"est_date_2026":"2026-09-28","ref_date_2015":"2015-08-25","pct_2015":0.4506,"day_chg_2015":-1.1768,"projected_spy":565.11,"pct_from_now":-10.879,"pct_from_anchor25":-14.2516},{"day":218,"days_ahead":132,"est_date_2026":"2026-09-29","ref_date_2015":"2015-08-26","pct_2015":4.3073,"day_chg_2015":3.8394,"projected_spy":586.8,"pct_from_now":-7.4573,"pct_from_anchor25":-10.9594},{"day":219,"days_ahead":133,"est_date_2026":"2026-09-30","ref_date_2015":"2015-08-27","pct_2015":6.8873,"day_chg_2015":2.4735,"projected_spy":601.32,"pct_from_now":-5.1682,"pct_from_anchor25":-8.757},{"day":220,"days_ahead":134,"est_date_2026":"2026-10-01","ref_date_2015":"2015-08-28","pct_2015":6.8927,"day_chg_2015":0.005,"projected_spy":601.35,"pct_from_now":-5.1635,"pct_from_anchor25":-8.7524},{"day":221,"days_ahead":135,"est_date_2026":"2026-10-02","ref_date_2015":"2015-08-31","pct_2015":6.0291,"day_chg_2015":-0.8079,"projected_spy":596.49,"pct_from_now":-5.9297,"pct_from_anchor25":-9.4896},{"day":222,"days_ahead":136,"est_date_2026":"2026-10-05","ref_date_2015":"2015-09-01","pct_2015":2.8644,"day_chg_2015":-2.9848,"projected_spy":578.69,"pct_from_now":-8.7374,"pct_from_anchor25":-12.1911},{"day":223,"days_ahead":137,"est_date_2026":"2026-10-06","ref_date_2015":"2015-09-02","pct_2015":4.8168,"day_chg_2015":1.8981,"projected_spy":589.67,"pct_from_now":-7.0052,"pct_from_anchor25":-10.5244},{"day":224,"days_ahead":138,"est_date_2026":"2026-10-07","ref_date_2015":"2015-09-03","pct_2015":4.8919,"day_chg_2015":0.0716,"projected_spy":590.09,"pct_from_now":-6.9386,"pct_from_anchor25":-10.4603},{"day":225,"days_ahead":139,"est_date_2026":"2026-10-08","ref_date_2015":"2015-09-04","pct_2015":3.3042,"day_chg_2015":-1.5137,"projected_spy":581.16,"pct_from_now":-8.3472,"pct_from_anchor25":-11.8157},{"day":226,"days_ahead":140,"est_date_2026":"2026-10-09","ref_date_2015":"2015-09-08","pct_2015":5.9003,"day_chg_2015":2.5131,"projected_spy":595.77,"pct_from_now":-6.0439,"pct_from_anchor25":-9.5995},{"day":227,"days_ahead":141,"est_date_2026":"2026-10-12","ref_date_2015":"2015-09-09","pct_2015":4.4843,"day_chg_2015":-1.3372,"projected_spy":587.8,"pct_from_now":-7.3002,"pct_from_anchor25":-10.8083},{"day":228,"days_ahead":142,"est_date_2026":"2026-10-13","ref_date_2015":"2015-09-10","pct_2015":5.0528,"day_chg_2015":0.5442,"projected_spy":591.0,"pct_from_now":-6.7958,"pct_from_anchor25":-10.323},{"day":229,"days_ahead":143,"est_date_2026":"2026-10-14","ref_date_2015":"2015-09-11","pct_2015":5.5302,"day_chg_2015":0.4544,"projected_spy":593.68,"pct_from_now":-6.3722,"pct_from_anchor25":-9.9154},{"day":230,"days_ahead":144,"est_date_2026":"2026-10-15","ref_date_2015":"2015-09-14","pct_2015":5.1387,"day_chg_2015":-0.3711,"projected_spy":591.48,"pct_from_now":-6.7197,"pct_from_anchor25":-10.2497},{"day":231,"days_ahead":145,"est_date_2026":"2026-10-16","ref_date_2015":"2015-09-15","pct_2015":6.4528,"day_chg_2015":1.2499,"projected_spy":598.87,"pct_from_now":-5.5537,"pct_from_anchor25":-9.1279},{"day":232,"days_ahead":146,"est_date_2026":"2026-10-19","ref_date_2015":"2015-09-16","pct_2015":7.3754,"day_chg_2015":0.8667,"projected_spy":604.06,"pct_from_now":-4.7352,"pct_from_anchor25":-8.3403},{"day":233,"days_ahead":147,"est_date_2026":"2026-10-20","ref_date_2015":"2015-09-17","pct_2015":7.134,"day_chg_2015":-0.2248,"projected_spy":602.71,"pct_from_now":-4.9493,"pct_from_anchor25":-8.5464},{"day":234,"days_ahead":148,"est_date_2026":"2026-10-21","ref_date_2015":"2015-09-18","pct_2015":4.8383,"day_chg_2015":-2.1429,"projected_spy":589.79,"pct_from_now":-6.9862,"pct_from_anchor25":-10.5061},{"day":235,"days_ahead":149,"est_date_2026":"2026-10-22","ref_date_2015":"2015-09-21","pct_2015":5.38,"day_chg_2015":0.5168,"projected_spy":592.84,"pct_from_now":-6.5055,"pct_from_anchor25":-10.0437},{"day":236,"days_ahead":150,"est_date_2026":"2026-10-23","ref_date_2015":"2015-09-22","pct_2015":4.0122,"day_chg_2015":-1.298,"projected_spy":585.14,"pct_from_now":-7.719,"pct_from_anchor25":-11.2113},{"day":237,"days_ahead":151,"est_date_2026":"2026-10-26","ref_date_2015":"2015-09-23","pct_2015":3.846,"day_chg_2015":-0.1599,"projected_spy":584.21,"pct_from_now":-7.8666,"pct_from_anchor25":-11.3532},{"day":238,"days_ahead":152,"est_date_2026":"2026-10-27","ref_date_2015":"2015-09-24","pct_2015":3.4705,"day_chg_2015":-0.3616,"projected_spy":582.1,"pct_from_now":-8.1997,"pct_from_anchor25":-11.6737},{"day":239,"days_ahead":153,"est_date_2026":"2026-10-28","ref_date_2015":"2015-09-25","pct_2015":3.4437,"day_chg_2015":-0.0259,"projected_spy":581.95,"pct_from_now":-8.2235,"pct_from_anchor25":-11.6966},{"day":240,"days_ahead":154,"est_date_2026":"2026-10-29","ref_date_2015":"2015-09-28","pct_2015":0.8475,"day_chg_2015":-2.5097,"projected_spy":567.34,"pct_from_now":-10.5268,"pct_from_anchor25":-13.9128},{"day":241,"days_ahead":155,"est_date_2026":"2026-10-30","ref_date_2015":"2015-09-29","pct_2015":0.9065,"day_chg_2015":0.0585,"projected_spy":567.67,"pct_from_now":-10.4745,"pct_from_anchor25":-13.8624},{"day":242,"days_ahead":156,"est_date_2026":"2026-11-02","ref_date_2015":"2015-09-30","pct_2015":2.7893,"day_chg_2015":1.8658,"projected_spy":578.26,"pct_from_now":-8.8041,"pct_from_anchor25":-12.2552},{"day":243,"days_ahead":157,"est_date_2026":"2026-11-03","ref_date_2015":"2015-10-01","pct_2015":3.0575,"day_chg_2015":0.2609,"projected_spy":579.77,"pct_from_now":-8.5661,"pct_from_anchor25":-12.0263},{"day":244,"days_ahead":158,"est_date_2026":"2026-11-04","ref_date_2015":"2015-10-02","pct_2015":4.5969,"day_chg_2015":1.4938,"projected_spy":588.43,"pct_from_now":-7.2003,"pct_from_anchor25":-10.7122},{"day":245,"days_ahead":159,"est_date_2026":"2026-11-05","ref_date_2015":"2015-10-05","pct_2015":6.4582,"day_chg_2015":1.7795,"projected_spy":598.9,"pct_from_now":-5.5489,"pct_from_anchor25":-9.1233},{"day":246,"days_ahead":160,"est_date_2026":"2026-11-06","ref_date_2015":"2015-10-06","pct_2015":6.0934,"day_chg_2015":-0.3426,"projected_spy":596.85,"pct_from_now":-5.8726,"pct_from_anchor25":-9.4347},{"day":247,"days_ahead":161,"est_date_2026":"2026-11-09","ref_date_2015":"2015-10-07","pct_2015":6.9624,"day_chg_2015":0.8191,"projected_spy":601.74,"pct_from_now":-5.1016,"pct_from_anchor25":-8.6929},{"day":248,"days_ahead":162,"est_date_2026":"2026-11-10","ref_date_2015":"2015-10-08","pct_2015":7.9279,"day_chg_2015":0.9027,"projected_spy":607.17,"pct_from_now":-4.245,"pct_from_anchor25":-7.8687},{"day":249,"days_ahead":163,"est_date_2026":"2026-11-11","ref_date_2015":"2015-10-09","pct_2015":7.9923,"day_chg_2015":0.0596,"projected_spy":607.54,"pct_from_now":-4.1879,"pct_from_anchor25":-7.8138},{"day":250,"days_ahead":164,"est_date_2026":"2026-11-12","ref_date_2015":"2015-10-12","pct_2015":8.0942,"day_chg_2015":0.0944,"projected_spy":608.11,"pct_from_now":-4.0975,"pct_from_anchor25":-7.7268},{"day":251,"days_ahead":165,"est_date_2026":"2026-11-13","ref_date_2015":"2015-10-13","pct_2015":7.413,"day_chg_2015":-0.6302,"projected_spy":604.28,"pct_from_now":-4.7019,"pct_from_anchor25":-8.3083},{"day":252,"days_ahead":166,"est_date_2026":"2026-11-16","ref_date_2015":"2015-10-14","pct_2015":6.898,"day_chg_2015":-0.4794,"projected_spy":601.38,"pct_from_now":-5.1587,"pct_from_anchor25":-8.7478},{"day":253,"days_ahead":167,"est_date_2026":"2026-11-17","ref_date_2015":"2015-10-15","pct_2015":8.5394,"day_chg_2015":1.5355,"projected_spy":610.61,"pct_from_now":-3.7025,"pct_from_anchor25":-7.3467},{"day":254,"days_ahead":168,"est_date_2026":"2026-11-18","ref_date_2015":"2015-10-16","pct_2015":9.0329,"day_chg_2015":0.4547,"projected_spy":613.39,"pct_from_now":-3.2646,"pct_from_anchor25":-6.9255},{"day":255,"days_ahead":169,"est_date_2026":"2026-11-19","ref_date_2015":"2015-10-19","pct_2015":9.0865,"day_chg_2015":0.0492,"projected_spy":613.69,"pct_from_now":-3.2171,"pct_from_anchor25":-6.8797},{"day":256,"days_ahead":170,"est_date_2026":"2026-11-20","ref_date_2015":"2015-10-20","pct_2015":8.9471,"day_chg_2015":-0.1278,"projected_spy":612.91,"pct_from_now":-3.3408,"pct_from_anchor25":-6.9987},{"day":257,"days_ahead":171,"est_date_2026":"2026-11-23","ref_date_2015":"2015-10-21","pct_2015":8.2712,"day_chg_2015":-0.6204,"projected_spy":609.1,"pct_from_now":-3.9404,"pct_from_anchor25":-7.5756},{"day":258,"days_ahead":172,"est_date_2026":"2026-11-24","ref_date_2015":"2015-10-22","pct_2015":10.1003,"day_chg_2015":1.6894,"projected_spy":619.39,"pct_from_now":-2.3176,"pct_from_anchor25":-6.0143},{"day":259,"days_ahead":173,"est_date_2026":"2026-11-25","ref_date_2015":"2015-10-23","pct_2015":11.3072,"day_chg_2015":1.0962,"projected_spy":626.18,"pct_from_now":-1.2469,"pct_from_anchor25":-4.984},{"day":260,"days_ahead":174,"est_date_2026":"2026-11-26","ref_date_2015":"2015-10-26","pct_2015":11.0336,"day_chg_2015":-0.2458,"projected_spy":624.64,"pct_from_now":-1.4896,"pct_from_anchor25":-5.2175},{"day":261,"days_ahead":175,"est_date_2026":"2026-11-27","ref_date_2015":"2015-10-27","pct_2015":10.8191,"day_chg_2015":-0.1932,"projected_spy":623.44,"pct_from_now":-1.6799,"pct_from_anchor25":-5.4007},{"day":262,"days_ahead":176,"est_date_2026":"2026-11-30","ref_date_2015":"2015-10-28","pct_2015":12.0796,"day_chg_2015":1.1375,"projected_spy":630.53,"pct_from_now":-0.5616,"pct_from_anchor25":-4.3247},{"day":263,"days_ahead":177,"est_date_2026":"2026-12-01","ref_date_2015":"2015-10-29","pct_2015":12.0152,"day_chg_2015":-0.0574,"projected_spy":630.17,"pct_from_now":-0.6187,"pct_from_anchor25":-4.3796},{"day":264,"days_ahead":178,"est_date_2026":"2026-12-02","ref_date_2015":"2015-10-30","pct_2015":11.5325,"day_chg_2015":-0.431,"projected_spy":627.45,"pct_from_now":-1.047,"pct_from_anchor25":-4.7917},{"day":265,"days_ahead":179,"est_date_2026":"2026-12-03","ref_date_2015":"2015-11-02","pct_2015":12.852,"day_chg_2015":1.1831,"projected_spy":634.87,"pct_from_now":0.1237,"pct_from_anchor25":-3.6653},{"day":266,"days_ahead":180,"est_date_2026":"2026-12-04","ref_date_2015":"2015-11-03","pct_2015":13.1792,"day_chg_2015":0.2899,"projected_spy":636.72,"pct_from_now":0.414,"pct_from_anchor25":-3.386},{"day":267,"days_ahead":181,"est_date_2026":"2026-12-07","ref_date_2015":"2015-11-04","pct_2015":12.8359,"day_chg_2015":-0.3033,"projected_spy":634.78,"pct_from_now":0.1095,"pct_from_anchor25":-3.679},{"day":268,"days_ahead":182,"est_date_2026":"2026-12-08","ref_date_2015":"2015-11-05","pct_2015":12.7233,"day_chg_2015":-0.0998,"projected_spy":634.15,"pct_from_now":0.0095,"pct_from_anchor25":-3.7752},{"day":269,"days_ahead":183,"est_date_2026":"2026-12-09","ref_date_2015":"2015-11-06","pct_2015":12.6643,"day_chg_2015":-0.0523,"projected_spy":633.82,"pct_from_now":-0.0428,"pct_from_anchor25":-3.8256},{"day":270,"days_ahead":184,"est_date_2026":"2026-12-10","ref_date_2015":"2015-11-09","pct_2015":11.6129,"day_chg_2015":-0.9332,"projected_spy":627.9,"pct_from_now":-0.9756,"pct_from_anchor25":-4.723},{"day":271,"days_ahead":185,"est_date_2026":"2026-12-11","ref_date_2015":"2015-11-10","pct_2015":11.8704,"day_chg_2015":0.2307,"projected_spy":629.35,"pct_from_now":-0.7472,"pct_from_anchor25":-4.5032},{"day":272,"days_ahead":186,"est_date_2026":"2026-12-14","ref_date_2015":"2015-11-11","pct_2015":11.4306,"day_chg_2015":-0.3932,"projected_spy":626.88,"pct_from_now":-1.1374,"pct_from_anchor25":-4.8787},{"day":273,"days_ahead":187,"est_date_2026":"2026-12-15","ref_date_2015":"2015-11-12","pct_2015":9.875,"day_chg_2015":-1.396,"projected_spy":618.13,"pct_from_now":-2.5175,"pct_from_anchor25":-6.2066},{"day":274,"days_ahead":188,"est_date_2026":"2026-12-16","ref_date_2015":"2015-11-13","pct_2015":8.6413,"day_chg_2015":-1.1228,"projected_spy":611.19,"pct_from_now":-3.6121,"pct_from_anchor25":-7.2597},{"day":275,"days_ahead":189,"est_date_2026":"2026-12-17","ref_date_2015":"2015-11-16","pct_2015":10.2934,"day_chg_2015":1.5207,"projected_spy":620.48,"pct_from_now":-2.1463,"pct_from_anchor25":-5.8494},{"day":276,"days_ahead":190,"est_date_2026":"2026-12-18","ref_date_2015":"2015-11-17","pct_2015":10.213,"day_chg_2015":-0.0729,"projected_spy":620.03,"pct_from_now":-2.2177,"pct_from_anchor25":-5.9181},{"day":277,"days_ahead":191,"est_date_2026":"2026-12-21","ref_date_2015":"2015-11-18","pct_2015":11.9616,"day_chg_2015":1.5866,"projected_spy":629.87,"pct_from_now":-0.6663,"pct_from_anchor25":-4.4254},{"day":278,"days_ahead":192,"est_date_2026":"2026-12-22","ref_date_2015":"2015-11-19","pct_2015":11.865,"day_chg_2015":-0.0862,"projected_spy":629.32,"pct_from_now":-0.7519,"pct_from_anchor25":-4.5078},{"day":279,"days_ahead":193,"est_date_2026":"2026-12-23","ref_date_2015":"2015-11-20","pct_2015":12.2727,"day_chg_2015":0.3644,"projected_spy":631.62,"pct_from_now":-0.3902,"pct_from_anchor25":-4.1598},{"day":280,"days_ahead":194,"est_date_2026":"2026-12-24","ref_date_2015":"2015-11-23","pct_2015":12.144,"day_chg_2015":-0.1147,"projected_spy":630.89,"pct_from_now":-0.5044,"pct_from_anchor25":-4.2697},{"day":281,"days_ahead":195,"est_date_2026":"2026-12-25","ref_date_2015":"2015-11-24","pct_2015":12.2942,"day_chg_2015":0.1339,"projected_spy":631.74,"pct_from_now":-0.3712,"pct_from_anchor25":-4.1415},{"day":282,"days_ahead":196,"est_date_2026":"2026-12-28","ref_date_2015":"2015-11-25","pct_2015":12.2781,"day_chg_2015":-0.0143,"projected_spy":631.65,"pct_from_now":-0.3855,"pct_from_anchor25":-4.1552},{"day":283,"days_ahead":197,"est_date_2026":"2026-12-29","ref_date_2015":"2015-11-27","pct_2015":12.4068,"day_chg_2015":0.1147,"projected_spy":632.37,"pct_from_now":-0.2713,"pct_from_anchor25":-4.0453},{"day":284,"days_ahead":198,"est_date_2026":"2026-12-30","ref_date_2015":"2015-11-30","pct_2015":11.9401,"day_chg_2015":-0.4152,"projected_spy":629.74,"pct_from_now":-0.6853,"pct_from_anchor25":-4.4437},{"day":285,"days_ahead":199,"est_date_2026":"2026-12-31","ref_date_2015":"2015-12-01","pct_2015":13.0076,"day_chg_2015":0.9536,"projected_spy":635.75,"pct_from_now":0.2617,"pct_from_anchor25":-3.5325},{"day":286,"days_ahead":200,"est_date_2026":"2027-01-01","ref_date_2015":"2015-12-02","pct_2015":11.8543,"day_chg_2015":-1.0205,"projected_spy":629.26,"pct_from_now":-0.7614,"pct_from_anchor25":-4.517},{"day":287,"days_ahead":201,"est_date_2026":"2027-01-04","ref_date_2015":"2015-12-03","pct_2015":10.288,"day_chg_2015":-1.4003,"projected_spy":620.45,"pct_from_now":-2.1511,"pct_from_anchor25":-5.854},{"day":288,"days_ahead":202,"est_date_2026":"2027-01-05","ref_date_2015":"2015-12-04","pct_2015":12.439,"day_chg_2015":1.9503,"projected_spy":632.55,"pct_from_now":-0.2427,"pct_from_anchor25":-4.0179},{"day":289,"days_ahead":203,"est_date_2026":"2027-01-06","ref_date_2015":"2015-12-07","pct_2015":11.7578,"day_chg_2015":-0.6059,"projected_spy":628.72,"pct_from_now":-0.8471,"pct_from_anchor25":-4.5994},{"day":290,"days_ahead":204,"est_date_2026":"2027-01-07","ref_date_2015":"2015-12-08","pct_2015":11.0068,"day_chg_2015":-0.672,"projected_spy":624.49,"pct_from_now":-1.5134,"pct_from_anchor25":-5.2404},{"day":291,"days_ahead":205,"est_date_2026":"2027-01-08","ref_date_2015":"2015-12-09","pct_2015":10.1432,"day_chg_2015":-0.778,"projected_spy":619.64,"pct_from_now":-2.2795,"pct_from_anchor25":-5.9776},{"day":292,"days_ahead":206,"est_date_2026":"2027-01-11","ref_date_2015":"2015-12-10","pct_2015":10.4275,"day_chg_2015":0.2581,"projected_spy":621.23,"pct_from_now":-2.0273,"pct_from_anchor25":-5.735},{"day":293,"days_ahead":207,"est_date_2026":"2027-01-12","ref_date_2015":"2015-12-11","pct_2015":8.2873,"day_chg_2015":-1.9381,"projected_spy":609.19,"pct_from_now":-3.9261,"pct_from_anchor25":-7.5619},{"day":294,"days_ahead":208,"est_date_2026":"2027-01-13","ref_date_2015":"2015-12-14","pct_2015":8.8344,"day_chg_2015":0.5052,"projected_spy":612.27,"pct_from_now":-3.4407,"pct_from_anchor25":-7.0949},{"day":295,"days_ahead":209,"est_date_2026":"2027-01-14","ref_date_2015":"2015-12-15","pct_2015":9.9769,"day_chg_2015":1.0498,"projected_spy":618.7,"pct_from_now":-2.4271,"pct_from_anchor25":-6.1196},{"day":296,"days_ahead":210,"est_date_2026":"2027-01-15","ref_date_2015":"2015-12-16","pct_2015":11.5861,"day_chg_2015":1.4632,"projected_spy":627.75,"pct_from_now":-0.9994,"pct_from_anchor25":-4.7459},{"day":297,"days_ahead":211,"est_date_2026":"2027-01-18","ref_date_2015":"2015-12-17","pct_2015":9.8858,"day_chg_2015":-1.5238,"projected_spy":618.19,"pct_from_now":-2.508,"pct_from_anchor25":-6.1974},{"day":298,"days_ahead":212,"est_date_2026":"2027-01-19","ref_date_2015":"2015-12-18","pct_2015":7.2896,"day_chg_2015":-2.3626,"projected_spy":603.58,"pct_from_now":-4.8113,"pct_from_anchor25":-8.4136},{"day":299,"days_ahead":213,"est_date_2026":"2027-01-20","ref_date_2015":"2015-12-21","pct_2015":8.1747,"day_chg_2015":0.8249,"projected_spy":608.56,"pct_from_now":-4.0261,"pct_from_anchor25":-7.6581},{"day":300,"days_ahead":214,"est_date_2026":"2027-01-21","ref_date_2015":"2015-12-22","pct_2015":9.1563,"day_chg_2015":0.9074,"projected_spy":614.08,"pct_from_now":-3.1552,"pct_from_anchor25":-6.8201},{"day":301,"days_ahead":215,"est_date_2026":"2027-01-22","ref_date_2015":"2015-12-23","pct_2015":10.508,"day_chg_2015":1.2383,"projected_spy":621.69,"pct_from_now":-1.9559,"pct_from_anchor25":-5.6663},{"day":302,"days_ahead":216,"est_date_2026":"2027-01-25","ref_date_2015":"2015-12-24","pct_2015":10.3256,"day_chg_2015":-0.165,"projected_spy":620.66,"pct_from_now":-2.1177,"pct_from_anchor25":-5.8219},{"day":303,"days_ahead":217,"est_date_2026":"2027-01-26","ref_date_2015":"2015-12-28","pct_2015":10.0735,"day_chg_2015":-0.2285,"projected_spy":619.24,"pct_from_now":-2.3414,"pct_from_anchor25":-6.0371},{"day":304,"days_ahead":218,"est_date_2026":"2027-01-27","ref_date_2015":"2015-12-29","pct_2015":11.2482,"day_chg_2015":1.0672,"projected_spy":625.85,"pct_from_now":-1.2992,"pct_from_anchor25":-5.0344},{"day":305,"days_ahead":219,"est_date_2026":"2027-01-28","ref_date_2015":"2015-12-30","pct_2015":10.4597,"day_chg_2015":-0.7088,"projected_spy":621.42,"pct_from_now":-1.9988,"pct_from_anchor25":-5.7075},{"day":306,"days_ahead":220,"est_date_2026":"2027-01-29","ref_date_2015":"2015-12-31","pct_2015":9.3547,"day_chg_2015":-1.0003,"projected_spy":615.2,"pct_from_now":-2.9791,"pct_from_anchor25":-6.6507}],"milestones":{"peak1":{"day":151,"est_date":"2026-06-26","proj_spy":644.26,"pct_from_now":1.6038,"label":"Peak 1","color":"#00ff88","pct_2015":14.52},"trough1":{"day":217,"est_date":"2026-09-28","proj_spy":565.11,"pct_from_now":-10.879,"label":"Trough 1","color":"#ff3355","pct_2015":0.45},"peak2":{"day":266,"est_date":"2026-12-04","proj_spy":636.72,"pct_from_now":0.414,"label":"Peak 2","color":"#00ff88","pct_2015":13.18},"trough2":{"day":298,"est_date":"2027-01-19","proj_spy":603.58,"pct_from_now":-4.8113,"label":"Trough 2","color":"#ff8800","pct_2015":7.29},"yearend":{"day":306,"est_date":"2027-01-29","proj_spy":615.2,"pct_from_now":-2.9791,"label":"Year End","color":"var(--cyan)","pct_2015":9.35}}};
+
+function renderAnalog() {
+  const D = ANALOG_DATA;
+  const hist = D.hist;
+  const proj = D.proj;
+  const ms = D.milestones;
+  const curPrice = D.current.price;
+  const anchor25 = D.anchor_2025.price;
+  const anchor14 = D.anchor_2014.price;
+  const curDay = D.current.day;
+
+  // ── HEADER CARDS ────────────────────────────────────────────────────────────
+  const cardsEl = $('analogCards');
+  if(cardsEl) {
+    const cur2015pct = hist[hist.length-1].pct_2015;
+    const cur2026pct = hist[hist.length-1].pct_2026;
+    const div = cur2026pct - cur2015pct;
+    const divColor = div > 0 ? '#00ff88' : '#ff3355';
+    const nextMilestone = Object.values(ms).find(m => m.day > curDay);
+
+    cardsEl.innerHTML = [
+      {
+        label: 'CYCLE DAY',
+        val: `Day ${curDay}`,
+        sub: `of 306 total days`,
+        color: 'var(--cyan)'
+      },
+      {
+        label: '2015 WAS HERE',
+        val: `${cur2015pct >= 0 ? '+' : ''}${cur2015pct.toFixed(2)}%`,
+        sub: `from Oct 2014 low`,
+        color: '#ffcc00'
+      },
+      {
+        label: '2026 IS HERE',
+        val: `${cur2026pct >= 0 ? '+' : ''}${cur2026pct.toFixed(2)}%`,
+        sub: `from Nov 2025 low`,
+        color: cur2026pct >= 0 ? '#00ff88' : '#ff3355'
+      },
+      {
+        label: 'DIVERGENCE',
+        val: `${div >= 0 ? '+' : ''}${div.toFixed(2)}%`,
+        sub: `2026 vs 2015 pace`,
+        color: divColor
+      },
+      {
+        label: nextMilestone ? `NEXT: ${nextMilestone.label.toUpperCase()}` : 'CYCLE COMPLETE',
+        val: nextMilestone ? `$${nextMilestone.proj_spy.toFixed(2)}` : '—',
+        sub: nextMilestone ? `${nextMilestone.est_date} · ${nextMilestone.pct_from_now >= 0 ? '+' : ''}${nextMilestone.pct_from_now.toFixed(2)}% from now` : '',
+        color: nextMilestone?.color || 'var(--text3)'
+      }
+    ].map(c => `
+      <div class="panel" style="text-align:center;border-top:3px solid ${c.color};">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">${c.label}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:${c.color};">${c.val}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">${c.sub}</div>
+      </div>`).join('');
+  }
+
+  // ── OVERLAY CHART (Canvas) ───────────────────────────────────────────────────
+  const chartEl = $('analogChart');
+  if(chartEl) {
+    chartEl.innerHTML = '';
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'display:block;width:100%;height:100%;';
+    chartEl.appendChild(canvas);
+
+    requestAnimationFrame(() => {
+      const W = canvas.offsetWidth || 900;
+      const H = canvas.offsetHeight || 320;
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      const pad = {l:52, r:20, t:20, b:36};
+      const cw = W - pad.l - pad.r;
+      const ch = H - pad.t - pad.b;
+
+      // All pct values combined for scale
+      const allPcts2015 = [...hist.map(h => h.pct_2015), ...proj.map(p => p.pct_2015)];
+      const allPcts2026 = [...hist.map(h => h.pct_2026), ...proj.map(p => p.pct_from_anchor25)];
+      const allPcts = [...allPcts2015, ...allPcts2026];
+      const minP = Math.min(...allPcts) - 1;
+      const maxP = Math.max(...allPcts) + 1;
+      const range = maxP - minP;
+      const totalDays = hist.length + proj.length;
+
+      const px = day => pad.l + ((day - 1) / (totalDays - 1)) * cw;
+      const py = pct => pad.t + ch - ((pct - minP) / range) * ch;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Zero line
+      const zeroY = py(0);
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(pad.l, zeroY); ctx.lineTo(W - pad.r, zeroY); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Grid lines
+      [-10,-5,0,5,10,15,20].forEach(pct => {
+        if(pct < minP || pct > maxP) return;
+        const y = py(pct);
+        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+        ctx.fillStyle = '#505070';
+        ctx.font = '9px "Share Tech Mono",monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText((pct >= 0 ? '+' : '') + pct + '%', pad.l - 4, y + 3);
+      });
+
+      // Milestone vertical lines
+      Object.values(ms).forEach(m => {
+        const x = px(m.day);
+        ctx.strokeStyle = m.color + '44';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ch); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = m.color;
+        ctx.font = '7px "Orbitron",monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(m.label.toUpperCase(), x, pad.t - 4);
+      });
+
+      // Today divider
+      const todayX = px(curDay);
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(todayX, pad.t); ctx.lineTo(todayX, pad.t + ch); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '8px "Orbitron",monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('TODAY', todayX, pad.t + 10);
+
+      // Draw 2015 line (full — historical + projection reference)
+      ctx.strokeStyle = '#ffcc00';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      hist.forEach((h, i) => {
+        const x = px(h.day); const y = py(h.pct_2015);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      proj.forEach(p => {
+        ctx.lineTo(px(p.day), py(p.pct_2015));
+      });
+      ctx.stroke();
+
+      // Draw 2026 historical (solid cyan)
+      ctx.strokeStyle = 'var(--cyan)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      hist.forEach((h, i) => {
+        const x = px(h.day); const y = py(h.pct_2026);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Draw 2026 projection (dashed cyan)
+      ctx.strokeStyle = '#00ccff88';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      // Start from last historical point
+      const lastH = hist[hist.length - 1];
+      ctx.moveTo(px(lastH.day), py(lastH.pct_2026));
+      proj.forEach(p => {
+        ctx.lineTo(px(p.day), py(p.pct_from_anchor25));
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Current dot
+      ctx.fillStyle = 'var(--cyan)';
+      ctx.beginPath();
+      ctx.arc(todayX, py(lastH.pct_2026), 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Legend
+      const legendItems = [
+        {color:'#ffcc00', label:'2014/2015 actual', dash:false},
+        {color:'#00ccff', label:'2025/2026 actual', dash:false},
+        {color:'#00ccff88', label:'2026 projected (if 2015 repeats)', dash:true},
+      ];
+      legendItems.forEach((item, i) => {
+        const lx = pad.l + i * 220;
+        const ly = H - 10;
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = 2;
+        if(item.dash) ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 24, ly); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '9px "Share Tech Mono",monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(item.label, lx + 28, ly + 3);
+      });
+    });
+  }
+
+  // ── ROADMAP ─────────────────────────────────────────────────────────────────
+  const roadmapEl = $('analogRoadmap');
+  if(roadmapEl) {
+    roadmapEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;">
+        ${Object.entries(ms).map(([k, m]) => {
+          const isPast = m.day <= curDay;
+          const isCurrent = !isPast && m.day === Object.values(ms).find(x => x.day > curDay)?.day;
+          const bc = isPast ? 'var(--bg3)' : m.color + '11';
+          const bc2 = isPast ? 'var(--border)' : m.color + '44';
+          return `<div style="padding:12px;background:${bc};border:1px solid ${bc2};border-top:3px solid ${isPast?'var(--border2)':m.color};border-radius:4px;text-align:center;${isCurrent?'box-shadow:0 0 12px '+m.color+'44;':''}">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:${isPast?'var(--text3)':m.color};margin-bottom:4px;letter-spacing:1px;">${m.label.toUpperCase()}</div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:6px;">Day ${m.day}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:900;color:${isPast?'var(--text3)':m.color};">$${m.proj_spy.toFixed(0)}</div>
+            <div style="font-size:11px;color:${isPast?'var(--text3)':m.color};margin-top:2px;">${m.pct_from_now >= 0 ? '+' : ''}${m.pct_from_now.toFixed(2)}% from now</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px;">${m.est_date}</div>
+            ${isPast ? '<div style="font-size:9px;color:var(--text3);margin-top:4px;">PASSED</div>' : ''}
+            ${isCurrent ? `<div style="font-family:'Orbitron',monospace;font-size:8px;color:${m.color};margin-top:4px;animation:pulse 1s infinite;">▶ NEXT</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="padding:10px;background:var(--bg3);border-radius:4px;font-size:12px;color:var(--text2);line-height:1.7;">
+        <strong style="color:var(--text);">How to read this:</strong> If 2026 tracks the 2015 analog, each projected price applies the exact same daily % move that SPY made in 2015 to today's price of $${curPrice.toFixed(2)}. 
+        The <span style="color:#ffcc00;">2026 is currently ${Math.abs(hist[hist.length-1].divergence).toFixed(2)}% ${hist[hist.length-1].divergence < 0 ? 'behind' : 'ahead of'} 2015 pace</span> at the same cycle day.
+        The next key level is <span style="color:${Object.values(ms).find(m=>m.day>curDay)?.color}">${Object.values(ms).find(m=>m.day>curDay)?.label} at $${Object.values(ms).find(m=>m.day>curDay)?.proj_spy.toFixed(2)}</span>, projected around ${Object.values(ms).find(m=>m.day>curDay)?.est_date}.
+        The deepest projected pullback is <span style="color:#ff3355;">Trough 1 at $${ms.trough1.proj_spy.toFixed(2)} (${ms.trough1.pct_from_now.toFixed(2)}% from now)</span>, equivalent to the Aug 2015 flash crash.
+      </div>`;
+  }
+
+  // ── DAY BY DAY TABLE ─────────────────────────────────────────────────────────
+  const ctrlEl = $('analogTableControls');
+  if(ctrlEl) {
+    ctrlEl.innerHTML = `
+      <button onclick="analogShowAll()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;background:var(--cyan)22;border:1px solid var(--cyan);color:var(--cyan);border-radius:3px;cursor:pointer;">ALL DAYS</button>
+      <button onclick="analogShowHist()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:3px;cursor:pointer;">HISTORICAL ONLY</button>
+      <button onclick="analogShowProj()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:3px;cursor:pointer;">PROJECTIONS ONLY</button>
+      <span style="font-size:11px;color:var(--text3);margin-left:8px;">${hist.length} historical + ${proj.length} projected days</span>`;
+  }
+
+  window._analogHist = hist;
+  window._analogProj = proj;
+  analogShowAll();
+}
+
+function _analogBuildRows(rows) {
+  const tbody = $('analogTableBody');
+  if(!tbody) return;
+  tbody.innerHTML = rows.map(r => {
+    const isProj = !r.date_2026;
+    const divColor = r.divergence != null ? (r.divergence > 0 ? '#00ff88' : r.divergence < 0 ? '#ff3355' : 'var(--text3)') : '#ffcc00';
+    const rowBg = isProj ? 'rgba(0,204,255,0.03)' : (r.divergence != null && Math.abs(r.divergence) > 5 ? 'rgba(255,51,85,0.04)' : '');
+    return `<tr style="border-bottom:1px solid var(--border);background:${rowBg}">
+      <td style="padding:5px 8px;text-align:center;font-family:'Share Tech Mono',monospace;color:var(--text3);">${r.day}</td>
+      <td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;color:#ffcc00;">${r.date_2015 || r.ref_date_2015 || '—'}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;color:var(--text2);">${r.close_2015 != null ? '$'+r.close_2015.toFixed(2) : '—'}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;color:#ffcc00;">${r.pct_2015 != null ? (r.pct_2015>=0?'+':'')+r.pct_2015.toFixed(2)+'%' : '—'}</td>
+      <td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;color:var(--cyan);">${r.date_2026 || r.est_date_2026 || '—'}${isProj ? ' <span style=\'font-size:9px;color:var(--text3);\'>est</span>' : ''}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;color:var(--text2);">${r.close_2026 != null ? '$'+r.close_2026.toFixed(2) : (r.projected_spy != null ? '<span style=\'color:var(--cyan)44;\'>$'+r.projected_spy.toFixed(2)+'</span>' : '—')}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;color:${r.pct_2026 != null ? (r.pct_2026>=0?'#00ff88':'#ff3355') : 'var(--cyan)44'};">${r.pct_2026 != null ? (r.pct_2026>=0?'+':'')+r.pct_2026.toFixed(2)+'%' : (r.pct_from_anchor25 != null ? '<span style=\'color:var(--cyan)44;\'>'+(r.pct_from_anchor25>=0?'+':'')+r.pct_from_anchor25.toFixed(2)+'%</span>' : '—')}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;color:${divColor};">${r.divergence != null ? (r.divergence>=0?'+':'')+r.divergence.toFixed(2)+'%' : '<span style=\'color:#ffcc0055;\'>proj</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function analogShowAll() {
+  const all = [...(window._analogHist||[]), ...(window._analogProj||[])];
+  _analogBuildRows(all);
+}
+function analogShowHist() { _analogBuildRows(window._analogHist||[]); }
+function analogShowProj() { _analogBuildRows(window._analogProj||[]); }
+
