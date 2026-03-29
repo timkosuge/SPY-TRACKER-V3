@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPY // EDGE ANALYTICS</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap');
+    :root {
+      --bg:#050508;--bg2:#0c0c14;--bg3:#121220;--panel:#0f0f1a;
+      --border:#252545;--border2:#353560;
+      --green:#00ff88;--red:#ff3355;--yellow:#ffcc00;--orange:#ff8800;
+      --cyan:#00ccff;--purple:#8855ff;--dim:#606080;
+      --text:#e8e8ff;--text2:#c0c0e0;--text3:#9090c0;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;font-size:16px;min-height:100vh;overflow-x:hidden;}
+    body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.02) 2px,rgba(0,0,0,0.02) 4px);pointer-events:none;z-index:9999;}
+
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200;gap:16px;}
+    .logo{font-family:'Orbitron',monospace;font-weight:900;font-size:18px;letter-spacing:3px;flex-shrink:0;}
+    .logo span{color:var(--green);}
+    .back-btn{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--text3);border:1px solid var(--border2);padding:6px 14px;border-radius:4px;text-decoration:none;transition:all 0.2s;flex-shrink:0;}
+    .back-btn:hover{color:var(--cyan);border-color:var(--cyan);}
+
+    .subtabs{display:flex;padding:0 20px;background:var(--bg2);border-bottom:2px solid var(--border);overflow-x:auto;scrollbar-width:thin;scrollbar-color:#353560 #0c0c14;}
+    .subtab{padding:10px 18px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1.5px;color:var(--text3);cursor:pointer;border-bottom:3px solid transparent;transition:all 0.2s;white-space:nowrap;}
+    .subtab:hover{color:var(--text2);}
+    .subtab.active{color:var(--green);border-bottom-color:var(--green);}
+
+    .subtab-panel{display:none;padding:24px 20px;}
+    .subtab-panel.active{display:block;}
+
+    .section-header{font-family:'Orbitron',monospace;font-size:12px;letter-spacing:2px;color:var(--cyan);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:16px;margin-top:28px;display:flex;align-items:center;gap:10px;}
+    .section-header:first-child{margin-top:0;}
+    .section-header::before{content:'';width:3px;height:13px;background:var(--cyan);border-radius:2px;flex-shrink:0;}
+
+    .cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:20px;}
+    .card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:14px 16px;}
+    .card-label{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.5px;color:var(--text3);margin-bottom:6px;}
+    .card-value{font-family:'Share Tech Mono',monospace;font-size:22px;line-height:1;}
+    .card-value.up{color:var(--green);}
+    .card-value.dn{color:var(--red);}
+    .card-value.neu{color:var(--yellow);}
+    .card-sub{font-size:11px;color:var(--text3);margin-top:5px;font-family:'Share Tech Mono',monospace;}
+
+    .edge-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;}
+    .edge-table th{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--cyan);padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;opacity:0.85;}
+    .edge-table th:first-child{text-align:left;}
+    .edge-table td{padding:8px 10px;border-bottom:1px solid rgba(37,37,69,0.6);font-family:'Share Tech Mono',monospace;font-size:13px;text-align:right;}
+    .edge-table td:first-child{text-align:left;color:var(--text2);font-weight:600;}
+    .edge-table tr:hover td{background:rgba(255,255,255,0.02);}
+    .edge-table tr:last-child td{border-bottom:none;}
+
+    .up{color:var(--green);}
+    .dn{color:var(--red);}
+    .neu{color:var(--yellow);}
+
+    .bar-chart-wrap{margin:16px 0 28px;}
+    .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;height:26px;}
+    .bar-label{font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text2);width:36px;text-align:right;flex-shrink:0;}
+    .bar-outer{flex:1;height:16px;background:rgba(37,37,69,0.5);border-radius:3px;overflow:hidden;position:relative;}
+    .bar-fill{height:100%;border-radius:3px;position:absolute;top:0;}
+    .bar-fill.pos{background:linear-gradient(90deg,rgba(0,255,136,0.3),rgba(0,255,136,0.85));left:50%;}
+    .bar-fill.neg{background:linear-gradient(270deg,rgba(255,51,85,0.3),rgba(255,51,85,0.85));right:50%;}
+    .bar-center{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border2);}
+    .bar-val{font-family:'Share Tech Mono',monospace;font-size:12px;width:58px;text-align:left;flex-shrink:0;}
+    .winrate-pill{font-family:'Share Tech Mono',monospace;font-size:11px;padding:2px 8px;border-radius:10px;flex-shrink:0;background:rgba(255,255,255,0.05);}
+
+    .badge{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:10px;padding:2px 7px;border-radius:3px;margin-left:6px;vertical-align:middle;}
+    .badge.top{background:rgba(0,255,136,0.12);color:var(--green);border:1px solid rgba(0,255,136,0.3);}
+    .badge.bot{background:rgba(255,51,85,0.12);color:var(--red);border:1px solid rgba(255,51,85,0.3);}
+    .badge.neu{background:rgba(255,204,0,0.1);color:var(--yellow);border:1px solid rgba(255,204,0,0.25);}
+
+    .santa-compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:16px 0 24px;}
+    .santa-box{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px;}
+    .santa-box-label{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1.5px;color:var(--text3);margin-bottom:12px;}
+    .santa-stat{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(37,37,69,0.5);font-family:'Share Tech Mono',monospace;font-size:13px;}
+    .santa-stat:last-child{border-bottom:none;}
+    .santa-stat-label{color:var(--text3);}
+
+    .vol-compare{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0 24px;}
+    .vol-box{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px;text-align:center;}
+    .vol-box-label{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:10px;line-height:1.6;}
+    .vol-box-val{font-family:'Share Tech Mono',monospace;font-size:24px;}
+
+    .holiday-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:16px 0 24px;}
+    .holiday-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px;}
+    .holiday-name{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:1px;color:var(--cyan);margin-bottom:12px;}
+    .holiday-stat{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(37,37,69,0.4);}
+    .holiday-stat:last-child{border-bottom:none;}
+    .holiday-stat-label{color:var(--text3);font-size:13px;}
+    .holiday-stat-val{font-family:'Share Tech Mono',monospace;font-size:13px;}
+
+    .chart-wrap{position:relative;height:260px;margin:16px 0 24px;}
+    .foot-note{font-size:12px;color:var(--text3);margin-top:20px;font-family:'Share Tech Mono',monospace;line-height:1.6;}
+
+    .loading{display:flex;align-items:center;justify-content:center;height:300px;font-family:'Orbitron',monospace;font-size:12px;letter-spacing:3px;color:var(--text3);}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">SPY <span>//</span> EDGE</div>
+  <div style="flex:1;overflow:hidden;">
+    <div class="subtabs" style="border:none;padding:0;background:none;">
+      <div class="subtab active" onclick="switchSub('seasonality',this)">SEASONALITY</div>
+      <div class="subtab" onclick="switchSub('santa',this)">SANTA RALLY</div>
+      <div class="subtab" onclick="switchSub('streaks',this)">STREAKS</div>
+      <div class="subtab" onclick="switchSub('recovery',this)">RECOVERY</div>
+      <div class="subtab" onclick="switchSub('voledge',this)">VOL EDGE</div>
+      <div class="subtab" onclick="switchSub('wom',this)">WEEK-OF-MONTH</div>
+      <div class="subtab" onclick="switchSub('holidays',this)">HOLIDAYS</div>
+    </div>
+  </div>
+  <a class="back-btn" href="index.html">← DASHBOARD</a>
+</div>
+
+<div id="loading" class="loading">COMPUTING EDGE DATA…</div>
+<div id="app" style="display:none;">
+
+  <!-- SEASONALITY -->
+  <div class="subtab-panel active" id="panel-seasonality">
+    <div class="section-header">MONTHLY SEASONALITY — 1993 TO 2026 · 33 YEARS</div>
+    <div class="bar-chart-wrap" id="season-bars"></div>
+    <table class="edge-table">
+      <thead><tr><th>Month</th><th>Avg Return</th><th>Median</th><th>Win Rate</th><th>Avg True Range</th><th>Best</th><th>Worst</th><th>Count</th></tr></thead>
+      <tbody id="season-tbody"></tbody>
+    </table>
+    <div class="section-header">TOP 3 vs BOTTOM 3 MONTHS</div>
+    <div class="cards-grid" id="season-cards"></div>
+    <p class="foot-note">* Avg Return = arithmetic mean monthly close-to-close. Win Rate = % of months positive. True Range = monthly High − Low ($).</p>
+  </div>
+
+  <!-- SANTA RALLY -->
+  <div class="subtab-panel" id="panel-santa">
+    <div class="section-header">NOVEMBER + DECEMBER DEEP DIVE — SANTA RALLY</div>
+    <div class="santa-compare" id="santa-compare"></div>
+    <div class="section-header">NOV vs DEC vs REST OF YEAR</div>
+    <table class="edge-table" id="santa-table"></table>
+    <div class="section-header">HISTORICAL NOVEMBER RETURNS (ALL YEARS)</div>
+    <div class="chart-wrap"><canvas id="chart-nov"></canvas></div>
+    <div class="section-header">HISTORICAL DECEMBER RETURNS (ALL YEARS)</div>
+    <div class="chart-wrap"><canvas id="chart-dec"></canvas></div>
+    <p class="foot-note">* Santa Rally = Nov 1 – Dec 31. Rest of Year = Jan–Oct. Based on 33 years of monthly data.</p>
+  </div>
+
+  <!-- STREAKS -->
+  <div class="subtab-panel" id="panel-streaks">
+    <div class="section-header">CONSECUTIVE GREEN / RED STREAKS</div>
+    <div class="cards-grid" id="streak-cards"></div>
+    <div class="section-header">MOMENTUM — PROBABILITY OF NEXT PERIOD BEING GREEN</div>
+    <table class="edge-table" id="momentum-table"></table>
+    <div class="section-header">AFTER 2+ CONSECUTIVE GREEN WEEKS</div>
+    <div class="cards-grid" id="after2g-cards"></div>
+    <div class="section-header">AFTER 2+ CONSECUTIVE RED WEEKS</div>
+    <div class="cards-grid" id="after2r-cards"></div>
+    <p class="foot-note">* Momentum = conditional probability based on 1,700+ weekly bars. Streaks track uninterrupted directional runs from peak to reversal.</p>
+  </div>
+
+  <!-- RECOVERY -->
+  <div class="subtab-panel" id="panel-recovery">
+    <div class="section-header">DRAWDOWN RECOVERY TIMES — WEEKLY DATA SINCE 1993</div>
+    <div class="cards-grid" id="rec-summary-cards"></div>
+    <table class="edge-table">
+      <thead><tr><th>Drawdown Level</th><th>Events</th><th>Avg Recovery</th><th>Median Recovery</th><th>Avg Recovery (months)</th></tr></thead>
+      <tbody id="rec-tbody"></tbody>
+    </table>
+    <div class="section-header">RECOVERY TIME VISUAL</div>
+    <div id="rec-visual" style="margin:16px 0 24px;"></div>
+    <p class="foot-note">* Recovery = weeks from trough back to new all-time high close. Drawdown measured from rolling peak. Based on ~1,730 weekly bars, 1993–2026.</p>
+  </div>
+
+  <!-- VOL EDGE -->
+  <div class="subtab-panel" id="panel-voledge">
+    <div class="section-header">VOLATILITY EDGE — WEEKLY TRUE RANGE ANALYSIS</div>
+    <div class="vol-compare" id="vol-compare"></div>
+    <div class="section-header">NEXT-WEEK PERFORMANCE AFTER HIGH vs LOW VOL</div>
+    <table class="edge-table" id="vol-table"></table>
+    <div class="section-header">RISK-ADJUSTED RETURN (RETURN ÷ TRUE RANGE)</div>
+    <div class="cards-grid" id="risk-adj-cards"></div>
+    <div class="section-header">WEEKLY TRUE RANGE DISTRIBUTION</div>
+    <div class="chart-wrap"><canvas id="chart-vol"></canvas></div>
+    <p class="foot-note">* High Vol = top 20% of True Range. Low Vol = bottom 20%. "After" = next week's return. True Range = weekly High − Low ($).</p>
+  </div>
+
+  <!-- WEEK OF MONTH -->
+  <div class="subtab-panel" id="panel-wom">
+    <div class="section-header">WEEK-OF-MONTH PERFORMANCE — TURN-OF-MONTH EFFECT</div>
+    <div class="cards-grid" id="wom-cards"></div>
+    <div class="section-header">RETURN BY WEEK NUMBER</div>
+    <div id="wom-bars" style="margin:16px 0 24px;"></div>
+    <table class="edge-table">
+      <thead><tr><th>Week</th><th>Avg Return</th><th>Win Rate</th><th>Sample</th><th>Edge vs Avg</th></tr></thead>
+      <tbody id="wom-tbody"></tbody>
+    </table>
+    <p class="foot-note">* Week 1 = days 1–7, Week 2 = 8–14, Week 3 = 15–21, Week 4 = 22–28, Week 5 = 29+. Turn-of-month effect concentrates positive returns in Week 1.</p>
+  </div>
+
+  <!-- HOLIDAYS -->
+  <div class="subtab-panel" id="panel-holidays">
+    <div class="section-header">HOLIDAY PERIOD PERFORMANCE — WEEKLY DATA</div>
+    <div class="holiday-grid" id="holiday-cards"></div>
+    <div class="section-header">DETAIL TABLE</div>
+    <table class="edge-table">
+      <thead><tr><th>Period</th><th>Definition</th><th>Avg Return</th><th>Win Rate</th><th>Sample</th><th>Edge vs Avg Week</th></tr></thead>
+      <tbody id="holiday-tbody"></tbody>
+    </table>
+    <p class="foot-note">* Avg weekly return overall ≈ +0.21%. Thanksgiving = Nov 21–27 week. Christmas = Dec 21–27 week. New Year = Dec 28 or Jan 1–3 week.</p>
+  </div>
+
+</div>
+
+<script>
+const STATS = {"seasonality":[{"month":"Jan","avg_return":0.38,"median_return":1.08,"win_rate":58.8,"avg_vol":13.25,"count":34,"best":9.74,"worst":-8.41},{"month":"Feb","avg_return":-0.14,"median_return":0.48,"win_rate":58.8,"avg_vol":13.43,"count":34,"best":5.3,"worst":-9.59},{"month":"Mar","avg_return":0.41,"median_return":1.12,"win_rate":58.8,"avg_vol":16.77,"count":34,"best":9.65,"worst":-13.57},{"month":"Apr","avg_return":1.83,"median_return":1.0,"win_rate":72.7,"avg_vol":13.88,"count":33,"best":17.14,"worst":-9.11},{"month":"May","avg_return":1.0,"median_return":1.41,"win_rate":72.7,"avg_vol":12.35,"count":33,"best":6.66,"worst":-8.38},{"month":"Jun","avg_return":0.0,"median_return":0.1,"win_rate":51.5,"avg_vol":11.98,"count":33,"best":6.43,"worst":-9.13},{"month":"Jul","avg_return":1.3,"median_return":1.33,"win_rate":66.7,"avg_vol":11.52,"count":33,"best":9.41,"worst":-8.09},{"month":"Aug","avg_return":-0.16,"median_return":0.99,"win_rate":63.6,"avg_vol":13.35,"count":33,"best":6.39,"worst":-14.12},{"month":"Sep","avg_return":-0.83,"median_return":0.3,"win_rate":51.5,"avg_vol":13.86,"count":33,"best":6.93,"worst":-10.8},{"month":"Oct","avg_return":1.68,"median_return":2.09,"win_rate":66.7,"avg_vol":15.63,"count":33,"best":11.57,"worst":-16.0},{"month":"Nov","avg_return":2.26,"median_return":2.62,"win_rate":75.8,"avg_vol":13.61,"count":33,"best":9.65,"worst":-7.01},{"month":"Dec","avg_return":0.25,"median_return":0.57,"win_rate":60.6,"avg_vol":11.91,"count":33,"best":6.18,"worst":-10.83}],"santa":{"nov_avg":2.26,"nov_win":75.8,"dec_avg":0.25,"dec_win":60.6,"novdec_avg":1.25,"novdec_win":68.2,"rest_avg":0.55,"rest_win":62.2,"count":33},"streaks":{"weekly":{"max_green":10,"max_red":8,"after_2green_avg":0.09,"after_2green_winrate":55.6,"after_2red_avg":0.43,"after_2red_winrate":58.0},"monthly":{"max_green":9,"max_red":5},"yearly":{"max_green":5,"max_red":3},"momentum_weekly":{"p_green_after_green":53.3,"p_green_after_red":64.6},"momentum_monthly":{"p_green_after_green":63.5}},"recovery":{"dd5":{"count":22,"avg_weeks":47.6,"median_weeks":13.0},"dd10":{"count":9,"avg_weeks":93.3,"median_weeks":25.0},"dd15":{"count":7,"avg_weeks":107.9,"median_weeks":23.0}},"vol_edge":{"hi_vol_threshold":8.7,"lo_vol_threshold":2.28,"hi_vol_self_avg":-0.04,"hi_vol_self_winrate":51.7,"after_hivol_avg":0.24,"after_hivol_winrate":57.1,"after_lovol_avg":0.15,"after_lovol_winrate":53.8,"risk_adj_return_hiVol":-0.0029,"risk_adj_return_loVol":0.14,"risk_adj_all":0.0253},"week_of_month":[{"week":"Week 1","avg_return":0.26,"win_rate":58.5,"count":398},{"week":"Week 2","avg_return":0.12,"win_rate":55.0,"count":398},{"week":"Week 3","avg_return":0.08,"win_rate":51.0,"count":398},{"week":"Week 4","avg_return":0.17,"win_rate":55.5,"count":398},{"week":"Week 5","avg_return":0.12,"win_rate":51.8,"count":139}],"holidays":{"thanksgiving":{"avg":-0.07,"win_rate":60.6,"count":33},"christmas":{"avg":0.42,"win_rate":72.7,"count":33},"new_year":{"avg":0.27,"win_rate":48.5,"count":33}}};
+
+let monthlyData=[], weeklyData=[];
+
+function fmt(n,plus=true){return `<span class="${n>=0?'up':'dn'}">${plus&&n>=0?'+':''}${n.toFixed(2)}%</span>`;}
+function fmtWr(n){return `<span class="${n>=65?'up':n>=50?'neu':'dn'}">${n}%</span>`;}
+
+function switchSub(id,el){
+  document.querySelectorAll('.subtab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.subtab-panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-'+id).classList.add('active');
+}
+
+// ---- SEASONALITY ----
+function renderSeasonality(){
+  const s=STATS.seasonality;
+  const maxAbs=Math.max(...s.map(m=>Math.abs(m.avg_return)));
+  let bars='';
+  s.forEach(m=>{
+    const pct=(Math.abs(m.avg_return)/maxAbs)*46;
+    const isPos=m.avg_return>=0;
+    const col=isPos?'var(--green)':'var(--red)';
+    const wrCol=m.win_rate>=65?'var(--green)':m.win_rate>=55?'var(--yellow)':'var(--red)';
+    bars+=`<div class="bar-row">
+      <div class="bar-label">${m.month}</div>
+      <div class="bar-outer"><div class="bar-center"></div>
+        <div class="bar-fill ${isPos?'pos':'neg'}" style="width:${pct}%"></div></div>
+      <div class="bar-val" style="color:${col}">${isPos?'+':''}${m.avg_return}%</div>
+      <div class="winrate-pill" style="color:${wrCol}">${m.win_rate}% WR</div>
+    </div>`;
+  });
+  document.getElementById('season-bars').innerHTML=bars;
+
+  const rankByReturn=[...s].sort((a,b)=>b.avg_return-a.avg_return);
+  let rows='';
+  s.forEach(m=>{
+    const rank=rankByReturn.findIndex(r=>r.month===m.month)+1;
+    const badge=rank===1?' <span class="badge top">#1</span>':rank===12?' <span class="badge bot">WORST</span>':'';
+    rows+=`<tr>
+      <td>${m.month}${badge}</td>
+      <td>${fmt(m.avg_return)}</td><td>${fmt(m.median_return)}</td>
+      <td>${fmtWr(m.win_rate)}</td>
+      <td style="color:var(--text3)">$${m.avg_vol.toFixed(2)}</td>
+      <td><span class="up">+${m.best}%</span></td>
+      <td><span class="dn">${m.worst}%</span></td>
+      <td style="color:var(--text3)">${m.count}</td>
+    </tr>`;
+  });
+  document.getElementById('season-tbody').innerHTML=rows;
+
+  const top3=rankByReturn.slice(0,3), bot3=rankByReturn.slice(-3).reverse();
+  let cards='';
+  top3.forEach(m=>{ cards+=`<div class="card"><div class="card-label">${m.month} · TOP MONTH</div><div class="card-value up">+${m.avg_return}%</div><div class="card-sub">${m.win_rate}% win rate</div></div>`; });
+  bot3.forEach(m=>{ cards+=`<div class="card"><div class="card-label">${m.month} · WEAK MONTH</div><div class="card-value ${m.avg_return>=0?'up':'dn'}">${m.avg_return>=0?'+':''}${m.avg_return}%</div><div class="card-sub">${m.win_rate}% win rate</div></div>`; });
+  document.getElementById('season-cards').innerHTML=cards;
+}
+
+// ---- SANTA RALLY ----
+function renderSanta(){
+  const s=STATS.santa;
+  document.getElementById('santa-compare').innerHTML=`
+    <div class="santa-box"><div class="santa-box-label">NOVEMBER <span class="badge top">#1 BEST MONTH</span></div>
+      <div class="santa-stat"><span class="santa-stat-label">Avg Return</span><span class="up">+${s.nov_avg}%</span></div>
+      <div class="santa-stat"><span class="santa-stat-label">Win Rate</span><span class="up">${s.nov_win}%</span></div>
+      <div class="santa-stat"><span class="santa-stat-label">Sample</span><span style="color:var(--text3)">${s.count} years</span></div>
+    </div>
+    <div class="santa-box"><div class="santa-box-label">DECEMBER <span class="badge neu">#9 RANK</span></div>
+      <div class="santa-stat"><span class="santa-stat-label">Avg Return</span>${fmt(s.dec_avg)}</div>
+      <div class="santa-stat"><span class="santa-stat-label">Win Rate</span><span class="neu">${s.dec_win}%</span></div>
+      <div class="santa-stat"><span class="santa-stat-label">Sample</span><span style="color:var(--text3)">${s.count} years</span></div>
+    </div>
+    <div class="santa-box"><div class="santa-box-label">NOV + DEC COMBINED</div>
+      <div class="santa-stat"><span class="santa-stat-label">Avg Return</span>${fmt(s.novdec_avg)}</div>
+      <div class="santa-stat"><span class="santa-stat-label">Win Rate</span><span class="up">${s.novdec_win}%</span></div>
+      <div class="santa-stat"><span class="santa-stat-label">vs Rest of Year</span><span class="up">+${(s.novdec_avg-s.rest_avg).toFixed(2)}% edge</span></div>
+    </div>`;
+  document.getElementById('santa-table').innerHTML=`<thead><tr>
+    <th>Period</th><th>Avg Return</th><th>Win Rate</th><th>Edge vs Rest</th>
+  </tr></thead><tbody>
+  <tr><td>November</td><td>${fmt(s.nov_avg)}</td><td>${fmtWr(s.nov_win)}</td><td><span class="up">+${(s.nov_avg-s.rest_avg).toFixed(2)}%</span></td></tr>
+  <tr><td>December</td><td>${fmt(s.dec_avg)}</td><td>${fmtWr(s.dec_win)}</td><td>${fmt(s.dec_avg-s.rest_avg)}</td></tr>
+  <tr><td>Nov + Dec Combined</td><td>${fmt(s.novdec_avg)}</td><td>${fmtWr(s.novdec_win)}</td><td><span class="up">+${(s.novdec_avg-s.rest_avg).toFixed(2)}%</span></td></tr>
+  <tr><td>Jan–Oct (Baseline)</td><td>${fmt(s.rest_avg)}</td><td>${fmtWr(s.rest_win)}</td><td><span class="neu">BASELINE</span></td></tr>
+  </tbody>`;
+
+  if(monthlyData.length>0){
+    ['nov','dec'].forEach((mo,idx)=>{
+      const mNum=idx===0?10:11;
+      const d=monthlyData.filter(r=>new Date(r.DATE).getMonth()===mNum).sort((a,b)=>new Date(a.DATE)-new Date(b.DATE));
+      const ctx=document.getElementById('chart-'+mo);
+      if(!ctx)return;
+      const returns=d.map(r=>parseFloat(r['Return_%'])||0);
+      const years=d.map(r=>new Date(r.DATE).getFullYear());
+      new Chart(ctx,{type:'bar',data:{labels:years,datasets:[{data:returns,backgroundColor:returns.map(v=>v>=0?'rgba(0,255,136,0.7)':'rgba(255,51,85,0.7)'),borderWidth:0}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw>=0?'+':''}${c.raw.toFixed(2)}%`}}},
+          scales:{x:{ticks:{color:'#9090c0',font:{size:10}},grid:{color:'rgba(37,37,69,0.5)'}},y:{ticks:{color:'#9090c0',font:{size:10},callback:v=>`${v>=0?'+':''}${v}%`},grid:{color:'rgba(37,37,69,0.5)'}}}}});
+    });
+  }
+}
+
+// ---- STREAKS ----
+function renderStreaks(){
+  const s=STATS.streaks;
+  document.getElementById('streak-cards').innerHTML=`
+    <div class="card"><div class="card-label">WEEKLY MAX GREEN STREAK</div><div class="card-value up">${s.weekly.max_green}</div><div class="card-sub">consecutive up weeks</div></div>
+    <div class="card"><div class="card-label">WEEKLY MAX RED STREAK</div><div class="card-value dn">${s.weekly.max_red}</div><div class="card-sub">consecutive down weeks</div></div>
+    <div class="card"><div class="card-label">MONTHLY MAX GREEN STREAK</div><div class="card-value up">${s.monthly.max_green}</div><div class="card-sub">consecutive up months</div></div>
+    <div class="card"><div class="card-label">MONTHLY MAX RED STREAK</div><div class="card-value dn">${s.monthly.max_red}</div><div class="card-sub">consecutive down months</div></div>
+    <div class="card"><div class="card-label">YEARLY MAX GREEN STREAK</div><div class="card-value up">${s.yearly.max_green}</div><div class="card-sub">consecutive up years</div></div>
+    <div class="card"><div class="card-label">YEARLY MAX RED STREAK</div><div class="card-value dn">${s.yearly.max_red}</div><div class="card-sub">consecutive down years</div></div>`;
+
+  document.getElementById('momentum-table').innerHTML=`<thead><tr>
+    <th>Condition</th><th>Prob Green Next Week</th><th>Reading</th>
+  </tr></thead><tbody>
+  <tr><td>After a GREEN week</td><td>${fmtWr(s.momentum_weekly.p_green_after_green)}</td>
+    <td style="color:var(--text3);text-align:left">Slight momentum — markets lean to follow through</td></tr>
+  <tr><td>After a RED week</td><td>${fmtWr(s.momentum_weekly.p_green_after_red)}</td>
+    <td style="color:var(--text3);text-align:left">Strong mean reversion — bounces common after red weeks</td></tr>
+  <tr><td>After a GREEN month</td><td>${fmtWr(s.momentum_monthly.p_green_after_green)}</td>
+    <td style="color:var(--text3);text-align:left">Strong monthly momentum — continuation is the edge</td></tr>
+  </tbody>`;
+
+  document.getElementById('after2g-cards').innerHTML=`
+    <div class="card"><div class="card-label">AVG RETURN — NEXT WEEK</div>
+      <div class="card-value ${s.weekly.after_2green_avg>=0?'up':'dn'}">${s.weekly.after_2green_avg>=0?'+':''}${s.weekly.after_2green_avg}%</div>
+      <div class="card-sub">After 2+ consecutive green weeks</div></div>
+    <div class="card"><div class="card-label">WIN RATE — NEXT WEEK</div>
+      <div class="card-value neu">${s.weekly.after_2green_winrate}%</div>
+      <div class="card-sub">Slightly muted — momentum fades short-term</div></div>`;
+
+  document.getElementById('after2r-cards').innerHTML=`
+    <div class="card"><div class="card-label">AVG RETURN — NEXT WEEK</div>
+      <div class="card-value up">+${s.weekly.after_2red_avg}%</div>
+      <div class="card-sub">After 2+ consecutive red weeks</div></div>
+    <div class="card"><div class="card-label">WIN RATE — NEXT WEEK</div>
+      <div class="card-value up">${s.weekly.after_2red_winrate}%</div>
+      <div class="card-sub">Elevated bounce probability — mean reversion edge</div></div>`;
+}
+
+// ---- RECOVERY ----
+function renderRecovery(){
+  const r=STATS.recovery;
+  document.getElementById('rec-summary-cards').innerHTML=`
+    <div class="card"><div class="card-label">-5%+ DRAWDOWN EVENTS</div><div class="card-value neu">${r.dd5.count}</div><div class="card-sub">since 1993</div></div>
+    <div class="card"><div class="card-label">-10%+ DRAWDOWN EVENTS</div><div class="card-value dn">${r.dd10.count}</div><div class="card-sub">since 1993</div></div>
+    <div class="card"><div class="card-label">-15%+ DRAWDOWN EVENTS</div><div class="card-value dn">${r.dd15.count}</div><div class="card-sub">since 1993</div></div>`;
+
+  const rows=[{label:'-5% or more',d:r.dd5},{label:'-10% or more',d:r.dd10},{label:'-15% or more',d:r.dd15}];
+  document.getElementById('rec-tbody').innerHTML=rows.map(({label,d})=>`<tr>
+    <td>${label}</td>
+    <td style="color:var(--yellow)">${d.count}</td>
+    <td style="color:var(--orange)">${d.avg_weeks} weeks</td>
+    <td style="color:var(--cyan)">${d.median_weeks} weeks</td>
+    <td style="color:var(--text3)">${(d.avg_weeks/4.33).toFixed(1)} mo</td>
+  </tr>`).join('');
+
+  const maxW=120;
+  document.getElementById('rec-visual').innerHTML=rows.map(({label,d})=>`
+    <div style="margin-bottom:20px;">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);margin-bottom:8px;">${label}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:5px;">
+        <span style="font-size:11px;color:var(--text3);width:55px;font-family:'Share Tech Mono',monospace">AVG</span>
+        <div style="flex:1;height:10px;background:var(--bg2);border-radius:5px;overflow:hidden;">
+          <div style="width:${Math.min(d.avg_weeks/maxW*100,100)}%;height:100%;background:var(--orange);border-radius:5px;"></div></div>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--orange);width:65px">${d.avg_weeks}w</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:11px;color:var(--text3);width:55px;font-family:'Share Tech Mono',monospace">MEDIAN</span>
+        <div style="flex:1;height:10px;background:var(--bg2);border-radius:5px;overflow:hidden;">
+          <div style="width:${Math.min(d.median_weeks/maxW*100,100)}%;height:100%;background:var(--cyan);border-radius:5px;"></div></div>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);width:65px">${d.median_weeks}w</span>
+      </div>
+    </div>`).join('');
+}
+
+// ---- VOL EDGE ----
+function renderVolEdge(){
+  const v=STATS.vol_edge;
+  document.getElementById('vol-compare').innerHTML=`
+    <div class="vol-box">
+      <div class="vol-box-label">LOW VOL WEEKS<br><span style="opacity:0.6;font-size:9px">TR ≤ $${v.lo_vol_threshold} (bottom 20%)</span></div>
+      <div class="vol-box-val up">+${v.after_lovol_avg}%</div>
+      <div style="color:var(--text3);font-size:12px;margin-top:6px;font-family:'Share Tech Mono',monospace">${v.after_lovol_winrate}% win rate next week</div>
+    </div>
+    <div class="vol-box">
+      <div class="vol-box-label">ALL WEEKS<br><span style="opacity:0.6;font-size:9px">BASELINE</span></div>
+      <div class="vol-box-val neu">+0.21%</div>
+      <div style="color:var(--text3);font-size:12px;margin-top:6px;font-family:'Share Tech Mono',monospace">~56% avg win rate</div>
+    </div>
+    <div class="vol-box">
+      <div class="vol-box-label">HIGH VOL WEEKS<br><span style="opacity:0.6;font-size:9px">TR ≥ $${v.hi_vol_threshold} (top 20%)</span></div>
+      <div class="vol-box-val ${v.after_hivol_avg>=0?'up':'dn'}">${v.after_hivol_avg>=0?'+':''}${v.after_hivol_avg}%</div>
+      <div style="color:var(--text3);font-size:12px;margin-top:6px;font-family:'Share Tech Mono',monospace">${v.after_hivol_winrate}% win rate next week</div>
+    </div>`;
+
+  document.getElementById('vol-table').innerHTML=`<thead><tr>
+    <th>Condition</th><th>During-Week Return</th><th>During-Week Win Rate</th><th>Next Week Avg</th><th>Next Week Win Rate</th>
+  </tr></thead><tbody>
+  <tr><td>High Vol Week (top 20%)</td><td>${fmt(v.hi_vol_self_avg)}</td><td>${fmtWr(v.hi_vol_self_winrate)}</td><td>${fmt(v.after_hivol_avg)}</td><td>${fmtWr(v.after_hivol_winrate)}</td></tr>
+  <tr><td>Low Vol Week (bottom 20%)</td><td><span class="neu">—</span></td><td><span class="neu">—</span></td><td>${fmt(v.after_lovol_avg)}</td><td>${fmtWr(v.after_lovol_winrate)}</td></tr>
+  </tbody>`;
+
+  document.getElementById('risk-adj-cards').innerHTML=`
+    <div class="card"><div class="card-label">ALL WEEKS (RETURN÷TR)</div><div class="card-value neu">${v.risk_adj_all}</div><div class="card-sub">baseline risk-adjusted</div></div>
+    <div class="card"><div class="card-label">LOW VOL (RETURN÷TR)</div><div class="card-value up">${v.risk_adj_return_loVol}</div><div class="card-sub">best risk-adjusted edge</div></div>
+    <div class="card"><div class="card-label">HIGH VOL (RETURN÷TR)</div><div class="card-value dn">${v.risk_adj_return_hiVol}</div><div class="card-sub">worst risk-adjusted edge</div></div>`;
+
+  if(weeklyData.length>0){
+    const ctx=document.getElementById('chart-vol');
+    if(ctx){
+      const vals=weeklyData.map(r=>parseFloat(r['True_Range'])).filter(v=>v>0&&v<50);
+      const bins=Array(25).fill(0);
+      vals.forEach(v=>{bins[Math.min(Math.floor(v/2),24)]++;});
+      new Chart(ctx,{type:'bar',data:{labels:bins.map((_,i)=>`$${i*2}`),datasets:[{data:bins,backgroundColor:'rgba(0,204,255,0.55)',borderWidth:0}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+          scales:{x:{ticks:{color:'#9090c0',font:{size:9}},grid:{color:'rgba(37,37,69,0.4)'}},y:{ticks:{color:'#9090c0',font:{size:10}},grid:{color:'rgba(37,37,69,0.4)'}}}}});
+    }
+  }
+}
+
+// ---- WEEK OF MONTH ----
+function renderWOM(){
+  const wom=STATS.week_of_month;
+  const avgAll=wom.reduce((s,w)=>s+w.avg_return,0)/wom.length;
+  const maxR=Math.max(...wom.map(w=>w.avg_return));
+
+  document.getElementById('wom-cards').innerHTML=wom.map(w=>`
+    <div class="card"><div class="card-label">${w.week.toUpperCase()}${w.avg_return===maxR?' <span class="badge top">STRONGEST</span>':''}</div>
+      <div class="card-value ${w.avg_return>=0?'up':'dn'}">${w.avg_return>=0?'+':''}${w.avg_return}%</div>
+      <div class="card-sub">${w.win_rate}% WR · n=${w.count}</div></div>`).join('');
+
+  const maxB=Math.max(...wom.map(w=>Math.abs(w.avg_return)));
+  document.getElementById('wom-bars').innerHTML=`<div style="display:flex;align-items:flex-end;gap:16px;height:120px;">
+    ${wom.map(w=>{
+      const h=Math.max((Math.abs(w.avg_return)/maxB)*100,4);
+      const col=w.avg_return>=0?'var(--green)':'var(--red)';
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:120px;justify-content:flex-end;">
+        <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${col}">${w.avg_return>=0?'+':''}${w.avg_return}%</span>
+        <div style="width:100%;height:${h}px;background:${col};opacity:0.75;border-radius:4px 4px 0 0;"></div>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3)">${w.week}</span>
+      </div>`;}).join('')}
+  </div>`;
+
+  document.getElementById('wom-tbody').innerHTML=wom.map(w=>{
+    const e=w.avg_return-avgAll;
+    return `<tr><td>${w.week}</td><td>${fmt(w.avg_return)}</td><td>${fmtWr(w.win_rate)}</td>
+      <td style="color:var(--text3)">${w.count}</td>
+      <td>${e>=0?`<span class="up">+${e.toFixed(2)}%</span>`:`<span class="dn">${e.toFixed(2)}%</span>`}</td></tr>`;}).join('');
+}
+
+// ---- HOLIDAYS ----
+function renderHolidays(){
+  const h=STATS.holidays;
+  const avgWeek=0.21;
+  const items=[
+    {key:'thanksgiving',label:'🦃 THANKSGIVING WEEK',def:'Nov 21–27'},
+    {key:'christmas',label:'🎄 CHRISTMAS WEEK',def:'Dec 21–27'},
+    {key:'new_year',label:'🎆 NEW YEAR WINDOW',def:'Dec 28 / Jan 1–3'},
+  ];
+  document.getElementById('holiday-cards').innerHTML=items.map(({key,label,def})=>{
+    const d=h[key], e=d.avg-avgWeek;
+    return `<div class="holiday-card">
+      <div class="holiday-name">${label}</div>
+      <div class="holiday-stat"><span class="holiday-stat-label">Avg Return</span>
+        <span class="holiday-stat-val ${d.avg>=0?'up':'dn'}">${d.avg>=0?'+':''}${d.avg}%</span></div>
+      <div class="holiday-stat"><span class="holiday-stat-label">Win Rate</span>
+        <span class="holiday-stat-val" style="color:${d.win_rate>=60?'var(--green)':d.win_rate>=50?'var(--yellow)':'var(--red)'}">${d.win_rate}%</span></div>
+      <div class="holiday-stat"><span class="holiday-stat-label">Edge vs Avg</span>
+        <span class="holiday-stat-val ${e>=0?'up':'dn'}">${e>=0?'+':''}${e.toFixed(2)}%</span></div>
+      <div style="font-size:11px;color:var(--dim);margin-top:10px;font-family:'Share Tech Mono',monospace">${def} · ${d.count} years</div>
+    </div>`;}).join('');
+
+  document.getElementById('holiday-tbody').innerHTML=items.map(({key,label,def})=>{
+    const d=h[key], e=d.avg-avgWeek;
+    return `<tr><td>${label}</td><td style="text-align:left;color:var(--text3)">${def}</td>
+      <td>${fmt(d.avg)}</td><td>${fmtWr(d.win_rate)}</td>
+      <td style="color:var(--text3)">${d.count} yrs</td>
+      <td>${e>=0?`<span class="up">+${e.toFixed(2)}%</span>`:`<span class="dn">${e.toFixed(2)}%</span>`}</td></tr>`;}).join('');
+}
+
+// ---- INIT ----
+async function init(){
+  try{
+    const [mRes,wRes]=await Promise.all([
+      fetch('data/SPY_monthly.csv').then(r=>r.text()),
+      fetch('data/SPY_weekly.csv').then(r=>r.text())
+    ]);
+    monthlyData=Papa.parse(mRes,{header:true,dynamicTyping:true}).data.filter(r=>r.DATE&&!isNaN(Date.parse(r.DATE)));
+    weeklyData=Papa.parse(wRes,{header:true,dynamicTyping:true}).data.filter(r=>r.DATE&&!isNaN(Date.parse(r.DATE)));
+  }catch(e){ console.warn('CSV load failed:',e.message); }
+
+  renderSeasonality(); renderSanta(); renderStreaks();
+  renderRecovery(); renderVolEdge(); renderWOM(); renderHolidays();
+
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='block';
+}
+init();
+</script>
+</body>
+</html>

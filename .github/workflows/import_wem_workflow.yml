@@ -1,0 +1,47 @@
+name: Import WEM Data (One-Time)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  import-wem:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pandas requests pytz yfinance market-calendar-tool
+
+      - name: Run WEM import
+        run: python import_wem.py
+
+      - name: Commit database with WEM data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main
+          git add -f spy_data.db
+          git diff --staged --quiet && echo "No changes" || git commit -m "Import WEM data into database"
+          git push || echo "Nothing to push"
+
+      - name: Run main tracker to export JSON
+        env:
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+        run: python fetch_and_analyze.py
+
+      - name: Commit JSON exports
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main
+          git add -f spy_data.db spy_data.json market_data.json
+          git diff --staged --quiet && echo "No changes" || git commit -m "Export JSON after WEM import"
+          git push || echo "Nothing to push"
