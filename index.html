@@ -983,15 +983,15 @@
 <div class="tab-panel" id="panel-analog">
   <!-- Row 1: Header cards -->
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:10px;" id="analogCards"></div>
-  <!-- Row 2: Overlay chart -->
+  <!-- Row 2: Analog comparison cards -->
   <div class="panel" style="margin-bottom:10px;">
-    <div class="panel-label">⬡ 2015 vs 2026 — % RETURN FROM CYCLE LOW · DAY BY DAY OVERLAY</div>
-    <div id="analogChart" style="position:relative;height:320px;"></div>
+    <div class="panel-label">⬡ TOP 5 HISTORICAL ANALOGS — RANKED BY CORRELATION + PATH SIMILARITY</div>
+    <div id="analogSummary"></div>
   </div>
-  <!-- Row 3: Milestone roadmap -->
+  <!-- Row 3: Overlay chart -->
   <div class="panel" style="margin-bottom:10px;">
-    <div class="panel-label">⬡ 2015 ROADMAP — PROJECTED LEVELS IF ANALOG HOLDS</div>
-    <div id="analogRoadmap"></div>
+    <div class="panel-label">⬡ ALL ANALOGS OVERLAY — % RETURN FROM CYCLE ANCHOR · DASHED = PROJECTION</div>
+    <div id="analogChart" style="position:relative;height:380px;"></div>
   </div>
   <!-- Row 4: Day by day table -->
   <div class="panel" style="margin-bottom:10px;">
@@ -1002,13 +1002,14 @@
         <thead style="position:sticky;top:0;background:var(--bg2);">
           <tr>
             <th style="padding:6px 8px;text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DAY</th>
-            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">2015 DATE</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">SPY 2015</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">% FROM LOW</th>
             <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">2026 DATE</th>
             <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">SPY 2026</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">% FROM LOW</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DIVERGENCE</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">% FROM ANCHOR</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;border-bottom:1px solid var(--border);">2012 DATE / %</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ff8800;border-bottom:1px solid var(--border);">2018 DATE / %</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#8855ff;border-bottom:1px solid var(--border);">2007 DATE / %</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#00ccff;border-bottom:1px solid var(--border);">2016 DATE / %</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;border-bottom:1px solid var(--border);">2008 DATE / %</th>
           </tr>
         </thead>
         <tbody id="analogTableBody"></tbody>
