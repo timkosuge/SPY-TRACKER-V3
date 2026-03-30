@@ -98,6 +98,8 @@ export async function onRequest(context) {
     ];
 
     const bvols = Object.fromEntries(BUCKET_DEFS.map(b => [b.key, 0]));
+    // Track OHLC per bucket for session volatility panel
+    const bOHLC = Object.fromEntries(BUCKET_DEFS.map(b => [b.key, { high: null, low: null, open: null, close: null, bars: 0 }]));
     const priceVol = {};
     let peakBar = null;
 
@@ -108,7 +110,17 @@ export async function onRequest(context) {
       if (mins < 8*60+30 || mins >= 15*60) continue;
       const vol = bar.vol || 0;
       for (const bd of BUCKET_DEFS) {
-        if (mins >= bd.start && mins < bd.end) { bvols[bd.key] += vol; break; }
+        if (mins >= bd.start && mins < bd.end) {
+          bvols[bd.key] += vol;
+          const o = bOHLC[bd.key];
+          const h = bar.high ?? bar.close, l = bar.low ?? bar.close, c = bar.close;
+          if (o.open === null) o.open = bar.open ?? c;
+          if (o.high === null || h > o.high) o.high = h;
+          if (o.low  === null || l < o.low)  o.low  = l;
+          o.close = c;
+          o.bars++;
+          break;
+        }
       }
       const pk = Math.round((bar.close ?? bar.open) * 10) / 10;
       priceVol[pk] = (priceVol[pk] || 0) + vol;
@@ -120,12 +132,21 @@ export async function onRequest(context) {
     }
 
     const total = sessionVol || 1;
-    const buckets = BUCKET_DEFS.map(bd => ({
-      key:    bd.key,
-      label:  bd.label,
-      volume: Math.round(bvols[bd.key]),
-      pct:    Math.round(bvols[bd.key] / total * 1000) / 10,
-    }));
+    const buckets = BUCKET_DEFS.map(bd => {
+      const o = bOHLC[bd.key];
+      const range = (o.high !== null && o.low !== null) ? Math.round((o.high - o.low) * 100) / 100 : null;
+      return {
+        key:    bd.key,
+        label:  bd.label,
+        volume: Math.round(bvols[bd.key]),
+        pct:    Math.round(bvols[bd.key] / total * 1000) / 10,
+        high:   o.high   !== null ? Math.round(o.high  * 100) / 100 : null,
+        low:    o.low    !== null ? Math.round(o.low   * 100) / 100 : null,
+        open:   o.open   !== null ? Math.round(o.open  * 100) / 100 : null,
+        close:  o.close  !== null ? Math.round(o.close * 100) / 100 : null,
+        range,
+      };
+    });
 
     const open_1h    = bvols['vol_830_900'] + bvols['vol_900_930'];
     const close_1h   = bvols['vol_1400_1430'] + bvols['vol_1430_1500'];
