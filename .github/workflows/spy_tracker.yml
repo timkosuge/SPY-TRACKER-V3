@@ -33,11 +33,14 @@ jobs:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
         run: python fetch_and_analyze.py
 
+      - name: Generate analog data
+        run: python generate_analog.py
+
       - name: Commit updated files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git pull origin main
-          git add -f spy_data.db spy_data.json market_data.json
+          git add -f spy_data.db spy_data.json market_data.json analog_data.js
           git diff --staged --quiet && echo "No changes" || git commit -m "Auto: SPY data update $(date -u +'%Y-%m-%d')"
           git push || echo "Nothing to push"
