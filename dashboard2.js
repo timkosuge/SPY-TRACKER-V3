@@ -2337,11 +2337,25 @@ function renderEvents() {
 // VOLATILITY STATS TAB RENDER
 // ─────────────────────────────────────────────
 function renderVolStats() {
+  // Use existing esRenderVolEdge() then mirror output into vs-* elements
+  if (typeof esRenderVolEdge === 'function') {
+    esRenderVolEdge();
+    const copy = (from, to) => {
+      const src = document.getElementById(from);
+      const dst = document.getElementById(to);
+      if (src && dst) dst.innerHTML = src.innerHTML;
+    };
+    copy('es-wvol-rows', 'vs-wvol-rows');
+    copy('es-dvol-rows', 'vs-dvol-rows');
+    copy('es-risk-cards', 'vs-risk-cards');
+    copy('es-consec-vol-cards', 'vs-consec-vol-cards');
+    copy('es-vol-explainer', 'vs-vol-explainer');
+  }
+
   // ES_DATA and esLookback live in the edgestats inline script — access via window
   const _esData = typeof window.ES_DATA !== 'undefined' ? window.ES_DATA
                 : typeof ES_DATA !== 'undefined' ? ES_DATA : null;
   if (!_esData) { 
-    // Try again in 500ms — edgestats panel may not have rendered yet
     setTimeout(renderVolStats, 500);
     return;
   }
