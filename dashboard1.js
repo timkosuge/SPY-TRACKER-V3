@@ -7,9 +7,9 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
-  derivatives: ['options','gex','wem','volatility'],
+  derivatives: ['options','gex','wem'],
   macro:       ['bonds','breadth','sentiment'],
-  history:     ['pricehistory','volhistory','edgestats','analog','mag7']
+  history:     ['pricehistory','volhistory','edgestats','analog','mag7','volatility','events']
 };
 const TAB_TO_GROUP = {};
 Object.entries(GROUP_TABS).forEach(([g,tabs]) => tabs.forEach(t => TAB_TO_GROUP[t]=g));
@@ -56,6 +56,7 @@ function _switchPanelOnly(id) {
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
+  if(id==='events') { try { renderEvents(); } catch(e){ console.warn('events:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
   if(id==='edgestats') { if(typeof renderEdgeStats==='function') renderEdgeStats(); }
   if(id==='breadth' && _md && _sd) { try { renderBreadth(_md,_sd); } catch(e){} }
