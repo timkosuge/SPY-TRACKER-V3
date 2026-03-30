@@ -4585,14 +4585,14 @@ function renderMag7() {
       {l:'Full',    v:avg('full_ret'),   c:'#00ff88'},
     ];
     const maxAbs = Math.max(...bars.map(b=>Math.abs(b.v)), 0.5);
-    const maxBarH = 90;
-    wcEl.innerHTML = `<div style="display:flex;gap:8px;align-items:center;justify-content:space-around;height:140px;padding:8px 4px 0;">
+    const M7_BAR_H = 90;
+    wcEl.innerHTML = `<div style="display:flex;gap:8px;align-items:flex-end;justify-content:space-around;height:${M7_BAR_H+40}px;padding:8px 4px 4px;">
       ${bars.map(b => {
-        const bc = b.v>=0?b.c:b.c;
-        const h = Math.abs(b.v)/maxAbs*maxBarH;
-        return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${clr(b.v)};font-weight:bold;">${b.v>=0?'+':''}${b.v.toFixed(2)}%</div>
-          <div style="width:70%;height:${h.toFixed(0)}px;background:${b.v>=0?b.c+'99':b.c+'99'};border-radius:${b.v>=0?'4px 4px 0 0':'0 0 4px 4px'};min-height:4px;"></div>
+        const h = Math.max(Math.abs(b.v)/maxAbs*M7_BAR_H, 4);
+        const col = clr(b.v);
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;height:100%;justify-content:flex-end;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${col};font-weight:bold;">${b.v>=0?'+':''}${b.v.toFixed(2)}%</div>
+          <div style="width:70%;height:${h.toFixed(0)}px;background:${b.c}99;border-radius:${b.v>=0?'4px 4px 0 0':'0 0 4px 4px'};"></div>
           <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${b.l}</div>
         </div>`;
       }).join('')}
@@ -4607,14 +4607,15 @@ function renderMag7() {
     const buckets = [{l:'<-2%',min:-99,max:-2},{l:'-2 to -1',min:-2,max:-1},{l:'-1 to 0',min:-1,max:0},{l:'0 to +1',min:0,max:1},{l:'+1 to +2',min:1,max:2},{l:'>+2%',min:2,max:99}];
     const counts = buckets.map(b=>vals.filter(v=>v>=b.min&&v<b.max).length);
     const maxC = Math.max(...counts,1);
+    const M7_PRE_BAR_H = 90;
     pcEl.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:flex-end;height:120px;padding:8px 4px 0;">
+      <div style="display:flex;gap:8px;align-items:flex-end;height:${M7_PRE_BAR_H+28}px;padding:4px 4px 0;">
         ${buckets.map((b,i)=>{
-          const c=counts[i], h=Math.max(c/maxC*100,c?4:0);
-          const bc = b.min>=0?'#00ff8888':'#ff335588';
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
-            <div style="font-size:9px;color:rgba(255,255,255,0.5);">${c||''}</div>
-            <div style="width:100%;height:${h.toFixed(0)}%;background:${bc};border-radius:2px 2px 0 0;min-height:${c?4:0}px;"></div>
+          const c=counts[i], h=c?Math.max(Math.round(c/maxC*M7_PRE_BAR_H),4):0;
+          const bc = b.min>=0?'#00ff8899':'#ff335599';
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:100%;">
+            <div style="font-size:9px;color:rgba(255,255,255,0.6);">${c||''}</div>
+            <div style="width:100%;height:${h}px;background:${bc};border-radius:2px 2px 0 0;"></div>
           </div>`;
         }).join('')}
       </div>
