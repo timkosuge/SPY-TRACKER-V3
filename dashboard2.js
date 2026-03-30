@@ -1468,7 +1468,7 @@ async function analyzeChart() {
       ${currentPreviewImg ? `<img src="${currentPreviewImg}" style="width:100%;max-height:260px;object-fit:contain;border-radius:4px;border:1px solid var(--border);margin-bottom:10px;"/>` : ''}
       <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:3px;padding:14px;font-size:13px;line-height:1.7;color:var(--text2);">${analysis.replace(/\n/g,'<br>')}</div>
       ${note?`<div style="margin-top:8px;font-size:11px;color:var(--text3);">Note: ${note}</div>`:''}
-      <div style="margin-top:8px;font-size:10px;color:var(--text3);">Saved to journal · ${new Date().toLocaleString()}</div>`;
+      <div style="margin-top:8px;font-size:10px;color:var(--text3);">Saved to journal · ${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})} CT</div>`;
 
   } catch(e) {
     preview.innerHTML += `<div style="color:#ff3355;font-size:12px;margin-top:8px;">Analysis failed: ${e.message}</div>`;
@@ -1488,7 +1488,7 @@ function renderJournalEntries() {
   el.innerHTML = _journalEntries.map((e,i) => {
     const d = new Date(e.ts);
     const dateStr = d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
-    const timeStr = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    const timeStr = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'}) + ' CT';
     const preview = e.analysis ? e.analysis.slice(0,120)+'…' : 'No analysis';
     return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:10px;margin-bottom:6px;cursor:pointer;"
       onclick="expandJournalEntry(${i})"
@@ -1511,7 +1511,7 @@ function expandJournalEntry(i) {
   const d = new Date(e.ts);
   preview.innerHTML = `
     <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:10px;">
-      ${d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})} · ${d.toLocaleTimeString()}
+      ${d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})} · ${d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Chicago'})} CT
     </div>
     ${e.note?`<div style="margin-bottom:10px;font-size:12px;color:var(--text3);font-style:italic;">"${e.note}"</div>`:''}
     <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:3px;padding:14px;font-size:13px;line-height:1.7;color:var(--text2);">${(e.analysis||'').replace(/\n/g,'<br>')}</div>`;
@@ -2748,7 +2748,7 @@ function updateDeskTimestamp(status, liveTime) {
   const statusColor = status === 'live' ? '#00ff88' : status === 'updating' ? '#ffcc00' : '#ff3355';
   const statusLabel = status === 'live' ? '● LIVE' : status === 'updating' ? '⟳ UPDATING' : '✕ OFFLINE';
   const staticLabel = _lastStaticRefresh
-    ? new Date(_lastStaticRefresh).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    ? new Date(_lastStaticRefresh).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT'
     : 'pending';
   el.innerHTML = `
     <span style="color:${statusColor};font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;">${statusLabel}</span>
@@ -2769,7 +2769,7 @@ function updateDeskTimestamp(status, liveTime) {
 
 function updateStaticTimestamp() {
   updateDeskTimestamp('live', _lastLiveSuccess
-    ? _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    ? _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT'
     : '—');
 }
 
@@ -2825,7 +2825,7 @@ function mergeLiveData(md, liveQuotes, liveFG) {
     Object.assign(merged.quotes, liveQuotes);
   }
   if (liveFG) merged.fear_greed = liveFG;
-  merged.updated = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  merged.updated = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
   return merged;
 }
 
@@ -2925,7 +2925,7 @@ async function refreshLiveData() {
       renderGEX(merged);
       
       _lastLiveSuccess = new Date();
-      setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT');
     } else {
       setLiveStatus('offline', 'fetch failed');
     }
