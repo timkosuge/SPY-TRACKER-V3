@@ -1225,7 +1225,7 @@
 <!-- FLOATING CHAT -->
 
 
-<script src="analog_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="dashboard1.js"></script><script src="dashboard2.js"></script>
+<script src="analog_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="dashboard1.js"></script><script src="dashboard2.js"></script>
 
 <!-- ============================================================
      EDGE STATS TAB — INLINE PANEL v3
@@ -1301,6 +1301,13 @@
   .es-yr-cell.up{border-color:rgba(0,255,136,0.25);background:rgba(0,255,136,0.05);}
   .es-yr-cell.dn{border-color:rgba(255,51,85,0.2);background:rgba(255,51,85,0.04);}
   .es-foot{font-size:11px;color:var(--text3);margin-top:18px;font-family:'Share Tech Mono',monospace;line-height:1.6;}
+  .rel-lb-btn{font-family:'Orbitron',monospace;font-size:9px;padding:5px 12px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
+  .rel-lb-btn.active{background:rgba(0,204,255,0.15);border-color:var(--cyan);color:var(--cyan);}
+  .rel-type-btn{font-family:'Orbitron',monospace;font-size:10px;padding:6px 16px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
+  .rel-type-btn.active{border-width:2px;font-weight:bold;}
+  #reltab-cpi.active{background:rgba(255,136,0,0.15);border-color:#ff8800;color:#ff8800;}
+  #reltab-nfp.active{background:rgba(0,204,255,0.15);border-color:#00ccff;color:#00ccff;}
+  #reltab-fomc.active{background:rgba(136,85,255,0.15);border-color:#8855ff;color:#8855ff;}
   .up{color:var(--green);}.dn{color:var(--red);}.neu{color:var(--yellow);}
   .es-insight{background:rgba(0,204,255,0.05);border:1px solid rgba(0,204,255,0.2);border-radius:5px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--text2);line-height:1.6;}
   .es-insight strong{color:var(--cyan);}
@@ -1449,16 +1456,53 @@
 
 <!-- DATA RELEASES -->
 <div class="es-panel" id="es-releases">
-  <div class="es-topbar"><div id="es-rel-lb"></div><div class="es-meta" id="es-rel-meta"></div></div>
-  <div class="es-section">CPI — CONSUMER PRICE INDEX · RELEASE WINDOWS</div>
-  <p style="font-size:12px;color:var(--text3);font-family:'Share Tech Mono',monospace;margin:-6px 0 14px;">CPI ≈ 2nd Wednesday of month. Before = 5 td pre-release week. During = release day ±2 td. After = 5 td post. Use lookback to compare regimes.</p>
-  <div class="es-cards" id="es-rel-cpi-cards"></div>
-  <div id="es-rel-cpi-grid" style="margin:0 0 22px;"></div>
-  <div class="es-section">NFP — NONFARM PAYROLLS · RELEASE WINDOWS</div>
-  <p style="font-size:12px;color:var(--text3);font-family:'Share Tech Mono',monospace;margin:-6px 0 14px;">NFP ≈ 1st Friday of month. All-time: CPI n=397, NFP n=376. Since 2020: CPI n=75, NFP n=70.</p>
-  <div class="es-cards" id="es-rel-nfp-cards"></div>
-  <div id="es-rel-nfp-grid" style="margin:0 0 22px;"></div>
-  <p class="es-foot">* Approximate BLS release schedule. Actual dates vary ±1-3 days. Window = 5 trading days before/during/after each release.</p>
+
+  <!-- Lookback toggles -->
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+    <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;">LOOKBACK:</span>
+    <button class="rel-lb-btn active" onclick="relSetLookback('all',this)">2020–2026</button>
+    <button class="rel-lb-btn" onclick="relSetLookback('1yr',this)">LAST 12 MONTHS</button>
+    <button class="rel-lb-btn" onclick="relSetLookback('2026',this)">2026 ONLY</button>
+  </div>
+
+  <!-- Event type tabs -->
+  <div style="display:flex;gap:6px;margin-bottom:14px;">
+    <button class="rel-type-btn active" id="reltab-cpi"  onclick="relSetType('cpi',this)">CPI</button>
+    <button class="rel-type-btn" id="reltab-nfp"  onclick="relSetType('nfp',this)">NFP</button>
+    <button class="rel-type-btn" id="reltab-fomc" onclick="relSetType('fomc',this)">FOMC</button>
+  </div>
+
+  <!-- Upcoming next event banner -->
+  <div id="rel-upcoming-banner" style="margin-bottom:12px;"></div>
+
+  <!-- Aggregate stat cards -->
+  <div id="rel-stat-cards" style="margin-bottom:14px;"></div>
+
+  <!-- Chart: day-of returns scatter + bar -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+    <div class="panel">
+      <div class="panel-label" id="rel-chart-label">⬡ DAY-OF RETURN DISTRIBUTION</div>
+      <canvas id="relReturnChart" height="180"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-label">⬡ BEFORE / DAY-OF / AFTER · AVG RETURN</div>
+      <canvas id="relWindowChart" height="180"></canvas>
+    </div>
+  </div>
+
+  <!-- Event-by-event table -->
+  <div class="panel">
+    <div class="panel-label" id="rel-table-label">⬡ EVENT LOG — EVERY RELEASE SINCE 2020</div>
+    <div style="max-height:420px;overflow-y:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead style="position:sticky;top:0;background:var(--bg2);">
+          <tr id="rel-table-head"></tr>
+        </thead>
+        <tbody id="rel-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 <!-- POLITICAL CYCLE -->
@@ -1848,53 +1892,218 @@ function esRenderHolidays(){
     </tr>`;}).join('');
 }
 
-// ---- DATA RELEASES ----
+// ---- DATA RELEASES (v2 — exact dates from release_data.js) ----
+let _relType = 'cpi';
+let _relLookback = 'all';
+
+const REL_COLORS = { cpi:'#ff8800', nfp:'#00ccff', fomc:'#8855ff' };
+const REL_LABELS = { cpi:'CPI', nfp:'NFP', fomc:'FOMC' };
+
+function relSetLookback(lb, btn) {
+  _relLookback = lb;
+  document.querySelectorAll('.rel-lb-btn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  esRenderReleases();
+}
+
+function relSetType(type, btn) {
+  _relType = type;
+  document.querySelectorAll('.rel-type-btn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  esRenderReleases();
+}
+
 function esRenderReleases(){
-  mkLB('es-rel-lb'); mkMeta('es-rel-meta');
-  const d = ES().releases;
-  if(!d){ document.getElementById('es-rel-cpi-grid').innerHTML='<div class="no-data">No data for this lookback</div>'; return; }
-  const winC = w => parseFloat(w)>=65?'var(--green)':parseFloat(w)>=55?'#88cc44':parseFloat(w)>=50?'var(--yellow)':'var(--red)';
-  const avg0 = parseFloat(ES().meta.daily_count > 1000 ? 0.21 : 0.04); // rough daily baseline
+  if(typeof RELEASE_DATA === 'undefined') {
+    const el = document.getElementById('rel-stat-cards');
+    if(el) el.innerHTML = '<div class="no-data">Loading release data...</div>';
+    return;
+  }
 
-  function relGrid(key, gridId, cardId){
-    const r = d[key];
-    const periods = [
-      {l:'WEEK BEFORE', x:r.before, note:'Pre-release drift'},
-      {l:'RELEASE WEEK', x:r.during, note:'Release day ±2 td'},
-      {l:'WEEK AFTER',  x:r.after,  note:'Post-release move'}
-    ];
-    const cardEl = document.getElementById(cardId);
-    if(cardEl) cardEl.innerHTML = periods.map(({l,x,note})=>{
-      const avg=parseFloat(x.avg)||0, wr=parseFloat(x.win_rate)||0;
-      const e=avg-0.21;
-      return `<div class="es-card">
-        <div class="es-card-label">${l}</div>
-        <div class="es-card-val ${avg>=0?'up':'dn'}">${avg>=0?'+':''}${esN(avg)}%</div>
-        <div class="es-card-sub">${esWr(wr)} win rate · n=${x.count}</div>
-        <div style="font-size:10px;color:${e>=0?'var(--green)':'var(--red)'};margin-top:4px;">${e>=0?'+':''}${esN(e)} vs avg week</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">${note}</div>
+  const today = new Date().toISOString().slice(0,10);
+  const oneYrAgo = new Date(Date.now()-365*24*60*60*1000).toISOString().slice(0,10);
+  const color = REL_COLORS[_relType];
+  const label = REL_LABELS[_relType];
+
+  // Filter by lookback
+  let data = RELEASE_DATA[_relType] || [];
+  if(_relLookback === '1yr') data = data.filter(d => d.date >= oneYrAgo);
+  else if(_relLookback === '2026') data = data.filter(d => d.date.startsWith('2026'));
+
+  // ── Upcoming banner ──────────────────────────────────────────────────────
+  const bannerEl = document.getElementById('rel-upcoming-banner');
+  if(bannerEl) {
+    const upcoming = (RELEASE_DATA.upcoming[_relType] || []).filter(d => d >= today);
+    const next = upcoming[0];
+    if(next) {
+      const nextDate = new Date(next+'T12:00:00');
+      const daysAway = Math.ceil((nextDate - new Date()) / (1000*60*60*24));
+      bannerEl.innerHTML = `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:${color}15;border:1px solid ${color}44;border-left:4px solid ${color};border-radius:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${color};letter-spacing:1px;">NEXT ${label}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${color};">${next}</div>
+        <div style="font-size:12px;color:var(--text3);">${daysAway} calendar days away</div>
+        ${upcoming.slice(1,4).length ? `<div style="font-size:11px;color:var(--text3);margin-left:auto;">Also upcoming: ${upcoming.slice(1,4).join(' · ')}</div>` : ''}
       </div>`;
-    }).join('');
-
-    const gridEl = document.getElementById(gridId);
-    if(gridEl){
-      const maxV = Math.max(...periods.map(p=>Math.abs(parseFloat(p.x.avg)||0)))||0.1;
-      gridEl.innerHTML = `<table class="es-tbl"><thead><tr>
-        <th>Window</th><th>Avg Return</th><th>Median</th><th>Win Rate</th><th>Sample</th><th>Best</th><th>Worst</th><th>Edge vs Avg</th>
-      </tr></thead><tbody>` + periods.map(({l,x})=>{
-        const avg=parseFloat(x.avg)||0, e=avg-0.21;
-        return `<tr>
-          <td>${l}</td><td>${esFmt(x.avg)}</td><td>${esFmt(x.median)}</td>
-          <td>${esWr(x.win_rate)}</td><td style="color:var(--text3)">${x.count}</td>
-          <td class="up">+${esN(x.best)}%</td><td class="dn">${esN(x.worst)}%</td>
-          <td>${e>=0?`<span class="up">+${esN(e)}%</span>`:`<span class="dn">${esN(e)}%</span>`}</td>
-        </tr>`;
-      }).join('') + '</tbody></table>';
+    } else {
+      bannerEl.innerHTML = '';
     }
   }
 
-  relGrid('cpi','es-rel-cpi-grid','es-rel-cpi-cards');
-  relGrid('nfp','es-rel-nfp-grid','es-rel-nfp-cards');
+  if(!data.length) {
+    document.getElementById('rel-stat-cards').innerHTML = '<div class="no-data">No events in selected period</div>';
+    document.getElementById('rel-table-body').innerHTML = '';
+    return;
+  }
+
+  // ── Aggregate stats ──────────────────────────────────────────────────────
+  const n = data.length;
+  const avg = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+  const pctUp = (arr, fn) => arr.filter(fn).length/arr.length*100;
+
+  const dayRets   = data.map(d=>d.day_ret);
+  const dayRanges = data.map(d=>d.range);
+  const beforeRets = data.filter(d=>d.before_ret!==null).map(d=>d.before_ret);
+  const afterRets  = data.filter(d=>d.after_ret!==null).map(d=>d.after_ret);
+  const gaps       = data.map(d=>d.gap);
+
+  const statCards = document.getElementById('rel-stat-cards');
+  if(statCards) {
+    const stats = [
+      { l:'EVENTS',        v: n,                                          sub: `${_relLookback==='all'?'2020–2026':_relLookback==='1yr'?'Last 12 mo':'2026 YTD'}`, c:'var(--text2)' },
+      { l:'DAY-OF % UP',   v: pctUp(dayRets,r=>r>0).toFixed(0)+'%',     sub: `avg ${avg(dayRets)>=0?'+':''}${avg(dayRets).toFixed(3)}%`, c: pctUp(dayRets,r=>r>0)>55?'#00ff88':pctUp(dayRets,r=>r>0)>45?'#ffcc00':'#ff3355' },
+      { l:'AVG DAY RANGE', v: '$'+avg(dayRanges).toFixed(2),             sub: `high–low on event day`, c:'var(--cyan)' },
+      { l:'BEFORE 5 DAYS', v: pctUp(beforeRets,r=>r>0).toFixed(0)+'%',  sub: `avg ${avg(beforeRets)>=0?'+':''}${avg(beforeRets).toFixed(3)}%`, c: pctUp(beforeRets,r=>r>0)>55?'#00ff88':'#ff8800' },
+      { l:'AFTER 5 DAYS',  v: pctUp(afterRets,r=>r>0).toFixed(0)+'%',   sub: `avg ${avg(afterRets)>=0?'+':''}${avg(afterRets).toFixed(3)}%`, c: pctUp(afterRets,r=>r>0)>55?'#00ff88':'#ff3355' },
+      { l:'AVG GAP',       v: (avg(gaps)>=0?'+':'')+avg(gaps).toFixed(3)+'%', sub: `open vs prev close`, c: avg(gaps)>=0?'#00ff88':'#ff3355' },
+    ];
+    statCards.innerHTML = `<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;">
+      ${stats.map(s=>`<div class="panel" style="text-align:center;border-top:3px solid ${s.c};padding:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:5px;">${s.l}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${s.c};">${s.v}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px;">${s.sub}</div>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  // ── Return distribution chart (bar chart of day-of returns) ─────────────
+  const retCanvas = document.getElementById('relReturnChart');
+  if(retCanvas) {
+    const ctx = retCanvas.getContext('2d');
+    const W = retCanvas.offsetWidth || 400;
+    const H = 180;
+    retCanvas.width = W; retCanvas.height = H;
+    ctx.clearRect(0,0,W,H);
+
+    // Sort returns into buckets
+    const buckets = [-6,-4,-2,-1,0,1,2,4,6];
+    const counts = new Array(buckets.length+1).fill(0);
+    dayRets.forEach(r => {
+      let i = buckets.findIndex(b => r < b);
+      if(i<0) i = buckets.length;
+      counts[i]++;
+    });
+    const labels = ['<-6','−4','−2','−1','0','1','2','4','>6'];
+    const maxC = Math.max(...counts);
+    const pad = {l:30,r:10,t:20,b:30};
+    const bw = (W-pad.l-pad.r)/counts.length;
+
+    counts.forEach((c,i) => {
+      const midVal = i < buckets.length ? (buckets[i] + (buckets[i-1]||buckets[i]-2))/2 : 6;
+      const bc = midVal > 0 ? '#00ff8888' : midVal < 0 ? '#ff335588' : '#ffcc0088';
+      const bh = (c/maxC)*(H-pad.t-pad.b);
+      const x = pad.l + i*bw;
+      const y = H-pad.b-bh;
+      ctx.fillStyle = bc;
+      ctx.fillRect(x+2, y, bw-4, bh);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '9px Share Tech Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText(labels[i], x+bw/2, H-pad.b+12);
+      if(c>0) ctx.fillText(c, x+bw/2, y-3);
+    });
+
+    // Zero line
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath(); ctx.moveTo(pad.l,H-pad.b); ctx.lineTo(W-pad.r,H-pad.b); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '9px Orbitron';
+    ctx.textAlign = 'left';
+    ctx.fillText('Day-of return (%)', pad.l, 14);
+  }
+
+  // ── Before/During/After window chart ────────────────────────────────────
+  const winCanvas = document.getElementById('relWindowChart');
+  if(winCanvas) {
+    const ctx = winCanvas.getContext('2d');
+    const W = winCanvas.offsetWidth || 400;
+    const H = 180;
+    winCanvas.width = W; winCanvas.height = H;
+    ctx.clearRect(0,0,W,H);
+
+    const vals = [
+      { l:'5d Before', v: avg(beforeRets), c: avg(beforeRets)>=0?'#00ff88':'#ff3355' },
+      { l:'Day-Of',    v: avg(dayRets),    c: avg(dayRets)>=0?'#00ff88':'#ff3355' },
+      { l:'5d After',  v: avg(afterRets),  c: avg(afterRets)>=0?'#00ff88':'#ff3355' },
+    ];
+    const maxAbs = Math.max(...vals.map(v=>Math.abs(v.v)), 0.5);
+    const pad = {l:10,r:10,t:30,b:40};
+    const bw = (W-pad.l-pad.r)/vals.length;
+    const midY = pad.t + (H-pad.t-pad.b)/2;
+
+    // Zero line
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(pad.l,midY); ctx.lineTo(W-pad.r,midY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    vals.forEach((v,i) => {
+      const bh = (Math.abs(v.v)/maxAbs)*((H-pad.t-pad.b)/2);
+      const x = pad.l + i*bw + bw*0.15;
+      const bwActual = bw*0.7;
+      const y = v.v >= 0 ? midY - bh : midY;
+      ctx.fillStyle = v.c + 'aa';
+      ctx.fillRect(x, y, bwActual, bh);
+      // Label
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = '9px Share Tech Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${v.v>=0?'+':''}${v.v.toFixed(3)}%`, x+bwActual/2, v.v>=0?y-5:y+bh+12);
+      ctx.fillStyle = v.c;
+      ctx.font = '8px Orbitron';
+      ctx.fillText(v.l, x+bwActual/2, H-12);
+    });
+  }
+
+  // ── Event log table ──────────────────────────────────────────────────────
+  const headEl = document.getElementById('rel-table-head');
+  const bodyEl = document.getElementById('rel-table-body');
+  const tableLabel = document.getElementById('rel-table-label');
+  if(tableLabel) tableLabel.textContent = `⬡ ${label} EVENT LOG — ${data.length} EVENTS`;
+  if(headEl) {
+    const thStyle = `style="padding:6px 8px;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);text-align:right;"`;
+    const thStyleL = `style="padding:6px 8px;font-family:'Orbitron',monospace;font-size:8px;color:${color};border-bottom:1px solid var(--border);text-align:left;"`;
+    headEl.innerHTML = `<th ${thStyleL}>DATE</th><th ${thStyleL}>NOTES</th>
+      <th ${thStyle}>OPEN</th><th ${thStyle}>HIGH</th><th ${thStyle}>LOW</th><th ${thStyle}>CLOSE</th>
+      <th ${thStyle}>GAP</th><th ${thStyle}>DAY RETURN</th><th ${thStyle}>DAY RANGE</th>
+      <th ${thStyle}>5d BEFORE</th><th ${thStyle}>5d AFTER</th>`;
+  }
+  if(bodyEl) {
+    const fmt2 = v => v != null ? (v>=0?'+':'')+v.toFixed(3)+'%' : '—';
+    const clr  = v => v == null ? 'var(--text3)' : v>0?'#00ff88':v<0?'#ff3355':'var(--text2)';
+    bodyEl.innerHTML = [...data].reverse().map(d => `<tr style="border-bottom:1px solid var(--border)22;">
+      <td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;font-size:11px;color:${color};">${d.date}</td>
+      <td style="padding:5px 8px;font-size:10px;color:var(--text3);">${d.notes||'—'}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">$${d.open.toFixed(2)}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:#00ff8888;">$${d.high.toFixed(2)}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff335588;">$${d.low.toFixed(2)}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${d.day_ret>=0?'#00ff88':'#ff3355'};">$${d.close.toFixed(2)}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${clr(d.gap)};">${fmt2(d.gap)}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;color:${clr(d.day_ret)};">${fmt2(d.day_ret)}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--cyan);">$${d.range.toFixed(2)}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${clr(d.before_ret)};">${fmt2(d.before_ret)}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${clr(d.after_ret)};">${fmt2(d.after_ret)}</td>
+    </tr>`).join('');
+  }
 }
 
 // ---- POLITICAL CYCLE ----
