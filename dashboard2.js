@@ -2623,33 +2623,47 @@ const LIVE_SYMBOLS = [
   '^ADVN','^DECN','^NYA','^NYHGH','^NYLOW'
 ];
 
-// Fetch live quotes from Yahoo Finance via a CORS proxy
+// Fetch live quotes — primary: our own /quotes Cloudflare function (server-side, no CORS)
+// Fallbacks: Yahoo direct, then third-party CORS proxies
 async function fetchLiveQuotes(symbols) {
   const chunk = symbols.join(',');
-  // Use Yahoo Finance v8 endpoint via allorigins proxy
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk)}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketPreviousClose`;
-  
-  // Try direct first (works in some browsers/environments)
+  const yahooFields = 'regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketPreviousClose';
+  const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk)}&fields=${yahooFields}`;
+
+  // Primary: our own Cloudflare function — server-side, no CORS issues, always works
   try {
-    const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const r = await fetch(`/quotes?symbols=${encodeURIComponent(chunk)}`, {
+      headers: { 'Accept': 'application/json' }
+    });
     if (r.ok) {
       const data = await r.json();
-      return parseYahooQuotes(data);
+      if (data.quotes && Object.keys(data.quotes).length > 0) return data.quotes;
     }
   } catch(e) {}
-  
-  // Fallback: use allorigins CORS proxy
+
+  // Fallback 1: Yahoo direct (works if browser allows cross-origin)
   try {
-    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const r = await fetch(yahooUrl, { headers: { 'Accept': 'application/json' } });
+    if (r.ok) {
+      const data = await r.json();
+      const q = parseYahooQuotes(data);
+      if (q && Object.keys(q).length > 0) return q;
+    }
+  } catch(e) {}
+
+  // Fallback 2: allorigins CORS proxy
+  try {
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(yahooUrl)}`;
     const r = await fetch(proxy);
     const wrapper = await r.json();
     const data = JSON.parse(wrapper.contents);
-    return parseYahooQuotes(data);
+    const q = parseYahooQuotes(data);
+    if (q && Object.keys(q).length > 0) return q;
   } catch(e) {}
 
-  // Fallback 2: corsproxy.io
+  // Fallback 3: corsproxy.io
   try {
-    const proxy2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+    const proxy2 = `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`;
     const r = await fetch(proxy2);
     const data = await r.json();
     return parseYahooQuotes(data);
