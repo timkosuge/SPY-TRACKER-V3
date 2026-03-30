@@ -99,6 +99,32 @@
     color: var(--green);
     border-bottom-color: var(--green);
 }
+.tab.group-tab { color: var(--cyan); }
+.tab.group-tab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+/* Subtab bar */
+.subtab-bar {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 12px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+}
+.subtab-group { display: flex; gap: 0; }
+.subtab {
+    padding: 8px 18px;
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--text3);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.subtab:hover { color: var(--text2); }
+.subtab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
 
   /* CONTENT */
   .content{padding:12px 16px;box-sizing:border-box;width:100%;overflow-x:hidden;}
@@ -381,20 +407,35 @@
   <div class="tab active" onclick="switchTab('hub')">MARKET HUB</div>
   <div class="tab" onclick="switchTab('desk')">TRADING DESK</div>
   <div class="tab" onclick="switchTab('overview')">MARKET OVERVIEW</div>
-  <div class="tab" onclick="switchTab('wem')">EXPECTED MOVE</div>
-  <div class="tab" onclick="switchTab('options')">OPTIONS</div>
-  <div class="tab" onclick="switchTab('gex')">⬡ GEX</div>
-  <div class="tab" onclick="switchTab('volatility')">VOLATILITY</div>
-  <div class="tab" onclick="switchTab('bonds')">⬡ BONDS</div>
-  <div class="tab" onclick="switchTab('breadth')">BREADTH</div>
-  <div class="tab" onclick="switchTab('sentiment')">SENTIMENT</div>
-  <div class="tab" onclick="switchTab('pricehistory')">PRICE HISTORY</div>
-  <div class="tab" onclick="switchTab('volhistory')">VOLUME HISTORY</div>
+  <div class="tab group-tab" onclick="switchGroupTab('derivatives','options')">DERIVATIVES ▾</div>
+  <div class="tab group-tab" onclick="switchGroupTab('macro','bonds')">MACRO ▾</div>
+  <div class="tab group-tab" onclick="switchGroupTab('history','pricehistory')">HISTORY ▾</div>
   <div class="tab" onclick="switchTab('media')">▶ MEDIA</div>
   <div class="tab" onclick="switchTab('journal')">⬡ JOURNAL</div>
+</div>
 
-  <div class="tab" onclick="switchTab('edgestats')">STATS</div>
-  <div class="tab" onclick="switchTab('analog')">⬡ ANALOG FINDER</div>
+<!-- Subtab bar — shown below main tabs when a group is active -->
+<div class="subtab-bar" id="subtabBar" style="display:none;">
+  <!-- Derivatives subtabs -->
+  <div class="subtab-group" id="subtabs-derivatives">
+    <div class="subtab active" onclick="switchGroupSub('options',this)">OPTIONS</div>
+    <div class="subtab" onclick="switchGroupSub('gex',this)">⬡ GEX</div>
+    <div class="subtab" onclick="switchGroupSub('wem',this)">EXPECTED MOVE</div>
+    <div class="subtab" onclick="switchGroupSub('volatility',this)">VOLATILITY</div>
+  </div>
+  <!-- Macro subtabs -->
+  <div class="subtab-group" id="subtabs-macro" style="display:none;">
+    <div class="subtab active" onclick="switchGroupSub('bonds',this)">⬡ BONDS</div>
+    <div class="subtab" onclick="switchGroupSub('breadth',this)">BREADTH</div>
+    <div class="subtab" onclick="switchGroupSub('sentiment',this)">SENTIMENT</div>
+  </div>
+  <!-- History subtabs -->
+  <div class="subtab-group" id="subtabs-history" style="display:none;">
+    <div class="subtab active" onclick="switchGroupSub('pricehistory',this)">PRICE HISTORY</div>
+    <div class="subtab" onclick="switchGroupSub('volhistory',this)">VOLUME HISTORY</div>
+    <div class="subtab" onclick="switchGroupSub('edgestats',this)">STATS</div>
+    <div class="subtab" onclick="switchGroupSub('analog',this)">⬡ ANALOG FINDER</div>
+  </div>
 </div>
 
 <div class="content">
@@ -525,6 +566,10 @@
       <thead><tr><th>EXPIRY</th><th>TYPE</th><th>MAX PAIN</th><th>TOTAL OI</th><th>DIST FROM PRICE</th></tr></thead>
       <tbody id="optsMpBody"></tbody>
     </table>
+  </div>
+  <div class="panel" style="margin-top:10px;">
+    <div class="panel-label">⬡ EXPIRY BEHAVIOR — HISTORICAL STATS FOR TODAY'S SESSION TYPE</div>
+    <div id="optsExpiryBehavior"></div>
   </div>
 </div>
 
@@ -1180,7 +1225,7 @@
 <!-- FLOATING CHAT -->
 
 
-<script src="analog_data.js"></script><script src="dashboard1.js"></script><script src="dashboard2.js"></script>
+<script src="analog_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="dashboard1.js"></script><script src="dashboard2.js"></script>
 
 <!-- ============================================================
      EDGE STATS TAB — INLINE PANEL v3
