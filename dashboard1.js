@@ -4483,25 +4483,25 @@ function renderExpiryBehavior(md) {
       ${renderPanel(todayStats, todayLabel, todayColor, true)}
     </div>
 
-    <!-- Weekly OPEX panel -->
-    <details style="margin-bottom:8px;">
-      <summary style="cursor:pointer;font-family:'Orbitron',monospace;font-size:10px;color:#00ffcc;letter-spacing:1px;padding:6px 0;user-select:none;">
-        ▶ WEEKLY OPEX — ALL FRIDAYS (NON-MONTHLY) · ${weeklyStats?.n||0} SESSIONS
-      </summary>
-      <div style="padding:8px 0 4px;">
+    <!-- Weekly OPEX panel — always open -->
+    <div style="margin-bottom:16px;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:#00ffcc;letter-spacing:1px;padding:6px 0;border-bottom:1px solid #00ffcc33;margin-bottom:8px;">
+        WEEKLY OPEX — ALL FRIDAYS (NON-MONTHLY) · ${weeklyStats?.n||0} SESSIONS
+      </div>
+      <div>
         ${renderPanel(weeklyStats, 'WEEKLY OPEX (FRI)', '#00ffcc', false)}
       </div>
-    </details>
+    </div>
 
-    <!-- Monthly OPEX panel -->
-    <details>
-      <summary style="cursor:pointer;font-family:'Orbitron',monospace;font-size:10px;color:#ff8800;letter-spacing:1px;padding:6px 0;user-select:none;">
-        ▶ MONTHLY OPEX — 3RD FRIDAY · ${monthlyStats?.n||0} SESSIONS
-      </summary>
-      <div style="padding:8px 0 4px;">
+    <!-- Monthly OPEX panel — always open -->
+    <div style="margin-bottom:8px;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:#ff8800;letter-spacing:1px;padding:6px 0;border-bottom:1px solid #ff880033;margin-bottom:8px;">
+        MONTHLY OPEX — 3RD FRIDAY · ${monthlyStats?.n||0} SESSIONS
+      </div>
+      <div>
         ${renderPanel(monthlyStats, 'MONTHLY OPEX', '#ff8800', false)}
       </div>
-    </details>
+    </div>
   </div>`;
 
   // inject button styles if not yet present
