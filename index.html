@@ -1483,9 +1483,9 @@
   .rel-lb-btn.active{background:rgba(0,204,255,0.15);border-color:var(--cyan);color:var(--cyan);}
   .rel-type-btn{font-family:'Orbitron',monospace;font-size:10px;padding:6px 16px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
   .rel-type-btn.active{border-width:2px;font-weight:bold;}
-  #reltab-cpi.active{background:rgba(255,136,0,0.15);border-color:#ff8800;color:#ff8800;}
-  #reltab-nfp.active{background:rgba(0,204,255,0.15);border-color:#00ccff;color:#00ccff;}
-  #reltab-fomc.active{background:rgba(136,85,255,0.15);border-color:#8855ff;color:#8855ff;}
+  #reltab-cpi.active,#ev-reltab-cpi.active{background:rgba(255,136,0,0.15);border-color:#ff8800;color:#ff8800;}
+  #reltab-nfp.active,#ev-reltab-nfp.active{background:rgba(0,204,255,0.15);border-color:#00ccff;color:#00ccff;}
+  #reltab-fomc.active,#ev-reltab-fomc.active{background:rgba(136,85,255,0.15);border-color:#8855ff;color:#8855ff;}
   .up{color:var(--green);}.dn{color:var(--red);}.neu{color:var(--yellow);}
   .es-insight{background:rgba(0,204,255,0.05);border:1px solid rgba(0,204,255,0.2);border-radius:5px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--text2);line-height:1.6;}
   .es-insight strong{color:var(--cyan);}
@@ -2178,18 +2178,19 @@ function esRenderReleases(){
     const counts = buckets.map(b => dayRets.filter(r => r >= b.min && r < b.max).length);
     const maxC = Math.max(...counts, 1);
     const isPos = b => b.min >= 0;
-    retCanvas.innerHTML = `<div style="display:flex;align-items:flex-end;gap:3px;height:140px;padding:8px 4px 0;">
+    const BAR_H = 100;
+    retCanvas.innerHTML = `<div style="display:flex;align-items:flex-end;gap:3px;height:${BAR_H+30}px;padding:4px 4px 0;">
       ${buckets.map((b,i) => {
         const c = counts[i];
-        const pct = c/maxC*100;
+        const h = c ? Math.max(Math.round(c/maxC*BAR_H), 4) : 0;
         const bc = b.min >= 0 ? '#00ff88' : b.max <= 0 ? '#ff3355' : '#ffcc00';
-        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
-          <div style="font-size:9px;color:rgba(255,255,255,0.5);">${c||''}</div>
-          <div style="width:100%;height:${Math.max(pct,2).toFixed(0)}%;background:${bc}99;border-radius:2px 2px 0 0;min-height:${c?4:0}px;"></div>
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:100%;">
+          <div style="font-size:9px;color:rgba(255,255,255,0.6);">${c||''}</div>
+          <div style="width:100%;height:${h}px;background:${bc}99;border-radius:2px 2px 0 0;"></div>
         </div>`;
       }).join('')}
     </div>
-    <div style="display:flex;gap:3px;padding:0 4px;">
+    <div style="display:flex;gap:3px;padding:2px 4px 0;">
       ${buckets.map(b=>`<div style="flex:1;text-align:center;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text3);white-space:nowrap;overflow:hidden;">${b.label}</div>`).join('')}
     </div>`;
   }
@@ -2204,17 +2205,26 @@ function esRenderReleases(){
       {l:'5d AFTER',  v:avgA, n:afterRets.length,  wu:pctUp(afterRets,r=>r>0)},
     ];
     const maxAbs = Math.max(...vals.map(v=>Math.abs(v.v)), 0.3);
-    const maxBarH = 100; // px
-    winCanvas.innerHTML = `<div style="display:flex;gap:12px;align-items:center;justify-content:space-around;height:160px;padding:8px;">
+    const WIN_BAR_H = 90; // max bar height in px
+    const midLine = WIN_BAR_H + 10; // baseline y offset — bars go up or down from here
+    const totalH = midLine * 2 + 30;
+    winCanvas.innerHTML = `<div style="display:flex;gap:12px;align-items:center;justify-content:space-around;height:${totalH}px;padding:8px;">
       ${vals.map(v => {
         const bc = v.v>=0?'#00ff88':'#ff3355';
-        const barH = Math.abs(v.v)/maxAbs*maxBarH;
+        const barH = Math.max(Math.abs(v.v)/maxAbs*WIN_BAR_H, 4);
         const isPos = v.v >= 0;
-        return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${bc};font-weight:bold;">${v.v>=0?'+':''}${v.v.toFixed(3)}%</div>
-          <div style="width:60%;height:${barH.toFixed(0)}px;background:${bc}99;border-radius:${isPos?'4px 4px 0 0':'0 0 4px 4px'};min-height:4px;"></div>
+        // Each bar column: fixed height, content laid out with flexbox
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;height:100%;justify-content:center;">
+          ${isPos ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${bc};font-weight:bold;">${v.v>=0?'+':''}${v.v.toFixed(3)}%</div>
+          <div style="width:60%;height:${barH.toFixed(0)}px;background:${bc}99;border-radius:4px 4px 0 0;"></div>
+          <div style="width:60%;height:2px;background:#444;"></div>
           <div style="font-family:'Orbitron',monospace;font-size:8px;color:${bc};letter-spacing:1px;">${v.l}</div>
+          <div style="font-size:10px;color:var(--text3);">${v.wu.toFixed(0)}% up · n=${v.n}</div>`
+          : `<div style="font-family:'Orbitron',monospace;font-size:8px;color:${bc};letter-spacing:1px;">${v.l}</div>
           <div style="font-size:10px;color:var(--text3);">${v.wu.toFixed(0)}% up · n=${v.n}</div>
+          <div style="width:60%;height:2px;background:#444;"></div>
+          <div style="width:60%;height:${barH.toFixed(0)}px;background:${bc}99;border-radius:0 0 4px 4px;"></div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${bc};font-weight:bold;">${v.v.toFixed(3)}%</div>`}
         </div>`;
       }).join('')}
     </div>`;
