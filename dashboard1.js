@@ -17,6 +17,7 @@ function switchTab(id){
   if(id==='journal') renderJournalEntries();
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
+  if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
 }
 
 // ── VIX bar marker ──
@@ -1016,6 +1017,12 @@ function renderDesk(md,sd){
       <div style="padding:12px 14px;" id="deskBreadthMag7"></div>
       <div style="background:var(--border);"></div>
       <div style="padding:12px 14px;" id="deskBreadthSectors"></div>
+    </div>
+
+    <!-- INTRADAY PATTERN RECOGNITION -->
+    <div class="panel" style="margin-bottom:10px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ TODAY'S INTRADAY PATTERN</div>
+      <div id="deskPatternPanel"><div class="no-data">Loading pattern data...</div></div>
     </div>
 
     <!-- GAUGES: VIX · F&G · IV · PCR · GEX · MAX PAIN -->
@@ -3937,4 +3944,176 @@ function analogShowProj() {
       ${cols}
     </tr>`;
   }).join('');
+}
+
+// ─── INTRADAY PATTERN RECOGNITION ────────────────────────────────────────────
+function renderIntradayPattern(md, sd) {
+  const el = $('deskPatternPanel');
+  if(!el || typeof INTRADAY_PATTERNS === 'undefined') return;
+  const q = md?.quotes||{}, spy = q['SPY']||{}, today = sd?.[0]||{};
+  const open_ = spy.open||today.open||0, high = spy.high||today.high||0;
+  const low = spy.low||today.low||0, cur = spy.price||0;
+  const prevClose = spy.prev_close||sd?.[1]?.close||0;
+  if(!open_||!prevClose){el.innerHTML='<div class="no-data">Awaiting price data</div>';return;}
+
+  const gapPct = (open_-prevClose)/prevClose*100;
+  const gapType = gapPct>0.3?'GAP_UP':gapPct<-0.3?'GAP_DOWN':'FLAT';
+  const f30dir = cur>open_?'UP':'DOWN';
+  const gapFilled = gapType==='GAP_UP'?low<=prevClose:gapType==='GAP_DOWN'?high>=prevClose:null;
+  const dayRange = high-low;
+  const P = INTRADAY_PATTERNS;
+  const matches = P.filter(p=>p.gt===gapType&&p.f3d===f30dir);
+  const avg = arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
+  const pctFn = (arr,fn)=>arr.length?arr.filter(fn).length/arr.length*100:0;
+  const followThruRate = pctFn(matches,p=>p.fl);
+  const avgRange = avg(matches.map(p=>p.dr));
+  const avgClose = avg(matches.map(p=>p.ocp));
+  const gapFillRate = gapType!=='FLAT'?pctFn(matches.filter(p=>p.gf!==null),p=>p.gf):null;
+  const stCounts = {};
+  matches.forEach(p=>{stCounts[p.st]=(stCounts[p.st]||0)+1;});
+  const mostLikely = Object.entries(stCounts).sort((a,b)=>b[1]-a[1])[0];
+  const total = matches.length;
+  const gtColor = gapType==='GAP_UP'?'#00ff88':gapType==='GAP_DOWN'?'#ff3355':'#ffcc00';
+  const dirColor = f30dir==='UP'?'#00ff88':'#ff3355';
+  const followColor = followThruRate>65?'#00ff88':followThruRate>50?'#ffcc00':'#ff3355';
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">
+      <div style="min-width:190px;display:flex;flex-direction:column;gap:6px;">
+        <div style="padding:8px 12px;background:${gtColor}15;border:1px solid ${gtColor}44;border-left:3px solid ${gtColor};border-radius:3px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">GAP TYPE</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${gtColor};">${gapType.replace('_',' ')} ${gapPct>=0?'+':''}${fmt(gapPct,2)}%</div>
+        </div>
+        <div style="padding:8px 12px;background:${dirColor}15;border:1px solid ${dirColor}44;border-left:3px solid ${dirColor};border-radius:3px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">FIRST 30MIN</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${dirColor};">${f30dir} BIAS</div>
+        </div>
+        ${gapFilled!==null?`<div style="padding:6px 12px;background:${gapFilled?'#00ff8815':'#ff335515'};border:1px solid ${gapFilled?'#00ff8844':'#ff335544'};border-radius:3px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">GAP STATUS</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${gapFilled?'#00ff88':'#ff3355'};">${gapFilled?'✓ FILLED':'✗ UNFILLED'}</div>
+        </div>`:''}
+      </div>
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:8px;">${total} SESSIONS — ${gapType.replace('_',' ')} + FIRST 30MIN ${f30dir}</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
+          ${[
+            ['FOLLOW-THRU', followThruRate.toFixed(0)+'%', followColor, 'Direction continued all day'],
+            ['AVG DAY RANGE', '$'+fmt(avgRange,2), 'var(--cyan)', 'Typical H-L range'],
+            ['AVG CLOSE', (avgClose>=0?'+':'')+fmt(avgClose,2)+'%', avgClose>=0?'#00ff88':'#ff3355', 'Avg open-to-close'],
+            gapFillRate!==null?['GAP FILL', gapFillRate.toFixed(0)+'%', gapFillRate>55?'#ff8800':'#00ff88', 'Same-day fill rate']:
+            ['SESSIONS', total.toString(), 'var(--text2)', 'Matching patterns'],
+          ].map(([l,v,c,sub])=>`<div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">${l}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${c};">${v}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>
+          </div>`).join('')}
+        </div>
+        ${mostLikely?`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">MOST LIKELY SESSION TYPE:</span>
+          <span style="font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);padding:2px 8px;background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);border-radius:3px;">${mostLikely[0].replace('_',' ')}</span>
+          <span style="font-size:11px;color:var(--text3);">${((mostLikely[1]/total)*100).toFixed(0)}% of similar days</span>
+        </div>`:''}
+        <div style="display:flex;gap:4px;align-items:flex-end;height:36px;">
+          ${['TREND_UP','REVERSAL','RANGE','TREND_DOWN'].map(st=>{
+            const n=stCounts[st]||0, pctH=total?(n/total)*100:0;
+            const c=st==='TREND_UP'?'#00ff88':st==='TREND_DOWN'?'#ff3355':st==='RANGE'?'#ffcc00':'#ff8800';
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+              <div style="font-size:9px;color:${c};">${pctH.toFixed(0)}%</div>
+              <div style="width:100%;height:${Math.max(pctH*0.28,2).toFixed(0)}px;background:${c};border-radius:2px 2px 0 0;opacity:0.7;"></div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;gap:4px;margin-top:3px;">
+          ${['TREND UP','REVERSAL','RANGE','TREND DN'].map(l=>`<div style="flex:1;text-align:center;font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">${l}</div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ─── EXPIRY BEHAVIOR ──────────────────────────────────────────────────────────
+function renderExpiryBehavior(md) {
+  const el = $('optsExpiryBehavior');
+  if(!el||typeof EXPIRY_DATA==='undefined') {
+    // Still show a placeholder so the panel isn't empty
+    if(el) el.innerHTML='<div style="padding:12px;font-size:12px;color:var(--text3);">Loading expiry data...</div>';
+    return;
+  }
+  const q=md?.quotes||{}, spy=q['SPY']||{}, mp=md?.max_pain||[];
+  const nearest=mp[0];
+  const now=new Date(), dow=now.getDay();
+  const isFri=dow===5, isMonthly=isFri&&now.getDate()>=15&&now.getDate()<=21;
+  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  // SPY has 0DTE every trading day
+  if(dow===0||dow===6){
+    el.innerHTML=`<div style="padding:16px;text-align:center;color:var(--text3);font-family:'Orbitron',monospace;font-size:10px;">MARKET CLOSED — NO 0DTE TODAY<br><span style="font-size:11px;font-family:inherit;margin-top:6px;display:block;">Next session: Monday</span></div>`;
+    return;
+  }
+
+  const E=EXPIRY_DATA;
+  // dow: JS 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri; data stores JS dow directly
+  const same=E.filter(e=>e.dow===dow);
+  const group=isMonthly?same.filter(e=>e.mo):(isFri?same.filter(e=>!e.mo):same);
+  const avg=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
+  const pctFn=(arr,fn)=>arr.length?arr.filter(fn).length/arr.length*100:0;
+
+  const pctUp=pctFn(group,e=>e.r>0);
+  const avgRange=avg(group.map(e=>e.dr));
+  const avgReturn=avg(group.map(e=>e.r));
+  const avgCP=avg(group.map(e=>e.cp));
+
+  const open_=spy.open||0, prevClose=spy.prev_close||0;
+  const gapPct=open_&&prevClose?(open_-prevClose)/prevClose*100:0;
+  const gapType=gapPct>0.3?'GAP_UP':gapPct<-0.3?'GAP_DOWN':'FLAT';
+  const gapGroup=group.filter(e=>gapType==='GAP_UP'?e.g>0.3:gapType==='GAP_DOWN'?e.g<-0.3:Math.abs(e.g)<=0.3);
+  const fillRate=gapType!=='FLAT'?pctFn(gapGroup.filter(e=>e.gf!==null),e=>e.gf):null;
+
+  const cur=spy.price||0;
+  const mpDist=nearest&&cur?nearest.max_pain-cur:null;
+  const mpColor=mpDist===null?'var(--text3)':Math.abs(mpDist)<2?'#00ff88':Math.abs(mpDist)<5?'#ffcc00':'#ff8800';
+  const sessionLabel=isMonthly?'MONTHLY OPEX':isFri?'WEEKLY OPEX':`0DTE ${dayNames[dow]}`;
+  const sessionColor=isMonthly?'#ff8800':'#ffcc00';
+
+  el.innerHTML=`
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;">
+      <div style="min-width:170px;">
+        <div style="padding:12px;text-align:center;background:${sessionColor}11;border:1px solid ${sessionColor}44;border-radius:4px;margin-bottom:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">TODAY</div>
+          <div style="font-family:'Orbitron',monospace;font-size:13px;color:${sessionColor};">${sessionLabel}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px;">${group.length} historical sessions</div>
+        </div>
+        ${nearest?`<div style="padding:8px;background:var(--bg3);border-radius:3px;text-align:center;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">MAX PAIN</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:${mpColor};">$${fmt(nearest.max_pain,2)}</div>
+          <div style="font-size:11px;color:${mpColor};">${mpDist>=0?'+':''}${fmt(mpDist,2)} from spot</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">${Math.abs(mpDist||0)<2?'AT MAX PAIN':Math.abs(mpDist||0)<5?'Near max pain':'Far from max pain'}</div>
+        </div>`:''}
+      </div>
+      <div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;">
+          ${[
+            ['% DAYS UP', pctUp.toFixed(0)+'%', pctUp>55?'#00ff88':pctUp>45?'#ffcc00':'#ff3355', 'Closed higher'],
+            ['AVG RETURN', (avgReturn>=0?'+':'')+fmt(avgReturn,3)+'%', avgReturn>=0?'#00ff88':'#ff3355', 'Prev close→close'],
+            ['AVG RANGE', '$'+fmt(avgRange,2), 'var(--cyan)', 'High-low on expiry'],
+            ['AVG CLOSE POS', fmt(avgCP*100,0)+'%', 'var(--text2)', '0%=LOD · 100%=HOD'],
+            fillRate!==null?['GAP FILL', fillRate.toFixed(0)+'%', fillRate>55?'#ff8800':'#00ff88', gapType.replace('_',' ')+' fill rate']:
+            ['GAP TYPE', gapType.replace('_',' '), '#ffcc00', fmt(Math.abs(gapPct),2)+'% gap'],
+          ].map(([l,v,c,sub])=>`<div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">${l}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${c};">${v}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>
+          </div>`).join('')}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          ${[
+            pctUp>55?{c:'#00ff88',t:`${sessionLabel} closes up ${pctUp.toFixed(0)}% of the time — slight bullish lean.`}:
+            pctUp<45?{c:'#ff3355',t:`${sessionLabel} closes down ${(100-pctUp).toFixed(0)}% of the time — bearish historical tendency.`}:
+                     {c:'#ffcc00',t:`${sessionLabel} is nearly coin-flip — no strong directional edge.`},
+            {c:'var(--cyan)',t:`Average day range on ${sessionLabel}: $${fmt(avgRange,2)}. Useful for intraday targets.`},
+            isMonthly?{c:'#ff8800',t:'Monthly OPEX: historically weaker than regular Fridays. Dealers pin aggressively near max pain.'}:null,
+            fillRate!==null?{c:fillRate>55?'#ff8800':'#00ff88',t:`${gapType.replace('_',' ')} gaps on ${sessionLabel} fill ${fillRate.toFixed(0)}% of the time same day.`}:null,
+            mpDist!==null&&Math.abs(mpDist)<5?{c:'#ffcc00',t:`Price is $${fmt(Math.abs(mpDist),2)} from max pain $${fmt(nearest.max_pain,2)} — gravitational pull into close.`}:null,
+          ].filter(Boolean).map(s=>`<div style="display:flex;gap:8px;padding:7px 10px;border-left:3px solid ${s.c};background:${s.c}11;border-radius:0 3px 3px 0;font-size:12px;color:var(--text2);line-height:1.5;">${s.t}</div>`).join('')}
+        </div>
+      </div>
+    </div>`;
 }
