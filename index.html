@@ -1093,9 +1093,9 @@
   <!-- Lookback toggles -->
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
     <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;">LOOKBACK:</span>
-    <button class="rel-lb-btn active" id="mag7lb-all"  onclick="mag7SetLookback('all',this)">2020–2024</button>
-    <button class="rel-lb-btn" id="mag7lb-r2023" onclick="mag7SetLookback('r2023',this)">2023–2024</button>
-    <button class="rel-lb-btn" id="mag7lb-r2026" onclick="mag7SetLookback('r2026',this)">2026</button>
+    <button class="mag7-lb-btn active" id="mag7lb-all"  onclick="mag7SetLookback('all',this)">2020–2024</button>
+    <button class="mag7-lb-btn" id="mag7lb-r2023" onclick="mag7SetLookback('r2023',this)">2023–2024</button>
+    <button class="mag7-lb-btn" id="mag7lb-r2026" onclick="mag7SetLookback('r2026',this)">2026</button>
   </div>
 
   <!-- Aggregate stat cards -->
@@ -1528,8 +1528,8 @@
   .es-yr-cell.up{border-color:rgba(0,255,136,0.25);background:rgba(0,255,136,0.05);}
   .es-yr-cell.dn{border-color:rgba(255,51,85,0.2);background:rgba(255,51,85,0.04);}
   .es-foot{font-size:11px;color:var(--text3);margin-top:18px;font-family:'Share Tech Mono',monospace;line-height:1.6;}
-  .rel-lb-btn{font-family:'Orbitron',monospace;font-size:9px;padding:5px 12px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
-  .rel-lb-btn.active{background:rgba(0,204,255,0.15);border-color:var(--cyan);color:var(--cyan);}
+  .rel-lb-btn,.mag7-lb-btn{font-family:'Orbitron',monospace;font-size:9px;padding:5px 12px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
+  .rel-lb-btn.active,.mag7-lb-btn.active{background:rgba(0,204,255,0.15);border-color:var(--cyan);color:var(--cyan);}
   .rel-type-btn{font-family:'Orbitron',monospace;font-size:10px;padding:6px 16px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
   .rel-type-btn.active{border-width:2px;font-weight:bold;}
   /* Color each type button when active — scoped by ID so both panels work */
