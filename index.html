@@ -435,6 +435,7 @@
     <div class="subtab" onclick="switchGroupSub('volhistory',this)">VOLUME HISTORY</div>
     <div class="subtab" onclick="switchGroupSub('edgestats',this)">STATS</div>
     <div class="subtab" onclick="switchGroupSub('analog',this)">⬡ ANALOG FINDER</div>
+    <div class="subtab" onclick="switchGroupSub('mag7',this)">MAG 7 EARNINGS</div>
   </div>
 </div>
 
@@ -1081,6 +1082,81 @@
   </div>
 
 </div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MAG 7 EARNINGS
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-mag7">
+
+  <!-- Lookback toggles -->
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+    <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;">LOOKBACK:</span>
+    <button class="rel-lb-btn active" id="mag7lb-all"  onclick="mag7SetLookback('all',this)">2020–2024</button>
+    <button class="rel-lb-btn" id="mag7lb-r2023" onclick="mag7SetLookback('r2023',this)">2023–2024</button>
+    <button class="rel-lb-btn" id="mag7lb-r2026" onclick="mag7SetLookback('r2026',this)">2026</button>
+  </div>
+
+  <!-- Aggregate stat cards -->
+  <div id="mag7Cards" style="margin-bottom:14px;"></div>
+
+  <!-- Two charts: pre-run bar chart + full window scatter -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+    <div class="panel">
+      <div class="panel-label">⬡ SPY RETURN BY WINDOW — AVG % ACROSS ALL QUARTERS</div>
+      <div id="mag7WindowChart"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">⬡ 3-DAY PRE-EARNINGS DRIFT — ALL QUARTERS</div>
+      <div id="mag7PreChart"></div>
+    </div>
+  </div>
+
+  <!-- Quarter-by-quarter table -->
+  <div class="panel" style="margin-bottom:14px;">
+    <div class="panel-label">⬡ QUARTER-BY-QUARTER — SPY BEHAVIOR AROUND MAG 7 EARNINGS</div>
+    <div style="max-height:400px;overflow-y:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead style="position:sticky;top:0;background:var(--bg2);">
+          <tr>
+            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">QUARTER</th>
+            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">WINDOW</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">5D PRE</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">3D PRE</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">DURING</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#8855ff;border-bottom:1px solid var(--border);">3D POST</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#8855ff;border-bottom:1px solid var(--border);">5D POST</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;border-bottom:1px solid var(--border);">FULL WINDOW</th>
+          </tr>
+        </thead>
+        <tbody id="mag7TableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Per-company day-of table -->
+  <div class="panel">
+    <div class="panel-label">⬡ SPY ON EACH EARNINGS DAY — COMPANY BY COMPANY</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;" id="mag7CompanyFilters"></div>
+    <div style="max-height:360px;overflow-y:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead style="position:sticky;top:0;background:var(--bg2);">
+          <tr>
+            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DATE</th>
+            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">COMPANY</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">SPY OPEN</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">SPY CLOSE</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">GAP %</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">DAY RETURN</th>
+            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DAY RANGE</th>
+          </tr>
+        </thead>
+        <tbody id="mag7CompanyBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
 <!-- ═══════════════════════════════════════════════════════
      GEX
 ════════════════════════════════════════════════════════ -->
@@ -1229,7 +1305,7 @@
 <!-- FLOATING CHAT -->
 
 
-<script src="analog_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="dashboard1.js"></script><script src="dashboard2.js"></script>
+<script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="dashboard1.js"></script><script src="dashboard2.js"></script>
 
 <!-- ============================================================
      EDGE STATS TAB — INLINE PANEL v3
