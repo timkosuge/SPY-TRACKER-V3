@@ -2153,158 +2153,264 @@ async function renderKeyEvents() {
     </div>`;
 }
 
-// EVENTS TAB RENDER
+// EVENTS TAB RENDER — Data Releases, Mag7 Earnings, Holidays
 // ─────────────────────────────────────────────
 function renderEvents() {
+  const $ = id => document.getElementById(id);
   const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
   const todayStr = today.toISOString().slice(0, 10);
-
-  const $ = id => document.getElementById(id);
-  const fmtDate = d => {
-    const dt = new Date(d + 'T12:00:00');
-    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-  const daysUntil = d => {
-    const ms = new Date(d + 'T12:00:00') - new Date(todayStr + 'T12:00:00');
-    return Math.round(ms / 86400000);
-  };
+  const daysUntil = d => Math.round((new Date(d + 'T12:00:00') - new Date(todayStr + 'T12:00:00')) / 86400000);
+  const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const countdown = d => {
     const n = daysUntil(d);
     if (n === 0) return '<span style="color:var(--cyan);">TODAY</span>';
-    if (n < 0)  return '<span style="color:var(--text3);">' + Math.abs(n) + 'd ago</span>';
+    if (n < 0) return '<span style="color:var(--text3);">' + Math.abs(n) + 'd ago</span>';
     return '<span style="color:var(--cyan);">' + n + 'd</span>';
   };
-  const row = (date, label, badgeClass, badgeText) => {
+  const evRow = (date, label, badgeClass, badgeText, extra) => {
     const n = daysUntil(date);
-    const isPast = n < -1;
-    const isToday = n === 0;
+    const isPast = n < -1, isToday = n === 0;
     return `<div class="ev-row ${isToday ? 'ev-today' : ''} ${isPast ? 'ev-past' : ''}">
       <span class="ev-date">${fmtDate(date)}</span>
-      <span class="ev-label">${label}</span>
+      <span class="ev-label">${label}${extra ? '<span style="font-size:10px;color:var(--text3);margin-left:6px;">' + extra + '</span>' : ''}</span>
       <span class="ev-badge ${badgeClass}">${badgeText}</span>
       <span class="ev-countdown">${countdown(date)}</span>
     </div>`;
   };
 
-  // ── FOMC ──────────────────────────────────────────────────────────────────
-  const fomcDates = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.fomc || []) : [];
-  const fomcEl = $('evFomc');
-  if (fomcEl) {
-    const upcoming = fomcDates.filter(d => daysUntil(d) >= -1).slice(0, 8);
-    fomcEl.innerHTML = upcoming.length
-      ? upcoming.map(d => row(d, 'FOMC Rate Decision', 'fomc', 'FOMC')).join('')
-      : '<div class="no-data">No upcoming FOMC dates loaded</div>';
-  }
+  // ── DATA RELEASES ──────────────────────────────────────────────────────────
+  const relEl = $('evReleases');
+  if (relEl) {
+    const fomc = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.fomc || []) : [];
+    const cpi  = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.cpi  || []) : [];
+    const nfp  = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.nfp  || []) : [];
+    const esD  = typeof ES_DATA !== 'undefined' ? ES_DATA.all_time : null;
 
-  // ── CPI ───────────────────────────────────────────────────────────────────
-  const cpiDates = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.cpi || []) : [];
-  const cpiEl = $('evCpi');
-  if (cpiEl) {
-    const upcoming = cpiDates.filter(d => daysUntil(d.date || d) >= -1).slice(0, 8);
-    cpiEl.innerHTML = upcoming.length
-      ? upcoming.map(d => {
-          const dateStr = d.date || d;
-          const lbl = d.label || ('CPI Release — ' + fmtDate(dateStr));
-          return row(dateStr, lbl, 'cpi', 'CPI');
-        }).join('')
-      : '<div class="no-data">No upcoming CPI dates loaded</div>';
-  }
+    // Upcoming events — all three types merged and sorted
+    const upcoming = [];
+    fomc.forEach(d => { const ds = d.date||d; if (daysUntil(ds) >= -1) upcoming.push({ date: ds, label: 'FOMC Rate Decision', badge: 'fomc', tag: 'FOMC' }); });
+    cpi.forEach(d  => { const ds = d.date||d; if (daysUntil(ds) >= -1) upcoming.push({ date: ds, label: d.label||'CPI Inflation Report', badge: 'cpi',  tag: 'CPI'  }); });
+    nfp.forEach(d  => { const ds = d.date||d; if (daysUntil(ds) >= -1) upcoming.push({ date: ds, label: d.label||'NFP Jobs Report',      badge: 'nfp',  tag: 'NFP'  }); });
+    upcoming.sort((a,b) => a.date.localeCompare(b.date));
 
-  // ── NFP ───────────────────────────────────────────────────────────────────
-  const nfpDates = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.nfp || []) : [];
-  const nfpEl = $('evNfp');
-  if (nfpEl) {
-    const upcoming = nfpDates.filter(d => daysUntil(d.date || d) >= -1).slice(0, 8);
-    nfpEl.innerHTML = upcoming.length
-      ? upcoming.map(d => {
-          const dateStr = d.date || d;
-          const lbl = d.label || ('NFP Jobs Report — ' + fmtDate(dateStr));
-          return row(dateStr, lbl, 'nfp', 'NFP');
-        }).join('')
-      : '<div class="no-data">No upcoming NFP dates loaded</div>';
-  }
-
-  // ── MAG7 EARNINGS ─────────────────────────────────────────────────────────
-  const earnEl = $('evEarnings');
-  if (earnEl) {
-    const mag7 = typeof MAG7_EARNINGS_DATA !== 'undefined' ? MAG7_EARNINGS_DATA.results : [];
-    const upcoming = mag7.filter(q => daysUntil(q.first_date) >= -30).slice(0, 6);
-    earnEl.innerHTML = upcoming.length
-      ? upcoming.map(q => {
-          const n = daysUntil(q.first_date);
-          const isPast = daysUntil(q.last_date) < -1;
-          const isActive = n <= 0 && daysUntil(q.last_date) >= 0;
-          const lbl = `${q.label} · ${q.companies.slice(0,3).join(', ')}${q.companies.length > 3 ? ' +' + (q.companies.length - 3) : ''}`;
-          return `<div class="ev-row ${isActive ? 'ev-today' : ''} ${isPast ? 'ev-past' : ''}">
-            <span class="ev-date">${fmtDate(q.first_date)}</span>
-            <span class="ev-label">${lbl}</span>
-            <span class="ev-badge earn">EARN</span>
-            <span class="ev-countdown">${countdown(q.first_date)}</span>
+    const statBox = (title, color, data) => {
+      if (!data) return '';
+      const cc = n => n >= 0 ? '#00ff88' : '#ff3355';
+      const s = n => n >= 0 ? '+' : '';
+      return `<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid ${color};border-radius:4px;padding:12px;flex:1;min-width:160px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${color};margin-bottom:8px;letter-spacing:1px;">${title}</div>
+        ${[
+          ['Day-of Avg', data.during, '%'],
+          ['Day-of WR',  { avg: data.during?.win_rate }, '%wr'],
+          ['Day Before', data.before, '%'],
+          ['Day After',  data.after,  '%'],
+        ].map(([lbl, v, type]) => {
+          if (!v) return '';
+          const val = type === '%wr' ? v.avg : v.avg;
+          const disp = type === '%wr' ? v.avg.toFixed(1) + '%' : s(val) + val.toFixed(2) + '%';
+          return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(37,37,69,0.4);font-size:12px;">
+            <span style="color:var(--text3);">${lbl}</span>
+            <span style="font-family:'Share Tech Mono',monospace;color:${type === '%wr' ? (val >= 55 ? '#00ff88' : val >= 50 ? '#ffcc00' : '#ff3355') : cc(val)};">${disp}</span>
           </div>`;
-        }).join('')
-      : '<div class="no-data">No MAG7 data loaded</div>';
+        }).join('')}
+      </div>`;
+    };
+
+    relEl.innerHTML = `
+      <!-- Upcoming releases -->
+      <div class="ev-card" style="margin-bottom:16px;">
+        <div class="ev-card-title" style="color:var(--cyan);">⬡ UPCOMING DATA RELEASES</div>
+        ${upcoming.slice(0, 12).map(e => evRow(e.date, e.label, e.badge, e.tag)).join('') || '<div class="no-data">No release dates loaded</div>'}
+      </div>
+      <!-- Historical stats -->
+      ${esD ? `<div class="ev-card">
+        <div class="ev-card-title" style="color:var(--text2);">⬡ HISTORICAL REACTION — ALL TIME (1993–2026)</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          ${statBox('CPI', '#ff8800', esD.releases?.cpi)}
+          ${statBox('NFP', '#00ccff', esD.releases?.nfp)}
+        </div>
+        <p style="font-size:10px;color:var(--text3);margin-top:8px;font-family:'Share Tech Mono',monospace;">Day-of = SPY return on release day. Day Before/After = adjacent sessions. All returns are daily close-to-close %.</p>
+      </div>` : ''}`;
   }
 
-  // ── HOLIDAYS ──────────────────────────────────────────────────────────────
-  const holidays = [
-    { date: '2026-01-19', label: 'MLK Day — Market Closed' },
-    { date: '2026-02-16', label: "Presidents' Day — Market Closed" },
-    { date: '2026-04-03', label: 'Good Friday — Market Closed' },
-    { date: '2026-05-25', label: 'Memorial Day — Market Closed' },
-    { date: '2026-07-03', label: 'July 4th (observed) — Market Closed' },
-    { date: '2026-09-07', label: 'Labor Day — Market Closed' },
-    { date: '2026-11-26', label: 'Thanksgiving — Market Closed' },
-    { date: '2026-11-27', label: 'Thanksgiving Friday — Early Close 1pm ET' },
-    { date: '2026-12-24', label: 'Christmas Eve — Early Close 1pm ET' },
-    { date: '2026-12-25', label: 'Christmas — Market Closed' },
-  ];
-  const holEl = $('evHolidays');
-  if (holEl) {
-    const upcoming = holidays.filter(h => daysUntil(h.date) >= -1).slice(0, 8);
-    holEl.innerHTML = upcoming.length
-      ? upcoming.map(h => row(h.date, h.label, 'hol', 'HOLIDAY')).join('')
-      : '<div class="no-data">No upcoming holidays</div>';
-  }
-
-  // ── POLITICAL / MACRO ─────────────────────────────────────────────────────
-  const political = [
-    { date: '2026-01-20', label: 'Presidential Inauguration (2025 — passed)' },
-    { date: '2026-11-03', label: '2026 Midterm Elections' },
-    { date: '2026-03-31', label: 'Q1 2026 Ends' },
-    { date: '2026-06-30', label: 'Q2 2026 Ends' },
-    { date: '2026-09-30', label: 'Q3 2026 Ends' },
-    { date: '2026-12-31', label: 'Q4 2026 Ends / Year End' },
-    { date: '2026-04-15', label: 'Tax Day 2026' },
-    { date: '2026-10-01', label: 'US Fiscal Year 2027 Begins' },
-  ];
-  const polEl = $('evPolitical');
-  if (polEl) {
-    const upcoming = political.filter(p => daysUntil(p.date) >= -30).slice(0, 8);
-    polEl.innerHTML = upcoming.length
-      ? upcoming.map(p => row(p.date, p.label, 'pol', 'MACRO')).join('')
-      : '<div class="no-data">No upcoming political events</div>';
-  }
-
-  // ── UNIFIED UPCOMING (next 60 days, all types) ────────────────────────────
-  const upEl = $('evUpcoming');
-  if (upEl) {
-    const all = [];
-    fomcDates.forEach(d => { const ds = d.date || d; if (daysUntil(ds) >= 0 && daysUntil(ds) <= 60) all.push({ date: ds, label: 'FOMC Rate Decision', badge: 'fomc', tag: 'FOMC' }); });
-    cpiDates.forEach(d => { const ds = d.date || d; if (daysUntil(ds) >= 0 && daysUntil(ds) <= 60) all.push({ date: ds, label: d.label || 'CPI Release', badge: 'cpi', tag: 'CPI' }); });
-    nfpDates.forEach(d => { const ds = d.date || d; if (daysUntil(ds) >= 0 && daysUntil(ds) <= 60) all.push({ date: ds, label: d.label || 'NFP Jobs Report', badge: 'nfp', tag: 'NFP' }); });
-    if (typeof MAG7_EARNINGS_DATA !== 'undefined') {
-      MAG7_EARNINGS_DATA.results.forEach(q => {
-        if (daysUntil(q.first_date) >= 0 && daysUntil(q.first_date) <= 60)
-          all.push({ date: q.first_date, label: q.label + ' MAG7 Earnings begin', badge: 'earn', tag: 'EARN' });
-      });
+  // ── MAG 7 EARNINGS ─────────────────────────────────────────────────────────
+  const earnEl = $('evEarningsPanel');
+  if (earnEl) {
+    const mag7 = typeof MAG7_EARNINGS_DATA !== 'undefined' ? MAG7_EARNINGS_DATA : null;
+    if (!mag7) { earnEl.innerHTML = '<div class="no-data">MAG7 data not loaded</div>'; }
+    else {
+      const upcoming = mag7.results.filter(q => daysUntil(q.last_date) >= -14).slice(0, 6);
+      const agg = mag7.aggregates?.all;
+      earnEl.innerHTML = `
+        <div class="ev-card" style="margin-bottom:16px;">
+          <div class="ev-card-title" style="color:#00ff88;">⬡ MAG 7 EARNINGS WINDOWS</div>
+          ${upcoming.map(q => {
+            const n = daysUntil(q.first_date);
+            const isActive = n <= 0 && daysUntil(q.last_date) >= 0;
+            return `<div class="ev-row ${isActive ? 'ev-today' : ''} ${daysUntil(q.last_date) < -1 ? 'ev-past' : ''}">
+              <span class="ev-date">${fmtDate(q.first_date)}</span>
+              <span class="ev-label">${q.label} · ${q.companies.slice(0,4).join(', ')}${q.companies.length > 4 ? ' +' + (q.companies.length - 4) : ''}</span>
+              <span class="ev-badge earn">${isActive ? 'ACTIVE' : 'EARN'}</span>
+              <span class="ev-countdown">${countdown(q.first_date)}</span>
+            </div>`;
+          }).join('') || '<div class="no-data">No upcoming MAG7 windows</div>'}
+        </div>
+        ${agg ? `<div class="ev-card">
+          <div class="ev-card-title" style="color:var(--text2);">⬡ HISTORICAL EDGE — ALL QUARTERS (2020–2026)</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            ${[
+              ['5D PRE',    agg.pre5_ret,   '#ffcc00'],
+              ['3D PRE',    agg.pre3_ret,   '#ffcc00'],
+              ['DURING',    agg.during_ret, 'var(--cyan)'],
+              ['3D POST',   agg.post3_ret,  '#8855ff'],
+              ['FULL WIN',  agg.full_ret,   '#00ff88'],
+            ].map(([lbl, d, color]) => `<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid ${color};border-radius:4px;padding:10px;flex:1;min-width:100px;text-align:center;">
+              <div style="font-family:'Orbitron',monospace;font-size:8px;color:${color};margin-bottom:6px;">${lbl}</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${(d?.avg||0)>=0?'#00ff88':'#ff3355'};">${(d?.avg||0)>=0?'+':''}${(d?.avg||0).toFixed(2)}%</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:3px;">${(d?.pct_up||0).toFixed(0)}% up · n=${d?.n||0}</div>
+            </div>`).join('')}
+          </div>
+        </div>` : ''}`;
     }
-    holidays.forEach(h => { if (daysUntil(h.date) >= 0 && daysUntil(h.date) <= 60) all.push({ date: h.date, label: h.label, badge: 'hol', tag: 'HOL' }); });
-    all.sort((a, b) => a.date.localeCompare(b.date));
-    upEl.innerHTML = all.length
-      ? all.slice(0, 15).map(e => row(e.date, e.label, e.badge, e.tag)).join('')
-      : '<div class="no-data">No events in next 60 days</div>';
+  }
+
+  // ── HOLIDAYS ───────────────────────────────────────────────────────────────
+  const holEl = $('evHolidaysPanel');
+  if (holEl) {
+    const esD = typeof ES_DATA !== 'undefined' ? ES_DATA.all_time : null;
+    const H = esD?.holidays;
+    const statRow = (lbl, data) => {
+      if (!data || !data.count) return '';
+      const s = n => n >= 0 ? '+' : '';
+      const cc = n => n >= 0 ? '#00ff88' : '#ff3355';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(37,37,69,0.4);font-size:12px;">
+        <span style="color:var(--text2);width:160px;">${lbl}</span>
+        <span style="font-family:'Share Tech Mono',monospace;color:${cc(data.avg)};">${s(data.avg)}${data.avg.toFixed(2)}%</span>
+        <span style="font-family:'Share Tech Mono',monospace;color:${data.win_rate>=55?'#00ff88':data.win_rate>=50?'#ffcc00':'#ff3355'};">${data.win_rate.toFixed(1)}% up</span>
+        <span style="color:var(--text3);font-size:11px;">n=${data.count}</span>
+      </div>`;
+    };
+
+    // Upcoming 2026 market holidays
+    const holidays2026 = [
+      { date: '2026-04-03', label: 'Good Friday — Market Closed' },
+      { date: '2026-05-25', label: 'Memorial Day — Market Closed' },
+      { date: '2026-07-03', label: 'Independence Day (observed) — Closed' },
+      { date: '2026-09-07', label: 'Labor Day — Market Closed' },
+      { date: '2026-11-26', label: 'Thanksgiving — Market Closed' },
+      { date: '2026-11-27', label: 'Thanksgiving Friday — Early Close 1pm ET' },
+      { date: '2026-12-24', label: 'Christmas Eve — Early Close 1pm ET' },
+      { date: '2026-12-25', label: 'Christmas — Market Closed' },
+    ].filter(h => daysUntil(h.date) >= -1);
+
+    holEl.innerHTML = `
+      <div class="ev-card" style="margin-bottom:16px;">
+        <div class="ev-card-title" style="color:#ffcc00;">⬡ UPCOMING MARKET HOLIDAYS 2026</div>
+        ${holidays2026.map(h => evRow(h.date, h.label, 'hol', 'HOLIDAY')).join('') || '<div class="no-data">No upcoming holidays</div>'}
+      </div>
+      ${H ? `<div class="ev-card">
+        <div class="ev-card-title" style="color:var(--text2);">⬡ HISTORICAL PERFORMANCE AROUND HOLIDAYS (1993–2026)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);margin-bottom:8px;">WEEKLY WINDOWS</div>
+            ${statRow('Thanksgiving Week', H.thanksgiving_week)}
+            ${statRow('Christmas Week', H.christmas_week)}
+            ${statRow('July 4th Week', H.july4_week)}
+            ${statRow('Memorial Day Week', H.memorial_week)}
+            ${statRow('Labor Day Week', H.labor_week)}
+            ${statRow('Short Week (any)', H.short_week)}
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);margin-bottom:8px;">SEASONAL EDGES</div>
+            ${statRow('Santa Rally (Nov+Dec)', { avg: ((H.thanksgiving_week?.avg||0) + (H.christmas_week?.avg||0))/2, win_rate: ((H.thanksgiving_week?.win_rate||0) + (H.christmas_week?.win_rate||0))/2, count: (H.thanksgiving_week?.count||0) + (H.christmas_week?.count||0) })}
+            ${statRow('January Effect (1st 5d)', H.january_effect)}
+            ${statRow('Triple Witching', H.triple_witching)}
+            ${statRow('Tax Loss Sell (Dec 15–31)', H.tax_loss_sell)}
+            ${statRow('Tax Loss Buy (Jan 1–15)', H.tax_loss_buy)}
+          </div>
+        </div>
+      </div>` : ''}`;
   }
 }
+
+// VOLATILITY STATS TAB RENDER
+// ─────────────────────────────────────────────
+function renderVolStats() {
+  if (typeof ES_DATA === 'undefined') return;
+  const D = ES_DATA[typeof esLookback !== 'undefined' ? esLookback : 'all_time'];
+  if (!D) return;
+  const ve = D.vol_edge;
+  if (!ve) return;
+
+  // Weekly buckets
+  const wvolEl = document.getElementById('vs-wvol-rows');
+  if (wvolEl && ve.weekly_buckets) {
+    wvolEl.innerHTML = ve.weekly_buckets.map(b => {
+      const sc = b.self_avg >= 0 ? '#00ff88' : '#ff3355';
+      const ac = b.after_avg >= 0 ? '#00ff88' : '#ff3355';
+      return `<div class="es-vol-bucket">
+        <div>${b.bucket}</div>
+        <div>$${b.threshold_low.toFixed(2)}</div>
+        <div>$${b.threshold_high.toFixed(2)}</div>
+        <div style="color:${sc};">${b.self_avg >= 0 ? '+' : ''}${b.self_avg.toFixed(2)}%</div>
+        <div>${b.self_winrate.toFixed(1)}%</div>
+        <div style="color:${ac};">${b.after_avg >= 0 ? '+' : ''}${b.after_avg.toFixed(2)}%</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Daily buckets
+  const dvolEl = document.getElementById('vs-dvol-rows');
+  if (dvolEl && ve.daily_buckets) {
+    dvolEl.innerHTML = ve.daily_buckets.map(b => {
+      const sc = b.self_avg >= 0 ? '#00ff88' : '#ff3355';
+      const ac = b.after_avg >= 0 ? '#00ff88' : '#ff3355';
+      return `<div class="es-vol-bucket">
+        <div>${b.bucket}</div>
+        <div>$${b.threshold_low.toFixed(2)}</div>
+        <div>$${b.threshold_high.toFixed(2)}</div>
+        <div style="color:${sc};">${b.self_avg >= 0 ? '+' : ''}${b.self_avg.toFixed(2)}%</div>
+        <div>${b.self_winrate.toFixed(1)}%</div>
+        <div style="color:${ac};">${b.after_avg >= 0 ? '+' : ''}${b.after_avg.toFixed(2)}%</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Risk + consec cards
+  const riskEl = document.getElementById('vs-risk-cards');
+  if (riskEl) {
+    riskEl.innerHTML = [
+      { lbl: 'Risk-Adj (All)', val: ve.risk_adj_all?.toFixed(4) || '—', sub: 'return per $ of range' },
+      { lbl: 'High-Vol Self', val: (ve.hi_vol_self_avg >= 0 ? '+' : '') + (ve.hi_vol_self_avg?.toFixed(2) || '—') + '%', sub: ve.hi_vol_self_winrate?.toFixed(1) + '% up' },
+      { lbl: 'Low-Vol Self',  val: (ve.lo_vol_self_avg >= 0 ? '+' : '') + (ve.lo_vol_self_avg?.toFixed(2) || '—') + '%', sub: 'during low-vol weeks' },
+    ].map(c => `<div class="es-card"><div class="es-card-label">${c.lbl}</div><div class="es-card-val neu">${c.val}</div><div class="es-card-sub">${c.sub}</div></div>`).join('');
+  }
+
+  const consecEl = document.getElementById('vs-consec-vol-cards');
+  if (consecEl && ve.after_consec_hivol_avg != null) {
+    consecEl.innerHTML = [
+      { lbl: 'After 2+ High-Vol Wks Avg', val: (ve.after_consec_hivol_avg >= 0 ? '+' : '') + ve.after_consec_hivol_avg.toFixed(2) + '%', cls: ve.after_consec_hivol_avg >= 0 ? 'up' : 'dn' },
+      { lbl: 'Win Rate', val: ve.after_consec_hivol_winrate?.toFixed(1) + '%', cls: ve.after_consec_hivol_winrate >= 55 ? 'up' : 'dn' },
+    ].map(c => `<div class="es-card"><div class="es-card-label">${c.lbl}</div><div class="es-card-val ${c.cls}">${c.val}</div></div>`).join('');
+  }
+
+  // Lookback + meta
+  const lbEl = document.getElementById('vs-vol-lb');
+  if (lbEl) {
+    const lb = typeof esLookback !== 'undefined' ? esLookback : 'all_time';
+    lbEl.innerHTML = `<div class="es-lookback">
+      <button class="es-lb-btn ${lb==='all_time'?'active':''}" onclick="esSetLookback('all_time');renderVolStats();">ALL TIME</button>
+      <button class="es-lb-btn ${lb==='since_2020'?'active':''}" onclick="esSetLookback('since_2020');renderVolStats();">SINCE 2020</button>
+      <button class="es-lb-btn ${lb==='current_year'?'active':''}" onclick="esSetLookback('current_year');renderVolStats();">2026 YTD</button>
+    </div>`;
+  }
+}
+
+window.vsSubTab = function(id, el) {
+  document.querySelectorAll('#panel-volstats .es-subtab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+};
+
 
 // GEX RENDER
 // ─────────────────────────────────────────────
