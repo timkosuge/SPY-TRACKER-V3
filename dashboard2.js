@@ -2994,57 +2994,70 @@ function isExtendedHours() {
 // Fetch and cache Monday's (week) open price so CUR WK OPEN level bar is always live
 async function fetchWeekOpen() {
   try {
-    // Get current week's Monday date
-    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    const day = now.getDay(); // 0=Sun,1=Mon,...
-    const daysBack = day === 0 ? 6 : day - 1; // days since Monday
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - daysBack);
-    const mondayStr = monday.toISOString().slice(0, 10);
+    const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    const dow = ctNow.getDay(); // 0=Sun,1=Mon,...
+    const isMon = dow === 1;
+    const ctTodayStr = ctNow.toISOString().slice(0, 10);
 
-    // Fetch Monday's 1d bar from Yahoo via our /quotes CF function
-    const r = await fetch(`/quotes?symbols=SPY`);
-    if (!r.ok) return;
-    const data = await r.json();
-    const spyQ = data.quotes?.['SPY'];
-    if (!spyQ) return;
+    // Helper: apply a week open value and re-render
+    const applyWeekOpen = (openVal) => {
+      if (!openVal) return false;
+      window._spyWeekOpen = openVal;
+      if (window._spyLevels) {
+        window._spyLevels.weekOpen = openVal;
+        updateLevelBar(window._spyLevels?.cur);
+      }
+      return true;
+    };
 
-    // Store todayOpen immediately for CHG/OPEN calculation
-    if (spyQ.open && window._spyLevels) {
-      window._spyLevels.todayOpen = spyQ.open;
-    }
-    // If today IS Monday, week open = today's open
-    const todayCT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    const isMon = todayCT.getDay() === 1;
-    if (isMon && spyQ.open) {
-      window._spyWeekOpen = spyQ.open;
-      if (window._spyLevels) window._spyLevels.weekOpen = spyQ.open;
-      updateLevelBar(window._spyLevels?.cur); // re-render level bar with correct week open
-      return;
-    }
+    // ── Source 1: /spyintraday — most reliable, always live ──────────────────
+    // If today is Monday: its open IS the week open.
+    // Any other day: fetch it for today's open; week open comes from _sd Monday row.
+    // Either way this gives us today's live open for CHG/OPEN calculation.
+    try {
+      const r = await fetch('/spyintraday?t=' + Date.now());
+      if (r.ok) {
+        const d = await r.json();
+        if (d.available && d.open) {
+          // Always update today's open for CHG/OPEN tracking
+          if (window._spyLevels) window._spyLevels.todayOpen = d.open;
+          if (isMon) {
+            // On Monday, today's open = week open
+            applyWeekOpen(d.open);
+            return;
+          }
+        }
+      }
+    } catch(e) {}
 
-    // Otherwise fetch the actual Monday bar from Yahoo chart API via CF
-    const p1 = Math.floor(new Date(mondayStr + 'T13:30:00Z').getTime() / 1000);
-    const p2 = p1 + 3600; // 1 hour of bars is enough to get open
-    const chartR = await fetch(`/quotes?symbols=SPY&chart=1&p1=${p1}&p2=${p2}`);
-    // /quotes doesn't support chart — fall back to sd data already in memory
+    // ── Source 2: /quotes — get today's open from Yahoo quote API ────────────
+    try {
+      const r = await fetch('/quotes?symbols=SPY');
+      if (r.ok) {
+        const data = await r.json();
+        const spyQ = data.quotes?.['SPY'];
+        if (spyQ?.open && window._spyLevels) {
+          window._spyLevels.todayOpen = spyQ.open;
+        }
+        if (isMon && spyQ?.open) {
+          applyWeekOpen(spyQ.open);
+          return;
+        }
+      }
+    } catch(e) {}
+
+    // ── Source 3: spy_data.json (_sd) — find first trading day of this week ──
+    // This is the definitive source for non-Monday week opens once _sd is loaded.
     if (_sd && _sd.length) {
-      const thisWeek = (() => {
-        const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-        const dow = d.getDay();
-        const mon = new Date(d);
-        mon.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
-        return mon.toISOString().slice(0, 10);
-      })();
-      const todayStr2 = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })).toISOString().slice(0, 10);
-      const weekRows = _sd.filter(r => r.date >= thisWeek && r.date <= todayStr2);
+      const mon = new Date(ctNow);
+      mon.setDate(ctNow.getDate() - (dow === 0 ? 6 : dow - 1));
+      const monStr = mon.toISOString().slice(0, 10);
+      const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
+      // First trading day of the week = oldest date in weekRows
       const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
       if (firstDay?.open) {
-        window._spyWeekOpen = firstDay.open;
-        if (window._spyLevels) {
-          window._spyLevels.weekOpen = firstDay.open;
-          updateLevelBar(window._spyLevels.cur); // refresh level bar with correct week open
-        }
+        applyWeekOpen(firstDay.open);
+        return;
       }
     }
   } catch(e) {}
@@ -3206,12 +3219,18 @@ async function loadData(){
     ]);
 
     // Patch SPY quotes with real intraday OHLC immediately
-    if (spyOHLC && md.quotes && md.quotes['SPY']) {
-      md.quotes['SPY'].open   = spyOHLC.open   || md.quotes['SPY'].open;
-      md.quotes['SPY'].high   = spyOHLC.high   || md.quotes['SPY'].high;
-      md.quotes['SPY'].low    = spyOHLC.low    || md.quotes['SPY'].low;
-      md.quotes['SPY'].volume = spyOHLC.volume || md.quotes['SPY'].volume;
+    if (spyOHLC && spyOHLC.available && md.quotes && md.quotes['SPY']) {
+      md.quotes['SPY'].open       = spyOHLC.open       || md.quotes['SPY'].open;
+      md.quotes['SPY'].high       = spyOHLC.high       || md.quotes['SPY'].high;
+      md.quotes['SPY'].low        = spyOHLC.low        || md.quotes['SPY'].low;
+      md.quotes['SPY'].volume     = spyOHLC.volume     || md.quotes['SPY'].volume;
       md.quotes['SPY'].prev_close = spyOHLC.prev_close || md.quotes['SPY'].prev_close;
+      // Also patch current price — market_data.json is stale until next workflow run
+      if (spyOHLC.close) {
+        md.quotes['SPY'].price      = spyOHLC.close;
+        md.quotes['SPY'].change     = spyOHLC.change     ?? md.quotes['SPY'].change;
+        md.quotes['SPY'].pct_change = spyOHLC.changePct  ?? md.quotes['SPY'].pct_change;
+      }
     }
     // Patch F&G with CNN value immediately
     if (liveFG) md.fear_greed = liveFG;
