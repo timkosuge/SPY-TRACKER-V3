@@ -3543,231 +3543,394 @@ function renderCommodities(md){
 // ─── BEST ANALOGS DATA ───────────────────────────────────────────────────────
 // ANALOG_DATA loaded from analog_data.js
 
+// ── Active state ─────────────────────────────────────────────────────────────
+let _analogActive = null;   // null = all on; string = analog name active
+let _analogTableMode = 'hist';
+
 function renderAnalog() {
   const D = ANALOG_DATA;
-  const cur = D.current;
-  const analogs = D.analogs;
-  const curPrice = cur.current_price;
-  const curDay = cur.current_day;
-  const curPct = cur.current_pct;
+  if(!D) return;
+  window._analogData = D;
 
-  // ── HEADER CARDS ────────────────────────────────────────────────────────────
-  const cardsEl = $('analogCards');
-  if(cardsEl) {
-    // Consensus (top 4 non-2008)
-    const top4 = analogs.filter(a => !a.name.includes('2008'));
-    const cons30 = top4.map(a=>a.proj[29]?.proj_spy||0).filter(Boolean);
-    const cons60 = top4.map(a=>a.proj[59]?.proj_spy||0).filter(Boolean);
-    const avgCons30 = cons30.reduce((a,b)=>a+b,0)/cons30.length;
-    const avgCons60 = cons60.reduce((a,b)=>a+b,0)/cons60.length;
-    const pct30 = (avgCons30/curPrice-1)*100;
-    const pct60 = (avgCons60/curPrice-1)*100;
-    const bestAnalog = analogs[0];
+  // Convert corr (−1…1) and rmse to a 0–100% match score
+  // Score = 50% from corr (mapped 0→100%) + 50% from rmse (inverted, capped at 5)
+  const score = a => {
+    const corrScore = ((a.corr + 1) / 2) * 100;          // −1→0%  1→100%
+    const rmseScore = Math.max(0, (1 - a.rmse / 5)) * 100; // 0→100%, 5+ → 0%
+    return Math.round(corrScore * 0.6 + rmseScore * 0.4);
+  };
 
-    cardsEl.innerHTML = [
-      {label:'CYCLE DAY', val:`Day ${curDay}`, sub:`SPY $${curPrice.toFixed(2)}`, color:'var(--cyan)'},
-      {label:'CURRENT POSITION', val:`${curPct>=0?'+':''}${curPct.toFixed(2)}%`, sub:`from Nov 2025 anchor`, color:curPct>=0?'#00ff88':'#ff3355'},
-      {label:'BEST ANALOG', val:bestAnalog.name.replace(' Analog',''), sub:`r=${bestAnalog.corr.toFixed(3)} rmse=${bestAnalog.rmse.toFixed(2)}`, color:bestAnalog.color},
-      {label:'CONSENSUS 30 DAYS', val:`$${avgCons30.toFixed(0)}`, sub:`${pct30>=0?'+':''}${pct30.toFixed(1)}% · ${top4[0].proj[29]?.est_date||''}`, color:pct30>=0?'#00ff88':'#ff3355'},
-      {label:'CONSENSUS 60 DAYS', val:`$${avgCons60.toFixed(0)}`, sub:`${pct60>=0?'+':''}${pct60.toFixed(1)}% · ${top4[0].proj[59]?.est_date||''}`, color:pct60>=0?'#00ff88':'#ff3355'},
-    ].map(c=>`<div class="panel" style="text-align:center;border-top:3px solid ${c.color};">
-      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">${c.label}</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:${c.color};">${c.val}</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px;">${c.sub}</div>
-    </div>`).join('');
-  }
+  const analogs = D.analogs.map(a => ({...a, score: score(a)}));
+  const best = [...analogs].sort((a,b) => b.score - a.score)[0];
 
-  // ── ANALOG SUMMARY CARDS ──────────────────────────────────────────────────
-  const summEl = $('analogSummary');
-  if(summEl) {
-    summEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
-      ${analogs.map(a=>{
-        const p30 = a.proj[29];
-        const p60 = a.proj[59];
-        const ms = a.milestones;
-        const nextMs = ms.peak || ms.yearend;
-        return `<div style="padding:10px;background:${a.color}11;border:1px solid ${a.color}33;border-top:3px solid ${a.color};border-radius:4px;">
-          <div style="font-family:'Orbitron',monospace;font-size:9px;color:${a.color};margin-bottom:6px;">${a.name.toUpperCase()}</div>
-          <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">r=${a.corr.toFixed(3)} | rmse=${a.rmse.toFixed(2)}</div>
-          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);">
-            <span style="font-size:10px;color:var(--text3);">30 days</span>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${p30?.pct_from_now>=0?'#00ff88':'#ff3355'};">$${p30?.proj_spy.toFixed(0)} (${p30?.pct_from_now>=0?'+':''}${p30?.pct_from_now.toFixed(1)}%)</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);">
-            <span style="font-size:10px;color:var(--text3);">60 days</span>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${p60?.pct_from_now>=0?'#00ff88':'#ff3355'};">$${p60?.proj_spy.toFixed(0)} (${p60?.pct_from_now>=0?'+':''}${p60?.pct_from_now.toFixed(1)}%)</span>
-          </div>
-          ${nextMs?`<div style="margin-top:6px;text-align:center;padding:4px;background:${nextMs.color}22;border-radius:3px;">
-            <div style="font-size:9px;color:${nextMs.color};">${nextMs.label.toUpperCase()}</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${nextMs.color};">$${nextMs.proj_spy.toFixed(0)}</div>
-            <div style="font-size:9px;color:var(--text3);">${nextMs.est_date}</div>
-          </div>`:''}
-        </div>`;
-      }).join('')}
-    </div>`;
-  }
+  _analogActive = null; // default all on
 
-  // ── OVERLAY CHART ─────────────────────────────────────────────────────────
-  const chartEl = $('analogChart');
-  if(chartEl) {
-    chartEl.innerHTML='';
-    const canvas=document.createElement('canvas');
-    canvas.style.cssText='display:block;width:100%;height:100%;';
-    chartEl.appendChild(canvas);
-
-    requestAnimationFrame(()=>{
-      const W=canvas.offsetWidth||900, H=canvas.offsetHeight||360;
-      canvas.width=W; canvas.height=H;
-      const ctx=canvas.getContext('2d');
-      const pad={l:52,r:16,t:20,b:44};
-      const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
-
-      // Gather all pct values for scale
-      const allPcts=[...cur.data.map(d=>d.pct)];
-      analogs.forEach(a=>{
-        a.hist.forEach(h=>allPcts.push(h.pct));
-        a.proj.forEach(p=>allPcts.push(p.pct_from_anchor25));
-      });
-      const minP=Math.min(...allPcts)-2, maxP=Math.max(...allPcts)+2;
-      const range=maxP-minP;
-      const totalDays=curDay+220;
-
-      const px=day=>pad.l+((day-1)/(totalDays-1))*cw;
-      const py=pct=>pad.t+ch-((pct-minP)/range)*ch;
-
-      ctx.clearRect(0,0,W,H);
-
-      // Grid
-      [-40,-30,-20,-10,0,5,10,15,20,25].forEach(pct=>{
-        if(pct<minP||pct>maxP)return;
-        const y=py(pct);
-        ctx.strokeStyle=pct===0?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.04)';
-        ctx.lineWidth=pct===0?1:0.5;
-        ctx.setLineDash(pct===0?[4,4]:[]);
-        ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle='#505070';
-        ctx.font='9px "Share Tech Mono",monospace';
-        ctx.textAlign='right';
-        ctx.fillText((pct>=0?'+':'')+pct+'%',pad.l-4,y+3);
-      });
-
-      // Today line
-      const todayX=px(curDay);
-      ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=1.5;
-      ctx.setLineDash([3,3]);
-      ctx.beginPath();ctx.moveTo(todayX,pad.t);ctx.lineTo(todayX,pad.t+ch);ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='8px "Orbitron",monospace';
-      ctx.textAlign='center';ctx.fillText('TODAY',todayX,pad.t+10);
-
-      // Draw each analog historical (thin, same color)
-      analogs.forEach(a=>{
-        ctx.strokeStyle=a.color+'66';ctx.lineWidth=1;
-        ctx.beginPath();
-        a.hist.forEach((h,i)=>{
-          i===0?ctx.moveTo(px(h.day),py(h.pct)):ctx.lineTo(px(h.day),py(h.pct));
-        });
-        ctx.stroke();
-
-        // Projection (dashed)
-        ctx.strokeStyle=a.color+'88';ctx.lineWidth=1.2;ctx.setLineDash([5,4]);
-        ctx.beginPath();
-        const lastH=a.hist[a.hist.length-1];
-        ctx.moveTo(px(lastH.day),py(cur.data[cur.data.length-1].pct));
-        a.proj.forEach(p=>ctx.lineTo(px(p.day),py(p.pct_from_anchor25)));
-        ctx.stroke();ctx.setLineDash([]);
-      });
-
-      // Draw current 2026 (thick cyan, on top)
-      ctx.strokeStyle='#00ccff';ctx.lineWidth=2.5;
-      ctx.beginPath();
-      cur.data.forEach((d,i)=>{
-        i===0?ctx.moveTo(px(d.day),py(d.pct)):ctx.lineTo(px(d.day),py(d.pct));
-      });
-      ctx.stroke();
-
-      // Current dot
-      const lastD=cur.data[cur.data.length-1];
-      ctx.fillStyle='#00ccff';
-      ctx.beginPath();ctx.arc(px(lastD.day),py(lastD.pct),5,0,Math.PI*2);ctx.fill();
-
-      // Legend
-      const legendItems=[
-        {color:'#00ccff',label:'2025/26 actual',dash:false},
-        ...analogs.map(a=>{return {color:a.color,label:a.name,dash:true}})
-      ];
-      legendItems.forEach((item,i)=>{
-        const cols=3, row=Math.floor(i/cols), col=i%cols;
-        const lx=pad.l+col*200, ly=H-28+row*14;
-        ctx.strokeStyle=item.color;ctx.lineWidth=2;
-        if(item.dash)ctx.setLineDash([5,4]);
-        ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(lx+20,ly);ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle='rgba(255,255,255,0.5)';
-        ctx.font='9px "Share Tech Mono",monospace';ctx.textAlign='left';
-        ctx.fillText(item.label,lx+24,ly+3);
-      });
-    });
-  }
-
-  // ── DAY TABLE ─────────────────────────────────────────────────────────────
-  const ctrlEl=$('analogTableControls');
-  if(ctrlEl){
-    ctrlEl.innerHTML=`
-      <button onclick="analogShowHist()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;background:var(--cyan)22;border:1px solid var(--cyan);color:var(--cyan);border-radius:3px;cursor:pointer;">HISTORICAL (Days 1-${curDay})</button>
-      <button onclick="analogShowProj()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:3px;cursor:pointer;">PROJECTIONS</button>
-      <span style="font-size:11px;color:var(--text3);margin-left:8px;">Sorted by day · ${analogs.length} analogs shown</span>`;
-  }
-  window._analogData=D;
+  _renderBossPanel(best, analogs);
+  _renderToggles(analogs);
+  _renderActiveDetail(analogs);
+  _renderAnalogChart(D, analogs);
   analogShowHist();
 }
 
-function analogShowHist(){
-  const D=window._analogData;
-  if(!D)return;
-  const tbody=$('analogTableBody');
-  if(!tbody)return;
-  const cur=D.current;
+function _renderBossPanel(best, analogs) {
+  const nameEl = $('analogBestName');
+  const barEl  = $('analogBestBar');
+  const scoreEl = $('analogBestScore');
+  const descEl  = $('analogBestDesc');
+  if(!nameEl) return;
 
-  tbody.innerHTML=cur.data.map(d=>{
-    const analogCols=D.analogs.map(a=>{
+  nameEl.textContent = best.name.replace(' Analog','');
+  nameEl.style.color = best.color;
+
+  // Score bar
+  const barW = best.score;
+  const bc = best.score > 70 ? '#00ff88' : best.score > 50 ? '#ffcc00' : '#ff8800';
+  barEl.innerHTML = `
+    <div style="height:10px;background:var(--bg3);border-radius:5px;overflow:hidden;margin-bottom:4px;">
+      <div style="width:${barW}%;height:100%;background:linear-gradient(90deg,${best.color}88,${best.color});border-radius:5px;transition:width 0.6s;"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);">
+      <span>0%</span><span style="color:${best.color};font-family:'Share Tech Mono',monospace;font-size:12px;">${best.score}% MATCH</span><span>100%</span>
+    </div>`;
+
+  scoreEl.textContent = `r=${best.corr.toFixed(3)} · rmse=${best.rmse.toFixed(2)} · score ${best.score}%`;
+  scoreEl.style.color = best.color;
+
+  // Show all scores ranked
+  const ranked = [...analogs].sort((a,b) => b.score - a.score);
+  descEl.innerHTML = ranked.map((a,i) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)33;">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);">#${i+1}</span>
+      <span style="font-family:'Orbitron',monospace;font-size:8px;color:${a.color};min-width:36px;">${a.name.replace(' Analog','')}</span>
+      <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;">
+        <div style="width:${a.score}%;height:100%;background:${a.color};border-radius:3px;"></div>
+      </div>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${a.color};min-width:32px;text-align:right;">${a.score}%</span>
+    </div>`).join('');
+}
+
+function _renderToggles(analogs) {
+  const D = window._analogData;
+  const curPrice = D.current.current_price;
+  const cardsEl = $('analogCards');
+  const toggleEl = $('analogToggles');
+  if(!toggleEl || !cardsEl) return;
+
+  // Year toggle buttons
+  toggleEl.innerHTML = analogs.map(a => `
+    <button id="atog_${a.name.replace(/\s/g,'_')}"
+      onclick="analogToggle('${a.name}')"
+      style="font-family:'Orbitron',monospace;font-size:9px;padding:5px 12px;
+             background:${a.color}22;border:2px solid ${a.color};
+             color:${a.color};border-radius:3px;cursor:pointer;
+             transition:all 0.2s;opacity:1;">
+      ${a.name.replace(' Analog','')}
+    </button>`).join('');
+
+  // Top stat cards — consensus + current
+  const top4 = analogs.filter(a => !a.name.includes('2008'));
+  const c30 = top4.map(a=>a.proj[29]?.proj_spy||0).filter(Boolean);
+  const c60 = top4.map(a=>a.proj[59]?.proj_spy||0).filter(Boolean);
+  const c90 = top4.map(a=>a.proj[89]?.proj_spy||0).filter(Boolean);
+  const avg = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+  const pct = (p,base) => ((p/base-1)*100);
+
+  cardsEl.innerHTML = [
+    {l:'CURRENT SPY',   v:`$${curPrice.toFixed(2)}`,           sub:`Day ${D.current.current_day} · ${D.current.current_date}`, c:'var(--cyan)'},
+    {l:'CONSENSUS 30d', v:`$${avg(c30).toFixed(0)}`,           sub:`${pct(avg(c30),curPrice)>=0?'+':''}${pct(avg(c30),curPrice).toFixed(1)}% · ${top4[0].proj[29]?.est_date}`, c:pct(avg(c30),curPrice)>=0?'#00ff88':'#ff3355'},
+    {l:'CONSENSUS 60d', v:`$${avg(c60).toFixed(0)}`,           sub:`${pct(avg(c60),curPrice)>=0?'+':''}${pct(avg(c60),curPrice).toFixed(1)}% · ${top4[0].proj[59]?.est_date}`, c:pct(avg(c60),curPrice)>=0?'#00ff88':'#ff3355'},
+    {l:'CONSENSUS 90d', v:`$${avg(c90).toFixed(0)}`,           sub:`${pct(avg(c90),curPrice)>=0?'+':''}${pct(avg(c90),curPrice).toFixed(1)}% · ${top4[0].proj[89]?.est_date}`, c:pct(avg(c90),curPrice)>=0?'#00ff88':'#ff3355'},
+    {l:'BEAR CASE (2008)',v:`$${analogs.find(a=>a.name.includes('2008'))?.proj[59]?.proj_spy.toFixed(0)||'—'}`,
+     sub:`60d if 2008 repeats`, c:'#ff3355'},
+  ].map(c=>`<div class="panel" style="text-align:center;border-top:3px solid ${c.c};padding:8px;">
+    <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:5px;">${c.l}</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:900;color:${c.c};">${c.v}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:3px;">${c.sub}</div>
+  </div>`).join('');
+}
+
+function _renderActiveDetail(analogs) {
+  const D = window._analogData;
+  const curPrice = D.current.current_price;
+  const detEl = $('analogActiveDetail');
+  if(!detEl) return;
+
+  if(!_analogActive) { detEl.style.display='none'; return; }
+
+  const a = analogs.find(x=>x.name===_analogActive);
+  if(!a) { detEl.style.display='none'; return; }
+
+  detEl.style.display='block';
+  const ms = a.milestones;
+  const p30=a.proj[29], p60=a.proj[59], p90=a.proj[89];
+
+  detEl.innerHTML = `
+    <div style="background:${a.color}11;border:1px solid ${a.color}44;border-left:4px solid ${a.color};border-radius:4px;padding:12px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:14px;font-weight:900;color:${a.color};">${a.name.toUpperCase()}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">Match Score: <span style="color:${a.color};font-size:14px;">${a.score}%</span></div>
+        <div style="font-size:11px;color:var(--text3);">r=${a.corr.toFixed(3)} · rmse=${a.rmse.toFixed(2)}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;">
+        ${[
+          ['30 DAYS',  p30,  top4Date(a,29)],
+          ['60 DAYS',  p60,  top4Date(a,59)],
+          ['90 DAYS',  p90,  top4Date(a,89)],
+          ['PEAK',     a.milestones.peak,   null],
+          ['TROUGH',   a.milestones.trough, null],
+          ['~1 YEAR',  a.milestones.yearend,null],
+        ].map(([lbl, p, d]) => {
+          if(!p) return `<div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;opacity:0.4;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${lbl}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:var(--text3);">—</div>
+          </div>`;
+          const spy = p.proj_spy || p.proj_spy;
+          const pctV = p.pct_from_now;
+          const pc = pctV>=0?'#00ff88':'#ff3355';
+          const dt = p.est_date || d || '';
+          return `<div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;border-top:2px solid ${pc};">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">${lbl}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:900;color:${pc};">$${spy.toFixed(0)}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${pc};">${pctV>=0?'+':''}${pctV.toFixed(1)}%</div>
+            <div style="font-size:9px;color:var(--text3);margin-top:2px;">${dt}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function top4Date(a, idx) {
+  return a.proj[idx]?.est_date || '';
+}
+
+function analogToggle(name) {
+  const D = window._analogData;
+  if(!D) return;
+  const analogs = D.analogs.map(a => ({...a, score: _analogScore(a)}));
+
+  if(_analogActive === name) {
+    _analogActive = null; // clicking active one → go back to ALL
+  } else {
+    _analogActive = name;
+  }
+
+  // Update button styles
+  analogs.forEach(a => {
+    const btn = document.getElementById('atog_' + a.name.replace(/\s/g,'_'));
+    if(!btn) return;
+    const isActive = _analogActive === null || _analogActive === a.name;
+    btn.style.opacity = isActive ? '1' : '0.3';
+    btn.style.borderWidth = _analogActive === a.name ? '3px' : '2px';
+  });
+
+  _renderActiveDetail(analogs);
+  _renderAnalogChart(D, analogs);
+  _analogTableMode === 'hist' ? analogShowHist() : analogShowProj();
+}
+
+function analogToggleAll() {
+  const D = window._analogData;
+  if(!D) return;
+  _analogActive = null;
+  const analogs = D.analogs.map(a => ({...a, score: _analogScore(a)}));
+  analogs.forEach(a => {
+    const btn = document.getElementById('atog_' + a.name.replace(/\s/g,'_'));
+    if(btn) { btn.style.opacity='1'; btn.style.borderWidth='2px'; }
+  });
+  _renderActiveDetail(analogs);
+  _renderAnalogChart(D, analogs);
+  _analogTableMode === 'hist' ? analogShowHist() : analogShowProj();
+}
+
+function _analogScore(a) {
+  const corrScore = ((a.corr + 1) / 2) * 100;
+  const rmseScore = Math.max(0, (1 - a.rmse / 5)) * 100;
+  return Math.round(corrScore * 0.6 + rmseScore * 0.4);
+}
+
+function _renderAnalogChart(D, analogs) {
+  const chartEl = $('analogChart');
+  if(!chartEl) return;
+  chartEl.innerHTML='';
+  const canvas=document.createElement('canvas');
+  canvas.style.cssText='display:block;width:100%;height:100%;';
+  chartEl.appendChild(canvas);
+
+  const visAnalogs = _analogActive
+    ? analogs.filter(a => a.name === _analogActive)
+    : analogs;
+
+  requestAnimationFrame(() => {
+    const W=canvas.offsetWidth||900, H=canvas.offsetHeight||380;
+    canvas.width=W; canvas.height=H;
+    const ctx=canvas.getContext('2d');
+    const pad={l:56,r:16,t:24,b:50};
+    const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+    const curDay=D.current.current_day;
+    const totalDays=curDay+220;
+
+    // Scale
+    const allPcts=[...D.current.data.map(d=>d.pct)];
+    visAnalogs.forEach(a=>{
+      a.hist.forEach(h=>allPcts.push(h.pct));
+      a.proj.forEach(p=>allPcts.push(p.pct_from_anchor25));
+    });
+    const minP=Math.min(...allPcts)-2, maxP=Math.max(...allPcts)+2;
+    const range=maxP-minP;
+
+    const px=day=>pad.l+((day-1)/(totalDays-1))*cw;
+    const py=pct=>pad.t+ch-((pct-minP)/range)*ch;
+
+    ctx.clearRect(0,0,W,H);
+
+    // Grid lines
+    const gridLevels=[-40,-30,-20,-15,-10,-5,0,5,10,15,20,25];
+    gridLevels.forEach(pct=>{
+      if(pct<minP||pct>maxP)return;
+      const y=py(pct);
+      ctx.strokeStyle=pct===0?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.04)';
+      ctx.lineWidth=pct===0?1:0.5;
+      ctx.setLineDash(pct===0?[4,4]:[]);
+      ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='#505070';ctx.font='9px "Share Tech Mono",monospace';ctx.textAlign='right';
+      ctx.fillText((pct>=0?'+':'')+pct+'%',pad.l-4,y+3);
+    });
+
+    // Today line
+    const todayX=px(curDay);
+    ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(todayX,pad.t);ctx.lineTo(todayX,pad.t+ch);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,255,255,0.6)';ctx.font='8px "Orbitron",monospace';ctx.textAlign='center';
+    ctx.fillText('TODAY',todayX,pad.t+10);
+
+    // Draw analog lines
+    visAnalogs.forEach(a=>{
+      const alpha = _analogActive ? 'cc' : '88';
+      const lw = _analogActive ? 1.8 : 1.2;
+
+      // Historical
+      ctx.strokeStyle=a.color+alpha;ctx.lineWidth=lw;
+      ctx.beginPath();
+      a.hist.forEach((h,i)=>i===0?ctx.moveTo(px(h.day),py(h.pct)):ctx.lineTo(px(h.day),py(h.pct)));
+      ctx.stroke();
+
+      // Projection (dashed, starting from current 2026 position)
+      const lastPct=D.current.data[D.current.data.length-1].pct;
+      ctx.strokeStyle=a.color+(alpha==='cc'?'99':'66');ctx.lineWidth=lw;ctx.setLineDash([6,4]);
+      ctx.beginPath();ctx.moveTo(px(curDay),py(lastPct));
+      a.proj.forEach(p=>ctx.lineTo(px(p.day),py(p.pct_from_anchor25)));
+      ctx.stroke();ctx.setLineDash([]);
+
+      // Analog year label at end of projection
+      if(a.proj.length && _analogActive) {
+        const lastP=a.proj[Math.min(a.proj.length-1,89)];
+        const lx=px(lastP.day)+4, ly=py(lastP.pct_from_anchor25);
+        ctx.fillStyle=a.color;ctx.font='9px "Orbitron",monospace';ctx.textAlign='left';
+        ctx.fillText(a.name.replace(' Analog',''),lx,ly+3);
+      }
+    });
+
+    // 2026 actual — always on top, thick
+    ctx.strokeStyle='#00ccff';ctx.lineWidth=3;
+    ctx.beginPath();
+    D.current.data.forEach((d,i)=>i===0?ctx.moveTo(px(d.day),py(d.pct)):ctx.lineTo(px(d.day),py(d.pct)));
+    ctx.stroke();
+
+    // Current price dot
+    const last=D.current.data[D.current.data.length-1];
+    ctx.fillStyle='#00ccff';
+    ctx.beginPath();ctx.arc(px(last.day),py(last.pct),6,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#001122';
+    ctx.beginPath();ctx.arc(px(last.day),py(last.pct),3,0,Math.PI*2);ctx.fill();
+
+    // Legend
+    const legItems=[{color:'#00ccff',label:'2025/26 (actual)',dash:false},...visAnalogs.map(a=>({color:a.color,label:a.name+(a.score?` ${a.score}%`:''),dash:true}))];
+    const colW=Math.floor((cw)/(Math.min(legItems.length,4)));
+    legItems.forEach((item,i)=>{
+      const row=Math.floor(i/4), col=i%4;
+      const lx=pad.l+col*colW, ly=H-34+row*14;
+      ctx.strokeStyle=item.color;ctx.lineWidth=2;
+      if(item.dash)ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(lx+22,ly);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='rgba(255,255,255,0.55)';ctx.font='9px "Share Tech Mono",monospace';ctx.textAlign='left';
+      ctx.fillText(item.label,lx+26,ly+3);
+    });
+  });
+}
+
+function analogShowHist() {
+  _analogTableMode='hist';
+  const D=window._analogData; if(!D)return;
+  const tbody=$('analogTableBody'); if(!tbody)return;
+  const headEl=$('analogTableHead'); if(!headEl)return;
+  const analogs=D.analogs.map(a=>({...a,score:_analogScore(a)}));
+  const vis=_analogActive?analogs.filter(a=>a.name===_analogActive):analogs;
+
+  // Build header
+  headEl.innerHTML=`<tr>
+    <th style="padding:6px 8px;text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DAY</th>
+    <th style="padding:6px 8px;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">2026 DATE</th>
+    <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">SPY CLOSE</th>
+    <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">% FROM ANCHOR</th>
+    ${vis.map(a=>`<th colspan="2" style="padding:6px 8px;text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:${a.color};border-bottom:1px solid var(--border);">${a.name.replace(' Analog','')} (${a.score}%)</th>`).join('')}
+  </tr>`;
+
+  tbody.innerHTML=D.current.data.map(d=>{
+    const cols=vis.map(a=>{
       const h=a.hist.find(h=>h.day===d.day);
-      if(!h)return `<td style="padding:5px 6px;text-align:right;color:var(--text3);">—</td><td style="padding:5px 6px;text-align:right;color:var(--text3);">—</td>`;
+      if(!h)return `<td colspan="2" style="padding:5px 6px;text-align:center;color:var(--text3);">—</td>`;
       const c=h.pct>=0?'#00ff88':'#ff3355';
-      return `<td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;color:var(--text3);">${h.date}</td><td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;color:${c};">${h.pct>=0?'+':''}${h.pct.toFixed(2)}%</td>`;
+      return `<td style="padding:5px 6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">${h.date}</td>
+              <td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${c};">${h.pct>=0?'+':''}${h.pct.toFixed(2)}%</td>`;
     }).join('');
     const cc=d.pct>=0?'#00ff88':'#ff3355';
-    return `<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:5px 6px;text-align:center;font-family:'Share Tech Mono',monospace;color:var(--text3);">${d.day}</td>
-      <td style="padding:5px 6px;font-family:'Share Tech Mono',monospace;color:var(--cyan);">${d.date}</td>
-      <td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;color:var(--text2);">$${d.close.toFixed(2)}</td>
-      <td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;color:${cc};">${d.pct>=0?'+':''}${d.pct.toFixed(2)}%</td>
-      ${analogCols}
+    return `<tr style="border-bottom:1px solid var(--border)22;">
+      <td style="padding:5px 6px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">${d.day}</td>
+      <td style="padding:5px 6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--cyan);">${d.date}</td>
+      <td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">$${d.close.toFixed(2)}</td>
+      <td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${cc};">${d.pct>=0?'+':''}${d.pct.toFixed(2)}%</td>
+      ${cols}
     </tr>`;
   }).join('');
 }
 
-function analogShowProj(){
-  const D=window._analogData;
-  if(!D)return;
-  const tbody=$('analogTableBody');
-  if(!tbody)return;
-  const maxDays=Math.max(...D.analogs.map(a=>a.proj.length));
+function analogShowProj() {
+  _analogTableMode='proj';
+  const D=window._analogData; if(!D)return;
+  const tbody=$('analogTableBody'); if(!tbody)return;
+  const headEl=$('analogTableHead'); if(!headEl)return;
+  const analogs=D.analogs.map(a=>({...a,score:_analogScore(a)}));
+  const vis=_analogActive?analogs.filter(a=>a.name===_analogActive):analogs;
+  const curPrice=D.current.current_price;
+  const curDay=D.current.current_day;
 
-  tbody.innerHTML=Array.from({length:Math.min(maxDays,220)},(_,i)=>{
-    const analogCols=D.analogs.map(a=>{
+  headEl.innerHTML=`<tr>
+    <th style="padding:6px 8px;text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DAY</th>
+    <th style="padding:6px 8px;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">EST DATE</th>
+    ${vis.map(a=>`
+      <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:${a.color};border-bottom:1px solid var(--border);">${a.name.replace(' Analog','')} SPY</th>
+      <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:${a.color};border-bottom:1px solid var(--border);">% vs NOW</th>
+    `).join('')}
+  </tr>`;
+
+  const maxRows=Math.max(...vis.map(a=>a.proj.length),0);
+  tbody.innerHTML=Array.from({length:Math.min(maxRows,220)},(_,i)=>{
+    const day=curDay+i+1;
+    const estDate=vis[0]?.proj[i]?.est_date||'';
+    const cols=vis.map(a=>{
       const p=a.proj[i];
       if(!p)return `<td colspan="2" style="padding:5px 6px;text-align:center;color:var(--text3);">—</td>`;
       const c=p.pct_from_now>=0?'#00ff88':'#ff3355';
-      return `<td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;color:var(--text3);">${p.est_date}</td><td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;color:${c};">$${p.proj_spy.toFixed(0)} (${p.pct_from_now>=0?'+':''}${p.pct_from_now.toFixed(1)}%)</td>`;
+      return `<td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">$${p.proj_spy.toFixed(2)}</td>
+              <td style="padding:5px 6px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${c};">${p.pct_from_now>=0?'+':''}${p.pct_from_now.toFixed(2)}%</td>`;
     }).join('');
-    const day=D.current.current_day+i+1;
-    return `<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:5px 6px;text-align:center;font-family:'Share Tech Mono',monospace;color:var(--text3);">${day}</td>
-      <td style="padding:5px 6px;font-family:'Share Tech Mono',monospace;color:var(--cyan);">${D.analogs[0].proj[i]?.est_date||''}</td>
-      <td colspan="2" style="padding:5px 6px;text-align:center;font-size:10px;color:var(--text3);">← est. dates per analog →</td>
-      ${analogCols}
+    return `<tr style="border-bottom:1px solid var(--border)22;">
+      <td style="padding:5px 6px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">${day}</td>
+      <td style="padding:5px 6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--cyan);">${estDate}</td>
+      ${cols}
     </tr>`;
   }).join('');
 }
