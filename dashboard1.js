@@ -1240,7 +1240,7 @@ function renderDesk(md,sd){
         <div id="deskDod"></div>
       </div>
       <div class="panel">
-        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ </div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ VOLUME — LIVE</div>
         <div id="deskVolSummary"></div>
       </div>
       <div class="panel">
@@ -1293,36 +1293,104 @@ function renderDeskSession(md,sd){
 
   // Volume Summary — prefer live intraday data for today, fall back to sd[0] (prior completed day)
   const volSumEl=$('deskVolSummary');
-  if(volSumEl && sd && sd.length){
-    // _spyIntraday is set in dashboard2.js from the /spyintraday function (live 1-min bars)
-    const liveIntra = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
-    const day0=sd[0]||{}, v2static=day0.volume_analysis||{};
-    // Use live intraday fields when available (market hours), else fall back to sd[0]
-    const v2 = liveIntra?.available ? liveIntra : v2static;
-    const isLive = liveIntra?.available;
-    const vol=spy.volume||(isLive?liveIntra.volume:0)||day0.volume||0;
-    const last30=sd.slice(0,30).filter(d=>d.volume>0);
-    const avg30=last30.length?Math.round(last30.reduce((a,d)=>a+d.volume,0)/last30.length):85000000;
-    const volPct=vol&&avg30?(vol/avg30*100):0;
-    const volColor=volPct>130?'#ff8800':volPct>80?'#00ff88':'#ffcc00';
-    const srcLabel = isLive
-      ? `<div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-bottom:4px;letter-spacing:1px;">● LIVE INTRADAY · ${liveIntra.bars} bars · as of ${liveIntra.asOf?.slice(11,16)} UTC</div>`
-      : `<div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;">PRIOR SESSION · ${day0.date||''}</div>`;
-    volSumEl.innerHTML=srcLabel+`
-      <div style="text-align:center;margin-bottom:12px;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:26px;font-weight:bold;">${fmtK(vol)}</div>
-        <div style="height:8px;background:var(--bg3);border-radius:3px;overflow:hidden;margin:6px 0;">
-          <div style="width:${Math.min(volPct,100)}%;height:100%;background:${volColor};border-radius:3px;"></div>
+  if(volSumEl){
+    const lv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
+    const day0 = sd?.[0]||{}, va = day0.volume_analysis||{};
+    const isLive = lv?.available;
+    const last30 = (sd||[]).slice(0,30).filter(d=>d.volume>0);
+    const avg30 = last30.length ? Math.round(last30.reduce((a,d)=>a+d.volume,0)/last30.length) : 85000000;
+
+    if(!isLive) {
+      // Pre-market or no data: show yesterday + pace context
+      const vol = day0.volume || 0;
+      const volPct = vol&&avg30 ? vol/avg30*100 : 0;
+      const vc = volPct>130?'#ff8800':volPct>100?'#00ff88':'#ffcc00';
+      volSumEl.innerHTML = `
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:8px;letter-spacing:1px;">
+          PRIOR SESSION · ${day0.date||''} · 30D AVG: ${fmtK(avg30)}
         </div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${volColor};">${fmt(volPct,1)}% of 30d avg</div>
-      </div>`+
-      [
-        {l:'30d Avg',   v:fmtK(avg30)},
-        {l:'Open 1H',  v:v2.open_1h?fmtK(v2.open_1h)+'  '+fmt(v2.open_1h_pct,1)+'%':'—'},
-        {l:'Close 1H', v:v2.close_1h?fmtK(v2.close_1h)+'  '+fmt(v2.close_1h_pct,1)+'%':'—'},
-        {l:'Peak Time',v:v2.peak_time?v2.peak_time.slice(0,5)+'  '+fmtK(v2.peak_volume||0):'—'},
-        {l:'HVN Price',v:v2.hvn_price?'$'+fmt(v2.hvn_price,2)+'  '+fmtK(v2.hvn_volume||0):'—'},
-      ].map(i=>fmtRow(i.l,i.v)).join('');
+        <div style="text-align:center;margin-bottom:10px;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:24px;font-weight:bold;color:${vc};">${fmtK(vol)}</div>
+          <div style="font-size:11px;color:${vc};margin-top:2px;">${fmt(volPct,1)}% of 30d avg</div>
+        </div>
+        <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:10px;">
+          <div style="width:${Math.min(volPct,100).toFixed(1)}%;height:100%;background:${vc};border-radius:3px;"></div>
+        </div>
+        ${[
+          {l:'Open 1H',  v: va.open_1h  ? fmtK(va.open_1h)+'  '+fmt(va.open_1h_pct||0,1)+'%'  : '—'},
+          {l:'Close 1H', v: va.close_1h ? fmtK(va.close_1h)+'  '+fmt(va.close_1h_pct||0,1)+'%' : '—'},
+          {l:'Peak Time',v: va.peak_time ? va.peak_time.slice(0,5)+'  '+fmtK(va.peak_volume||0) : '—'},
+          {l:'HVN Price',v: va.hvn_price ? '$'+fmt(va.hvn_price,2)+'  '+fmtK(va.hvn_volume||0) : '—'},
+        ].map(i=>fmtRow(i.l,i.v)).join('')}
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:8px;text-align:center;">LIVE DATA AT MARKET OPEN</div>`;
+    } else {
+      // LIVE — full intraday breakdown
+      const vol = lv.volume||0;
+      const volPct = vol&&avg30 ? vol/avg30*100 : 0;
+      const vc = volPct>130?'#ff8800':volPct>100?'#00ff88':volPct>70?'#ffcc00':'var(--text3)';
+      const buckets = lv.buckets||[];
+      const maxBkt = Math.max(...buckets.map(b=>b.volume),1);
+      // Current CT time for highlighting active bucket
+      const nowCT = new Date(Date.now() - 5*3600*1000); // rough CDT
+      const nowMins = nowCT.getUTCHours()*60+nowCT.getUTCMinutes();
+
+      // Pace projection: extrapolate total from current pace
+      const elapsed = Math.max(lv.bars||1, 1);
+      const totalMins = 6.5*60; // full session
+      const paceTotal = Math.round(vol / elapsed * totalMins);
+      const pacePct = paceTotal/avg30*100;
+      const paceColor = pacePct>130?'#ff8800':pacePct>100?'#00ff88':'#ffcc00';
+
+      volSumEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+          <div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${vc};">${fmtK(vol)}</div>
+            <div style="font-size:10px;color:${vc};">${fmt(volPct,1)}% of 30d avg</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">PACE →</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${paceColor};">${fmtK(paceTotal)}</div>
+            <div style="font-size:9px;color:${paceColor};">${fmt(pacePct,0)}% proj</div>
+          </div>
+        </div>
+        <div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:10px;">
+          <div style="width:${Math.min(volPct,100).toFixed(1)}%;height:100%;background:${vc};border-radius:3px;transition:width 1s;"></div>
+        </div>
+
+        <!-- Bucket breakdown -->
+        <div style="margin-bottom:8px;">
+          ${buckets.map(b=>{
+            const bPct = b.pct||0;
+            const barW = maxBkt>0?Math.round(b.volume/maxBkt*100):0;
+            const [sh,sm] = b.label.split('-')[0].split(':').map(Number);
+            const [eh,em] = (b.label.split('-')[1]||'').replace(/[ap]m/,'').split(':').map(Number)||[0,0];
+            const bStart = sh*60+(sm||0), bEnd = eh*60+(em||0);
+            const isActive = nowMins >= bStart && nowMins < bEnd;
+            const bc = isActive?'var(--cyan)':bPct>20?'#00ff88':bPct>10?'#ffcc00':'var(--text3)';
+            return `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;${isActive?'background:rgba(0,204,255,0.05);border-radius:2px;':''}">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isActive?'var(--cyan)':'var(--text3)'};width:62px;flex-shrink:0;">${b.label}${isActive?' ◀':''}</span>
+              <div style="flex:1;height:8px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+                <div style="width:${barW}%;height:100%;background:${bc};border-radius:2px;"></div>
+              </div>
+              <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${bc};width:38px;text-align:right;">${fmt(bPct,1)}%</span>
+              <span style="font-size:9px;color:var(--text3);width:44px;text-align:right;">${fmtK(b.volume)}</span>
+            </div>`;
+          }).join('')}
+        </div>
+
+        <!-- Key stats row -->
+        ${[
+          {l:'30D Avg',  v:fmtK(avg30)},
+          {l:'Open 1H',  v:lv.open_1h  ? fmtK(lv.open_1h)+'  '+fmt(lv.open_1h_pct,1)+'%'  : '—'},
+          {l:'Close 1H', v:lv.close_1h ? fmtK(lv.close_1h)+'  '+fmt(lv.close_1h_pct,1)+'%' : '—'},
+          {l:'Peak Bar',  v:lv.peak_time ? lv.peak_time+'  '+fmtK(lv.peak_volume||0) : '—'},
+          {l:'HVN Price', v:lv.hvn_price ? '$'+fmt(lv.hvn_price,2)+'  '+fmtK(lv.hvn_volume||0) : '—'},
+        ].map(i=>fmtRow(i.l,i.v)).join('')}
+
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-top:6px;text-align:right;">
+          ● LIVE · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC
+        </div>`;
+    }
   }
 
   // Unfilled gaps within $20 of current price
