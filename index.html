@@ -1549,6 +1549,7 @@
   <div class="es-subtab" onclick="esSub('quarterly',this)">QUARTERLY</div>
   <div class="es-subtab" onclick="esSub('yearly',this)">YEARLY</div>
   <div class="es-subtab" onclick="esSub('streaks',this)">STREAKS</div>
+  <div class="es-subtab" onclick="esSub('declines',this)">DECLINE STATS</div>
   <div class="es-subtab" onclick="esSub('recovery',this)">RECOVERY</div>
   <div class="es-subtab" onclick="esSub('political',this)">POLITICAL CYCLE</div>
 </div>
@@ -1647,6 +1648,38 @@
 </div>
 
 <!-- RECOVERY -->
+<!-- DECLINE STATS sub-panel (inside panel-edgestats) -->
+<div class="es-panel" id="es-declines">
+  <div class="es-topbar"><div id="es-decl-lb"></div><div class="es-meta" id="es-decl-meta"></div></div>
+  <div class="es-insight">
+    <strong>How to read this:</strong> A decline event begins when SPY falls from a prior closing-price peak.
+    The <em>depth</em> is the maximum % drop from peak to trough.
+    <em>Conditional probability</em> — given a decline already reached level X, what % historically continued to level Y.
+    This tells you: "if we're already down 10%, how often does it become a 20% crash?"
+    <em>Duration</em> is in trading days (td). Only declines of 2%+ are counted (1993–present).
+  </div>
+  <div class="es-section">HOW OFTEN DOES SPY DECLINE BY THIS MUCH?</div>
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:18px;" id="es-decl-freq-cards"></div>
+  <div class="es-section">CONDITIONAL PROBABILITY — IF IT REACHED X%, WHAT % WENT TO Y%?</div>
+  <p style="color:var(--text3);font-size:12px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;">Read across a row: given a decline already hit the row level, the % chance it extended to each column level.</p>
+  <div style="overflow-x:auto;margin-bottom:18px;"><table style="width:100%;border-collapse:collapse;font-size:13px;" id="es-decl-cond-table"></table></div>
+  <div class="es-section">DURATION &amp; RECOVERY STATISTICS</div>
+  <p style="color:var(--text3);font-size:12px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;">td = trading days · calendar days ≈ td × 1.4</p>
+  <div style="overflow-x:auto;margin-bottom:18px;"><table style="width:100%;border-collapse:collapse;font-size:12px;" id="es-decl-dur-table"></table></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">
+    <div>
+      <div class="es-section">DEPTH DISTRIBUTION — ALL 2%+ DECLINES</div>
+      <div id="es-decl-depth-chart" style="padding:4px 0;"></div>
+    </div>
+    <div>
+      <div class="es-section">ESCALATION — OF DECLINES THAT HIT 5%, HOW DEEP DID THEY GO?</div>
+      <div id="es-decl-escalation-chart" style="padding:4px 0;"></div>
+    </div>
+  </div>
+  <div class="es-section">ALL DECLINES ≥ 10% — DETAIL TABLE</div>
+  <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;" id="es-decl-major-table"></table></div>
+</div>
+
 <div class="es-panel" id="es-recovery">
   <div class="es-topbar"><div id="es-rec-lb"></div><div class="es-meta" id="es-rec-meta"></div></div>
   <div class="es-section">DRAWDOWN EVENTS & RECOVERY TIMES — WEEKLY DATA</div>
@@ -2417,6 +2450,7 @@ function esRenderPolitical(){
 function esRenderAll(){
   esRenderDOW(); esRenderWOM(); esRenderSeasonality(); esRenderQuarterly();
   esRenderYearly(); esRenderStreaks(); esRenderVolEdge(); esRenderRecovery(); esRenderHolidays();
+  if(typeof renderDeclines==='function') renderDeclines();
   esRenderReleases(); esRenderPolitical();
 }
 esRenderAll();
