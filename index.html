@@ -1899,19 +1899,19 @@ let _relLookback = 'all';
 const REL_COLORS = { cpi:'#ff8800', nfp:'#00ccff', fomc:'#8855ff' };
 const REL_LABELS = { cpi:'CPI', nfp:'NFP', fomc:'FOMC' };
 
-function relSetLookback(lb, btn) {
+window.relSetLookback = function(lb, btn) {
   _relLookback = lb;
   document.querySelectorAll('.rel-lb-btn').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   esRenderReleases();
-}
+};
 
-function relSetType(type, btn) {
+window.relSetType = function(type, btn) {
   _relType = type;
   document.querySelectorAll('.rel-type-btn').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   esRenderReleases();
-}
+};
 
 function esRenderReleases(){
   if(typeof RELEASE_DATA === 'undefined') {
