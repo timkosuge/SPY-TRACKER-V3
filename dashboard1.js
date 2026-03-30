@@ -4158,6 +4158,8 @@ function renderExpiryBehavior(md) {
   const now=new Date(), dow=now.getDay();
   const isFri=dow===5, isMonthly=isFri&&now.getDate()>=15&&now.getDate()<=21;
   const E=EXPIRY_DATA;
+  const avg=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
+  const pctFn=(arr,fn)=>arr.length?arr.filter(fn).length/arr.length*100:0;
 
   // Weekend: show Monday preview
   if(dow===0||dow===6){
