@@ -2575,7 +2575,13 @@ window.renderEvMag7 = function() {
   if(typeof MAG7_EARNINGS_DATA==='undefined'){el.innerHTML='<div class="no-data">MAG7 data not loaded</div>';return;}
   if(typeof renderMag7==='function') renderMag7();
   const src=document.getElementById('panel-mag7');
-  if(src) el.innerHTML=src.innerHTML;
+  if(src) {
+    // Clone and strip the first child (lookback button row) so it doesn't duplicate
+    const clone = src.cloneNode(true);
+    const firstDiv = clone.querySelector('div');
+    if(firstDiv && firstDiv.querySelector('.mag7-lb-btn')) firstDiv.remove();
+    el.innerHTML = clone.innerHTML;
+  }
 };
 
 window.vsSubTab = function(id,el) {
