@@ -1015,32 +1015,57 @@ function renderDesk(md,sd){
 
   el.innerHTML=`
     <!-- HEADER ROW 1: Ratios + MAs + date -->
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;padding:4px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:11px;flex-wrap:wrap;">
-      <span style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">SPX:SPY</span>
-      <span style="color:var(--cyan);font-weight:bold;">${spxSpyRatio?fmt(spxSpyRatio,4):(spx&&(cur||prevClose)?fmt(spx/(cur||prevClose),4):'—')}</span>
-      <span style="color:var(--border2);">·</span>
-      <span style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">ES:SPY</span>
-      <span style="color:#ffcc00;font-weight:bold;">${esSpyRatio?fmt(esSpyRatio,4):(es&&(cur||prevClose)?fmt(es/(cur||prevClose),4):'—')}</span>
-      <span style="color:var(--border2);">·</span>
+    <div style="display:flex;gap:0;align-items:stretch;margin-bottom:6px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;overflow:hidden;font-family:'Share Tech Mono',monospace;font-size:11px;">
+
+      <!-- Ratios -->
+      <div style="display:flex;flex-direction:column;justify-content:center;gap:3px;padding:5px 10px;border-right:1px solid var(--border);flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">SPX:SPY</span>
+          <span style="color:var(--cyan);font-weight:bold;font-size:11px;">${spxSpyRatio?fmt(spxSpyRatio,4):(spx&&(cur||prevClose)?fmt(spx/(cur||prevClose),4):'—')}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">ES:SPY</span>
+          <span style="color:#ffcc00;font-weight:bold;font-size:11px;">${esSpyRatio?fmt(esSpyRatio,4):(es&&(cur||prevClose)?fmt(es/(cur||prevClose),4):'—')}</span>
+        </div>
+      </div>
+
+      <!-- Daily SMAs -->
       ${(()=>{
         const c=cur||prevClose||0;
-        if(!c||!sd||sd.length<20) return '<span style="color:var(--text3);font-size:10px;">Loading MAs...</span>';
+        if(!c||!sd||sd.length<20) return '<div style="padding:5px 10px;color:var(--text3);font-size:10px;">Loading MAs...</div>';
         const cl=sd.map(d=>parseFloat(d.close)).filter(v=>v>0);
         const sma=n=>cl.length>=n?cl.slice(0,n).reduce((a,b)=>a+b,0)/n:null;
         const wc=cl.filter((_,i)=>i%5===0);
         const wsma=n=>wc.length>=n?wc.slice(0,n).reduce((a,b)=>a+b,0)/n:null;
-        const mas=[
-          {l:'20D',v:sma(20)},{l:'50D',v:sma(50)},{l:'100D',v:sma(100)},{l:'200D',v:sma(200)},
-          {l:'20W',v:wsma(20)},{l:'50W',v:wsma(50)},{l:'100W',v:wsma(100)}
-        ];
-        return mas.filter(m=>m.v).map(m=>{
-          const d=c-m.v, pc=d/m.v*100, col=d>=0?'#00ff88':'#ff3355';
-          return '<span style="font-family:Orbitron,monospace;font-size:7px;color:var(--text3);">'+m.l+'</span>'+
-            '<span style="color:'+col+';font-size:11px;font-weight:bold;">'+
-            (d>=0?'+':'')+fmt(pc,2)+'%</span>';
-        }).join('<span style="color:var(--border2);">·</span>');
+        const daily=[{n:'20',v:sma(20)},{n:'50',v:sma(50)},{n:'100',v:sma(100)},{n:'200',v:sma(200)}];
+        const weekly=[{n:'20',v:wsma(20)},{n:'50',v:wsma(50)},{n:'100',v:wsma(100)}];
+        const maCell=(m)=>{
+          if(!m.v) return '';
+          const diff=c-m.v, pc=diff/m.v*100, col=diff>=0?'#00ff88':'#ff3355';
+          return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;border-right:1px solid var(--border)22;min-width:72px;">'+
+            '<span style="font-family:Orbitron,monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:1px;">'+m.n+'</span>'+
+            '<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text2);">$'+fmt(m.v,2)+'</span>'+
+            '<span style="font-size:10px;font-weight:bold;color:'+col+';">'+(pc>=0?'+':'')+fmt(pc,2)+'%</span>'+
+            '</div>';
+        };
+        return '<div style="display:flex;align-items:stretch;border-right:1px solid var(--border);">'+
+            '<div style="display:flex;flex-direction:column;justify-content:center;padding:4px 8px;border-right:1px solid var(--border);background:rgba(0,204,255,0.04);">'+
+              '<span style="font-family:Orbitron,monospace;font-size:7px;color:var(--cyan);letter-spacing:1px;writing-mode:horizontal-tb;white-space:nowrap;">DAILY SMAs</span>'+
+            '</div>'+
+            daily.map(maCell).join('')+
+          '</div>'+
+          '<div style="display:flex;align-items:stretch;">'+
+            '<div style="display:flex;flex-direction:column;justify-content:center;padding:4px 8px;border-right:1px solid var(--border);background:rgba(255,204,0,0.04);">'+
+              '<span style="font-family:Orbitron,monospace;font-size:7px;color:#ffcc00;letter-spacing:1px;writing-mode:horizontal-tb;white-space:nowrap;">WEEKLY SMAs</span>'+
+            '</div>'+
+            weekly.map(maCell).join('')+
+          '</div>';
       })()}
-      <span style="margin-left:auto;font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">${new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
+
+      <!-- Date -->
+      <div style="display:flex;align-items:center;padding:5px 10px;margin-left:auto;flex-shrink:0;">
+        <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);white-space:nowrap;">${new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
+      </div>
     </div>
 
     <!-- HEADER ROW 2: Key price levels — all update live via updateLevelBar() -->
