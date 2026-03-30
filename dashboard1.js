@@ -1274,6 +1274,11 @@ function renderDesk(md,sd){
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ UNFILLED GAPS — ALL HISTORY</div>
         <div id="deskGaps"></div>
       </div>
+    </div>
+
+    <!-- TIMESTAMP BAR -->
+    <div id="deskUpdateBar" style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:11px;flex-wrap:wrap;">
+      <span style="color:var(--text3);">Initializing...</span>
     </div>`;
 
   // Fill today's session from live quotes
@@ -1358,8 +1363,8 @@ function renderDeskSession(md,sd){
       const buckets = lv.buckets||[];
       const maxBkt = Math.max(...buckets.map(b=>b.volume),1);
       // Current CT time for highlighting active bucket
-      const nowCT = new Date(Date.now() - 5*3600*1000); // rough CDT
-      const nowMins = nowCT.getUTCHours()*60+nowCT.getUTCMinutes();
+      const nowCT = new Date(new Date().toLocaleString('en-US', {timeZone:'America/Chicago'}));
+      const nowMins = nowCT.getHours()*60+nowCT.getMinutes();
 
       // Pace projection: extrapolate total from current pace
       const elapsed = Math.max(lv.bars||1, 1);
