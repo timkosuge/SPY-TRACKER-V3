@@ -2815,6 +2815,20 @@ function updateLevelBar(price) {
     { lbl: 'CUR YR OPEN',   sub: fmt2(lv.yearOpen),        lvl: lv.yearOpen,        accent: '#8855ff' },
   ];
 
+  // Also patch live CHG/OPEN cell in price panel
+  const chgOpenEl = document.getElementById('deskChgOpen');
+  if (chgOpenEl) {
+    const todayOpenLive = window._spyLevels?.todayOpen || 0;
+    const chgFromOpen = price && todayOpenLive ? price - todayOpenLive : null;
+    const chgFromOpenPct = chgFromOpen && todayOpenLive ? chgFromOpen / todayOpenLive * 100 : null;
+    const cc2 = n => n >= 0 ? '#00ff88' : '#ff3355';
+    const cs2 = n => n >= 0 ? '+' : '';
+    if (chgFromOpen != null) {
+      chgOpenEl.style.color = cc2(chgFromOpen);
+      chgOpenEl.innerHTML = `<div style="font-size:12px;">${cs2(chgFromOpen)}${chgFromOpen.toFixed(2)}</div><div style="font-size:10px;">${cs2(chgFromOpenPct)}${chgFromOpenPct.toFixed(2)}%</div>`;
+    }
+  }
+
   el.innerHTML = levels.map(({ lbl, sub, lvl, accent }) => {
     const { d, p } = dist(lvl);
     const abv = d != null && d >= 0;
@@ -2840,6 +2854,10 @@ function mergeLiveData(md, liveQuotes, liveFG) {
   }
   if (liveFG) merged.fear_greed = liveFG;
   merged.updated = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
+  // Keep todayOpen in _spyLevels current so CHG/OPEN cell stays accurate
+  if (window._spyLevels && merged.quotes?.['SPY']?.open) {
+    window._spyLevels.todayOpen = merged.quotes['SPY'].open;
+  }
   return merged;
 }
 
@@ -2864,6 +2882,57 @@ function isExtendedHours() {
   if (dow === 0 || dow === 6) return false;
   const mins = et.getHours() * 60 + et.getMinutes();
   return mins >= 4 * 60 && mins < 16 * 60;
+}
+
+// Fetch and cache Monday's (week) open price so CUR WK OPEN level bar is always live
+async function fetchWeekOpen() {
+  try {
+    // Get current week's Monday date
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    const day = now.getDay(); // 0=Sun,1=Mon,...
+    const daysBack = day === 0 ? 6 : day - 1; // days since Monday
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - daysBack);
+    const mondayStr = monday.toISOString().slice(0, 10);
+
+    // Fetch Monday's 1d bar from Yahoo via our /quotes CF function
+    const r = await fetch(`/quotes?symbols=SPY`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const spyQ = data.quotes?.['SPY'];
+    if (!spyQ) return;
+
+    // If today IS Monday, use today's open directly
+    const todayCT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    const isMon = todayCT.getDay() === 1;
+    if (isMon && spyQ.open) {
+      window._spyWeekOpen = spyQ.open;
+      if (window._spyLevels) window._spyLevels.weekOpen = spyQ.open;
+      return;
+    }
+
+    // Otherwise fetch the actual Monday bar from Yahoo chart API via CF
+    const p1 = Math.floor(new Date(mondayStr + 'T13:30:00Z').getTime() / 1000);
+    const p2 = p1 + 3600; // 1 hour of bars is enough to get open
+    const chartR = await fetch(`/quotes?symbols=SPY&chart=1&p1=${p1}&p2=${p2}`);
+    // /quotes doesn't support chart — fall back to sd data already in memory
+    if (_sd && _sd.length) {
+      const thisWeek = (() => {
+        const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+        const dow = d.getDay();
+        const mon = new Date(d);
+        mon.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+        return mon.toISOString().slice(0, 10);
+      })();
+      const todayStr2 = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })).toISOString().slice(0, 10);
+      const weekRows = _sd.filter(r => r.date >= thisWeek && r.date <= todayStr2);
+      const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
+      if (firstDay?.open) {
+        window._spyWeekOpen = firstDay.open;
+        if (window._spyLevels) window._spyLevels.weekOpen = firstDay.open;
+      }
+    }
+  } catch(e) {}
 }
 
 // Schedules the next live-quote refresh at the appropriate interval
@@ -2900,6 +2969,7 @@ async function refreshLiveData() {
       if (freshSd && freshSd.length) _sd = freshSd;
       _lastStaticRefresh = now;
       updateStaticTimestamp();
+      fetchWeekOpen(); // refresh week open from fresh sd data
     } catch(e) {
       console.warn('Static JSON re-fetch failed:', e);
     }
@@ -3027,6 +3097,7 @@ async function loadData(){
     
     // Fix 2: Dynamic interval — 15s during market hours, 60s otherwise
     _lastStaticRefresh = Date.now(); // mark static data as just loaded
+    fetchWeekOpen(); // set week open immediately on load
     updateStaticTimestamp();
     scheduleLiveRefresh();
     setInterval(async () => {
