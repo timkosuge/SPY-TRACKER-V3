@@ -421,7 +421,6 @@
     <div class="subtab active" onclick="switchGroupSub('options',this)">OPTIONS</div>
     <div class="subtab" onclick="switchGroupSub('gex',this)">⬡ GEX</div>
     <div class="subtab" onclick="switchGroupSub('wem',this)">EXPECTED MOVE</div>
-    <div class="subtab" onclick="switchGroupSub('volatility',this)">VOLATILITY</div>
   </div>
   <!-- Macro subtabs -->
   <div class="subtab-group" id="subtabs-macro" style="display:none;">
@@ -436,6 +435,8 @@
     <div class="subtab" onclick="switchGroupSub('edgestats',this)">STATS</div>
     <div class="subtab" onclick="switchGroupSub('analog',this)">⬡ ANALOG FINDER</div>
     <div class="subtab" onclick="switchGroupSub('mag7',this)">MAG 7 EARNINGS</div>
+    <div class="subtab" onclick="switchGroupSub('volatility',this)">VOLATILITY</div>
+    <div class="subtab" onclick="switchGroupSub('events',this)">EVENTS</div>
   </div>
 </div>
 
@@ -1155,6 +1156,69 @@
     </div>
   </div>
 
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     EVENTS TAB
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-events">
+<style>
+  .ev-section{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);border-bottom:1px solid var(--border);padding-bottom:7px;margin-bottom:14px;margin-top:26px;display:flex;align-items:center;gap:9px;}
+  .ev-section:first-child{margin-top:0;}
+  .ev-section::before{content:'';width:3px;height:12px;background:var(--cyan);border-radius:2px;flex-shrink:0;}
+  .ev-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px;}
+  .ev-col{display:flex;flex-direction:column;gap:16px;}
+  .ev-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px;}
+  .ev-card-title{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1.5px;margin-bottom:12px;}
+  .ev-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(37,37,69,0.5);font-size:12px;}
+  .ev-row:last-child{border-bottom:none;}
+  .ev-date{font-family:'Share Tech Mono',monospace;color:var(--text3);font-size:11px;width:80px;flex-shrink:0;}
+  .ev-label{color:var(--text2);flex:1;padding:0 8px;}
+  .ev-badge{font-family:'Orbitron',monospace;font-size:8px;padding:2px 6px;border-radius:3px;flex-shrink:0;}
+  .ev-badge.fomc{background:rgba(136,85,255,0.2);color:#8855ff;border:1px solid rgba(136,85,255,0.4);}
+  .ev-badge.cpi{background:rgba(255,136,0,0.2);color:#ff8800;border:1px solid rgba(255,136,0,0.4);}
+  .ev-badge.nfp{background:rgba(0,204,255,0.2);color:#00ccff;border:1px solid rgba(0,204,255,0.4);}
+  .ev-badge.earn{background:rgba(0,255,136,0.15);color:#00ff88;border:1px solid rgba(0,255,136,0.3);}
+  .ev-badge.hol{background:rgba(255,204,0,0.15);color:#ffcc00;border:1px solid rgba(255,204,0,0.3);}
+  .ev-badge.pol{background:rgba(255,51,85,0.15);color:#ff3355;border:1px solid rgba(255,51,85,0.3);}
+  .ev-countdown{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--cyan);width:55px;text-align:right;flex-shrink:0;}
+  .ev-today{border-left:2px solid var(--cyan);padding-left:6px;background:rgba(0,204,255,0.04);}
+  .ev-past{opacity:0.4;}
+</style>
+<div class="ev-grid">
+  <div class="ev-col">
+    <div class="ev-card">
+      <div class="ev-card-title" style="color:var(--cyan);">⬡ UPCOMING EVENTS — NEXT 60 DAYS</div>
+      <div id="evUpcoming"><div class="no-data">Loading...</div></div>
+    </div>
+    <div class="ev-card">
+      <div class="ev-card-title" style="color:#8855ff;">⬡ FOMC CALENDAR</div>
+      <div id="evFomc"><div class="no-data">Loading...</div></div>
+    </div>
+    <div class="ev-card">
+      <div class="ev-card-title" style="color:#ff8800;">⬡ CPI / INFLATION RELEASES</div>
+      <div id="evCpi"><div class="no-data">Loading...</div></div>
+    </div>
+  </div>
+  <div class="ev-col">
+    <div class="ev-card">
+      <div class="ev-card-title" style="color:#00ff88;">⬡ MAG 7 EARNINGS WINDOWS</div>
+      <div id="evEarnings"><div class="no-data">Loading...</div></div>
+    </div>
+    <div class="ev-card">
+      <div class="ev-card-title" style="color:#00ccff;">⬡ NFP / JOBS RELEASES</div>
+      <div id="evNfp"><div class="no-data">Loading...</div></div>
+    </div>
+    <div class="ev-card">
+      <div class="ev-card-title" style="color:#ffcc00;">⬡ MARKET HOLIDAYS</div>
+      <div id="evHolidays"><div class="no-data">Loading...</div></div>
+    </div>
+    <div class="ev-card">
+      <div class="ev-card-title" style="color:#ff3355;">⬡ POLITICAL / MACRO CYCLE</div>
+      <div id="evPolitical"><div class="no-data">Loading...</div></div>
+    </div>
+  </div>
+</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
