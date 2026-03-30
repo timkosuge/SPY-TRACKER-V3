@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id);
 const GROUP_TABS = {
   derivatives: ['options','gex','wem','volatility'],
   macro:       ['bonds','breadth','sentiment'],
-  history:     ['pricehistory','volhistory','edgestats','analog','mag7','events']
+  history:     ['pricehistory','volhistory','edgestats','events','volstats','analog','mag7']
 };
 const TAB_TO_GROUP = {};
 Object.entries(GROUP_TABS).forEach(([g,tabs]) => tabs.forEach(t => TAB_TO_GROUP[t]=g));
@@ -57,6 +57,7 @@ function _switchPanelOnly(id) {
   if(id==='analog') { renderAnalog(); }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { renderEvents(); } catch(e){ console.warn('events:',e); } }
+  if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
   if(id==='edgestats') { if(typeof renderEdgeStats==='function') renderEdgeStats(); }
   if(id==='breadth' && _md && _sd) { try { renderBreadth(_md,_sd); } catch(e){} }
