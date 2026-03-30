@@ -2803,7 +2803,10 @@ async function fetchSPYIntraday() {
     const r = await fetch('/spyintraday');
     if (r.ok) {
       const d = await r.json();
-      if (d.open) return d;
+      // Always return the response — callers check d.available themselves.
+      // Checking d.open here meant pre-market responses (available:false, no open)
+      // were silently dropped, preventing the volume panel from updating.
+      if (d) return d;
     }
   } catch(e) {}
   return null;
