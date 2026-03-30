@@ -14,10 +14,21 @@ export async function onRequest(context) {
     // period1/period2 in unix seconds
     const now = new Date();
 
-    // Pre-market window: 3:00am CT = 8:00am UTC, 8:30am CT = 13:30am UTC
+    // Pre-market window: 3:00am CT – 8:30am CT, adjusted for DST via Intl
+    // Cloudflare Workers run in UTC so we can't use getTimezoneOffset()
+    const ctOffsetHrs = (() => {
+      const s = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago', hour: 'numeric', hour12: false, timeZoneName: 'shortOffset'
+      }).format(now);
+      const m = s.match(/GMT([+-]\d+)/);
+      return m ? parseInt(m[1]) : -5;
+    })();
     const todayStr = now.toISOString().slice(0, 10);
-    const pmStart = new Date(`${todayStr}T08:00:00Z`); // 3am CT
-    const pmEnd   = new Date(`${todayStr}T13:30:00Z`); // 8:30am CT
+    // 3:00am CT in UTC = 3:00 - ctOffsetHrs hours  (e.g. CDT=-5 → 8:00 UTC, CST=-6 → 9:00 UTC)
+    const pmStartUTC = 3 - ctOffsetHrs; // hours offset from midnight UTC
+    const pmEndUTC   = 8.5 - ctOffsetHrs; // 8:30am CT in UTC hours
+    const pmStart = new Date(`${todayStr}T${String(pmStartUTC).padStart(2,'0')}:00:00Z`);
+    const pmEnd   = new Date(`${todayStr}T${String(Math.floor(pmEndUTC)).padStart(2,'0')}:${pmEndUTC%1===0.5?'30':'00'}:00Z`);
 
     const p1 = Math.floor(pmStart.getTime() / 1000);
     const p2 = Math.floor(Math.min(pmEnd.getTime(), now.getTime()) / 1000);
