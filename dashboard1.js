@@ -56,7 +56,7 @@ function _switchPanelOnly(id) {
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
-  if(id==='events') { try { renderEvents(); } catch(e){ console.warn('events:',e); } }
+  if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
   if(id==='edgestats') { if(typeof renderEdgeStats==='function') renderEdgeStats(); }
