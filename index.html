@@ -1482,11 +1482,11 @@
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
     <div class="panel">
       <div class="panel-label" id="rel-chart-label">⬡ DAY-OF RETURN DISTRIBUTION</div>
-      <canvas id="relReturnChart" height="180"></canvas>
+      <div id="relReturnChart"></div>
     </div>
     <div class="panel">
       <div class="panel-label">⬡ BEFORE / DAY-OF / AFTER · AVG RETURN</div>
-      <canvas id="relWindowChart" height="180"></canvas>
+      <div id="relWindowChart"></div>
     </div>
   </div>
 
@@ -1985,93 +1985,62 @@ function esRenderReleases(){
     </div>`;
   }
 
-  // ── Return distribution chart (bar chart of day-of returns) ─────────────
+  // ── Return distribution chart — pure HTML (no canvas offsetWidth issues) ──
   const retCanvas = document.getElementById('relReturnChart');
   if(retCanvas) {
-    const ctx = retCanvas.getContext('2d');
-    const W = retCanvas.offsetWidth || 400;
-    const H = 180;
-    retCanvas.width = W; retCanvas.height = H;
-    ctx.clearRect(0,0,W,H);
-
-    // Sort returns into buckets
-    const buckets = [-6,-4,-2,-1,0,1,2,4,6];
-    const counts = new Array(buckets.length+1).fill(0);
-    dayRets.forEach(r => {
-      let i = buckets.findIndex(b => r < b);
-      if(i<0) i = buckets.length;
-      counts[i]++;
-    });
-    const labels = ['<-6','−4','−2','−1','0','1','2','4','>6'];
-    const maxC = Math.max(...counts);
-    const pad = {l:30,r:10,t:20,b:30};
-    const bw = (W-pad.l-pad.r)/counts.length;
-
-    counts.forEach((c,i) => {
-      const midVal = i < buckets.length ? (buckets[i] + (buckets[i-1]||buckets[i]-2))/2 : 6;
-      const bc = midVal > 0 ? '#00ff8888' : midVal < 0 ? '#ff335588' : '#ffcc0088';
-      const bh = (c/maxC)*(H-pad.t-pad.b);
-      const x = pad.l + i*bw;
-      const y = H-pad.b-bh;
-      ctx.fillStyle = bc;
-      ctx.fillRect(x+2, y, bw-4, bh);
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font = '9px Share Tech Mono';
-      ctx.textAlign = 'center';
-      ctx.fillText(labels[i], x+bw/2, H-pad.b+12);
-      if(c>0) ctx.fillText(c, x+bw/2, y-3);
-    });
-
-    // Zero line
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.beginPath(); ctx.moveTo(pad.l,H-pad.b); ctx.lineTo(W-pad.r,H-pad.b); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = '9px Orbitron';
-    ctx.textAlign = 'left';
-    ctx.fillText('Day-of return (%)', pad.l, 14);
+    const buckets = [
+      {label:'< −4%', min:-99, max:-4},
+      {label:'−4 to −2', min:-4, max:-2},
+      {label:'−2 to −1', min:-2, max:-1},
+      {label:'−1 to 0',  min:-1, max:0},
+      {label:'0 to +1',  min:0,  max:1},
+      {label:'+1 to +2', min:1,  max:2},
+      {label:'+2 to +4', min:2,  max:4},
+      {label:'> +4%',   min:4,  max:99},
+    ];
+    const counts = buckets.map(b => dayRets.filter(r => r >= b.min && r < b.max).length);
+    const maxC = Math.max(...counts, 1);
+    const isPos = b => b.min >= 0;
+    retCanvas.innerHTML = `<div style="display:flex;align-items:flex-end;gap:3px;height:140px;padding:8px 4px 0;">
+      ${buckets.map((b,i) => {
+        const c = counts[i];
+        const pct = c/maxC*100;
+        const bc = b.min >= 0 ? '#00ff88' : b.max <= 0 ? '#ff3355' : '#ffcc00';
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+          <div style="font-size:9px;color:rgba(255,255,255,0.5);">${c||''}</div>
+          <div style="width:100%;height:${Math.max(pct,2).toFixed(0)}%;background:${bc}99;border-radius:2px 2px 0 0;min-height:${c?4:0}px;"></div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:3px;padding:0 4px;">
+      ${buckets.map(b=>`<div style="flex:1;text-align:center;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text3);white-space:nowrap;overflow:hidden;">${b.label}</div>`).join('')}
+    </div>`;
   }
 
-  // ── Before/During/After window chart ────────────────────────────────────
+  // ── Before/Day-Of/After window chart — pure HTML ─────────────────────────
   const winCanvas = document.getElementById('relWindowChart');
   if(winCanvas) {
-    const ctx = winCanvas.getContext('2d');
-    const W = winCanvas.offsetWidth || 400;
-    const H = 180;
-    winCanvas.width = W; winCanvas.height = H;
-    ctx.clearRect(0,0,W,H);
-
+    const avgB = avg(beforeRets), avgD = avg(dayRets), avgA = avg(afterRets);
     const vals = [
-      { l:'5d Before', v: avg(beforeRets), c: avg(beforeRets)>=0?'#00ff88':'#ff3355' },
-      { l:'Day-Of',    v: avg(dayRets),    c: avg(dayRets)>=0?'#00ff88':'#ff3355' },
-      { l:'5d After',  v: avg(afterRets),  c: avg(afterRets)>=0?'#00ff88':'#ff3355' },
+      {l:'5d BEFORE', v:avgB, n:beforeRets.length, wu:pctUp(beforeRets,r=>r>0)},
+      {l:'DAY-OF',    v:avgD, n:n,                 wu:pctUp(dayRets,r=>r>0)},
+      {l:'5d AFTER',  v:avgA, n:afterRets.length,  wu:pctUp(afterRets,r=>r>0)},
     ];
-    const maxAbs = Math.max(...vals.map(v=>Math.abs(v.v)), 0.5);
-    const pad = {l:10,r:10,t:30,b:40};
-    const bw = (W-pad.l-pad.r)/vals.length;
-    const midY = pad.t + (H-pad.t-pad.b)/2;
-
-    // Zero line
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.setLineDash([4,4]);
-    ctx.beginPath(); ctx.moveTo(pad.l,midY); ctx.lineTo(W-pad.r,midY); ctx.stroke();
-    ctx.setLineDash([]);
-
-    vals.forEach((v,i) => {
-      const bh = (Math.abs(v.v)/maxAbs)*((H-pad.t-pad.b)/2);
-      const x = pad.l + i*bw + bw*0.15;
-      const bwActual = bw*0.7;
-      const y = v.v >= 0 ? midY - bh : midY;
-      ctx.fillStyle = v.c + 'aa';
-      ctx.fillRect(x, y, bwActual, bh);
-      // Label
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.font = '9px Share Tech Mono';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${v.v>=0?'+':''}${v.v.toFixed(3)}%`, x+bwActual/2, v.v>=0?y-5:y+bh+12);
-      ctx.fillStyle = v.c;
-      ctx.font = '8px Orbitron';
-      ctx.fillText(v.l, x+bwActual/2, H-12);
-    });
+    const maxAbs = Math.max(...vals.map(v=>Math.abs(v.v)), 0.3);
+    const maxBarH = 100; // px
+    winCanvas.innerHTML = `<div style="display:flex;gap:12px;align-items:center;justify-content:space-around;height:160px;padding:8px;">
+      ${vals.map(v => {
+        const bc = v.v>=0?'#00ff88':'#ff3355';
+        const barH = Math.abs(v.v)/maxAbs*maxBarH;
+        const isPos = v.v >= 0;
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${bc};font-weight:bold;">${v.v>=0?'+':''}${v.v.toFixed(3)}%</div>
+          <div style="width:60%;height:${barH.toFixed(0)}px;background:${bc}99;border-radius:${isPos?'4px 4px 0 0':'0 0 4px 4px'};min-height:4px;"></div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${bc};letter-spacing:1px;">${v.l}</div>
+          <div style="font-size:10px;color:var(--text3);">${v.wu.toFixed(0)}% up · n=${v.n}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
   }
 
   // ── Event log table ──────────────────────────────────────────────────────
