@@ -2815,7 +2815,7 @@ function updateLevelBar(price) {
     { lbl: 'CUR YR OPEN',   sub: fmt2(lv.yearOpen),        lvl: lv.yearOpen,        accent: '#8855ff' },
   ];
 
-  // Also patch live CHG/OPEN cell in price panel
+  // Also patch live CHG/OPEN cell in price panel on every tick
   const chgOpenEl = document.getElementById('deskChgOpen');
   if (chgOpenEl) {
     const todayOpenLive = window._spyLevels?.todayOpen || 0;
@@ -2825,7 +2825,7 @@ function updateLevelBar(price) {
     const cs2 = n => n >= 0 ? '+' : '';
     if (chgFromOpen != null) {
       chgOpenEl.style.color = cc2(chgFromOpen);
-      chgOpenEl.innerHTML = `<div style="font-size:12px;">${cs2(chgFromOpen)}${chgFromOpen.toFixed(2)}</div><div style="font-size:10px;">${cs2(chgFromOpenPct)}${chgFromOpenPct.toFixed(2)}%</div>`;
+      chgOpenEl.innerHTML = `<div style="font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;">${cs2(chgFromOpen)}${chgFromOpen.toFixed(2)}</div><div style="font-size:10px;">${cs2(chgFromOpenPct)}${chgFromOpenPct.toFixed(2)}%</div>`;
     }
   }
 
@@ -2902,12 +2902,17 @@ async function fetchWeekOpen() {
     const spyQ = data.quotes?.['SPY'];
     if (!spyQ) return;
 
-    // If today IS Monday, use today's open directly
+    // Store todayOpen immediately for CHG/OPEN calculation
+    if (spyQ.open && window._spyLevels) {
+      window._spyLevels.todayOpen = spyQ.open;
+    }
+    // If today IS Monday, week open = today's open
     const todayCT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
     const isMon = todayCT.getDay() === 1;
     if (isMon && spyQ.open) {
       window._spyWeekOpen = spyQ.open;
       if (window._spyLevels) window._spyLevels.weekOpen = spyQ.open;
+      updateLevelBar(window._spyLevels?.cur); // re-render level bar with correct week open
       return;
     }
 
@@ -2929,7 +2934,10 @@ async function fetchWeekOpen() {
       const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
       if (firstDay?.open) {
         window._spyWeekOpen = firstDay.open;
-        if (window._spyLevels) window._spyLevels.weekOpen = firstDay.open;
+        if (window._spyLevels) {
+          window._spyLevels.weekOpen = firstDay.open;
+          updateLevelBar(window._spyLevels.cur); // refresh level bar with correct week open
+        }
       }
     }
   } catch(e) {}
