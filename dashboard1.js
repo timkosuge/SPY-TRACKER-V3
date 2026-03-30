@@ -4519,7 +4519,7 @@ let _mag7Lookback = 'all';
 
 window.mag7SetLookback = function(lb, btn) {
   _mag7Lookback = lb;
-  document.querySelectorAll('#panel-mag7 .rel-lb-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.mag7-lb-btn').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   renderMag7();
 };
@@ -4536,6 +4536,14 @@ function renderMag7() {
   if(typeof MAG7_EARNINGS_DATA === 'undefined') return;
   const D = MAG7_EARNINGS_DATA;
   const allResults = D.results;
+
+  // Sync button active states to current lookback value
+  document.querySelectorAll('.mag7-lb-btn').forEach(b => b.classList.remove('active'));
+  const activeBtn = document.getElementById(
+    _mag7Lookback === 'r2023' ? 'mag7lb-r2023' :
+    _mag7Lookback === 'r2026' ? 'mag7lb-r2026' : 'mag7lb-all'
+  );
+  if(activeBtn) activeBtn.classList.add('active');
 
   // Filter by lookback
   let results;
