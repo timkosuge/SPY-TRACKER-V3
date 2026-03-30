@@ -1014,13 +1014,32 @@ function renderDesk(md,sd){
   const cs = n => n >= 0 ? '+' : '';
 
   el.innerHTML=`
-    <!-- HEADER ROW 1: Ratios + date -->
-    <div style="display:flex;gap:16px;align-items:center;margin-bottom:6px;padding:4px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:11px;">
+    <!-- HEADER ROW 1: Ratios + MAs + date -->
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;padding:4px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:11px;flex-wrap:wrap;">
       <span style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">SPX:SPY</span>
       <span style="color:var(--cyan);font-weight:bold;">${spxSpyRatio?fmt(spxSpyRatio,4):(spx&&(cur||prevClose)?fmt(spx/(cur||prevClose),4):'—')}</span>
       <span style="color:var(--border2);">·</span>
       <span style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">ES:SPY</span>
       <span style="color:#ffcc00;font-weight:bold;">${esSpyRatio?fmt(esSpyRatio,4):(es&&(cur||prevClose)?fmt(es/(cur||prevClose),4):'—')}</span>
+      <span style="color:var(--border2);">·</span>
+      ${(()=>{
+        const c=cur||prevClose||0;
+        if(!c||!sd||sd.length<20) return '<span style="color:var(--text3);font-size:10px;">Loading MAs...</span>';
+        const cl=sd.map(d=>parseFloat(d.close)).filter(v=>v>0);
+        const sma=n=>cl.length>=n?cl.slice(0,n).reduce((a,b)=>a+b,0)/n:null;
+        const wc=cl.filter((_,i)=>i%5===0);
+        const wsma=n=>wc.length>=n?wc.slice(0,n).reduce((a,b)=>a+b,0)/n:null;
+        const mas=[
+          {l:'20D',v:sma(20)},{l:'50D',v:sma(50)},{l:'100D',v:sma(100)},{l:'200D',v:sma(200)},
+          {l:'20W',v:wsma(20)},{l:'50W',v:wsma(50)},{l:'100W',v:wsma(100)}
+        ];
+        return mas.filter(m=>m.v).map(m=>{
+          const d=c-m.v, pc=d/m.v*100, col=d>=0?'#00ff88':'#ff3355';
+          return '<span style="font-family:Orbitron,monospace;font-size:7px;color:var(--text3);">'+m.l+'</span>'+
+            '<span style="color:'+col+';font-size:11px;font-weight:bold;">'+
+            (d>=0?'+':'')+fmt(pc,2)+'%</span>';
+        }).join('<span style="color:var(--border2);">·</span>');
+      })()}
       <span style="margin-left:auto;font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">${new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
     </div>
 
