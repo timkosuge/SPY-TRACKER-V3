@@ -437,7 +437,6 @@
     <div class="subtab" onclick="switchGroupSub('events',this)">EVENTS</div>
     <div class="subtab" onclick="switchGroupSub('volstats',this)">VOLATILITY STATS</div>
     <div class="subtab" onclick="switchGroupSub('analog',this)">⬡ ANALOG FINDER</div>
-    <div class="subtab" onclick="switchGroupSub('declines',this)">DECLINE STATS</div>
   </div>
 </div>
 
@@ -1101,14 +1100,25 @@
   <!-- Aggregate stat cards -->
   <div id="mag7Cards" style="margin-bottom:14px;"></div>
 
-  <!-- Two charts: pre-run bar chart + full window scatter -->
+  <!-- Two charts: window bar chart + pre-earnings drift histogram -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
     <div class="panel">
       <div class="panel-label">⬡ SPY RETURN BY WINDOW — AVG % ACROSS ALL QUARTERS</div>
+      <div style="font-size:11px;color:var(--text3);padding:6px 8px 2px;line-height:1.5;">
+        Average SPY % return across 6 windows surrounding MAG 7 earnings clusters.
+        <strong style="color:#ffcc00;">Pre</strong> = drift before earnings begin.
+        <strong style="color:var(--cyan);">During</strong> = while companies report.
+        <strong style="color:#8855ff;">Post</strong> = aftermath.
+        <strong style="color:#00ff88;">Full</strong> = entire window combined.
+      </div>
       <div id="mag7WindowChart"></div>
     </div>
     <div class="panel">
       <div class="panel-label">⬡ 3-DAY PRE-EARNINGS DRIFT — ALL QUARTERS</div>
+      <div style="font-size:11px;color:var(--text3);padding:6px 8px 2px;line-height:1.5;">
+        Distribution of SPY's 3-day return immediately before each MAG 7 earnings cluster starts.
+        Shows whether there is a consistent pre-earnings drift pattern (risk-on positioning).
+      </div>
       <div id="mag7PreChart"></div>
     </div>
   </div>
@@ -1187,10 +1197,18 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
       <div class="panel">
         <div class="panel-label" id="ev-chart-label">⬡ DAY-OF RETURN DISTRIBUTION</div>
+        <div style="font-size:11px;color:var(--text3);padding:6px 8px 2px;line-height:1.5;">
+          Each bar = how often SPY closed in that return bucket on the release day itself. 
+          A right-skewed distribution means the event tends to push SPY higher; left-skewed means it drags.
+        </div>
         <div id="evReturnChart2"></div>
       </div>
       <div class="panel">
         <div class="panel-label">⬡ BEFORE / DAY-OF / AFTER · AVG RETURN</div>
+        <div style="font-size:11px;color:var(--text3);padding:6px 8px 2px;line-height:1.5;">
+          Average SPY % return in the 5 days before, on the release day, and 5 days after. 
+          A tall "Before" bar = pre-event drift edge. Positive "After" = post-release momentum.
+        </div>
         <div id="evWindowChart2"></div>
       </div>
     </div>
@@ -1207,6 +1225,12 @@
 
   <!-- MAG 7 EARNINGS -->
   <div class="es-panel" id="ev-mag7earnings" style="padding:20px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;">LOOKBACK:</span>
+      <button class="rel-lb-btn active" id="ev-mag7lb-all"   onclick="evMag7Lookback('all',this)">2020–2024</button>
+      <button class="rel-lb-btn" id="ev-mag7lb-r2023"        onclick="evMag7Lookback('r2023',this)">2023–2024</button>
+      <button class="rel-lb-btn" id="ev-mag7lb-r2026"        onclick="evMag7Lookback('r2026',this)">2026</button>
+    </div>
     <div id="evMag7Content"><div class="no-data">Loading...</div></div>
   </div>
 
@@ -2530,6 +2554,19 @@ window.renderEvReleases = function() {
   if(l1&&s1) l1.textContent=s1.textContent;
   const l2=document.getElementById('ev-table-label'),s2=document.getElementById('rel-table-label');
   if(l2&&s2) l2.textContent=s2.textContent;
+};
+
+window.evMag7Lookback = function(lb, btn) {
+  // Sync with the underlying mag7 lookback and re-render
+  if(typeof mag7SetLookback === 'function') {
+    // Find the matching mag7 button in panel-mag7 and click it
+    const map = {all:'mag7lb-all', r2023:'mag7lb-r2023', r2026:'mag7lb-r2026'};
+    const srcBtn = document.getElementById(map[lb]);
+    if(srcBtn) mag7SetLookback(lb, srcBtn);
+  }
+  document.querySelectorAll('#ev-mag7earnings .rel-lb-btn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  window.renderEvMag7();
 };
 
 window.renderEvMag7 = function() {
