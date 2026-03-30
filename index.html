@@ -434,9 +434,10 @@
     <div class="subtab active" onclick="switchGroupSub('pricehistory',this)">PRICE HISTORY</div>
     <div class="subtab" onclick="switchGroupSub('volhistory',this)">VOLUME HISTORY</div>
     <div class="subtab" onclick="switchGroupSub('edgestats',this)">STATS</div>
+    <div class="subtab" onclick="switchGroupSub('events',this)">EVENTS</div>
+    <div class="subtab" onclick="switchGroupSub('volstats',this)">VOLATILITY STATS</div>
     <div class="subtab" onclick="switchGroupSub('analog',this)">⬡ ANALOG FINDER</div>
     <div class="subtab" onclick="switchGroupSub('mag7',this)">MAG 7 EARNINGS</div>
-    <div class="subtab" onclick="switchGroupSub('events',this)">EVENTS</div>
   </div>
 </div>
 
@@ -1163,60 +1164,27 @@
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-events">
 <style>
-  .ev-section{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);border-bottom:1px solid var(--border);padding-bottom:7px;margin-bottom:14px;margin-top:26px;display:flex;align-items:center;gap:9px;}
-  .ev-section:first-child{margin-top:0;}
-  .ev-section::before{content:'';width:3px;height:12px;background:var(--cyan);border-radius:2px;flex-shrink:0;}
-  .ev-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px;}
-  .ev-col{display:flex;flex-direction:column;gap:16px;}
-  .ev-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px;}
+  .ev-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:12px;}
   .ev-card-title{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1.5px;margin-bottom:12px;}
-  .ev-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(37,37,69,0.5);font-size:12px;}
+  .ev-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(37,37,69,0.5);font-size:12px;gap:6px;}
   .ev-row:last-child{border-bottom:none;}
-  .ev-date{font-family:'Share Tech Mono',monospace;color:var(--text3);font-size:11px;width:80px;flex-shrink:0;}
-  .ev-label{color:var(--text2);flex:1;padding:0 8px;}
+  .ev-date{font-family:'Share Tech Mono',monospace;color:var(--text3);font-size:11px;width:90px;flex-shrink:0;}
+  .ev-label{color:var(--text2);flex:1;}
   .ev-badge{font-family:'Orbitron',monospace;font-size:8px;padding:2px 6px;border-radius:3px;flex-shrink:0;}
   .ev-badge.fomc{background:rgba(136,85,255,0.2);color:#8855ff;border:1px solid rgba(136,85,255,0.4);}
   .ev-badge.cpi{background:rgba(255,136,0,0.2);color:#ff8800;border:1px solid rgba(255,136,0,0.4);}
   .ev-badge.nfp{background:rgba(0,204,255,0.2);color:#00ccff;border:1px solid rgba(0,204,255,0.4);}
   .ev-badge.earn{background:rgba(0,255,136,0.15);color:#00ff88;border:1px solid rgba(0,255,136,0.3);}
   .ev-badge.hol{background:rgba(255,204,0,0.15);color:#ffcc00;border:1px solid rgba(255,204,0,0.3);}
-  .ev-badge.pol{background:rgba(255,51,85,0.15);color:#ff3355;border:1px solid rgba(255,51,85,0.3);}
   .ev-countdown{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--cyan);width:55px;text-align:right;flex-shrink:0;}
   .ev-today{border-left:2px solid var(--cyan);padding-left:6px;background:rgba(0,204,255,0.04);}
   .ev-past{opacity:0.4;}
 </style>
-<div class="ev-grid">
-  <div class="ev-col">
-    <div class="ev-card">
-      <div class="ev-card-title" style="color:var(--cyan);">⬡ UPCOMING EVENTS — NEXT 60 DAYS</div>
-      <div id="evUpcoming"><div class="no-data">Loading...</div></div>
-    </div>
-    <div class="ev-card">
-      <div class="ev-card-title" style="color:#8855ff;">⬡ FOMC CALENDAR</div>
-      <div id="evFomc"><div class="no-data">Loading...</div></div>
-    </div>
-    <div class="ev-card">
-      <div class="ev-card-title" style="color:#ff8800;">⬡ CPI / INFLATION RELEASES</div>
-      <div id="evCpi"><div class="no-data">Loading...</div></div>
-    </div>
-  </div>
-  <div class="ev-col">
-    <div class="ev-card">
-      <div class="ev-card-title" style="color:#00ff88;">⬡ MAG 7 EARNINGS WINDOWS</div>
-      <div id="evEarnings"><div class="no-data">Loading...</div></div>
-    </div>
-    <div class="ev-card">
-      <div class="ev-card-title" style="color:#00ccff;">⬡ NFP / JOBS RELEASES</div>
-      <div id="evNfp"><div class="no-data">Loading...</div></div>
-    </div>
-    <div class="ev-card">
-      <div class="ev-card-title" style="color:#ffcc00;">⬡ MARKET HOLIDAYS</div>
-      <div id="evHolidays"><div class="no-data">Loading...</div></div>
-    </div>
-    <div class="ev-card">
-      <div class="ev-card-title" style="color:#ff3355;">⬡ POLITICAL / MACRO CYCLE</div>
-      <div id="evPolitical"><div class="no-data">Loading...</div></div>
-    </div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px;">
+  <div id="evReleases"></div>
+  <div>
+    <div id="evEarningsPanel"></div>
+    <div id="evHolidaysPanel"></div>
   </div>
 </div>
 </div>
@@ -1464,10 +1432,7 @@
   <div class="es-subtab" onclick="esSub('quarterly',this)">QUARTERLY</div>
   <div class="es-subtab" onclick="esSub('yearly',this)">YEARLY</div>
   <div class="es-subtab" onclick="esSub('streaks',this)">STREAKS</div>
-  <div class="es-subtab" onclick="esSub('voledge',this)">VOLATILITY</div>
   <div class="es-subtab" onclick="esSub('recovery',this)">RECOVERY</div>
-  <div class="es-subtab" onclick="esSub('holidays',this)">HOLIDAYS</div>
-  <div class="es-subtab" onclick="esSub('releases',this)">DATA RELEASES</div>
   <div class="es-subtab" onclick="esSub('political',this)">POLITICAL CYCLE</div>
 </div>
 
@@ -1665,6 +1630,35 @@
   <p class="es-foot">* Election: 1996,2000,2004,2008,2012,2016,2020,2024. Midterm: 1994,1998,2002,2006,2010,2014,2018,2022. Year 1=post-election. Year 3=pre-election. Dem: Clinton 1993–2000, Obama 2009–2016, Biden 2021–2024. Rep: Bush 2001–2008, Trump 2017–2020, Trump 2025+. Correlation ≠ causation.</p>
 </div>
 </div><!-- #panel-edgestats -->
+<!-- ═══════════════════════════════════════════════════════
+     VOLATILITY STATS TAB
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-volstats">
+  <div style="padding:20px;">
+    <div class="es-subtabs" style="margin-bottom:0;">
+      <div class="es-subtab active" onclick="vsSubTab('voledge',this)">WEEKLY &amp; DAILY RANGE</div>
+    </div>
+    <div id="vs-voledge-panel" style="padding-top:16px;">
+      <div class="es-topbar"><div id="vs-vol-lb"></div><div class="es-meta" id="vs-vol-meta"></div></div>
+      <div class="es-insight" id="vs-vol-explainer"></div>
+      <div class="es-section">WEEKLY RANGE — 5 BUCKETS (HOW VOLATILE WAS THIS WEEK?)</div>
+      <p style="color:var(--text3);font-size:12px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;">Each row = what happened IN that type of week, and what happened the FOLLOWING week</p>
+      <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low</div><div>Range High</div><div>During-Wk Avg</div><div>During-Wk WR</div><div>Next-Wk Avg</div></div>
+      <div id="vs-wvol-rows"></div>
+      <div class="es-section">DAILY RANGE — 5 BUCKETS (HOW VOLATILE WAS TODAY?)</div>
+      <p style="color:var(--text3);font-size:12px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;">Each row = what happened ON that type of day, and what happened the NEXT day</p>
+      <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low</div><div>Range High</div><div>That Day Avg</div><div>That Day WR</div><div>Next Day Avg</div></div>
+      <div id="vs-dvol-rows"></div>
+      <div class="es-section">RISK-ADJUSTED RETURN — RETURN PER DOLLAR OF RANGE</div>
+      <div class="es-cards" id="vs-risk-cards"></div>
+      <div class="es-section">WHAT HAPPENS AFTER 2+ CONSECUTIVE HIGH-VOL WEEKS?</div>
+      <div class="es-cards" id="vs-consec-vol-cards"></div>
+      <p class="es-foot">* True Range = High − Low ($). Higher range = higher volatility. "Next period" = following week or day. Risk-adj = avg return ÷ avg true range.</p>
+    </div>
+  </div>
+</div>
+
+
 
 <script>
 (function(){
