@@ -3096,18 +3096,58 @@ async function refreshLiveData() {
       fetchLiveFG(),
       fetchSPYIntraday()
     ]);
+
+    // Even if full quote fetch fails, spyOHLC gives us SPY price from /spyintraday
+    // Build a minimal quotes object from intraday data so desk always updates
+    let effectiveQuotes = liveQuotes;
+    if ((!liveQuotes || Object.keys(liveQuotes).length === 0) && spyOHLC?.available) {
+      effectiveQuotes = {
+        'SPY': {
+          price:      spyOHLC.close,
+          change:     spyOHLC.change,
+          pct_change: spyOHLC.changePct,
+          volume:     spyOHLC.volume,
+          open:       spyOHLC.open,
+          high:       spyOHLC.high,
+          low:        spyOHLC.low,
+          prev_close: spyOHLC.prev_close,
+        }
+      };
+      console.log('Using spyOHLC as quote fallback, SPY:', spyOHLC.close);
+    }
     
-    if (liveQuotes && Object.keys(liveQuotes).length > 0) {
+    // Always patch SPY from spyOHLC first — this is the most accurate source
+    // (Cloudflare function hitting Yahoo v8 chart, 1-min bars, no CORS issues)
+    if (spyOHLC?.available) {
+      _spyIntraday = spyOHLC;
+      _md.quotes = _md.quotes || {};
+      _md.quotes['SPY'] = _md.quotes['SPY'] || {};
+      // Override all SPY fields with live intraday data
+      _md.quotes['SPY'].price      = spyOHLC.close;
+      _md.quotes['SPY'].open       = spyOHLC.open;
+      _md.quotes['SPY'].high       = spyOHLC.high;
+      _md.quotes['SPY'].low        = spyOHLC.low;
+      _md.quotes['SPY'].volume     = spyOHLC.volume;
+      _md.quotes['SPY'].prev_close = spyOHLC.prev_close;
+      _md.quotes['SPY'].change     = spyOHLC.change;
+      _md.quotes['SPY'].pct_change = spyOHLC.changePct;
+    }
+
+    if (effectiveQuotes && Object.keys(effectiveQuotes).length > 0) {
+      // swap liveQuotes reference so rest of code works unchanged
+      const liveQuotes = effectiveQuotes;
       const merged = mergeLiveData(_md, liveQuotes, liveFG);
-      // Patch SPY with accurate intraday OHLC
-      if (spyOHLC && merged.quotes['SPY']) {
-        merged.quotes['SPY'].open = spyOHLC.open || merged.quotes['SPY'].open;
-        merged.quotes['SPY'].high = spyOHLC.high || merged.quotes['SPY'].high;
-        merged.quotes['SPY'].low  = spyOHLC.low  || merged.quotes['SPY'].low;
-        merged.quotes['SPY'].volume = spyOHLC.volume || merged.quotes['SPY'].volume;
-        merged.quotes['SPY'].prev_close = spyOHLC.prev_close || merged.quotes['SPY'].prev_close;
+      // Re-apply spyOHLC on top of merged quotes — liveQuotes may have overwritten with stale data
+      if (spyOHLC?.available && merged.quotes['SPY']) {
+        merged.quotes['SPY'].price      = spyOHLC.close;
+        merged.quotes['SPY'].open       = spyOHLC.open;
+        merged.quotes['SPY'].high       = spyOHLC.high;
+        merged.quotes['SPY'].low        = spyOHLC.low;
+        merged.quotes['SPY'].volume     = spyOHLC.volume;
+        merged.quotes['SPY'].prev_close = spyOHLC.prev_close;
+        merged.quotes['SPY'].change     = spyOHLC.change;
+        merged.quotes['SPY'].pct_change = spyOHLC.changePct;
       }
-      if (spyOHLC?.available) _spyIntraday = spyOHLC; // store live intraday for desk volume box
       _md = merged;
       
       // Re-render all live-data-dependent tabs
@@ -3125,6 +3165,13 @@ async function refreshLiveData() {
       
       _lastLiveSuccess = new Date();
       setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT');
+    } else if (spyOHLC?.available) {
+      // Quotes fetch failed but we have live SPY intraday — render with that
+      renderHub(_md, _sd);
+      renderDesk(_md, _sd);
+      updateLevelBar(_md.quotes?.['SPY']?.price);
+      _lastLiveSuccess = new Date();
+      setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT (SPY only)');
     } else {
       setLiveStatus('offline', 'fetch failed');
     }
