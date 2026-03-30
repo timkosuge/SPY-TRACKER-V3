@@ -959,8 +959,10 @@ function renderDesk(md,sd){
   const prevMonthStr = (() => { const d=new Date(today+'T12:00:00'); d.setMonth(d.getMonth()-1); return d.toISOString().substring(0,7); })();
 
   // Current week open = first trading day of this week
+  // Prefer live value set by fetchWeekOpen() which uses /spyintraday or Monday's Yahoo open
   const thisWeekRows = rows.filter(r=>r.date>=thisWeek&&r.date<=today);
-  const weekOpen = thisWeekRows.length ? thisWeekRows[thisWeekRows.length-1]?.open : null;
+  const weekOpenFromSd = thisWeekRows.length ? thisWeekRows[thisWeekRows.length-1]?.open : null;
+  const weekOpen = window._spyWeekOpen || weekOpenFromSd || null;
 
   // Prev week close = last day of previous week
   const prevWeekClose = pwClose;
@@ -1091,7 +1093,8 @@ function renderDesk(md,sd){
           {lbl:'HIGH',       val:dayHigh,   clr:'#00ff88',      grp:'TODAY'},
           {lbl:'LOW',        val:dayLow,    clr:'#ff3355',      grp:'TODAY'},
           {lbl:'LAST',       val:cur,       clr:changeAmt!=null?cc(changeAmt):'#fff', grp:'TODAY', big:true},
-          {lbl:'CHG',        val:'chg', clr:changeAmt!=null?cc(changeAmt):'var(--text2)', grp:'TODAY', isChg:true},
+          {lbl:'CHG/CLOSE',  val:'chg', clr:changeAmt!=null?cc(changeAmt):'var(--text2)', grp:'TODAY', isChg:true},
+          {lbl:'CHG/OPEN',   val:null, clr:changeFromOpen!=null?cc(changeFromOpen):'var(--text2)', grp:'TODAY', id:'deskChgOpen', isChgOpen:true},
         ].map((cell,i,arr)=>{
           const sameGrp = i>0 && arr[i-1].grp===cell.grp;
           const bg = cell.grp==='TODAY'?'rgba(0,204,255,0.04)':cell.grp==='PRE-MKT'?'rgba(255,204,0,0.04)':'';
@@ -1107,6 +1110,8 @@ function renderDesk(md,sd){
             val = changeAmt!=null
               ? `<div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${cell.clr};">${cs(changeAmt)}${fmt(changeAmt,2)}</div><div style="font-size:10px;color:${cell.clr};">${cs(changePct)}${fmt(changePct,2)}%</div>`
               : '—';
+          } else if(cell.isChgOpen) {
+            val = `<span id="deskChgOpen" style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;color:${cell.clr};">—</span>`;
           } else if(cell.val!=null && cell.val!==0 && cell.val!=='gap' && cell.val!=='chg') {
             val = `<span style="font-family:'Share Tech Mono',monospace;font-size:${cell.big?'16px':'14px'};font-weight:${cell.big?'900':'bold'};color:${cell.clr};">$${fmt(cell.val,2)}</span>`;
           }
@@ -1119,7 +1124,7 @@ function renderDesk(md,sd){
       <div style="display:flex;gap:4px;margin-top:2px;font-family:'Orbitron',monospace;font-size:6px;letter-spacing:1px;">
         <div style="flex:5;text-align:center;color:var(--text3);border-top:1px solid rgba(255,255,255,0.1);padding-top:1px;">PREV DAY</div>
         <div style="flex:3;text-align:center;color:#ffcc00;border-top:1px solid rgba(255,204,0,0.3);padding-top:1px;">PRE-MARKET</div>
-        <div style="flex:6;text-align:center;color:var(--cyan);border-top:1px solid rgba(0,204,255,0.3);padding-top:1px;">TODAY</div>
+        <div style="flex:8;text-align:center;color:var(--cyan);border-top:1px solid rgba(0,204,255,0.3);padding-top:1px;">TODAY</div>
       </div>
     </div>
 
