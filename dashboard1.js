@@ -1078,7 +1078,7 @@ function renderDesk(md,sd){
     <!-- PRICE PANEL: Equal cells,  L→R -->
     <div class="panel" style="margin-bottom:10px;">
       <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ SPY PRICE DATA </div>
-      <div style="display:grid;grid-template-columns:repeat(14,1fr);gap:4px;">
+      <div style="display:grid;grid-template-columns:repeat(15,1fr);gap:4px;">
         ${[
           {lbl:'PREV OPEN',  val:prevRow?.open,   clr:'var(--text2)', grp:'PREV DAY'},
           {lbl:'PREV HIGH',  val:prevRow?.high,   clr:'#00ff88',      grp:'PREV DAY'},
@@ -1094,7 +1094,7 @@ function renderDesk(md,sd){
           {lbl:'LOW',        val:dayLow,    clr:'#ff3355',      grp:'TODAY'},
           {lbl:'LAST',       val:cur,       clr:changeAmt!=null?cc(changeAmt):'#fff', grp:'TODAY', big:true},
           {lbl:'CHG/CLOSE',  val:'chg', clr:changeAmt!=null?cc(changeAmt):'var(--text2)', grp:'TODAY', isChg:true},
-          {lbl:'CHG/OPEN',   val:null, clr:changeFromOpen!=null?cc(changeFromOpen):'var(--text2)', grp:'TODAY', id:'deskChgOpen', isChgOpen:true},
+          {lbl:'CHG/OPEN',   val:null, clr:changeFromOpen!=null?cc(changeFromOpen):'var(--text2)', grp:'TODAY', isChgOpen:true},
         ].map((cell,i,arr)=>{
           const sameGrp = i>0 && arr[i-1].grp===cell.grp;
           const bg = cell.grp==='TODAY'?'rgba(0,204,255,0.04)':cell.grp==='PRE-MKT'?'rgba(255,204,0,0.04)':'';
@@ -1111,7 +1111,9 @@ function renderDesk(md,sd){
               ? `<div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${cell.clr};">${cs(changeAmt)}${fmt(changeAmt,2)}</div><div style="font-size:10px;color:${cell.clr};">${cs(changePct)}${fmt(changePct,2)}%</div>`
               : '—';
           } else if(cell.isChgOpen) {
-            val = `<span id="deskChgOpen" style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;color:${cell.clr};">—</span>`;
+            val = changeFromOpen!=null
+              ? `<div id="deskChgOpen" style="color:${cell.clr};"><div style="font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;">${cs(changeFromOpen)}${fmt(changeFromOpen,2)}</div><div style="font-size:10px;">${cs(changeFOPct)}${fmt(changeFOPct,2)}%</div></div>`
+              : `<div id="deskChgOpen" style="color:var(--text3);">—</div>`;
           } else if(cell.val!=null && cell.val!==0 && cell.val!=='gap' && cell.val!=='chg') {
             val = `<span style="font-family:'Share Tech Mono',monospace;font-size:${cell.big?'16px':'14px'};font-weight:${cell.big?'900':'bold'};color:${cell.clr};">$${fmt(cell.val,2)}</span>`;
           }
