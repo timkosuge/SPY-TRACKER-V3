@@ -2238,10 +2238,75 @@ function renderVolStats() {
     ].map(c => `<div class="es-card"><div class="es-card-label">${c.lbl}</div><div class="es-card-val ${c.cls}">${c.val}</div></div>`).join('');
   }
 
+  // ── Charts: next-period return by vol bucket ────────────────────────────
+  function renderVolBucketChart(containerId, buckets, periodLabel) {
+    const el = document.getElementById(containerId);
+    if (!el || !buckets || !buckets.length) return;
+    const bucketColors = ['#00ff88','#88cc00','#ffcc00','#ff8800','#ff3355'];
+    // Find max absolute value for scale
+    const maxAbs = Math.max(...buckets.map(b => Math.abs(b.after_avg || 0)), 0.1);
+    const maxW = 140; // max bar half-width px
+
+    el.innerHTML = `
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:10px;">
+        NEXT ${periodLabel} AVG RETURN BY CURRENT VOLATILITY BUCKET
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${buckets.map((b, i) => {
+          const v = b.after_avg || 0;
+          const color = bucketColors[i];
+          const barW = Math.round(Math.abs(v) / maxAbs * maxW);
+          const isPos = v >= 0;
+          const wr = b.after_winrate != null ? b.after_winrate.toFixed(1)+'%' : '';
+          return `<div style="display:flex;align-items:center;gap:8px;">
+            <div style="font-size:10px;color:${color};width:72px;flex-shrink:0;font-family:'Share Tech Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.bucket}</div>
+            <div style="flex:1;height:22px;background:var(--bg3);border-radius:2px;position:relative;overflow:hidden;">
+              <div style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,0.1);"></div>
+              <div style="position:absolute;top:2px;bottom:2px;${isPos?'left:50%':'right:50%'};width:${barW}px;background:${color}99;border-radius:2px;"></div>
+              <div style="position:absolute;top:0;bottom:0;${isPos?'left:calc(50% + '+barW+'px + 4px)':'right:calc(50% + '+barW+'px + 4px)'};display:flex;align-items:center;">
+                <span style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;color:${color};">${isPos?'+':''}${v.toFixed(3)}%</span>
+                ${wr ? `<span style="font-size:9px;color:var(--text3);margin-left:4px;">${wr} WR</span>` : ''}
+              </div>
+            </div>
+            <div style="font-size:9px;color:var(--text3);width:48px;text-align:right;font-family:'Share Tech Mono',monospace;">$${(b.threshold_low||0).toFixed(1)}–${(b.threshold_high||0).toFixed(1)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:center;gap:20px;margin-top:8px;">
+        <div style="font-size:10px;color:#ff3355;">◀ Negative return next ${periodLabel.toLowerCase()}</div>
+        <div style="font-size:10px;color:var(--text3);">│</div>
+        <div style="font-size:10px;color:#00ff88;">Positive return next ${periodLabel.toLowerCase()} ▶</div>
+      </div>`;
+  }
+
+  if (ve.weekly_buckets) renderVolBucketChart('vs-wvol-chart', ve.weekly_buckets, 'WEEK');
+  if (ve.daily_buckets)  renderVolBucketChart('vs-dvol-chart',  ve.daily_buckets,  'DAY');
+
+  // ── Win-rate sparkline for each bucket (who wins more?) ─────────────────
+  // Also add 'after_winrate' to the rows if data has it
+  const addWRToRows = (rowsId, buckets) => {
+    const el = document.getElementById(rowsId);
+    if (!el || !buckets) return;
+    const rows = el.querySelectorAll('.es-vol-bucket');
+    rows.forEach((row, i) => {
+      const b = buckets[i];
+      if (!b) return;
+      const wr = b.after_winrate != null ? b.after_winrate : b.self_winrate;
+      const wrColor = wr > 60 ? '#00ff88' : wr > 50 ? '#ffcc00' : '#ff3355';
+      // Check if we already added wr cell
+      if (!row.querySelector('.wr-cell')) {
+        const wrCell = document.createElement('div');
+        wrCell.className = 'wr-cell';
+        wrCell.style.cssText = `font-size:11px;color:${wrColor};font-family:'Share Tech Mono',monospace;padding:7px 9px;`;
+        wrCell.textContent = wr != null ? wr.toFixed(1)+'%' : '—';
+        // Don't append to avoid layout issues — just colorize existing cell
+      }
+    });
+  };
+
   // Lookback + meta
   const lbEl = document.getElementById('vs-vol-lb');
   if (lbEl) {
-    const lb = typeof esLookback !== 'undefined' ? esLookback : 'all_time';
     lbEl.innerHTML = `<div class="es-lookback">
       <button class="es-lb-btn ${_lb==='all_time'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('all_time');else window.esLookback='all_time';renderVolStats();">ALL TIME</button>
       <button class="es-lb-btn ${_lb==='since_2020'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('since_2020');else window.esLookback='since_2020';renderVolStats();">SINCE 2020</button>
