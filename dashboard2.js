@@ -2986,6 +2986,7 @@ async function loadData(){
     if (spyOHLC) updateLiveHVN(spyOHLC);
     safeRender(renderOverview, md);
     safeRender(renderOptions, md);
+    try { renderExpiryBehavior(md); } catch(e) {}
     safeRender(renderVolatility, md);
     safeRender(renderBonds, md);
     safeRender(renderBreadth, md, sd);
@@ -3041,3 +3042,5 @@ async function loadData(){
   }catch(e){console.error('Load error:',e);}
 }
 loadData();
+// Render expiry panel immediately on page load with date-based stats only
+setTimeout(() => { try { renderExpiryBehavior({}); } catch(e) {} }, 200);
