@@ -482,17 +482,25 @@
     <div id="narratorStatus" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);flex-shrink:0;">—</div>
   </div>
 
-  <!-- Row 4: Chart + Market Outlook side by side -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin-bottom:10px;">
+  <!-- Row 4: Chart + Bloomberg -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
     <div class="panel" style="display:flex;flex-direction:column;overflow:hidden;height:420px;">
       <div class="panel-label" style="flex-shrink:0;">⬡ S&P 500 FUTURES — ES=F</div>
       <div id="hubFuturesChart" style="flex:1;min-height:0;"></div>
     </div>
-    <div class="panel" style="display:flex;flex-direction:column;overflow:hidden;height:420px;">
-      <div class="panel-label" style="flex-shrink:0;">⬡ MARKET OUTLOOK</div>
-      <div id="hubNarrative" style="flex:1;overflow-y:auto;font-size:14px;line-height:1.7;color:var(--text2);"></div>
+    <div class="panel" style="display:flex;flex-direction:column;overflow:hidden;height:420px;padding:0;">
+      <div class="panel-label" style="flex-shrink:0;padding:14px 14px 0;">⬡ BLOOMBERG TV — LIVE</div>
+      <iframe
+        id="hubBloombergFrame"
+        src="https://www.youtube.com/embed/iEpJwprxDdk?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1&playsinline=1"
+        style="flex:1;width:100%;border:none;border-radius:0 0 4px 4px;"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowfullscreen
+        loading="lazy"
+      ></iframe>
     </div>
   </div>
+  <div id="hubNarrative" style="display:none;"></div>
   <!-- Row 5: News full width -->
   <div class="panel" style="margin-bottom:10px;">
     <div class="panel-label">⬡ MARKET NEWS</div>
