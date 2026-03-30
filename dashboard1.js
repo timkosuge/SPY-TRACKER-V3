@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id);
 const GROUP_TABS = {
   derivatives: ['options','gex','wem','volatility'],
   macro:       ['bonds','breadth','sentiment'],
-  history:     ['pricehistory','volhistory','edgestats','events','volstats','analog','mag7']
+  history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
 const TAB_TO_GROUP = {};
 Object.entries(GROUP_TABS).forEach(([g,tabs]) => tabs.forEach(t => TAB_TO_GROUP[t]=g));
