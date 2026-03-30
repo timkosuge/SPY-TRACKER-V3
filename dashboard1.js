@@ -4274,124 +4274,243 @@ function renderIntradayPattern(md, sd) {
 }
 
 // ─── EXPIRY BEHAVIOR ──────────────────────────────────────────────────────────
+let _expiryLookback = 'all'; // 'all' | '2026'
+
+window.expirySetLookback = function(lb, btn) {
+  _expiryLookback = lb;
+  document.querySelectorAll('#optsExpiryBehavior .exp-lb-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderExpiryBehavior(window._md || {});
+};
+
 function renderExpiryBehavior(md) {
   const el = $('optsExpiryBehavior');
-  if(!el) return;
-  if(typeof EXPIRY_DATA==='undefined') {
-    el.innerHTML='<div style="padding:12px;font-size:12px;color:var(--text3);">Loading expiry data...</div>';
-    return;
-  }
-  const q=md?.quotes||{}, spy=q['SPY']||{}, mp=md?.max_pain||[];
-  const nearest=mp[0];
-  const now=new Date(), dow=now.getDay();
-  const isFri=dow===5, isMonthly=isFri&&now.getDate()>=15&&now.getDate()<=21;
-  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const E=EXPIRY_DATA;
-  const avg=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
-  const pctFn=(arr,fn)=>arr.length?arr.filter(fn).length/arr.length*100:0;
-
-  // Weekend: show Monday preview
-  if(dow===0||dow===6){
-    const monData=E.filter(e=>e.dow===1);
-    const pctUp=pctFn(monData,e=>e.r>0);
-    const avgR=avg(monData.map(e=>e.dr));
-    const avgRet=avg(monData.map(e=>e.r));
-    const uc=pctUp>55?'#00ff88':pctUp>45?'#ffcc00':'#ff3355';
-    el.innerHTML=`
-      <div style="padding:12px;">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:10px;letter-spacing:1px;">⬡ MARKET CLOSED — NEXT SESSION: MONDAY 0DTE · ${monData.length} HISTORICAL SESSIONS</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-          <div style="background:var(--bg3);border-top:3px solid ${uc};border-radius:3px;padding:10px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">MONDAY % UP</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:${uc};">${pctUp.toFixed(0)}%</div>
-            <div style="font-size:10px;color:var(--text3);">days closed higher</div>
-          </div>
-          <div style="background:var(--bg3);border-top:3px solid var(--cyan);border-radius:3px;padding:10px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">AVG RANGE</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:var(--cyan);">$${avgR.toFixed(2)}</div>
-            <div style="font-size:10px;color:var(--text3);">typical H-L</div>
-          </div>
-          <div style="background:var(--bg3);border-top:3px solid ${avgRet>=0?'#00ff88':'#ff3355'};border-radius:3px;padding:10px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">AVG RETURN</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:${avgRet>=0?'#00ff88':'#ff3355'};">${avgRet>=0?'+':''}${avgRet.toFixed(3)}%</div>
-            <div style="font-size:10px;color:var(--text3);">prev close to close</div>
-          </div>
-          <div style="background:var(--bg3);border-top:3px solid #ffcc00;border-radius:3px;padding:10px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">GAP FILL RATE</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#ffcc00;">${pctFn(monData.filter(e=>e.g>0.2&&e.gf!==null),e=>e.gf).toFixed(0)}%</div>
-            <div style="font-size:10px;color:var(--text3);">gap-up fills same day</div>
-          </div>
-        </div>
-        <div style="margin-top:10px;padding:8px 12px;border-left:3px solid #ffcc00;background:#ffcc0011;font-size:12px;color:var(--text2);">
-          Mondays are the strongest 0DTE day — ${pctUp.toFixed(0)}% close up with an average range of $${avgR.toFixed(2)}. Plan your levels accordingly for tomorrow's open.
-        </div>
-      </div>`;
+  if (!el) return;
+  if (typeof EXPIRY_DATA === 'undefined') {
+    el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text3);">Loading expiry data...</div>';
     return;
   }
 
-  const same=E.filter(e=>e.dow===dow);
-  const group=isMonthly?same.filter(e=>e.mo):(isFri?same.filter(e=>!e.mo):same);
+  const q = md?.quotes || {}, spy = q['SPY'] || {}, mp = md?.max_pain || [];
+  const nearest = mp[0];
+  const now = new Date(), dow = now.getDay();
+  const E_ALL = EXPIRY_DATA;
+  const E = _expiryLookback === '2026' ? E_ALL.filter(e => e.d.startsWith('2026')) : E_ALL;
 
-  const pctUp=pctFn(group,e=>e.r>0);
-  const avgRange=avg(group.map(e=>e.dr));
-  const avgReturn=avg(group.map(e=>e.r));
-  const avgCP=avg(group.map(e=>e.cp));
+  const avg    = arr => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : 0;
+  const med    = arr => { if (!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+  const pctFn  = (arr, fn) => arr.length ? arr.filter(fn).length / arr.length * 100 : 0;
+  const fmt2   = n => (parseFloat(n)||0).toFixed(2);
+  const fmtPct = (n,d=1) => { const v=parseFloat(n)||0; return (v>=0?'+':'')+v.toFixed(d)+'%'; };
+  const clr    = (v, pos='#00ff88', mid='#ffcc00', neg='#ff3355', posThresh=55, negThresh=45) =>
+                   v > posThresh ? pos : v < negThresh ? neg : mid;
 
-  const open_=spy.open||0, prevClose=spy.prev_close||0;
-  const gapPct=open_&&prevClose?(open_-prevClose)/prevClose*100:0;
-  const gapType=gapPct>0.3?'GAP_UP':gapPct<-0.3?'GAP_DOWN':'FLAT';
-  const gapGroup=group.filter(e=>gapType==='GAP_UP'?e.g>0.3:gapType==='GAP_DOWN'?e.g<-0.3:Math.abs(e.g)<=0.3);
-  const fillRate=gapType!=='FLAT'?pctFn(gapGroup.filter(e=>e.gf!==null),e=>e.gf):null;
+  const open_    = spy.open || 0, prevClose = spy.prev_close || 0;
+  const gapPct   = open_ && prevClose ? (open_ - prevClose) / prevClose * 100 : 0;
+  const gapType  = gapPct > 0.3 ? 'GAP_UP' : gapPct < -0.3 ? 'GAP_DOWN' : 'FLAT';
+  const cur      = spy.price || 0;
+  const mpDist   = nearest && cur ? nearest.max_pain - cur : null;
+  const mpColor  = mpDist === null ? 'var(--text3)' : Math.abs(mpDist)<2 ? '#00ff88' : Math.abs(mpDist)<5 ? '#ffcc00' : '#ff8800';
 
-  const cur=spy.price||0;
-  const mpDist=nearest&&cur?nearest.max_pain-cur:null;
-  const mpColor=mpDist===null?'var(--text3)':Math.abs(mpDist)<2?'#00ff88':Math.abs(mpDist)<5?'#ffcc00':'#ff8800';
-  const sessionLabel=isMonthly?'MONTHLY OPEX':isFri?'WEEKLY OPEX':`0DTE ${dayNames[dow]}`;
-  const sessionColor=isMonthly?'#ff8800':'#ffcc00';
+  // ── data slicers ──────────────────────────────────────────────────────────
+  function sliceStats(rows) {
+    if (!rows.length) return null;
+    const pctUp    = pctFn(rows, e => e.r > 0);
+    const avgRet   = avg(rows.map(e => e.r));
+    const medRet   = med(rows.map(e => e.r));
+    const avgRange = avg(rows.map(e => e.dr));
+    const avgCP    = avg(rows.map(e => e.cp));
+    const avgGap   = avg(rows.map(e => e.g));
 
-  el.innerHTML=`
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;">
-      <div style="min-width:170px;">
-        <div style="padding:12px;text-align:center;background:${sessionColor}11;border:1px solid ${sessionColor}44;border-radius:4px;margin-bottom:8px;">
-          <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">TODAY</div>
-          <div style="font-family:'Orbitron',monospace;font-size:13px;color:${sessionColor};">${sessionLabel}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px;">${group.length} historical sessions</div>
-        </div>
-        ${nearest?`<div style="padding:8px;background:var(--bg3);border-radius:3px;text-align:center;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">MAX PAIN</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:${mpColor};">$${fmt(nearest.max_pain,2)}</div>
-          <div style="font-size:11px;color:${mpColor};">${mpDist>=0?'+':''}${fmt(mpDist,2)} from spot</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:2px;">${Math.abs(mpDist||0)<2?'AT MAX PAIN':Math.abs(mpDist||0)<5?'Near max pain':'Far from max pain'}</div>
-        </div>`:''}
-      </div>
-      <div>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;">
-          ${[
-            ['% DAYS UP', pctUp.toFixed(0)+'%', pctUp>55?'#00ff88':pctUp>45?'#ffcc00':'#ff3355', 'Closed higher'],
-            ['AVG RETURN', (avgReturn>=0?'+':'')+fmt(avgReturn,3)+'%', avgReturn>=0?'#00ff88':'#ff3355', 'Prev close→close'],
-            ['AVG RANGE', '$'+fmt(avgRange,2), 'var(--cyan)', 'High-low on expiry'],
-            ['AVG CLOSE POS', fmt(avgCP*100,0)+'%', 'var(--text2)', '0%=LOD · 100%=HOD'],
-            fillRate!==null?['GAP FILL', fillRate.toFixed(0)+'%', fillRate>55?'#ff8800':'#00ff88', gapType.replace('_',' ')+' fill rate']:
-            ['GAP TYPE', gapType.replace('_',' '), '#ffcc00', fmt(Math.abs(gapPct),2)+'% gap'],
-          ].map(([l,v,c,sub])=>`<div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">${l}</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${c};">${v}</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>
-          </div>`).join('')}
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          ${[
-            pctUp>55?{c:'#00ff88',t:`${sessionLabel} closes up ${pctUp.toFixed(0)}% of the time — slight bullish lean.`}:
-            pctUp<45?{c:'#ff3355',t:`${sessionLabel} closes down ${(100-pctUp).toFixed(0)}% of the time — bearish historical tendency.`}:
-                     {c:'#ffcc00',t:`${sessionLabel} is nearly coin-flip — no strong directional edge.`},
-            {c:'var(--cyan)',t:`Average day range on ${sessionLabel}: $${fmt(avgRange,2)}. Useful for intraday targets.`},
-            isMonthly?{c:'#ff8800',t:'Monthly OPEX: historically weaker than regular Fridays. Dealers pin aggressively near max pain.'}:null,
-            fillRate!==null?{c:fillRate>55?'#ff8800':'#00ff88',t:`${gapType.replace('_',' ')} gaps on ${sessionLabel} fill ${fillRate.toFixed(0)}% of the time same day.`}:null,
-            mpDist!==null&&Math.abs(mpDist)<5?{c:'#ffcc00',t:`Price is $${fmt(Math.abs(mpDist),2)} from max pain $${fmt(nearest.max_pain,2)} — gravitational pull into close.`}:null,
-          ].filter(Boolean).map(s=>`<div style="display:flex;gap:8px;padding:7px 10px;border-left:3px solid ${s.c};background:${s.c}11;border-radius:0 3px 3px 0;font-size:12px;color:var(--text2);line-height:1.5;">${s.t}</div>`).join('')}
-        </div>
-      </div>
+    // gap fill rates
+    const gapUpRows    = rows.filter(e => e.g >  0.3 && e.gf !== null);
+    const gapDnRows    = rows.filter(e => e.g < -0.3 && e.gf !== null);
+    const gapUpFill    = gapUpRows.length ? pctFn(gapUpRows, e => e.gf) : null;
+    const gapDnFill    = gapDnRows.length ? pctFn(gapDnRows, e => e.gf) : null;
+
+    // today's gap context
+    const todayGapRows = rows.filter(e => gapType==='GAP_UP'?e.g>0.3:gapType==='GAP_DOWN'?e.g<-0.3:Math.abs(e.g)<=0.3);
+    const todayGapFill = (gapType !== 'FLAT' && todayGapRows.filter(e=>e.gf!==null).length)
+                         ? pctFn(todayGapRows.filter(e=>e.gf!==null), e=>e.gf) : null;
+
+    // close position buckets (morning reversal: closes in bottom 30%)
+    const closeHigh = pctFn(rows, e => e.cp > 0.7);  // closes near HOD
+    const closeLow  = pctFn(rows, e => e.cp < 0.3);  // closes near LOD
+
+    // return distribution
+    const bigUp   = pctFn(rows, e => e.r >  1.0);
+    const bigDn   = pctFn(rows, e => e.r < -1.0);
+    const flatDay = pctFn(rows, e => Math.abs(e.r) <= 0.3);
+
+    // best/worst
+    const best  = Math.max(...rows.map(e => e.r));
+    const worst = Math.min(...rows.map(e => e.r));
+
+    return { n: rows.length, pctUp, avgRet, medRet, avgRange, avgCP, avgGap,
+             gapUpFill, gapDnFill, todayGapFill,
+             closeHigh, closeLow, bigUp, bigDn, flatDay, best, worst };
+  }
+
+  // ── build panels data ──────────────────────────────────────────────────────
+  const todayDow   = dow === 0 || dow === 6 ? 1 : dow; // weekend → preview Monday
+  const isWeekend  = dow === 0 || dow === 6;
+  const isFri      = dow === 5;
+  const isMonthly  = isFri && now.getDate() >= 15 && now.getDate() <= 21;
+
+  // Today's 0DTE panel
+  const todaySame    = E.filter(e => e.dow === todayDow);
+  const todayGroup   = isMonthly ? todaySame.filter(e => e.mo)
+                     : isFri     ? todaySame.filter(e => !e.mo)
+                     : todaySame;
+  const todayStats   = sliceStats(todayGroup);
+
+  // Weekly Friday OPEX (non-monthly Fridays)
+  const weeklyGroup  = E.filter(e => e.dow === 5 && !e.mo);
+  const weeklyStats  = sliceStats(weeklyGroup);
+
+  // Monthly OPEX (3rd Friday)
+  const monthlyGroup = E.filter(e => e.mo);
+  const monthlyStats = sliceStats(monthlyGroup);
+
+  const todayLabel   = isWeekend ? 'MONDAY 0DTE (PREVIEW)'
+                     : isMonthly ? 'MONTHLY OPEX'
+                     : isFri     ? 'WEEKLY OPEX (FRI)'
+                     : `0DTE ${['','MON','TUE','WED','THU','FRI','SAT'][todayDow]}`;
+  const todayColor   = isMonthly ? '#ff8800' : isFri ? '#00ffcc' : '#ffcc00';
+
+  // ── card builder ──────────────────────────────────────────────────────────
+  function statCard(label, value, color, sub) {
+    return `<div style="background:var(--bg3);border-top:2px solid ${color};border-radius:3px;padding:8px;text-align:center;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:3px;">${label}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${color};">${value}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>
     </div>`;
+  }
+
+  function insightBar(color, text) {
+    return `<div style="display:flex;gap:8px;padding:6px 10px;border-left:3px solid ${color};background:${color}11;border-radius:0 3px 3px 0;font-size:12px;color:var(--text2);line-height:1.5;">${text}</div>`;
+  }
+
+  function renderPanel(stats, label, color, showTodayContext) {
+    if (!stats) return `<div style="color:var(--text3);font-size:12px;padding:8px;">No data for this lookback.</div>`;
+    const wr    = stats.pctUp;
+    const wrClr = clr(wr);
+    const gapFillDisplay = showTodayContext && stats.todayGapFill !== null
+      ? statCard('GAP FILL TODAY', stats.todayGapFill.toFixed(0)+'%', stats.todayGapFill>55?'#ff8800':'#00ff88', gapType.replace('_',' ')+' → fill rate')
+      : stats.gapUpFill !== null
+        ? statCard('GAP-UP FILL', stats.gapUpFill.toFixed(0)+'%', '#ff8800', 'same-day fill rate')
+        : statCard('GAP TYPE', gapType.replace('_',' '), '#ffcc00', fmt2(Math.abs(gapPct))+'% gap today');
+
+    const cards = `
+      ${statCard('WIN RATE', wr.toFixed(0)+'%', wrClr, 'closes higher')}
+      ${statCard('AVG RETURN', fmtPct(stats.avgRet,3), stats.avgRet>=0?'#00ff88':'#ff3355', 'prev close→close')}
+      ${statCard('MED RETURN', fmtPct(stats.medRet,3), stats.medRet>=0?'#00ff88':'#ff3355', 'median (less skew)')}
+      ${statCard('AVG RANGE', '$'+fmt2(stats.avgRange), 'var(--cyan)', 'H−L on expiry day')}
+      ${statCard('AVG CLOSE POS', (stats.avgCP*100).toFixed(0)+'%', 'var(--text2)', '0%=LOD · 100%=HOD')}
+      ${statCard('CLOSE NEAR HOD', stats.closeHigh.toFixed(0)+'%', stats.closeHigh>50?'#00ff88':'#ff8800', 'closes top 30%')}
+      ${gapFillDisplay}
+      ${statCard('BIG UP (>1%)', stats.bigUp.toFixed(0)+'%', '#00ff88', 'sessions >+1%')}
+      ${statCard('BIG DN (<-1%)', stats.bigDn.toFixed(0)+'%', '#ff3355', 'sessions <-1%')}
+      ${statCard('FLAT (±0.3%)', stats.flatDay.toFixed(0)+'%', '#ffcc00', 'pinned sessions')}
+    `;
+
+    // Insights
+    const insights = [];
+    insights.push(insightBar(wrClr,
+      wr > 55 ? `<b>${label}</b> closes higher ${wr.toFixed(0)}% of the time — bullish lean. Avg gain: ${fmtPct(stats.avgRet,2)}.`
+      : wr < 45 ? `<b>${label}</b> has a bearish lean — only ${wr.toFixed(0)}% close up. Avg loss: ${fmtPct(stats.avgRet,2)}.`
+      : `<b>${label}</b> is near coin-flip (${wr.toFixed(0)}% up). No strong directional edge.`));
+
+    insights.push(insightBar('var(--cyan)',
+      `Avg range $${fmt2(stats.avgRange)}. Expect most movement inside that envelope. ` +
+      `${stats.closeHigh.toFixed(0)}% close near HOD vs ${stats.closeLow.toFixed(0)}% near LOD — ` +
+      (stats.closeHigh > stats.closeLow ? 'buyers tend to control into close.' : 'sellers tend to control into close.')));
+
+    if (stats.flatDay > 35) insights.push(insightBar('#ffcc00',
+      `${stats.flatDay.toFixed(0)}% of sessions are flat (±0.3%). Pin risk is elevated — dealers may defend strikes near current price.`));
+
+    if (showTodayContext && stats.todayGapFill !== null) insights.push(insightBar(stats.todayGapFill>55?'#ff8800':'#00ff88',
+      `Today's ${gapType.replace('_',' ')} gap fills same day ${stats.todayGapFill.toFixed(0)}% of the time historically on ${label}.`));
+    else if (stats.gapUpFill !== null) insights.push(insightBar('#ff8800',
+      `Gap-up opens fill same day ${stats.gapUpFill.toFixed(0)}% on ${label}. Gap-down fills: ${stats.gapDnFill!==null?stats.gapDnFill.toFixed(0)+'%':'n/a'}.`));
+
+    if (label.includes('MONTHLY') || label.includes('OPEX'))
+      insights.push(insightBar('#ff8800', `OPEX effect: dealers unwind hedges — expect elevated volatility and pin action near max pain. Watch for late-day mean reversion.`));
+
+    insights.push(insightBar('#7878aa',
+      `Range: best ${fmtPct(stats.best,2)}, worst ${fmtPct(stats.worst,2)}. Big moves (>1%) happen ${(stats.bigUp+stats.bigDn).toFixed(0)}% of sessions.`));
+
+    return `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:8px;">${cards}</div>
+    <div style="display:flex;flex-direction:column;gap:4px;">${insights.join('')}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:6px;">n = ${stats.n} historical sessions · ${_expiryLookback==='2026'?'2026 only':'2020–2026 (all)'}</div>`;
+  }
+
+  // ── assemble output ───────────────────────────────────────────────────────
+  const maxPainBox = nearest ? `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+      <div style="background:var(--bg3);border:1px solid ${mpColor}44;border-radius:4px;padding:8px 14px;text-align:center;min-width:110px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">MAX PAIN</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${mpColor};">$${fmt2(nearest.max_pain)}</div>
+        <div style="font-size:10px;color:${mpColor};">${mpDist>=0?'+':''}${fmt2(mpDist)} from spot</div>
+      </div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.5;">
+        ${Math.abs(mpDist||0)<2?'<span style="color:#00ff88">● AT MAX PAIN</span> — high pin risk into close.'
+         :Math.abs(mpDist||0)<5?'<span style="color:#ffcc00">● NEAR MAX PAIN</span> — gravitational pull possible.'
+         :'<span style="color:#ff8800">● FAR FROM MAX PAIN</span> — less pin risk; directional move more likely.'}
+      </div>
+    </div>` : '';
+
+  el.innerHTML = `
+  <div style="padding:4px 0 8px;">
+    <!-- lookback + header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">⬡ EXPIRY BEHAVIOR ANALYSIS</div>
+      <div style="display:flex;gap:5px;">
+        <button class="exp-lb-btn${_expiryLookback==='all'?' active':''}" onclick="expirySetLookback('all',this)">2020–2026</button>
+        <button class="exp-lb-btn${_expiryLookback==='2026'?' active':''}" onclick="expirySetLookback('2026',this)">2026 ONLY</button>
+      </div>
+    </div>
+
+    ${maxPainBox}
+
+    <!-- Today's expiry panel -->
+    <div style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:${todayColor};letter-spacing:1px;">TODAY — ${todayLabel}</div>
+        ${isWeekend?'<span style="font-size:10px;color:var(--text3);">(market closed — Monday preview)</span>':''}
+      </div>
+      ${renderPanel(todayStats, todayLabel, todayColor, true)}
+    </div>
+
+    <!-- Weekly OPEX panel -->
+    <details style="margin-bottom:8px;">
+      <summary style="cursor:pointer;font-family:'Orbitron',monospace;font-size:10px;color:#00ffcc;letter-spacing:1px;padding:6px 0;user-select:none;">
+        ▶ WEEKLY OPEX — ALL FRIDAYS (NON-MONTHLY) · ${weeklyStats?.n||0} SESSIONS
+      </summary>
+      <div style="padding:8px 0 4px;">
+        ${renderPanel(weeklyStats, 'WEEKLY OPEX (FRI)', '#00ffcc', false)}
+      </div>
+    </details>
+
+    <!-- Monthly OPEX panel -->
+    <details>
+      <summary style="cursor:pointer;font-family:'Orbitron',monospace;font-size:10px;color:#ff8800;letter-spacing:1px;padding:6px 0;user-select:none;">
+        ▶ MONTHLY OPEX — 3RD FRIDAY · ${monthlyStats?.n||0} SESSIONS
+      </summary>
+      <div style="padding:8px 0 4px;">
+        ${renderPanel(monthlyStats, 'MONTHLY OPEX', '#ff8800', false)}
+      </div>
+    </details>
+  </div>`;
+
+  // inject button styles if not yet present
+  if (!document.getElementById('expiry-btn-style')) {
+    const s = document.createElement('style');
+    s.id = 'expiry-btn-style';
+    s.textContent = `.exp-lb-btn{font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;border:1px solid #444;background:var(--bg3);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all .15s;}
+    .exp-lb-btn.active,.exp-lb-btn:hover{border-color:var(--cyan);color:var(--cyan);background:#00ccff18;}`;
+    document.head.appendChild(s);
+  }
 }
 
 // ─── MAG 7 EARNINGS SPY ANALYSIS ─────────────────────────────────────────────
