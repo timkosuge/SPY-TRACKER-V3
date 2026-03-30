@@ -1156,6 +1156,8 @@ function renderDesk(md,sd){
 
   // Fill today's session from live quotes
   renderDeskSession(md,sd);
+  // Intraday pattern recognition
+  try { renderIntradayPattern(md, sd); } catch(e) { console.warn('pattern:', e); }
 }
 
 function renderDeskSession(md,sd){
@@ -2036,6 +2038,8 @@ function renderOptions(md){
       <td class="${dist>0?'up':dist<0?'dn':''}">${dist!=null?(sign2(dist)+'$'+fmt(Math.abs(dist),2)):'—'}</td>
     </tr>`;
   }).join(''):'<tr><td colspan="5" class="no-data">No data</td></tr>';
+  // Expiry behavior
+  try { renderExpiryBehavior(md); } catch(e) { console.warn('expiry:', e); }
 }
 function renderVolatility(md){
   const q=md.quotes||{};
