@@ -2181,16 +2181,17 @@ function renderEvents() {
   // ── DATA RELEASES ──────────────────────────────────────────────────────────
   const relEl = $('evReleases');
   if (relEl) {
-    const fomc = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.fomc || []) : [];
-    const cpi  = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.cpi  || []) : [];
-    const nfp  = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.nfp  || []) : [];
-    const esD  = typeof ES_DATA !== 'undefined' ? ES_DATA.all_time : null;
+    // RELEASE_DATA.upcoming.* has the forward-looking dates as plain strings
+    const upFomc = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.upcoming?.fomc || []) : [];
+    const upCpi  = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.upcoming?.cpi  || []) : [];
+    const upNfp  = typeof RELEASE_DATA !== 'undefined' ? (RELEASE_DATA.upcoming?.nfp  || []) : [];
+    const esD    = typeof ES_DATA !== 'undefined' ? ES_DATA.all_time : null;
 
     // Upcoming events — all three types merged and sorted
     const upcoming = [];
-    fomc.forEach(d => { const ds = d.date||d; if (daysUntil(ds) >= -1) upcoming.push({ date: ds, label: 'FOMC Rate Decision', badge: 'fomc', tag: 'FOMC' }); });
-    cpi.forEach(d  => { const ds = d.date||d; if (daysUntil(ds) >= -1) upcoming.push({ date: ds, label: d.label||'CPI Inflation Report', badge: 'cpi',  tag: 'CPI'  }); });
-    nfp.forEach(d  => { const ds = d.date||d; if (daysUntil(ds) >= -1) upcoming.push({ date: ds, label: d.label||'NFP Jobs Report',      badge: 'nfp',  tag: 'NFP'  }); });
+    upFomc.forEach(d => { if (daysUntil(d) >= -1) upcoming.push({ date: d, label: 'FOMC Rate Decision',  badge: 'fomc', tag: 'FOMC' }); });
+    upCpi.forEach(d  => { if (daysUntil(d) >= -1) upcoming.push({ date: d, label: 'CPI Inflation Report', badge: 'cpi',  tag: 'CPI'  }); });
+    upNfp.forEach(d  => { if (daysUntil(d) >= -1) upcoming.push({ date: d, label: 'NFP Jobs Report',      badge: 'nfp',  tag: 'NFP'  }); });
     upcoming.sort((a,b) => a.date.localeCompare(b.date));
 
     const statBox = (title, color, data) => {
@@ -2336,8 +2337,17 @@ function renderEvents() {
 // VOLATILITY STATS TAB RENDER
 // ─────────────────────────────────────────────
 function renderVolStats() {
-  if (typeof ES_DATA === 'undefined') return;
-  const D = ES_DATA[typeof esLookback !== 'undefined' ? esLookback : 'all_time'];
+  // ES_DATA and esLookback live in the edgestats inline script — access via window
+  const _esData = typeof window.ES_DATA !== 'undefined' ? window.ES_DATA
+                : typeof ES_DATA !== 'undefined' ? ES_DATA : null;
+  if (!_esData) { 
+    // Try again in 500ms — edgestats panel may not have rendered yet
+    setTimeout(renderVolStats, 500);
+    return;
+  }
+  const _lb = typeof window.esLookback !== 'undefined' ? window.esLookback
+            : typeof esLookback !== 'undefined' ? esLookback : 'all_time';
+  const D = _esData[_lb] || _esData['all_time'];
   if (!D) return;
   const ve = D.vol_edge;
   if (!ve) return;
@@ -2399,9 +2409,9 @@ function renderVolStats() {
   if (lbEl) {
     const lb = typeof esLookback !== 'undefined' ? esLookback : 'all_time';
     lbEl.innerHTML = `<div class="es-lookback">
-      <button class="es-lb-btn ${lb==='all_time'?'active':''}" onclick="esSetLookback('all_time');renderVolStats();">ALL TIME</button>
-      <button class="es-lb-btn ${lb==='since_2020'?'active':''}" onclick="esSetLookback('since_2020');renderVolStats();">SINCE 2020</button>
-      <button class="es-lb-btn ${lb==='current_year'?'active':''}" onclick="esSetLookback('current_year');renderVolStats();">2026 YTD</button>
+      <button class="es-lb-btn ${_lb==='all_time'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('all_time');else window.esLookback='all_time';renderVolStats();">ALL TIME</button>
+      <button class="es-lb-btn ${_lb==='since_2020'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('since_2020');else window.esLookback='since_2020';renderVolStats();">SINCE 2020</button>
+      <button class="es-lb-btn ${_lb==='current_year'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('current_year');else window.esLookback='current_year';renderVolStats();">2026 YTD</button>
     </div>`;
   }
 }
