@@ -437,6 +437,7 @@
     <div class="subtab" onclick="switchGroupSub('events',this)">EVENTS</div>
     <div class="subtab" onclick="switchGroupSub('volstats',this)">VOLATILITY STATS</div>
     <div class="subtab" onclick="switchGroupSub('analog',this)">⬡ ANALOG FINDER</div>
+    <div class="subtab" onclick="switchGroupSub('declines',this)">DECLINE STATS</div>
   </div>
 </div>
 
@@ -1227,6 +1228,54 @@
   </div>
 </div>
 
+
+<!-- ═══════════════════════════════════════════════════════
+     DECLINE STATS
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-declines">
+
+  <!-- Header strip: context -->
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;margin-bottom:12px;">
+    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">SPY 1993–2026 · <span id="decl-total-events" style="color:var(--cyan);"></span> DRAWDOWN EVENTS · <span id="decl-date-range" style="color:var(--text2);"></span></div>
+    <div style="margin-left:auto;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">PEAK-TO-TROUGH METHODOLOGY · CLOSE PRICES</div>
+  </div>
+
+  <!-- Row 1: Frequency cards -->
+  <div style="margin-bottom:6px;font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;">HOW OFTEN DOES EACH DECLINE LEVEL OCCUR?</div>
+  <div id="decl-freq-cards" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:14px;"></div>
+
+  <!-- Row 2: Conditional probability matrix -->
+  <div style="margin-bottom:6px;font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;">CONDITIONAL PROBABILITIES — IF WE REACH LEVEL X, WHAT % CONTINUE TO Y?</div>
+  <div class="panel" style="margin-bottom:14px;overflow-x:auto;">
+    <table id="decl-cond-table" style="width:100%;border-collapse:collapse;font-size:12px;"></table>
+  </div>
+
+  <!-- Row 3: Duration stats -->
+  <div style="margin-bottom:6px;font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;">DURATION & RECOVERY — AVERAGE TIME AT EACH DECLINE LEVEL</div>
+  <div class="panel" style="margin-bottom:14px;overflow-x:auto;">
+    <table id="decl-dur-table" style="width:100%;border-collapse:collapse;font-size:12px;"></table>
+  </div>
+
+  <!-- Row 4: Visual depth chart + individual drawdown bars -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+    <div class="panel">
+      <div class="panel-label">⬡ DRAWDOWN DEPTH DISTRIBUTION</div>
+      <div id="decl-depth-chart" style="padding:8px 0;"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">⬡ ESCALATION — GIVEN 5%+, WHERE DID IT GO?</div>
+      <div id="decl-escalation-chart" style="padding:8px 0;"></div>
+    </div>
+  </div>
+
+  <!-- Row 5: Individual major drawdowns table -->
+  <div class="panel">
+    <div class="panel-label">⬡ MAJOR DRAWDOWNS — 10%+ EVENTS SINCE 1993</div>
+    <table id="decl-major-table" style="width:100%;border-collapse:collapse;font-size:12px;"></table>
+  </div>
+
+</div>
+
 <!-- ═══════════════════════════════════════════════════════
      GEX
 ════════════════════════════════════════════════════════ -->
@@ -1375,7 +1424,7 @@
 <!-- FLOATING CHAT -->
 
 
-<script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="dashboard1.js"></script><script src="dashboard2.js"></script>
+<script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="dashboard1.js"></script><script src="dashboard2.js"></script>
 
 <!-- ============================================================
      EDGE STATS TAB — INLINE PANEL v3
