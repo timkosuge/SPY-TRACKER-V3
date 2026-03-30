@@ -55,6 +55,7 @@ function _switchPanelOnly(id) {
   if(id==='journal') renderJournalEntries();
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
+  if(id==='declines') { try { renderDeclines(); } catch(e){ console.warn('declines:',e); } }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
@@ -4840,4 +4841,198 @@ function renderHubEventInsight() {
     </div>` : '';
 
   el.innerHTML = html_out + queueHtml;
+}
+
+// ─── DECLINE STATS ────────────────────────────────────────────────────────────
+function renderDeclines() {
+  if(typeof DECLINE_DATA === 'undefined') return;
+  const D = DECLINE_DATA;
+  const agg = D.aggregate;
+
+  // Header
+  const totalEl = $('decl-total-events');
+  const rangeEl = $('decl-date-range');
+  if(totalEl) totalEl.textContent = D.total_events_2pct;
+  if(rangeEl) rangeEl.textContent = D.date_range.start + ' → ' + D.date_range.end;
+
+  const LEVELS = [2,5,10,15,20,25,30];
+  const LEVEL_COLORS = {2:'#aaaaaa',5:'#ffcc00',10:'#ff8800',15:'#ff5500',20:'#ff3355',25:'#cc2244',30:'#991133'};
+  const clr = l => LEVEL_COLORS[l] || '#888888';
+
+  // ── Frequency cards ──────────────────────────────────────────────────────
+  const freqEl = $('decl-freq-cards');
+  if(freqEl) {
+    freqEl.innerHTML = LEVELS.map(l => {
+      const a = agg[String(l)];
+      if(!a) return '';
+      const yearsOfData = 33;
+      const perYear = (a.n / yearsOfData).toFixed(1);
+      return `<div class="panel" style="text-align:center;border-top:3px solid ${clr(l)};padding:10px 6px;">
+        <div style="font-family:'Orbitron',monospace;font-size:22px;font-weight:bold;color:${clr(l)};margin-bottom:2px;">${l}%+</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;color:var(--text);">${a.n}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">times since 1993</div>
+        <div style="font-size:11px;color:${clr(l)};margin-top:4px;font-weight:bold;">${perYear}× per year</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Conditional probability table ────────────────────────────────────────
+  const condEl = $('decl-cond-table');
+  if(condEl) {
+    const th = s => `<th style="padding:8px 12px;text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);white-space:nowrap;">${s}</th>`;
+    const thL = s => `<th style="padding:8px 12px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">${s}</th>`;
+
+    const targets = [5,10,15,20,25,30];
+    condEl.innerHTML = `<thead><tr>
+      ${thL('IF DECLINE REACHES...')}
+      ${thL('SAMPLE SIZE')}
+      ${targets.map(t=>`<th style="padding:8px 12px;text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:${clr(t)};border-bottom:1px solid var(--border);">→ ${t}%</th>`).join('')}
+    </tr></thead><tbody>${
+      [2,5,10,15,20].map(base => {
+        const a = agg[String(base)];
+        if(!a) return '';
+        const condKeys = {5:'cond_to_5',10:'cond_to_10',15:'cond_to_15',20:'cond_to_20',25:'cond_to_25',30:'cond_to_30'};
+        return `<tr style="border-bottom:1px solid var(--border)22;">
+          <td style="padding:8px 12px;font-family:'Orbitron',monospace;font-size:11px;color:${clr(base)};font-weight:bold;">${base}%+ DECLINE</td>
+          <td style="padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text2);text-align:center;">${a.n} events</td>
+          ${targets.map(t => {
+            if(t <= base) return `<td style="padding:8px 12px;text-align:center;color:var(--border2);">—</td>`;
+            const key = `cond_to_${t}`;
+            const val = a[key];
+            if(val == null) return `<td style="padding:8px 12px;text-align:center;color:var(--border2);">—</td>`;
+            const bg = val >= 50 ? '#ff333522' : val >= 25 ? '#ff880022' : val >= 10 ? '#ffcc0022' : 'transparent';
+            const tc = val >= 50 ? '#ff3355' : val >= 25 ? '#ff8800' : val >= 10 ? '#ffcc00' : 'var(--text3)';
+            return `<td style="padding:8px 12px;text-align:center;background:${bg};border-radius:3px;">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${tc};">${val.toFixed(1)}%</span>
+            </td>`;
+          }).join('')}
+        </tr>`;
+      }).join('')
+    }</tbody>`;
+  }
+
+  // ── Duration table ───────────────────────────────────────────────────────
+  const durEl = $('decl-dur-table');
+  if(durEl) {
+    const th = (s,c='var(--text3)') => `<th style="padding:8px 12px;font-family:'Orbitron',monospace;font-size:8px;color:${c};border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">${s}</th>`;
+    durEl.innerHTML = `<thead><tr>
+      <th style="padding:8px 12px;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);text-align:left;">DECLINE LEVEL</th>
+      <th style="padding:8px 12px;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);text-align:center;">EVENTS</th>
+      ${th('AVG DAYS → TROUGH')} ${th('MAX DAYS → TROUGH')}
+      ${th('AVG DAYS TROUGH → RECOVERY','#00ff88')} ${th('MAX','#00ff88')}
+      ${th('AVG TOTAL DURATION','var(--cyan)')} ${th('MAX','var(--cyan)')}
+      ${th('% FULLY RECOVERED','#00ff88')}
+    </tr></thead><tbody>${
+      [2,5,10,15,20,25,30].map(l => {
+        const a = agg[String(l)];
+        if(!a) return '';
+        const f = v => v != null ? v.toLocaleString() : '—';
+        const calDays = td => td != null ? `${td}td <span style="color:var(--text3);font-size:10px;">(~${Math.round(td*365/252)}cd)</span>` : '—';
+        return `<tr style="border-bottom:1px solid var(--border)22;">
+          <td style="padding:7px 12px;font-family:'Orbitron',monospace;font-size:11px;color:${clr(l)};font-weight:bold;">${l}%+</td>
+          <td style="padding:7px 12px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text2);">${a.n}</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;">${a.avg_days_to_trough}td</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${f(a.max_days_to_trough)}td</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:#00ff88;">${a.avg_recovery_td != null ? a.avg_recovery_td+'td' : '—'}</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${a.max_recovery_td != null ? a.max_recovery_td+'td' : '—'}</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);">${a.avg_total_td != null ? a.avg_total_td+'td' : '—'}</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${a.max_total_td != null ? a.max_total_td+'td' : '—'}</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:${a.pct_recovered===100?'#00ff88':'#ffcc00'};">${a.pct_recovered}%</td>
+        </tr>`;
+      }).join('')
+    }</tbody>`;
+  }
+
+  // ── Depth distribution chart ─────────────────────────────────────────────
+  const depthEl = $('decl-depth-chart');
+  if(depthEl) {
+    const buckets = [
+      {l:'2–5%',   min:2,  max:5,  c:'#aaaaaa'},
+      {l:'5–10%',  min:5,  max:10, c:'#ffcc00'},
+      {l:'10–15%', min:10, max:15, c:'#ff8800'},
+      {l:'15–20%', min:15, max:20, c:'#ff5500'},
+      {l:'20–30%', min:20, max:30, c:'#ff3355'},
+      {l:'30–50%', min:30, max:50, c:'#cc2244'},
+      {l:'50%+',   min:50, max:999,c:'#881122'},
+    ];
+    const counts = buckets.map(b => D.drawdowns.filter(d => d.dd_pct >= b.min && d.dd_pct < b.max).length);
+    const maxC = Math.max(...counts, 1);
+    depthEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:5px;padding:4px 8px;">
+      ${buckets.map((b,i) => {
+        const c = counts[i];
+        const w = c/maxC*100;
+        return `<div style="display:flex;align-items:center;gap:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${b.c};width:52px;flex-shrink:0;">${b.l}</div>
+          <div style="flex:1;height:22px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+            <div style="width:${w.toFixed(1)}%;height:100%;background:${b.c}99;border-radius:2px;display:flex;align-items:center;padding-left:6px;min-width:${c?28:0}px;">
+              ${c ? `<span style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;color:${b.c};">${c}</span>` : ''}
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);width:36px;text-align:right;">${c ? ((c/D.total_events_2pct)*100).toFixed(0)+'%' : ''}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:10px;color:var(--text3);text-align:right;padding:4px 8px;">of all 2%+ declines · n=${D.total_events_2pct}</div>`;
+  }
+
+  // ── Escalation chart (given 5%+, breakdown of final depth) ───────────────
+  const escalEl = $('decl-escalation-chart');
+  if(escalEl) {
+    const base5 = D.drawdowns.filter(d => d.dd_pct >= 5);
+    const n5 = base5.length;
+    const stages = [
+      {l:'5–10% (stopped here)',  n: base5.filter(d=>d.dd_pct<10).length,  c:'#ffcc00'},
+      {l:'10–15% (stopped here)', n: base5.filter(d=>d.dd_pct>=10&&d.dd_pct<15).length, c:'#ff8800'},
+      {l:'15–20% (stopped here)', n: base5.filter(d=>d.dd_pct>=15&&d.dd_pct<20).length, c:'#ff5500'},
+      {l:'20–30% (stopped here)', n: base5.filter(d=>d.dd_pct>=20&&d.dd_pct<30).length, c:'#ff3355'},
+      {l:'30%+ (continued)',      n: base5.filter(d=>d.dd_pct>=30).length,  c:'#881122'},
+    ];
+    const maxN = Math.max(...stages.map(s=>s.n),1);
+    escalEl.innerHTML = `<div style="padding:8px;font-size:11px;color:var(--text3);margin-bottom:8px;">Of ${n5} declines that reached 5%:</div>
+      <div style="display:flex;flex-direction:column;gap:5px;padding:4px 8px;">
+        ${stages.map(s => {
+          const w = s.n/maxN*100;
+          const pct = (s.n/n5*100).toFixed(0);
+          return `<div style="display:flex;align-items:center;gap:8px;">
+            <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${s.c};width:140px;flex-shrink:0;">${s.l}</div>
+            <div style="flex:1;height:22px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+              <div style="width:${w.toFixed(1)}%;height:100%;background:${s.c}99;border-radius:2px;display:flex;align-items:center;padding-left:6px;min-width:${s.n?28:0}px;">
+                ${s.n ? `<span style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;color:${s.c};">${s.n}</span>` : ''}
+              </div>
+            </div>
+            <div style="font-size:11px;font-weight:bold;color:${s.c};width:36px;text-align:right;">${pct}%</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  // ── Major drawdowns table ────────────────────────────────────────────────
+  const majorEl = $('decl-major-table');
+  if(majorEl) {
+    const majors = D.drawdowns.filter(d => d.dd_pct >= 10).reverse();
+    const th = (s,align='right') => `<th style="padding:7px 10px;text-align:${align};font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);white-space:nowrap;">${s}</th>`;
+    majorEl.innerHTML = `<thead><tr>
+      ${th('PEAK DATE','left')} ${th('TROUGH DATE','left')} ${th('RECOVERY DATE','left')}
+      ${th('DEPTH')} ${th('SPY PEAK')} ${th('SPY TROUGH')}
+      ${th('DAYS → TROUGH')} ${th('DAYS TO RECOVER')} ${th('TOTAL DURATION')}
+    </tr></thead><tbody>${
+      majors.map(d => {
+        const depthColor = d.dd_pct >= 30 ? '#cc2244' : d.dd_pct >= 20 ? '#ff3355' : d.dd_pct >= 15 ? '#ff5500' : '#ff8800';
+        const recStr = d.recovery_date || '<span style="color:#ffcc00;">ongoing</span>';
+        const recTd = d.recovery_td != null ? d.recovery_td+'td' : '<span style="color:#ffcc00;">—</span>';
+        const totalTd = d.total_td != null ? d.total_td+'td' : '<span style="color:#ffcc00;">—</span>';
+        return `<tr style="border-bottom:1px solid var(--border)22;">
+          <td style="padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">${d.peak_date}</td>
+          <td style="padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3355;">${d.trough_date}</td>
+          <td style="padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:11px;color:#00ff88;">${recStr}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:14px;font-weight:bold;color:${depthColor};">-${d.dd_pct}%</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">$${d.peak_val}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff335588;">$${d.trough_val}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--cyan);">${d.duration_td}td</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:#00ff88;">${recTd}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">${totalTd}</td>
+        </tr>`;
+      }).join('')
+    }</tbody>`;
+  }
 }
