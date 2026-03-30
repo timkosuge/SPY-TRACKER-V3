@@ -73,13 +73,18 @@ export async function onRequest(context) {
     const asOf = new Date(bars[bars.length - 1].t * 1000).toISOString();
 
     // ── CT time bucket breakdown from live 1-min bars ──────────────────────
-    // Yahoo timestamps are UTC epoch seconds. CT = UTC-5 (CST) or UTC-6 (CDT).
-    // Detect CT offset: CDT is UTC-5 (Mar–Nov), CST is UTC-6 (Nov–Mar).
-    const janOffset = new Date(now.getFullYear(), 0, 1).getTimezoneOffset();
-    const julOffset = new Date(now.getFullYear(), 6, 1).getTimezoneOffset();
-    // Server is UTC so we detect DST by checking if now is in summer
-    const isDST = now.getTimezoneOffset() < Math.max(janOffset, julOffset);
-    const ctOffsetHrs = isDST ? -5 : -6; // CDT = UTC-5, CST = UTC-6
+    // Yahoo timestamps are UTC epoch seconds. CT = UTC-5 (CDT) or UTC-6 (CST).
+    // Cloudflare Workers always run in UTC — getTimezoneOffset() is always 0, useless.
+    // Use Intl to get the real current CT offset (handles DST automatically).
+    const ctOffsetHrs = (() => {
+      const ctStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        hour: 'numeric', hour12: false,
+        timeZoneName: 'shortOffset'
+      }).format(now);
+      const m = ctStr.match(/GMT([+-]\d+)/);
+      return m ? parseInt(m[1]) : -5;
+    })();
 
     const BUCKET_DEFS = [
       { key: 'vol_830_900',   label: '8:30-9:00',   start: 8*60+30, end: 9*60     },
