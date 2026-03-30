@@ -5043,4 +5043,23 @@ function renderDeclines() {
       }).join('')
     }</tbody>`;
   }
+
+
+  // Mirror all rendered content into the es-declines sub-panel (Stats tab)
+  const _mirrorDecl = [
+    ['decl-freq-cards',       'es-decl-freq-cards'],
+    ['decl-cond-table',       'es-decl-cond-table'],
+    ['decl-dur-table',        'es-decl-dur-table'],
+    ['decl-depth-chart',      'es-decl-depth-chart'],
+    ['decl-escalation-chart', 'es-decl-escalation-chart'],
+    ['decl-major-table',      'es-decl-major-table'],
+  ];
+  _mirrorDecl.forEach(([src, dst]) => {
+    const s = document.getElementById(src), d = document.getElementById(dst);
+    if(s && d) d.innerHTML = s.innerHTML;
+  });
+  ['decl-total-events','decl-date-range'].forEach(id => {
+    const s = document.getElementById(id), d = document.getElementById('es-' + id);
+    if(s && d) d.textContent = s.textContent;
+  });
 }
