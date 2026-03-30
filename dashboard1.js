@@ -5,14 +5,83 @@ const sign=n=>n>0?'+':'';
 const fmt12=t=>{if(!t||!t.includes(':'))return t||'—';const[h,m]=t.split(':').map(Number);const ampm=h>=12?'PM':'AM';const h12=h%12||12;return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;};
 const $=id=>document.getElementById(id);
 
+// Group tab mapping
+const GROUP_TABS = {
+  derivatives: ['options','gex','wem','volatility'],
+  macro:       ['bonds','breadth','sentiment'],
+  history:     ['pricehistory','volhistory','edgestats','analog']
+};
+const TAB_TO_GROUP = {};
+Object.entries(GROUP_TABS).forEach(([g,tabs]) => tabs.forEach(t => TAB_TO_GROUP[t]=g));
+let _activeGroup = null;
+
+function switchGroupTab(group, firstTab) {
+  _activeGroup = group;
+  // Activate group tab button
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const groupBtn = document.querySelector(`.tab.group-tab[onclick*="${group}"]`);
+  if(groupBtn) groupBtn.classList.add('active');
+  // Show subtab bar, hide other groups
+  const bar = $('subtabBar');
+  if(bar) bar.style.display = 'flex';
+  document.querySelectorAll('.subtab-group').forEach(g => g.style.display='none');
+  const grp = $('subtabs-'+group);
+  if(grp) grp.style.display = 'flex';
+  // Reset subtab active states
+  if(grp) {
+    grp.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
+    grp.querySelector('.subtab')?.classList.add('active');
+  }
+  // Switch to first tab of group
+  _switchPanelOnly(firstTab);
+}
+
+function switchGroupSub(id, el) {
+  // Update subtab active state
+  if(el) {
+    el.closest('.subtab-group')?.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
+    el.classList.add('active');
+  }
+  _switchPanelOnly(id);
+}
+
+function _switchPanelOnly(id) {
+  // Hide all panels
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const p = $('panel-'+id);
+  if(p) p.classList.add('active');
+  // Tab-specific renders
+  if(id==='media') initMediaTab();
+  if(id==='journal') renderJournalEntries();
+  if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
+  if(id==='analog') { renderAnalog(); }
+  if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
+  if(id==='edgestats') { if(typeof renderEdgeStats==='function') renderEdgeStats(); }
+  if(id==='breadth' && _md && _sd) { try { renderBreadth(_md,_sd); } catch(e){} }
+  if(id==='volatility' && _md) { try { renderVolatility(_md); } catch(e){} }
+  if(id==='bonds' && _md) { try { renderBonds(_md); } catch(e){} }
+  if(id==='sentiment' && _md) { try { renderSentiment(_md); } catch(e){} }
+}
+
 function switchTab(id){
-  const keys=['hub','desk','overview','wem','options','gex','volatility','bonds','breadth','sentiment','pricehistory','volhistory','media','journal','ai'];
+  const group = TAB_TO_GROUP[id];
+  if(group) { switchGroupTab(group, id); return; }
+
+  // Hide subtab bar for non-group tabs
+  _activeGroup = null;
+  const bar = $('subtabBar');
+  if(bar) bar.style.display = 'none';
+
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  const i=keys.indexOf(id);
-  if(i>=0)document.querySelectorAll('.tab')[i].classList.add('active');
-  const p=$('panel-'+id);if(p)p.classList.add('active');
-  // Tab-specific init
+
+  // Find and activate the correct top-level tab button
+  const topTabs = ['hub','desk','overview','derivatives','macro','history','media','journal'];
+  const btnIdx = topTabs.indexOf(id);
+  const allTabs = document.querySelectorAll('.tab');
+  if(btnIdx>=0 && allTabs[btnIdx]) allTabs[btnIdx].classList.add('active');
+
+  const p=$('panel-'+id); if(p)p.classList.add('active');
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
@@ -1022,7 +1091,7 @@ function renderDesk(md,sd){
     <!-- INTRADAY PATTERN RECOGNITION -->
     <div class="panel" style="margin-bottom:10px;">
       <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ TODAY'S INTRADAY PATTERN</div>
-      <div id="deskPatternPanel"><div class="no-data">Loading pattern data...</div></div>
+      <div id="deskPatternPanel"><div style="padding:10px;font-size:12px;color:var(--text3);">Initializing pattern data...</div></div>
     </div>
 
     <!-- GAUGES: VIX · F&G · IV · PCR · GEX · MAX PAIN -->
@@ -3949,12 +4018,58 @@ function analogShowProj() {
 // ─── INTRADAY PATTERN RECOGNITION ────────────────────────────────────────────
 function renderIntradayPattern(md, sd) {
   const el = $('deskPatternPanel');
-  if(!el || typeof INTRADAY_PATTERNS === 'undefined') return;
+  if(!el || typeof INTRADAY_PATTERNS === 'undefined') {
+    if(el) el.innerHTML='<div style="padding:12px;font-size:12px;color:var(--text3);">Loading pattern data...</div>';
+    return;
+  }
   const q = md?.quotes||{}, spy = q['SPY']||{}, today = sd?.[0]||{};
   const open_ = spy.open||today.open||0, high = spy.high||today.high||0;
   const low = spy.low||today.low||0, cur = spy.price||0;
   const prevClose = spy.prev_close||sd?.[1]?.close||0;
-  if(!open_||!prevClose){el.innerHTML='<div class="no-data">Awaiting price data</div>';return;}
+
+  // Before market open: show yesterday's completed session
+  if(!open_||!prevClose) {
+    const P = INTRADAY_PATTERNS;
+    const yest = P[P.length-1];
+    if(!yest) { el.innerHTML='<div class="no-data">No pattern data</div>'; return; }
+    const ytMatches = P.filter(p=>p.gt===yest.gt&&p.f3d===yest.f3d);
+    const followPct = ytMatches.length ? ytMatches.filter(p=>p.fl).length/ytMatches.length*100 : 0;
+    const avgR = ytMatches.length ? ytMatches.reduce((a,p)=>a+p.dr,0)/ytMatches.length : 0;
+    const gtc = yest.gt==='GAP_UP'?'#00ff88':yest.gt==='GAP_DOWN'?'#ff3355':'#ffcc00';
+    const dc  = yest.f3d==='UP'?'#00ff88':'#ff3355';
+    const stc = yest.st==='TREND_UP'?'#00ff88':yest.st==='TREND_DOWN'?'#ff3355':yest.st==='REVERSAL'?'#ff8800':'#ffcc00';
+    el.innerHTML = `
+      <div style="padding:8px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:10px;letter-spacing:1px;">LAST SESSION: ${yest.d} — TODAY'S PATTERN LOADS AT MARKET OPEN</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">
+          <div style="background:${gtc}15;border:1px solid ${gtc}33;border-top:3px solid ${gtc};border-radius:3px;padding:8px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">GAP TYPE</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${gtc};">${yest.gt.replace('_',' ')}</div>
+            <div style="font-size:10px;color:${gtc};">${yest.g>=0?'+':''}${yest.g.toFixed(2)}%</div>
+          </div>
+          <div style="background:${dc}15;border:1px solid ${dc}33;border-top:3px solid ${dc};border-radius:3px;padding:8px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">FIRST 30MIN</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${dc};">${yest.f3d}</div>
+            <div style="font-size:10px;color:var(--text3);">bias</div>
+          </div>
+          <div style="background:${stc}15;border:1px solid ${stc}33;border-top:3px solid ${stc};border-radius:3px;padding:8px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">SESSION TYPE</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${stc};">${yest.st.replace('_',' ')}</div>
+          </div>
+          <div style="background:var(--bg3);border-top:3px solid ${followPct>65?'#00ff88':followPct>50?'#ffcc00':'#ff3355'};border-radius:3px;padding:8px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">FOLLOW-THRU</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:${followPct>65?'#00ff88':followPct>50?'#ffcc00':'#ff3355'};">${followPct.toFixed(0)}%</div>
+            <div style="font-size:10px;color:var(--text3);">${ytMatches.length} sessions</div>
+          </div>
+          <div style="background:var(--bg3);border-top:3px solid var(--cyan);border-radius:3px;padding:8px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">AVG RANGE</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:var(--cyan);">$${avgR.toFixed(2)}</div>
+            <div style="font-size:10px;color:var(--text3);">similar days</div>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
 
   const gapPct = (open_-prevClose)/prevClose*100;
   const gapType = gapPct>0.3?'GAP_UP':gapPct<-0.3?'GAP_DOWN':'FLAT';
@@ -4033,28 +4148,58 @@ function renderIntradayPattern(md, sd) {
 // ─── EXPIRY BEHAVIOR ──────────────────────────────────────────────────────────
 function renderExpiryBehavior(md) {
   const el = $('optsExpiryBehavior');
-  if(!el||typeof EXPIRY_DATA==='undefined') {
-    // Still show a placeholder so the panel isn't empty
-    if(el) el.innerHTML='<div style="padding:12px;font-size:12px;color:var(--text3);">Loading expiry data...</div>';
+  if(!el) return;
+  if(typeof EXPIRY_DATA==='undefined') {
+    el.innerHTML='<div style="padding:12px;font-size:12px;color:var(--text3);">Loading expiry data...</div>';
     return;
   }
   const q=md?.quotes||{}, spy=q['SPY']||{}, mp=md?.max_pain||[];
   const nearest=mp[0];
   const now=new Date(), dow=now.getDay();
   const isFri=dow===5, isMonthly=isFri&&now.getDate()>=15&&now.getDate()<=21;
-  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  // SPY has 0DTE every trading day
+  const E=EXPIRY_DATA;
+
+  // Weekend: show Monday preview
   if(dow===0||dow===6){
-    el.innerHTML=`<div style="padding:16px;text-align:center;color:var(--text3);font-family:'Orbitron',monospace;font-size:10px;">MARKET CLOSED — NO 0DTE TODAY<br><span style="font-size:11px;font-family:inherit;margin-top:6px;display:block;">Next session: Monday</span></div>`;
+    const monData=E.filter(e=>e.dow===1);
+    const pctUp=pctFn(monData,e=>e.r>0);
+    const avgR=avg(monData.map(e=>e.dr));
+    const avgRet=avg(monData.map(e=>e.r));
+    const uc=pctUp>55?'#00ff88':pctUp>45?'#ffcc00':'#ff3355';
+    el.innerHTML=`
+      <div style="padding:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:10px;letter-spacing:1px;">⬡ MARKET CLOSED — NEXT SESSION: MONDAY 0DTE · ${monData.length} HISTORICAL SESSIONS</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+          <div style="background:var(--bg3);border-top:3px solid ${uc};border-radius:3px;padding:10px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">MONDAY % UP</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:${uc};">${pctUp.toFixed(0)}%</div>
+            <div style="font-size:10px;color:var(--text3);">days closed higher</div>
+          </div>
+          <div style="background:var(--bg3);border-top:3px solid var(--cyan);border-radius:3px;padding:10px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">AVG RANGE</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:var(--cyan);">$${avgR.toFixed(2)}</div>
+            <div style="font-size:10px;color:var(--text3);">typical H-L</div>
+          </div>
+          <div style="background:var(--bg3);border-top:3px solid ${avgRet>=0?'#00ff88':'#ff3355'};border-radius:3px;padding:10px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">AVG RETURN</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:${avgRet>=0?'#00ff88':'#ff3355'};">${avgRet>=0?'+':''}${avgRet.toFixed(3)}%</div>
+            <div style="font-size:10px;color:var(--text3);">prev close to close</div>
+          </div>
+          <div style="background:var(--bg3);border-top:3px solid #ffcc00;border-radius:3px;padding:10px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">GAP FILL RATE</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#ffcc00;">${pctFn(monData.filter(e=>e.g>0.2&&e.gf!==null),e=>e.gf).toFixed(0)}%</div>
+            <div style="font-size:10px;color:var(--text3);">gap-up fills same day</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding:8px 12px;border-left:3px solid #ffcc00;background:#ffcc0011;font-size:12px;color:var(--text2);">
+          Mondays are the strongest 0DTE day — ${pctUp.toFixed(0)}% close up with an average range of $${avgR.toFixed(2)}. Plan your levels accordingly for tomorrow's open.
+        </div>
+      </div>`;
     return;
   }
 
-  const E=EXPIRY_DATA;
-  // dow: JS 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri; data stores JS dow directly
   const same=E.filter(e=>e.dow===dow);
   const group=isMonthly?same.filter(e=>e.mo):(isFri?same.filter(e=>!e.mo):same);
-  const avg=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
-  const pctFn=(arr,fn)=>arr.length?arr.filter(fn).length/arr.length*100:0;
 
   const pctUp=pctFn(group,e=>e.r>0);
   const avgRange=avg(group.map(e=>e.dr));
