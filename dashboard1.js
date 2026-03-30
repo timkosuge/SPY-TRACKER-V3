@@ -7,9 +7,9 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
-  derivatives: ['options','gex','wem'],
+  derivatives: ['options','gex','wem','volatility'],
   macro:       ['bonds','breadth','sentiment'],
-  history:     ['pricehistory','volhistory','edgestats','analog','mag7','volatility','events']
+  history:     ['pricehistory','volhistory','edgestats','analog','mag7','events']
 };
 const TAB_TO_GROUP = {};
 Object.entries(GROUP_TABS).forEach(([g,tabs]) => tabs.forEach(t => TAB_TO_GROUP[t]=g));
