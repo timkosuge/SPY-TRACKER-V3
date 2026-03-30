@@ -1069,6 +1069,54 @@ function renderDesk(md,sd){
           '</div>';
       })()}
 
+      <!-- Closest Gap Above & Below -->
+      ${(()=>{
+        if(!sd || sd.length < 2 || !cur) return '';
+        let gapAbove = null, gapBelow = null;
+        for(let i=0;i<sd.length-1;i++){
+          const todayR=sd[i], prevR=sd[i+1];
+          if(!todayR.open||!prevR.close) continue;
+          const gap=parseFloat(todayR.open)-parseFloat(prevR.close);
+          if(Math.abs(gap)<0.05) continue;
+          const fillPrice=parseFloat(prevR.close);
+          // Skip already filled gaps
+          let filled=false;
+          const lo0=parseFloat(todayR.low),hi0=parseFloat(todayR.high);
+          if(gap>0&&lo0&&lo0<=fillPrice) filled=true;
+          if(gap<0&&hi0&&hi0>=fillPrice) filled=true;
+          if(!filled){
+            for(let k=0;k<i;k++){
+              const lo=parseFloat(sd[k].low),hi=parseFloat(sd[k].high);
+              if(gap>0&&lo<=fillPrice){filled=true;break;}
+              if(gap<0&&hi>=fillPrice){filled=true;break;}
+            }
+          }
+          if(filled) continue;
+          if(fillPrice>cur){ if(gapAbove===null||fillPrice<gapAbove) gapAbove=fillPrice; }
+          else if(fillPrice<cur){ if(gapBelow===null||fillPrice>gapBelow) gapBelow=fillPrice; }
+        }
+        const distAbove = gapAbove ? gapAbove-cur : null;
+        const distBelow = gapBelow ? cur-gapBelow : null;
+        const pctA = distAbove&&cur ? distAbove/cur*100 : null;
+        const pctB = distBelow&&cur ? distBelow/cur*100 : null;
+        const aVal = gapAbove ? '$'+gapAbove.toFixed(2) : '—';
+        const bVal = gapBelow ? '$'+gapBelow.toFixed(2) : '—';
+        const aSub = distAbove ? '+$'+distAbove.toFixed(2)+' (+'+pctA.toFixed(2)+'%)' : '';
+        const bSub = distBelow ? '-$'+distBelow.toFixed(2)+' (-'+pctB.toFixed(2)+'%)' : '';
+        return '<div style="display:flex;border-left:1px solid var(--border);border-right:1px solid var(--border);">'+
+          '<div style="display:flex;flex-direction:column;justify-content:center;padding:4px 10px;gap:2px;border-right:1px solid rgba(0,255,136,0.2);min-width:90px;">'+
+            '<div style="font-family:Orbitron,monospace;font-size:7px;color:#00ff88;letter-spacing:1px;margin-bottom:1px;">GAP ABOVE</div>'+
+            '<div style="font-family:Share Tech Mono,monospace;font-size:13px;color:#00ff88;">'+aVal+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">'+aSub+'</div>'+
+          '</div>'+
+          '<div style="display:flex;flex-direction:column;justify-content:center;padding:4px 10px;gap:2px;min-width:90px;">'+
+            '<div style="font-family:Orbitron,monospace;font-size:7px;color:#ff3355;letter-spacing:1px;margin-bottom:1px;">GAP BELOW</div>'+
+            '<div style="font-family:Share Tech Mono,monospace;font-size:13px;color:#ff3355;">'+bVal+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">'+bSub+'</div>'+
+          '</div>'+
+        '</div>';
+      })()}
+
       <!-- Date -->
       <div style="display:flex;align-items:center;padding:5px 10px;margin-left:auto;flex-shrink:0;">
         <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);white-space:nowrap;">${new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
@@ -1133,6 +1181,12 @@ function renderDesk(md,sd){
       </div>
     </div>
 
+    <!-- INTRADAY PATTERN RECOGNITION — directly under SPY PRICE DATA -->
+    <div class="panel" style="margin-bottom:10px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ TODAY'S INTRADAY PATTERN</div>
+      <div id="deskPatternPanel"><div style="padding:10px;font-size:12px;color:var(--text3);">Initializing pattern data...</div></div>
+    </div>
+
     <!-- BREADTH STRIP -->
     <div style="display:grid;grid-template-columns:180px 1px 190px 1px 220px 1px 1fr;align-items:stretch;margin-bottom:10px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;overflow:hidden;min-height:80px;">
       <div style="padding:12px 14px;" id="deskBreadthAD"></div>
@@ -1142,12 +1196,6 @@ function renderDesk(md,sd){
       <div style="padding:12px 14px;" id="deskBreadthMag7"></div>
       <div style="background:var(--border);"></div>
       <div style="padding:12px 14px;" id="deskBreadthSectors"></div>
-    </div>
-
-    <!-- INTRADAY PATTERN RECOGNITION -->
-    <div class="panel" style="margin-bottom:10px;">
-      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ TODAY'S INTRADAY PATTERN</div>
-      <div id="deskPatternPanel"><div style="padding:10px;font-size:12px;color:var(--text3);">Initializing pattern data...</div></div>
     </div>
 
     <!-- GAUGES: VIX · F&G · IV · PCR · GEX · MAX PAIN -->
@@ -1266,8 +1314,8 @@ function renderDesk(md,sd){
       })()}
     </div>
 
-    <!-- SESSION + DOD + VOLUME + GAPS -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 2fr;gap:10px;margin-bottom:10px;">
+    <!-- SESSION + DOD + VOL + SESSION VOL + GAPS -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 2fr;gap:10px;margin-bottom:10px;">
       <div class="panel">
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ TODAY'S SESSION</div>
         <div id="deskOhlcv"></div>
@@ -1279,6 +1327,10 @@ function renderDesk(md,sd){
       <div class="panel">
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ VOLUME — LIVE</div>
         <div id="deskVolSummary"></div>
+      </div>
+      <div class="panel">
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ SESSION VOLATILITY</div>
+        <div id="deskSessionVol"></div>
       </div>
       <div class="panel">
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ UNFILLED GAPS — ALL HISTORY</div>
@@ -1637,6 +1689,91 @@ function renderDeskSession(md,sd){
   } else if(dodEl){
     dodEl.innerHTML='<div class="no-data">No prev day data yet</div>';
   }
+
+  // ── SESSION VOLATILITY ────────────────────────────────────────────────────
+  renderDeskSessionVol();
+}
+
+function renderDeskSessionVol() {
+  const el = $('deskSessionVol');
+  if (!el) return;
+
+  const lv = (typeof _spyIntraday !== 'undefined') ? _spyIntraday : null;
+  const isLive = lv?.available;
+
+  if (!isLive || !lv.buckets || !lv.buckets.length) {
+    el.innerHTML = `
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:8px;letter-spacing:1px;">
+        LIVE DATA AT MARKET OPEN
+      </div>
+      <div style="font-size:11px;color:var(--text3);padding:8px 0;">
+        Session volatility breakdown populates once intraday bars are available.
+      </div>`;
+    return;
+  }
+
+  const sessionRange = lv.high && lv.low ? lv.high - lv.low : null;
+  const maxRange = Math.max(...lv.buckets.map(b => b.range || 0), 0.01);
+
+  // CT time for highlighting active bucket
+  const nowCT = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Chicago'}));
+  const nowMins = nowCT.getHours() * 60 + nowCT.getMinutes();
+
+  // Color by range size relative to session max
+  const rangeColor = r => {
+    if (!r || !maxRange) return 'var(--text3)';
+    const pct = r / maxRange;
+    return pct > 0.7 ? '#ff3355' : pct > 0.4 ? '#ff8800' : pct > 0.2 ? '#ffcc00' : '#00ff88';
+  };
+
+  // Parse bucket label to get start/end mins (labels like "9:30-10:30")
+  const parseBucketMins = label => {
+    const parts = label.split('-');
+    const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+(m||0); };
+    return [toMins(parts[0]), toMins(parts[1] || parts[0])];
+  };
+
+  const rows = lv.buckets.map(b => {
+    if (b.range === null || b.range === undefined) return '';
+    const [bStart, bEnd] = parseBucketMins(b.label);
+    const isActive = nowMins >= bStart && nowMins < bEnd;
+    const rc = rangeColor(b.range);
+    const barW = maxRange > 0 ? Math.round(b.range / maxRange * 100) : 0;
+    return `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;${isActive ? 'background:rgba(0,204,255,0.05);border-radius:2px;' : ''}">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isActive ? 'var(--cyan)' : 'var(--text3)'};width:68px;flex-shrink:0;">${b.label}${isActive ? ' ◀' : ''}</span>
+      <div style="flex:1;height:8px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+        <div style="width:${barW}%;height:100%;background:${rc};border-radius:2px;"></div>
+      </div>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${rc};width:36px;text-align:right;">$${b.range.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+
+  // Highest-range bucket
+  const maxBucket = lv.buckets.reduce((best, b) => (b.range || 0) > (best.range || 0) ? b : best, lv.buckets[0]);
+  const quietBucket = lv.buckets.filter(b => b.range > 0).reduce((best, b) => (b.range || 99) < (best.range || 99) ? b : best, lv.buckets[0]);
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+      <div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:var(--cyan);">$${sessionRange ? sessionRange.toFixed(2) : '—'}</div>
+        <div style="font-size:10px;color:var(--text3);">total session range</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">PEAK</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3355;">${maxBucket.label}</div>
+        <div style="font-size:9px;color:#ff3355;">$${(maxBucket.range||0).toFixed(2)}</div>
+      </div>
+    </div>
+    <div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-bottom:8px;">
+      <div style="width:${sessionRange ? Math.min(sessionRange/15*100,100).toFixed(0) : 0}%;height:100%;background:var(--cyan);border-radius:2px;"></div>
+    </div>
+    ${rows}
+    <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-top:6px;">
+      QUIET: ${quietBucket.label} · $${(quietBucket.range||0).toFixed(2)}
+    </div>
+    <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-top:3px;text-align:right;">
+      ● LIVE · ${lv.bars} bars
+    </div>`;
 }
 
 function renderOverview(md){
