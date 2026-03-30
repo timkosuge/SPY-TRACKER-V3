@@ -3073,6 +3073,64 @@ function scheduleLiveRefresh() {
   }, delay);
 }
 
+// Lightweight WEM price update — runs every tick without rebuilding heavy SVG charts
+function updateWEMPrice(price) {
+  if (!price || !_md) return;
+  const wems = _md.weekly_em || [];
+  const cur  = wems.find(w => !w.week_close) || wems[0];
+  if (!cur) return;
+  const lo = cur.wem_low, hi = cur.wem_high, mid = cur.wem_mid;
+  const halfRange = cur.wem_range / 2;
+  if (!lo || !hi || !mid) return;
+
+  // Needle position
+  const pct = hi > lo ? Math.min(Math.max((price - lo) / (hi - lo) * 100, 2), 98) : 50;
+  const needle = $('wemTabNeedle');
+  if (needle) needle.style.left = pct + '%';
+
+  // Position text
+  const posText = $('wemTabPosText');
+  if (posText) {
+    const dte = cur.dte || '—';
+    posText.textContent = `SPY $${fmt(price,2)} · ${price>=lo&&price<=hi?'INSIDE WEM ✓':'OUTSIDE WEM ⚠'} · ±$${fmt(halfRange,2)} · DTE ${dte}`;
+  }
+
+  // Big cards — "from here" distances
+  const header = $('wemCurrentHeader');
+  if (header) {
+    header.innerHTML = `
+      <div class="wem-big-card">
+        <div class="wem-big-lbl">WEM LOW</div>
+        <div class="wem-big-val dn">$${fmt(lo,2)}</div>
+        <div class="wem-big-sub">${price>lo?'+':''}$${fmt(price-lo,2)} from here</div>
+      </div>
+      <div class="wem-big-card">
+        <div class="wem-big-lbl">MID (ANCHOR)</div>
+        <div class="wem-big-val">$${fmt(mid,2)}</div>
+        <div class="wem-big-sub">±$${fmt(halfRange,2)} range</div>
+      </div>
+      <div class="wem-big-card">
+        <div class="wem-big-lbl">WEM HIGH</div>
+        <div class="wem-big-val up">$${fmt(hi,2)}</div>
+        <div class="wem-big-sub">${price<hi?'+':''}$${fmt(hi-price,2)} from here</div>
+      </div>`;
+  }
+
+  // Z-score display (text elements only — skip rebuilding the full SVG)
+  const zEl = $('wemZScore');
+  if (zEl) {
+    const z = halfRange > 0 ? (price - mid) / halfRange : 0;
+    const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
+    const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
+    // Only update z-score text nodes, not the full SVG
+    const zScoreVal = zEl.querySelector('.wem-z-val');
+    const zScoreLbl = zEl.querySelector('.wem-z-lbl');
+    if (zScoreVal) { zScoreVal.textContent = (z>=0?'+':'')+fmt(z,2); zScoreVal.style.color = zColor; }
+    if (zScoreLbl) { zScoreLbl.textContent = zLabel; zScoreLbl.style.color = zColor; }
+  }
+}
+
+
 async function refreshLiveData() {
   if (!_md) return;
   setLiveStatus('updating');
@@ -3098,6 +3156,8 @@ async function refreshLiveData() {
       _lastStaticRefresh = now;
       updateStaticTimestamp();
       fetchWeekOpen(); // refresh week open from fresh sd data
+      // Re-render WEM fully on static refresh — WEM levels and IV can change
+      try { renderWEM(_md); } catch(e) {}
     } catch(e) {
       console.warn('Static JSON re-fetch failed:', e);
     }
@@ -3167,6 +3227,7 @@ async function refreshLiveData() {
       renderHub(merged, _sd);
       renderDesk(merged, _sd);
       updateLevelBar(merged.quotes?.['SPY']?.price);
+      updateWEMPrice(merged.quotes?.['SPY']?.price);
       renderOverview(merged);
       loadFuturesChart();
       if(_narratorRunning) _narratorComment();
@@ -3183,6 +3244,7 @@ async function refreshLiveData() {
       renderHub(_md, _sd);
       renderDesk(_md, _sd);
       updateLevelBar(_md.quotes?.['SPY']?.price);
+      updateWEMPrice(_md.quotes?.['SPY']?.price);
       _lastLiveSuccess = new Date();
       setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT (SPY only)');
     } else {
