@@ -1228,6 +1228,294 @@
   </div>
 </div>
 
+<div class="tab-panel" id="panel-edgestats">
+<style>
+  .es-subtabs{display:flex;padding:0;background:var(--bg2);border-bottom:2px solid var(--border);overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg2);}
+  .es-subtab{padding:9px 16px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1.5px;color:var(--text3);cursor:pointer;border-bottom:3px solid transparent;transition:all 0.2s;white-space:nowrap;user-select:none;}
+  .es-subtab:hover{color:var(--text2);}
+  .es-subtab.active{color:var(--green);border-bottom-color:var(--green);}
+  .es-panel{display:none;padding:20px;}
+  .es-panel.active{display:block;}
+  .es-topbar{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+  .es-lookback{display:flex;gap:0;border:1px solid var(--border);border-radius:5px;overflow:hidden;}
+  .es-lb-btn{padding:6px 16px;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.5px;color:var(--text3);cursor:pointer;transition:all 0.2s;background:transparent;border:none;border-right:1px solid var(--border);}
+  .es-lb-btn:last-child{border-right:none;}
+  .es-lb-btn:hover{color:var(--text2);background:rgba(255,255,255,0.03);}
+  .es-lb-btn.active{background:rgba(0,255,136,0.12);color:var(--green);}
+  .es-section{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);border-bottom:1px solid var(--border);padding-bottom:7px;margin-bottom:14px;margin-top:26px;display:flex;align-items:center;gap:9px;}
+  .es-section:first-child{margin-top:0;}
+  .es-section::before{content:'';width:3px;height:12px;background:var(--cyan);border-radius:2px;flex-shrink:0;}
+  .es-meta{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);margin-left:auto;}
+  .es-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-bottom:18px;}
+  .es-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px 14px;}
+  .es-card-label{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.3px;color:var(--text3);margin-bottom:5px;}
+  .es-card-val{font-family:'Share Tech Mono',monospace;font-size:20px;line-height:1;}
+  .es-card-val.up{color:var(--green);}.es-card-val.dn{color:var(--red);}.es-card-val.neu{color:var(--yellow);}
+  .es-card-sub{font-size:11px;color:var(--text3);margin-top:4px;font-family:'Share Tech Mono',monospace;}
+  .es-tbl{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:22px;}
+  .es-tbl th{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--cyan);padding:7px 9px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;opacity:0.85;}
+  .es-tbl th:first-child{text-align:left;}
+  .es-tbl td{padding:7px 9px;border-bottom:1px solid rgba(37,37,69,0.55);font-family:'Share Tech Mono',monospace;font-size:13px;text-align:right;}
+  .es-tbl td:first-child{text-align:left;color:var(--text2);font-weight:600;}
+  .es-tbl tr:hover td{background:rgba(255,255,255,0.02);}
+  .es-tbl tr:last-child td{border-bottom:none;}
+  .es-tbl .row-highlight td{background:rgba(0,255,136,0.04);}
+  .es-bar-wrap{margin:14px 0 26px;}
+  .es-bar-row{display:flex;align-items:center;gap:9px;margin-bottom:6px;height:24px;}
+  .es-bar-lbl{font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text2);width:36px;text-align:right;flex-shrink:0;}
+  .es-bar-outer{flex:1;height:14px;background:rgba(37,37,69,0.5);border-radius:3px;overflow:hidden;position:relative;}
+  .es-bar-fill{height:100%;border-radius:3px;position:absolute;top:0;}
+  .es-bar-fill.pos{background:linear-gradient(90deg,rgba(0,255,136,0.25),rgba(0,255,136,0.85));left:50%;}
+  .es-bar-fill.neg{background:linear-gradient(270deg,rgba(255,51,85,0.25),rgba(255,51,85,0.85));right:50%;}
+  .es-bar-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border2);}
+  .es-bar-val{font-family:'Share Tech Mono',monospace;font-size:12px;width:56px;flex-shrink:0;}
+  .es-wr-pill{font-family:'Share Tech Mono',monospace;font-size:11px;padding:2px 7px;border-radius:10px;flex-shrink:0;background:rgba(255,255,255,0.05);}
+  .es-badge{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:9px;padding:2px 6px;border-radius:3px;margin-left:5px;vertical-align:middle;}
+  .es-badge.top{background:rgba(0,255,136,0.1);color:var(--green);border:1px solid rgba(0,255,136,0.3);}
+  .es-badge.bot{background:rgba(255,51,85,0.1);color:var(--red);border:1px solid rgba(255,51,85,0.3);}
+  .es-badge.neu{background:rgba(255,204,0,0.08);color:var(--yellow);border:1px solid rgba(255,204,0,0.25);}
+  .es-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0 22px;}
+  .es-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:14px 0 22px;}
+  .es-box{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:14px;}
+  .es-box-label{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.3px;color:var(--text3);margin-bottom:10px;}
+  .es-box-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(37,37,69,0.5);font-family:'Share Tech Mono',monospace;font-size:13px;}
+  .es-box-row:last-child{border-bottom:none;}
+  .es-box-lbl{color:var(--text3);}
+  .es-hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:10px;margin:14px 0 22px;}
+  .es-hcard{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:14px;}
+  .es-hcard-title{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;color:var(--cyan);margin-bottom:10px;}
+  .es-hrow{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(37,37,69,0.35);font-size:12px;}
+  .es-hrow:last-child{border-bottom:none;}
+  .es-hrow-lbl{color:var(--text3);}
+  .es-hrow-val{font-family:'Share Tech Mono',monospace;}
+  .es-vol-bucket{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr;gap:0;margin-bottom:2px;}
+  .es-vol-bucket div{padding:7px 9px;font-family:'Share Tech Mono',monospace;font-size:12px;border-bottom:1px solid rgba(37,37,69,0.4);}
+  .es-vol-bucket div:first-child{color:var(--text2);font-size:11px;}
+  .es-vol-header{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr;gap:0;margin-bottom:4px;}
+  .es-vol-header div{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--cyan);padding:5px 9px;border-bottom:1px solid var(--border);opacity:0.85;}
+  .es-vol-bar{height:6px;border-radius:3px;margin-top:3px;}
+  .es-yr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;margin:14px 0 22px;}
+  .es-yr-cell{background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:8px 10px;text-align:center;}
+  .es-yr-cell.up{border-color:rgba(0,255,136,0.25);background:rgba(0,255,136,0.05);}
+  .es-yr-cell.dn{border-color:rgba(255,51,85,0.2);background:rgba(255,51,85,0.04);}
+  .es-foot{font-size:11px;color:var(--text3);margin-top:18px;font-family:'Share Tech Mono',monospace;line-height:1.6;}
+  .rel-lb-btn{font-family:'Orbitron',monospace;font-size:9px;padding:5px 12px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
+  .rel-lb-btn.active{background:rgba(0,204,255,0.15);border-color:var(--cyan);color:var(--cyan);}
+  .rel-type-btn{font-family:'Orbitron',monospace;font-size:10px;padding:6px 16px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
+  .rel-type-btn.active{border-width:2px;font-weight:bold;}
+  #reltab-cpi.active{background:rgba(255,136,0,0.15);border-color:#ff8800;color:#ff8800;}
+  #reltab-nfp.active{background:rgba(0,204,255,0.15);border-color:#00ccff;color:#00ccff;}
+  #reltab-fomc.active{background:rgba(136,85,255,0.15);border-color:#8855ff;color:#8855ff;}
+  .up{color:var(--green);}.dn{color:var(--red);}.neu{color:var(--yellow);}
+  .es-insight{background:rgba(0,204,255,0.05);border:1px solid rgba(0,204,255,0.2);border-radius:5px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--text2);line-height:1.6;}
+  .es-insight strong{color:var(--cyan);}
+</style>
+
+<div class="es-subtabs">
+  <div class="es-subtab active" onclick="esSub('dow',this)">DAY OF WEEK</div>
+  <div class="es-subtab" onclick="esSub('wom',this)">WEEK OF MONTH</div>
+  <div class="es-subtab" onclick="esSub('seasonality',this)">MONTH OF YEAR</div>
+  <div class="es-subtab" onclick="esSub('quarterly',this)">QUARTERLY</div>
+  <div class="es-subtab" onclick="esSub('yearly',this)">YEARLY</div>
+  <div class="es-subtab" onclick="esSub('streaks',this)">STREAKS</div>
+  <div class="es-subtab" onclick="esSub('recovery',this)">RECOVERY</div>
+  <div class="es-subtab" onclick="esSub('political',this)">POLITICAL CYCLE</div>
+</div>
+
+<!-- DAY OF WEEK -->
+<div class="es-panel active" id="es-dow">
+  <div class="es-topbar"><div id="es-dow-lb"></div><div class="es-meta" id="es-dow-meta"></div></div>
+  <div class="es-section">DAILY RETURN BY DAY OF WEEK</div>
+  <div id="es-dow-bars" style="margin:14px 0 22px;"></div>
+  <table class="es-tbl"><thead><tr><th>Day</th><th>Avg Return</th><th>Median</th><th>Win Rate</th><th>Avg Day Range ($)</th><th>Best Day</th><th>Worst Day</th><th>Days Sampled</th></tr></thead><tbody id="es-dow-tbody"></tbody></table>
+  <div class="es-section">CONTEXT — AFTER UP vs DOWN PRIOR DAY</div>
+  <table class="es-tbl" id="es-dow-context-tbl"></table>
+  <div class="es-section">DAILY MOMENTUM</div>
+  <div class="es-cards" id="es-daily-mom-cards"></div>
+  <p class="es-foot">* Daily close-to-close returns from daily_ohlcv (spy_data.db). Day Range = High − Low ($).</p>
+</div>
+
+<!-- WEEK OF MONTH -->
+<div class="es-panel" id="es-wom">
+  <div class="es-topbar"><div id="es-wom-lb"></div><div class="es-meta" id="es-wom-meta"></div></div>
+  <div class="es-section">WEEKLY RETURN BY WEEK NUMBER IN MONTH</div>
+  <div id="es-wom-bars" style="margin:14px 0 22px;"></div>
+  <table class="es-tbl"><thead><tr><th>Week</th><th>Avg Return</th><th>Median</th><th>Win Rate</th><th>Best Week</th><th>Worst Week</th><th>Sample</th><th>Edge vs Avg</th></tr></thead><tbody id="es-wom-tbody"></tbody></table>
+  <div class="es-section">KEY INSIGHT</div>
+  <div class="es-insight" id="es-wom-insight"></div>
+  <p class="es-foot">* Week 1 = days 1–7, Week 2 = 8–14, Week 3 = 15–21, Week 4 = 22–28, Week 5 = 29+. Turn-of-month effect: last days of month + first days of next month historically strongest.</p>
+</div>
+
+<!-- MONTH OF YEAR -->
+<div class="es-panel" id="es-seasonality">
+  <div class="es-topbar"><div id="es-sea-lb"></div><div class="es-meta" id="es-sea-meta"></div></div>
+  <div class="es-section">MONTHLY CLOSE-TO-CLOSE RETURN SEASONALITY</div>
+  <div class="es-bar-wrap" id="es-season-bars"></div>
+  <table class="es-tbl"><thead><tr><th>Month</th><th>Monthly Avg</th><th>Median</th><th>Monthly WR</th><th>Daily Avg</th><th>Daily WR</th><th>Avg True Range</th><th>Best Month</th><th>Worst Month</th><th>Yrs</th></tr></thead><tbody id="es-season-tbody"></tbody></table>
+  <div class="es-section">RANKING SUMMARY</div>
+  <div class="es-cards" id="es-season-cards"></div>
+  <p class="es-foot">* Monthly WR = % of years that month closed positive. Daily Avg/WR computed from individual trading days in that calendar month. True Range = monthly High−Low ($).</p>
+</div>
+
+<!-- QUARTERLY -->
+<div class="es-panel" id="es-quarterly">
+  <div class="es-topbar"><div id="es-q-lb"></div><div class="es-meta" id="es-q-meta"></div></div>
+  <div class="es-section">QUARTERLY PERFORMANCE — MONTHLY + DAILY BREAKDOWN</div>
+  <div class="es-cards" id="es-q-cards"></div>
+  <table class="es-tbl"><thead><tr><th>Quarter</th><th>Monthly Avg</th><th>Monthly WR</th><th>Daily Avg</th><th>Daily WR</th><th>Avg True Range</th><th>Best Month</th><th>Worst Month</th><th>Months Sampled</th></tr></thead><tbody id="es-q-tbody"></tbody></table>
+  <div class="es-section">Q4 — THE STRONGEST QUARTER</div>
+  <div class="es-insight" id="es-q-insight"></div>
+  <p class="es-foot">* Quarterly stats aggregate individual months. Q1=Jan–Mar, Q2=Apr–Jun, Q3=Jul–Sep, Q4=Oct–Dec.</p>
+</div>
+
+<!-- YEARLY -->
+<div class="es-panel" id="es-yearly">
+  <div class="es-topbar"><div id="es-yr-lb"></div><div class="es-meta" id="es-yr-meta"></div></div>
+  <div class="es-section">YEARLY SUMMARY STATS</div>
+  <div class="es-cards" id="es-yr-cards"></div>
+  <div class="es-section">ALL YEARS AT A GLANCE</div>
+  <div class="es-yr-grid" id="es-yr-grid"></div>
+  <p class="es-foot">* Full calendar year close-to-close returns from SPY_yearly.csv. Green = positive year, Red = negative year.</p>
+</div>
+
+<!-- STREAKS -->
+<div class="es-panel" id="es-streaks">
+  <div class="es-topbar"><div id="es-str-lb"></div><div class="es-meta" id="es-str-meta"></div></div>
+  <div class="es-section">CONSECUTIVE STREAK RECORDS</div>
+  <div class="es-cards" id="es-streak-cards"></div>
+  <div class="es-section">MOMENTUM — PROBABILITY NEXT PERIOD IS GREEN</div>
+  <table class="es-tbl" id="es-momentum-tbl"></table>
+  <div class="es-section">AFTER 2+ GREEN WEEKS IN A ROW</div>
+  <div class="es-cards" id="es-after2g-cards"></div>
+  <div class="es-section">AFTER 2+ RED WEEKS IN A ROW</div>
+  <div class="es-cards" id="es-after2r-cards"></div>
+  <div class="es-section">AFTER 3+ GREEN WEEKS IN A ROW</div>
+  <div class="es-cards" id="es-after3g-cards"></div>
+  <div class="es-section">AFTER 3+ RED WEEKS IN A ROW</div>
+  <div class="es-cards" id="es-after3r-cards"></div>
+  <p class="es-foot">* Weekly streaks from SPY_weekly.csv Return_%. Daily streaks from daily_ohlcv. Momentum = conditional probability of next close being higher.</p>
+</div>
+
+<!-- VOL EDGE -->
+<div class="es-panel" id="es-voledge">
+  <div class="es-topbar"><div id="es-vol-lb"></div><div class="es-meta" id="es-vol-meta"></div></div>
+  <div class="es-insight" id="es-vol-explainer"></div>
+  <div class="es-section">WEEKLY RANGE — 5 BUCKETS (HOW VOLATILE WAS THIS WEEK?)</div>
+  <p style="color:var(--text3);font-size:12px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;">Each row = what happened IN that type of week, and what happened the FOLLOWING week</p>
+  <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low</div><div>Range High</div><div>During-Wk Avg</div><div>During-Wk WR</div><div>Next-Wk Avg</div></div>
+  <div id="es-wvol-rows"></div>
+  <div class="es-section">DAILY RANGE — 5 BUCKETS (HOW VOLATILE WAS TODAY?)</div>
+  <p style="color:var(--text3);font-size:12px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;">Each row = what happened ON that type of day, and what happened the NEXT day</p>
+  <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low</div><div>Range High</div><div>That Day Avg</div><div>That Day WR</div><div>Next Day Avg</div></div>
+  <div id="es-dvol-rows"></div>
+  <div class="es-section">RISK-ADJUSTED RETURN — RETURN PER DOLLAR OF RANGE</div>
+  <div class="es-cards" id="es-risk-cards"></div>
+  <div class="es-section">WHAT HAPPENS AFTER 2+ CONSECUTIVE HIGH-VOL WEEKS?</div>
+  <div class="es-cards" id="es-consec-vol-cards"></div>
+  <p class="es-foot">* True Range = High − Low ($) for the period. Higher range = higher volatility. "Next period" = the following week or day respectively. Risk-adj = avg return ÷ avg true range.</p>
+</div>
+
+<!-- RECOVERY -->
+<div class="es-panel" id="es-recovery">
+  <div class="es-topbar"><div id="es-rec-lb"></div><div class="es-meta" id="es-rec-meta"></div></div>
+  <div class="es-section">DRAWDOWN EVENTS & RECOVERY TIMES — WEEKLY DATA</div>
+  <div class="es-cards" id="es-rec-cards"></div>
+  <table class="es-tbl"><thead><tr><th>Drawdown Level</th><th>Events Since Start</th><th>Avg Recovery</th><th>Median Recovery</th><th>Longest Recovery</th><th>Avg (months)</th></tr></thead><tbody id="es-rec-tbody"></tbody></table>
+  <div class="es-section">VISUAL — AVG vs MEDIAN RECOVERY TIME</div>
+  <div id="es-rec-visual" style="margin:14px 0 22px;"></div>
+  <div class="es-insight" id="es-rec-insight"></div>
+  <p class="es-foot">* Recovery = weeks from trough back to new all-time weekly closing high. Measured from rolling peak. Based on SPY weekly CLOSE prices.</p>
+</div>
+
+<!-- HOLIDAYS -->
+<div class="es-panel" id="es-holidays">
+  <div class="es-topbar"><div id="es-hol-lb"></div><div class="es-meta" id="es-hol-meta"></div></div>
+
+  <div class="es-section">SHORT WEEKS — FEWER THAN 5 TRADING DAYS</div>
+  <div class="es-cards" id="es-sw-cards"></div>
+
+  <div class="es-section">SANTA RALLY — NOVEMBER + DECEMBER</div>
+  <div class="es-3col" id="es-santa-boxes"></div>
+  <table class="es-tbl" id="es-santa-tbl"></table>
+
+  <div class="es-section">MAJOR HOLIDAY WINDOWS</div>
+  <div class="es-hgrid" id="es-hol-grid"></div>
+
+  <div class="es-section">SEASONAL PATTERNS & KNOWN EDGES</div>
+  <div class="es-hgrid" id="es-seasonal-grid"></div>
+
+  <div class="es-section">FULL HOLIDAY DETAIL TABLE</div>
+  <table class="es-tbl"><thead><tr><th>Period</th><th>Window</th><th>Avg Return</th><th>Median</th><th>Win Rate</th><th>Sample</th><th>Best</th><th>Worst</th></tr></thead><tbody id="es-hol-tbody"></tbody></table>
+  <p class="es-foot">* Daily returns from individual trading days in each window. Weekly returns from SPY_weekly.csv. Tax loss harvesting = Dec 15–31 daily. January effect = first 5 trading days. Sell in May = May–Oct daily avg vs Nov–Apr.</p>
+</div>
+
+<!-- DATA RELEASES -->
+<div class="es-panel" id="es-releases">
+
+  <!-- Lookback toggles -->
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+    <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;">LOOKBACK:</span>
+    <button class="rel-lb-btn active" onclick="relSetLookback('all',this)">2020–2026</button>
+    <button class="rel-lb-btn" onclick="relSetLookback('1yr',this)">LAST 12 MONTHS</button>
+    <button class="rel-lb-btn" onclick="relSetLookback('2026',this)">2026 ONLY</button>
+  </div>
+
+  <!-- Event type tabs -->
+  <div style="display:flex;gap:6px;margin-bottom:14px;">
+    <button class="rel-type-btn active" id="reltab-cpi"  onclick="relSetType('cpi',this)">CPI</button>
+    <button class="rel-type-btn" id="reltab-nfp"  onclick="relSetType('nfp',this)">NFP</button>
+    <button class="rel-type-btn" id="reltab-fomc" onclick="relSetType('fomc',this)">FOMC</button>
+  </div>
+
+  <!-- Upcoming next event banner -->
+  <div id="rel-upcoming-banner" style="margin-bottom:12px;"></div>
+
+  <!-- Aggregate stat cards -->
+  <div id="rel-stat-cards" style="margin-bottom:14px;"></div>
+
+  <!-- Chart: day-of returns scatter + bar -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+    <div class="panel">
+      <div class="panel-label" id="rel-chart-label">⬡ DAY-OF RETURN DISTRIBUTION</div>
+      <div id="relReturnChart"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">⬡ BEFORE / DAY-OF / AFTER · AVG RETURN</div>
+      <div id="relWindowChart"></div>
+    </div>
+  </div>
+
+  <!-- Event-by-event table -->
+  <div class="panel">
+    <div class="panel-label" id="rel-table-label">⬡ EVENT LOG — EVERY RELEASE SINCE 2020</div>
+    <div style="max-height:420px;overflow-y:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead style="position:sticky;top:0;background:var(--bg2);">
+          <tr id="rel-table-head"></tr>
+        </thead>
+        <tbody id="rel-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- POLITICAL CYCLE -->
+<div class="es-panel" id="es-political">
+  <p style="font-size:12px;color:var(--cyan);font-family:'Share Tech Mono',monospace;margin:0 0 16px;padding:8px 12px;background:rgba(0,204,255,0.06);border-left:3px solid var(--cyan);border-radius:0 4px 4px 0;">Lookback selector does not apply here — political cycle analysis requires full history (1993–2025) to be statistically meaningful.</p>
+  <div class="es-section">PRESIDENTIAL ELECTION CYCLE — SPY ANNUAL RETURNS 1993–2025</div>
+  <div class="es-cards" id="es-pol-summary-cards"></div>
+  <div class="es-section">ANNUAL RETURN BY CYCLE YEAR</div>
+  <div id="es-pol-bars" style="margin:14px 0 22px;"></div>
+  <div class="es-section">YEAR-BY-YEAR BREAKDOWN</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin:14px 0 22px;" id="es-pol-tables"></div>
+  <div class="es-section">PARTY IN POWER — FULL HISTORY</div>
+  <div class="es-cards" id="es-pol-party-cards"></div>
+  <div class="es-section">Q4 PERFORMANCE BY CYCLE YEAR (OCT–DEC)</div>
+  <div class="es-cards" id="es-pol-q4-cards"></div>
+  <p class="es-foot">* Election: 1996,2000,2004,2008,2012,2016,2020,2024. Midterm: 1994,1998,2002,2006,2010,2014,2018,2022. Year 1=post-election. Year 3=pre-election. Dem: Clinton 1993–2000, Obama 2009–2016, Biden 2021–2024. Rep: Bush 2001–2008, Trump 2017–2020, Trump 2025+. Correlation ≠ causation.</p>
+</div>
+</div><!-- #panel-edgestats -->
 <!-- ═══════════════════════════════════════════════════════
      VOLATILITY STATS TAB
 ════════════════════════════════════════════════════════ -->
