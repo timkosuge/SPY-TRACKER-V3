@@ -1483,9 +1483,11 @@
   .rel-lb-btn.active{background:rgba(0,204,255,0.15);border-color:var(--cyan);color:var(--cyan);}
   .rel-type-btn{font-family:'Orbitron',monospace;font-size:10px;padding:6px 16px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
   .rel-type-btn.active{border-width:2px;font-weight:bold;}
+  /* Color each type button when active — scoped by ID so both panels work */
   #reltab-cpi.active,#ev-reltab-cpi.active{background:rgba(255,136,0,0.15);border-color:#ff8800;color:#ff8800;}
   #reltab-nfp.active,#ev-reltab-nfp.active{background:rgba(0,204,255,0.15);border-color:#00ccff;color:#00ccff;}
   #reltab-fomc.active,#ev-reltab-fomc.active{background:rgba(136,85,255,0.15);border-color:#8855ff;color:#8855ff;}
+
   .up{color:var(--green);}.dn{color:var(--red);}.neu{color:var(--yellow);}
   .es-insight{background:rgba(0,204,255,0.05);border:1px solid rgba(0,204,255,0.2);border-radius:5px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--text2);line-height:1.6;}
   .es-insight strong{color:var(--cyan);}
@@ -2078,14 +2080,15 @@ const REL_LABELS = { cpi:'CPI', nfp:'NFP', fomc:'FOMC' };
 
 window.relSetLookback = function(lb, btn) {
   _relLookback = lb;
-  document.querySelectorAll('.rel-lb-btn').forEach(b => b.classList.remove('active'));
+  // Scope to es-releases panel only — don't disturb mag7 or ev buttons
+  document.querySelectorAll('#es-releases .rel-lb-btn').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   esRenderReleases();
 };
 
 window.relSetType = function(type, btn) {
   _relType = type;
-  document.querySelectorAll('.rel-type-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#es-releases .rel-type-btn').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   esRenderReleases();
 };
@@ -2398,20 +2401,41 @@ window.renderEvHolidays = function() {
 
 let _evRelLookback='all', _evRelType='cpi';
 window.evRelLookback = function(lb,btn) {
-  _evRelLookback=lb;
-  document.querySelectorAll('[id^="ev-rel-lb-"]').forEach(b=>b.classList.remove('active'));
+  _relLookback=lb; // sync the underlying variable
+  document.querySelectorAll('#ev-releases .rel-lb-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  window.relSetLookback(lb,null); renderEvReleases();
+  // also sync the hidden es-releases buttons so esRenderReleases reads correct state
+  document.querySelectorAll('#es-releases .rel-lb-btn').forEach((b,i)=>{
+    const lbs=['all','1yr','2026'];
+    b.classList.toggle('active', lbs[i]===lb);
+  });
+  renderEvReleases();
 };
 window.evRelType = function(type,btn) {
-  _evRelType=type;
-  document.querySelectorAll('[id^="ev-reltab-"]').forEach(b=>b.classList.remove('active'));
+  _relType=type; // sync underlying variable
+  document.querySelectorAll('#ev-releases .rel-type-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  window.relSetType(type,null); renderEvReleases();
+  // sync hidden es-releases type buttons
+  ['cpi','nfp','fomc'].forEach(t=>{
+    const b=document.getElementById('reltab-'+t);
+    if(b) b.classList.toggle('active',t===type);
+  });
+  renderEvReleases();
 };
 
 window.renderEvReleases = function() {
   esRenderReleases();
+  // Sync ev lookback button active state to match current _relLookback
+  const lbMap={'all':'ev-rel-lb-all','1yr':'ev-rel-lb-1yr','2026':'ev-rel-lb-2026'};
+  Object.entries(lbMap).forEach(([lb,id])=>{
+    const b=document.getElementById(id);
+    if(b) b.classList.toggle('active', (typeof _relLookback!=='undefined'?_relLookback:'all')===lb);
+  });
+  // Sync ev type button active state
+  ['cpi','nfp','fomc'].forEach(t=>{
+    const b=document.getElementById('ev-reltab-'+t);
+    if(b) b.classList.toggle('active',(typeof _relType!=='undefined'?_relType:'cpi')===t);
+  });
   const copy=(from,to)=>{const s=document.getElementById(from),d=document.getElementById(to);if(s&&d)d.innerHTML=s.innerHTML;};
   copy('rel-stat-cards','ev-stat-cards');
   copy('rel-upcoming-banner','ev-upcoming-banner');
