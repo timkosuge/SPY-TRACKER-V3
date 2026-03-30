@@ -394,7 +394,7 @@
   <div class="tab" onclick="switchTab('journal')">⬡ JOURNAL</div>
 
   <div class="tab" onclick="switchTab('edgestats')">STATS</div>
-  <div class="tab" onclick="switchTab('analog')">⬡ 2015 ANALOG</div>
+  <div class="tab" onclick="switchTab('analog')">⬡ ANALOG FINDER</div>
 </div>
 
 <div class="content">
@@ -978,44 +978,59 @@
 
 
 <!-- ═══════════════════════════════════════════════════════
-     2015 ANALOG
+     ANALOG FINDER
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-analog">
-  <!-- Row 1: Header cards -->
-  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:10px;" id="analogCards"></div>
-  <!-- Row 2: Analog comparison cards -->
-  <div class="panel" style="margin-bottom:10px;">
-    <div class="panel-label">⬡ TOP 5 HISTORICAL ANALOGS — RANKED BY CORRELATION + PATH SIMILARITY</div>
-    <div id="analogSummary"></div>
+
+  <!-- Row 1: Best match boss panel -->
+  <div style="display:grid;grid-template-columns:280px 1fr;gap:10px;margin-bottom:10px;">
+    <div class="panel" style="border:2px solid var(--cyan);text-align:center;padding:16px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:8px;">⬡ CLOSEST HISTORICAL MATCH</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:36px;font-weight:900;color:var(--cyan);" id="analogBestName">—</div>
+      <div style="margin:10px 0;" id="analogBestBar"></div>
+      <div style="font-family:'Orbitron',monospace;font-size:11px;color:var(--cyan);" id="analogBestScore">—</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;" id="analogBestDesc">—</div>
+    </div>
+    <div id="analogCards" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;align-content:start;"></div>
   </div>
+
+  <!-- Row 2: Year toggles + active analog detail -->
+  <div class="panel" style="margin-bottom:10px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;">COMPARE 2026 vs:</span>
+      <div id="analogToggles" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      <button onclick="analogToggleAll()" id="analogAllBtn"
+        style="font-family:'Orbitron',monospace;font-size:9px;padding:5px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:var(--text2);border-radius:3px;cursor:pointer;margin-left:8px;">
+        ALL ON
+      </button>
+    </div>
+    <!-- Active analog projections (shown when single analog selected) -->
+    <div id="analogActiveDetail" style="display:none;margin-bottom:12px;"></div>
+  </div>
+
   <!-- Row 3: Overlay chart -->
   <div class="panel" style="margin-bottom:10px;">
-    <div class="panel-label">⬡ ALL ANALOGS OVERLAY — % RETURN FROM CYCLE ANCHOR · DASHED = PROJECTION</div>
+    <div class="panel-label">⬡ ANALOG OVERLAY — % RETURN FROM CYCLE ANCHOR · SOLID = HISTORICAL · DASHED = PROJECTED</div>
     <div id="analogChart" style="position:relative;height:380px;"></div>
   </div>
-  <!-- Row 4: Day by day table -->
+
+  <!-- Row 4: Day by day table (updates with active analog) -->
   <div class="panel" style="margin-bottom:10px;">
-    <div class="panel-label">⬡ DAY-BY-DAY COMPARISON — HISTORICAL (DAYS 1–86) + PROJECTION</div>
-    <div style="display:flex;gap:8px;margin-bottom:8px;" id="analogTableControls"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <span class="panel-label" style="margin-bottom:0;" id="analogTableLabel">⬡ DAY-BY-DAY COMPARISON</span>
+      <div style="display:flex;gap:6px;margin-left:auto;">
+        <button onclick="analogShowHist()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;background:var(--cyan)22;border:1px solid var(--cyan);color:var(--cyan);border-radius:3px;cursor:pointer;">HISTORICAL</button>
+        <button onclick="analogShowProj()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:3px;cursor:pointer;">PROJECTIONS</button>
+      </div>
+    </div>
     <div style="max-height:400px;overflow-y:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;" id="analogTable">
-        <thead style="position:sticky;top:0;background:var(--bg2);">
-          <tr>
-            <th style="padding:6px 8px;text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DAY</th>
-            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">2026 DATE</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">SPY 2026</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">% FROM ANCHOR</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;border-bottom:1px solid var(--border);">2012 DATE / %</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ff8800;border-bottom:1px solid var(--border);">2018 DATE / %</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#8855ff;border-bottom:1px solid var(--border);">2007 DATE / %</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#00ccff;border-bottom:1px solid var(--border);">2016 DATE / %</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;border-bottom:1px solid var(--border);">2008 DATE / %</th>
-          </tr>
-        </thead>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead style="position:sticky;top:0;background:var(--bg2);" id="analogTableHead"></thead>
         <tbody id="analogTableBody"></tbody>
       </table>
     </div>
   </div>
+
 </div>
 <!-- ═══════════════════════════════════════════════════════
      GEX
