@@ -1097,9 +1097,153 @@ function renderVolume(sd,md){
 let _md = null, _sd = null, _spyIntraday = null;
 const chatHistory = [];
 
+// ── Ollama / AI provider settings ──────────────────────────────────────────
+const AI_DEFAULTS = {
+  ollamaEnabled: true,
+  ollamaUrl:     'http://localhost:11434',
+  ollamaModel:   'llama3.2:latest',
+  fallback:      'anthropic',   // 'anthropic' | 'none'
+};
+
+function aiSettings(key, val) {
+  const store = JSON.parse(localStorage.getItem('spyAI') || '{}');
+  if (val === undefined) return store[key] ?? AI_DEFAULTS[key];
+  store[key] = val;
+  localStorage.setItem('spyAI', JSON.stringify(store));
+}
+
+// Probe Ollama — returns { ok, models[] } or { ok:false }
+async function probeOllama(baseUrl) {
+  try {
+    const r = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(2500) });
+    if (!r.ok) return { ok: false };
+    const d = await r.json();
+    return { ok: true, models: (d.models || []).map(m => m.name) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+// Core AI caller — tries Ollama locally first, falls back to Anthropic /ai
+async function callAI(messages, system, maxTokens = 800) {
+  const ollamaOn  = aiSettings('ollamaEnabled');
+  const ollamaUrl = aiSettings('ollamaUrl');
+  const model     = aiSettings('ollamaModel');
+
+  if (ollamaOn) {
+    try {
+      const body = {
+        model,
+        messages: system
+          ? [{ role: 'system', content: system }, ...messages]
+          : messages,
+        stream: false,
+        options: { temperature: 0.3, num_predict: maxTokens }
+      };
+      const r = await fetch(`${ollamaUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60000)
+      });
+      if (!r.ok) throw new Error(`Ollama HTTP ${r.status}`);
+      const d = await r.json();
+      const text = d.message?.content || d.response || '';
+      if (!text) throw new Error('Empty Ollama response');
+      _aiLastProvider = 'ollama';
+      updateAIProviderBadge();
+      return text;
+    } catch (e) {
+      console.warn('[AI] Ollama failed:', e.message, '— falling back to Anthropic');
+      _aiLastProvider = 'fallback';
+      updateAIProviderBadge();
+    }
+  }
+
+  // Anthropic fallback via CF /ai
+  const resp = await fetch('/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, system, max_tokens: maxTokens })
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error);
+  _aiLastProvider = 'anthropic';
+  updateAIProviderBadge();
+  return data.content;
+}
+
+let _aiLastProvider = 'unknown';
+
+function updateAIProviderBadge() {
+  const b = document.getElementById('aiProviderBadge');
+  if (!b) return;
+  const cfg = {
+    ollama:    { label: '⬡ OLLAMA', color: '#00ff88' },
+    anthropic: { label: '◈ CLAUDE', color: '#00ccff' },
+    fallback:  { label: '◈ CLAUDE (fallback)', color: '#ff8800' },
+    unknown:   { label: '● READY', color: 'var(--text3)' },
+  };
+  const c = cfg[_aiLastProvider] || cfg.unknown;
+  b.textContent = c.label;
+  b.style.color = c.color;
+}
+
 function toggleChat() {
   const p = document.getElementById('aiPanel');
-  p.classList.toggle('open');
+  if (!p) return;
+  const isOpen = p.classList.toggle('open');
+  if (isOpen) {
+    // Probe Ollama status on open
+    const ollamaUrl = aiSettings('ollamaUrl');
+    if (aiSettings('ollamaEnabled')) {
+      probeOllama(ollamaUrl).then(res => {
+        const dot = document.getElementById('ollamaStatusDot');
+        const lbl = document.getElementById('ollamaStatusLbl');
+        if (dot) dot.style.background = res.ok ? '#00ff88' : '#ff3355';
+        if (lbl) lbl.textContent = res.ok ? 'Ollama connected' : 'Ollama not reachable — using Claude fallback';
+        if (res.ok && res.models?.length) {
+          const sel = document.getElementById('ollamaModelSel');
+          if (sel) {
+            const cur = aiSettings('ollamaModel');
+            sel.innerHTML = res.models.map(m =>
+              `<option value="${m}" ${m===cur?'selected':''}>${m}</option>`
+            ).join('');
+          }
+        }
+      });
+    }
+  }
+}
+
+function toggleAISettings() {
+  const s = document.getElementById('aiSettingsPanel');
+  if (s) s.style.display = s.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveAISettings() {
+  const url   = document.getElementById('ollamaUrlInput')?.value?.trim() || AI_DEFAULTS.ollamaUrl;
+  const model = document.getElementById('ollamaModelSel')?.value || AI_DEFAULTS.ollamaModel;
+  const on    = document.getElementById('ollamaEnabledChk')?.checked ?? true;
+  aiSettings('ollamaUrl', url);
+  aiSettings('ollamaModel', model);
+  aiSettings('ollamaEnabled', on);
+  toggleAISettings();
+  // Re-probe
+  if (on) {
+    probeOllama(url).then(res => {
+      const dot = document.getElementById('ollamaStatusDot');
+      const lbl = document.getElementById('ollamaStatusLbl');
+      if (dot) dot.style.background = res.ok ? '#00ff88' : '#ff3355';
+      if (lbl) lbl.textContent = res.ok ? 'Ollama connected (' + res.models?.length + ' models)' : 'Not reachable — Claude fallback active';
+    });
+  }
+}
+
+function clearAIChat() {
+  chatHistory.length = 0;
+  const msgs = document.getElementById('aiMessages');
+  if (msgs) msgs.innerHTML = '';
 }
 
 // Build compact data context for AI
@@ -1210,17 +1354,7 @@ RATES: 10YR:${fmt(tnx.price,3)}% 2YR:${fmt(irx.price,3)}% 30YR:${fmt(tyx.price,3
 SECTORS: ${sectorStr}`;
 }
 
-// Call AI proxy
-async function callAI(messages, system, maxTokens = 800) {
-  const resp = await fetch('/ai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, system, max_tokens: maxTokens })
-  });
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error);
-  return data.content;
-}
+// callAI is defined in the AI provider block above
 
 // ─── MEDIA PLAYER ─────────────────────────────────────────────────────────────
 // Two embed strategies:
@@ -1434,7 +1568,8 @@ async function analyzeChart() {
       ]
     }];
 
-    const resp = await fetch('/ai', {
+    // Image analysis always uses Anthropic (vision support); bypass local Ollama
+    const _imgResp = await fetch('/ai', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
@@ -1443,9 +1578,9 @@ async function analyzeChart() {
         max_tokens: 600
       })
     });
-    const data = await resp.json();
-    if(data.error) throw new Error(data.error);
-    const analysis = data.content;
+    const _imgData = await _imgResp.json();
+    if(_imgData.error) throw new Error(_imgData.error);
+    const analysis = _imgData.content;
 
     // Save to journal
     const entry = {
@@ -1551,18 +1686,29 @@ async function sendChat() {
 
   try {
     const context = buildContext(_md, _sd);
-    const system = `You are a trading assistant with access to real-time SPY dashboard data. Be concise, specific, and use actual numbers.
+    const model = aiSettings('ollamaModel');
+    const system = `You are a trading assistant with live SPY dashboard data. Be concise and specific — use exact numbers, not vague summaries. Skip preamble. Answer directly.
 
-Data available: price/OHLC (daily/weekly/monthly), WEM range, HVNs, unfilled gaps (above AND below current price), volume vs 30d avg, VIX/VVIX/SKEW, PCR (vol+OI), GEX (flip/support/resistance from CBOE), max pain by expiry (labeled: Mon/Wed/Fri=0DTE, Fri=also weekly OPEX, 3rd-Fri=monthly OPEX — Wednesday is NOT the weekly expiry), breadth (A/D ratio, up/down volume ratio, % stocks above 50/200-day MA, sector performance), macro (rates, DXY, gold, oil, BTC), and ATH distance.
+You have: price/OHLC (daily/weekly/monthly), WEM range, HVNs, unfilled gaps (above AND below), volume vs 30d avg, VIX/VVIX/SKEW, PCR (vol+OI), GEX (flip/support/resistance), max pain by expiry (Mon/Wed/Fri=0DTE, 3rd-Fri=monthly OPEX — Wednesday is NOT weekly expiry), breadth (A/D ratio, up/down vol, % above 50/200 MA, sectors), macro (rates, DXY, gold, oil, BTC), ATH distance.
 
-CURRENT DATA:\n${context}`;
+LIVE DATA:
+${context}`;
     const reply = await callAI(chatHistory, system, 600);
     chatHistory.push({ role: 'assistant', content: reply });
     document.getElementById('thinkingMsg')?.remove();
-    msgs.innerHTML += `<div class="ai-msg assistant">${reply.replace(/\n/g,'<br>')}</div>`;
+    // Format: convert markdown-ish to readable HTML
+    const formatted = reply
+      .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text)">$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em style="color:var(--text2)">$1</em>')
+      .replace(/`(.+?)`/g, '<code style="font-family:Share Tech Mono,monospace;color:var(--cyan);font-size:12px;">$1</code>')
+      .replace(/\n/g, '<br>');
+    const providerLabel = _aiLastProvider === 'ollama'
+      ? `<span style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;opacity:0.6;display:block;margin-top:6px;">⬡ ${model}</span>`
+      : `<span style="font-family:'Orbitron',monospace;font-size:8px;color:#00ccff;opacity:0.6;display:block;margin-top:6px;">◈ claude</span>`;
+    msgs.innerHTML += `<div class="ai-msg assistant">${formatted}${providerLabel}</div>`;
   } catch(e) {
     document.getElementById('thinkingMsg')?.remove();
-    msgs.innerHTML += `<div class="ai-msg thinking">Error: ${e.message}</div>`;
+    msgs.innerHTML += `<div class="ai-msg thinking">⚠ ${e.message}</div>`;
   }
 
   btn.disabled = false;
