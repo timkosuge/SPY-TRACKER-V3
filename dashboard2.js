@@ -1097,156 +1097,9 @@ function renderVolume(sd,md){
 let _md = null, _sd = null, _spyIntraday = null;
 const chatHistory = [];
 
-// ── Ollama / AI provider settings ──────────────────────────────────────────
-const AI_DEFAULTS = {
-  ollamaEnabled: true,
-  ollamaUrl:     'http://localhost:11434',
-  ollamaModel:   'llama3.2:latest',
-  fallback:      'anthropic',   // 'anthropic' | 'none'
-};
-
-function aiSettings(key, val) {
-  const store = JSON.parse(localStorage.getItem('spyAI') || '{}');
-  if (val === undefined) return store[key] ?? AI_DEFAULTS[key];
-  store[key] = val;
-  localStorage.setItem('spyAI', JSON.stringify(store));
-}
-
-// Probe Ollama — returns { ok, models[] } or { ok:false }
-async function probeOllama(baseUrl) {
-  try {
-    const r = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(2500) });
-    if (!r.ok) return { ok: false };
-    const d = await r.json();
-    return { ok: true, models: (d.models || []).map(m => m.name) };
-  } catch {
-    return { ok: false };
-  }
-}
-
-// Core AI caller — tries Ollama locally first, falls back to Anthropic /ai
-async function callAI(messages, system, maxTokens = 800) {
-  const ollamaOn  = aiSettings('ollamaEnabled');
-  const ollamaUrl = aiSettings('ollamaUrl');
-  const model     = aiSettings('ollamaModel');
-
-  if (ollamaOn) {
-    try {
-      const body = {
-        model,
-        messages: system
-          ? [{ role: 'system', content: system }, ...messages]
-          : messages,
-        stream: false,
-        options: { temperature: 0.3, num_predict: maxTokens }
-      };
-      const r = await fetch(`${ollamaUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(60000)
-      });
-      if (!r.ok) throw new Error(`Ollama HTTP ${r.status}`);
-      const d = await r.json();
-      const text = d.message?.content || d.response || '';
-      if (!text) throw new Error('Empty Ollama response');
-      _aiLastProvider = 'ollama';
-      updateAIProviderBadge();
-      return text;
-    } catch (e) {
-      console.warn('[AI] Ollama failed:', e.message, '— falling back to Anthropic');
-      _aiLastProvider = 'fallback';
-      updateAIProviderBadge();
-    }
-  }
-
-  // Grok fallback via CF /ai
-  const resp = await fetch('/ai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, system, max_tokens: maxTokens })
-  });
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error);
-  _aiLastProvider = 'anthropic';
-  updateAIProviderBadge();
-  return data.content;
-}
-
-let _aiLastProvider = 'unknown';
-
-function updateAIProviderBadge() {
-  const b = document.getElementById('aiProviderBadge');
-  if (!b) return;
-  const cfg = {
-    ollama:    { label: '⬡ OLLAMA', color: '#00ff88' },
-    anthropic: { label: '◈ GROK', color: '#00ccff' },
-    fallback:  { label: '◈ GROK (fallback)', color: '#ff8800' },
-    unknown:   { label: '● READY', color: 'var(--text3)' },
-  };
-  const c = cfg[_aiLastProvider] || cfg.unknown;
-  b.textContent = c.label;
-  b.style.color = c.color;
-}
-
 function toggleChat() {
-  const panel   = document.getElementById('aiPanel');
-  const trigger = document.getElementById('aiTrigger');
-  if (!panel) return;
-  const isOpen = panel.classList.toggle('open');
-  if (trigger) trigger.textContent = isOpen ? '×' : '⬡';
-  if (isOpen) {
-    setTimeout(() => document.getElementById('aiInput')?.focus(), 220);
-    if (aiSettings('ollamaEnabled')) {
-      probeOllama(aiSettings('ollamaUrl')).then(res => {
-        const dot = document.getElementById('ollamaStatusDot');
-        const lbl = document.getElementById('ollamaStatusLbl');
-        if (dot) dot.style.background = res.ok ? '#00ff88' : '#ff3355';
-        if (lbl) lbl.textContent = res.ok
-          ? 'Ollama connected — ' + (res.models?.length || 0) + ' models'
-          : 'Ollama offline — using Grok';
-        if (res.ok && res.models?.length) {
-          const sel = document.getElementById('ollamaModelSel');
-          if (sel) {
-            const cur = aiSettings('ollamaModel');
-            sel.innerHTML = res.models.map(m =>
-              `<option value="${m}" ${m===cur?'selected':''}>${m}</option>`
-            ).join('');
-          }
-        }
-      });
-    }
-  }
-}
-
-function toggleAISettings() {
-  const s = document.getElementById('aiSettingsPanel');
-  if (s) s.style.display = s.style.display === 'none' ? 'block' : 'none';
-}
-
-function saveAISettings() {
-  const url   = document.getElementById('ollamaUrlInput')?.value?.trim() || AI_DEFAULTS.ollamaUrl;
-  const model = document.getElementById('ollamaModelSel')?.value || AI_DEFAULTS.ollamaModel;
-  const on    = document.getElementById('ollamaEnabledChk')?.checked ?? true;
-  aiSettings('ollamaUrl', url);
-  aiSettings('ollamaModel', model);
-  aiSettings('ollamaEnabled', on);
-  toggleAISettings();
-  // Re-probe
-  if (on) {
-    probeOllama(url).then(res => {
-      const dot = document.getElementById('ollamaStatusDot');
-      const lbl = document.getElementById('ollamaStatusLbl');
-      if (dot) dot.style.background = res.ok ? '#00ff88' : '#ff3355';
-      if (lbl) lbl.textContent = res.ok ? 'Ollama connected (' + res.models?.length + ' models)' : 'Not reachable — Claude fallback active';
-    });
-  }
-}
-
-function clearAIChat() {
-  chatHistory.length = 0;
-  const msgs = document.getElementById('aiMessages');
-  if (msgs) msgs.innerHTML = '';
+  const p = document.getElementById('aiPanel');
+  p.classList.toggle('open');
 }
 
 // Build compact data context for AI
@@ -1357,7 +1210,17 @@ RATES: 10YR:${fmt(tnx.price,3)}% 2YR:${fmt(irx.price,3)}% 30YR:${fmt(tyx.price,3
 SECTORS: ${sectorStr}`;
 }
 
-// callAI is defined in the AI provider block above
+// Call AI proxy
+async function callAI(messages, system, maxTokens = 800) {
+  const resp = await fetch('/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, system, max_tokens: maxTokens })
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error);
+  return data.content;
+}
 
 // ─── MEDIA PLAYER ─────────────────────────────────────────────────────────────
 // Two embed strategies:
@@ -1571,8 +1434,7 @@ async function analyzeChart() {
       ]
     }];
 
-    // Image analysis always uses Anthropic (vision support); bypass local Ollama
-    const _imgResp = await fetch('/ai', {
+    const resp = await fetch('/ai', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
@@ -1581,9 +1443,9 @@ async function analyzeChart() {
         max_tokens: 600
       })
     });
-    const _imgData = await _imgResp.json();
-    if(_imgData.error) throw new Error(_imgData.error);
-    const analysis = _imgData.content;
+    const data = await resp.json();
+    if(data.error) throw new Error(data.error);
+    const analysis = data.content;
 
     // Save to journal
     const entry = {
@@ -1689,29 +1551,18 @@ async function sendChat() {
 
   try {
     const context = buildContext(_md, _sd);
-    const model = aiSettings('ollamaModel');
-    const system = `You are a trading assistant with live SPY dashboard data. Be concise and specific — use exact numbers, not vague summaries. Skip preamble. Answer directly.
+    const system = `You are a trading assistant with access to real-time SPY dashboard data. Be concise, specific, and use actual numbers.
 
-You have: price/OHLC (daily/weekly/monthly), WEM range, HVNs, unfilled gaps (above AND below), volume vs 30d avg, VIX/VVIX/SKEW, PCR (vol+OI), GEX (flip/support/resistance), max pain by expiry (Mon/Wed/Fri=0DTE, 3rd-Fri=monthly OPEX — Wednesday is NOT weekly expiry), breadth (A/D ratio, up/down vol, % above 50/200 MA, sectors), macro (rates, DXY, gold, oil, BTC), ATH distance.
+Data available: price/OHLC (daily/weekly/monthly), WEM range, HVNs, unfilled gaps (above AND below current price), volume vs 30d avg, VIX/VVIX/SKEW, PCR (vol+OI), GEX (flip/support/resistance from CBOE), max pain by expiry (labeled: Mon/Wed/Fri=0DTE, Fri=also weekly OPEX, 3rd-Fri=monthly OPEX — Wednesday is NOT the weekly expiry), breadth (A/D ratio, up/down volume ratio, % stocks above 50/200-day MA, sector performance), macro (rates, DXY, gold, oil, BTC), and ATH distance.
 
-LIVE DATA:
-${context}`;
+CURRENT DATA:\n${context}`;
     const reply = await callAI(chatHistory, system, 600);
     chatHistory.push({ role: 'assistant', content: reply });
     document.getElementById('thinkingMsg')?.remove();
-    // Format: convert markdown-ish to readable HTML
-    const formatted = reply
-      .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text)">$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em style="color:var(--text2)">$1</em>')
-      .replace(/`(.+?)`/g, '<code style="font-family:Share Tech Mono,monospace;color:var(--cyan);font-size:12px;">$1</code>')
-      .replace(/\n/g, '<br>');
-    const providerLabel = _aiLastProvider === 'ollama'
-      ? `<span style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;opacity:0.6;display:block;margin-top:6px;">⬡ ${model}</span>`
-      : `<span style="font-family:'Orbitron',monospace;font-size:8px;color:#00ccff;opacity:0.6;display:block;margin-top:6px;">◈ grok</span>`;
-    msgs.innerHTML += `<div class="ai-msg assistant">${formatted}${providerLabel}</div>`;
+    msgs.innerHTML += `<div class="ai-msg assistant">${reply.replace(/\n/g,'<br>')}</div>`;
   } catch(e) {
     document.getElementById('thinkingMsg')?.remove();
-    msgs.innerHTML += `<div class="ai-msg thinking">⚠ ${e.message}</div>`;
+    msgs.innerHTML += `<div class="ai-msg thinking">Error: ${e.message}</div>`;
   }
 
   btn.disabled = false;
@@ -3208,46 +3059,85 @@ function isExtendedHours() {
   return mins >= 4 * 60 && mins < 16 * 60;
 }
 
-// Fetch and cache Monday's (week) open price so CUR WK OPEN level bar is always live
+// Fetch and cache the current week's opening price (Monday open, or first trading day)
+// Sources tried in order: intraday (if Mon), market_data weekly_em, _sd rows, /quotes
 async function fetchWeekOpen() {
   try {
+    // Use CT for all day-of-week logic — avoids UTC/CT date boundary issues
     const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    const dow = ctNow.getDay(); // 0=Sun,1=Mon,...
-    const isMon = dow === 1;
-    const ctTodayStr = ctNow.toISOString().slice(0, 10);
+    const dow = ctNow.getDay(); // 0=Sun,1=Mon,2=Tue,...6=Sat
 
-    // Helper: apply a week open value and re-render
-    const applyWeekOpen = (openVal) => {
-      if (!openVal) return false;
-      window._spyWeekOpen = openVal;
+    // CT date string: pad month/day to avoid Intl quirks
+    const ctY = ctNow.getFullYear();
+    const ctM = String(ctNow.getMonth() + 1).padStart(2, '0');
+    const ctD = String(ctNow.getDate()).padStart(2, '0');
+    const ctTodayStr = `${ctY}-${ctM}-${ctD}`;
+
+    // Monday of current week in CT
+    const daysFromMon = dow === 0 ? 6 : dow - 1; // Sun→6, Mon→0, Tue→1...
+    const monCT = new Date(ctNow);
+    monCT.setDate(ctNow.getDate() - daysFromMon);
+    const monY = monCT.getFullYear();
+    const monM = String(monCT.getMonth() + 1).padStart(2, '0');
+    const monD = String(monCT.getDate()).padStart(2, '0');
+    const monStr = `${monY}-${monM}-${monD}`;
+
+    const isMon = dow === 1;
+    const isWeekend = dow === 0 || dow === 6;
+
+    // Helper: apply a week open value and re-render level bar
+    const applyWeekOpen = (val) => {
+      if (!val || isNaN(val)) return false;
+      window._spyWeekOpen = val;
       if (window._spyLevels) {
-        window._spyLevels.weekOpen = openVal;
+        window._spyLevels.weekOpen = val;
         updateLevelBar(window._spyLevels?.cur);
       }
       return true;
     };
 
-    // ── Source 1: /spyintraday — most reliable, always live ──────────────────
-    // If today is Monday: its open IS the week open.
-    // Any other day: fetch it for today's open; week open comes from _sd Monday row.
-    // Either way this gives us today's live open for CHG/OPEN calculation.
-    try {
-      const r = await fetch('/spyintraday?t=' + Date.now());
-      if (r.ok) {
-        const d = await r.json();
-        if (d.available && d.open) {
-          // Always update today's open for CHG/OPEN tracking
-          if (window._spyLevels) window._spyLevels.todayOpen = d.open;
-          if (isMon) {
-            // On Monday, today's open = week open
-            applyWeekOpen(d.open);
-            return;
+    // ── Source 1: /spyintraday — live Monday open ─────────────────────────────
+    // On Monday, intraday open = week open. Also always updates todayOpen.
+    if (!isWeekend) {
+      try {
+        const r = await fetch('/spyintraday?t=' + Date.now());
+        if (r.ok) {
+          const d = await r.json();
+          if (d.available && d.open) {
+            if (window._spyLevels) window._spyLevels.todayOpen = d.open;
+            if (isMon) {
+              applyWeekOpen(d.open);
+              return;
+            }
           }
         }
-      }
-    } catch(e) {}
+      } catch(e) {}
+    }
 
-    // ── Source 2: /quotes — get today's open from Yahoo quote API ────────────
+    // ── Source 2: market_data.json weekly_em — has week_open once Mon bar closes ──
+    // The workflow stamps week_open into the current week's WEM record each run.
+    if (_md) {
+      const wems = _md.weekly_em || [];
+      // Current week = entry with no week_close yet
+      const curWem = wems.find(w => !w.week_close) || wems[0];
+      if (curWem?.week_open) {
+        applyWeekOpen(curWem.week_open);
+        return;
+      }
+    }
+
+    // ── Source 3: _sd (spy_data.json) — find first trading day of this week ──
+    // Sorted newest-first. Filter to [monStr, ctTodayStr], take the oldest (last) row.
+    if (_sd && _sd.length) {
+      const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
+      const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
+      if (firstDay?.open) {
+        applyWeekOpen(firstDay.open);
+        return;
+      }
+    }
+
+    // ── Source 4: /quotes — fallback for Mon pre-market or if _sd not loaded ──
     try {
       const r = await fetch('/quotes?symbols=SPY');
       if (r.ok) {
@@ -3263,21 +3153,21 @@ async function fetchWeekOpen() {
       }
     } catch(e) {}
 
-    // ── Source 3: spy_data.json (_sd) — find first trading day of this week ──
-    // This is the definitive source for non-Monday week opens once _sd is loaded.
-    if (_sd && _sd.length) {
-      const mon = new Date(ctNow);
-      mon.setDate(ctNow.getDate() - (dow === 0 ? 6 : dow - 1));
-      const monStr = mon.toISOString().slice(0, 10);
-      const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
-      // First trading day of the week = oldest date in weekRows
-      const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
-      if (firstDay?.open) {
-        applyWeekOpen(firstDay.open);
-        return;
-      }
+    // ── Source 5: premarket open on Monday (8:30am CT before RTH) ────────────
+    if (isMon) {
+      try {
+        const r = await fetch('/premarket?t=' + Date.now());
+        if (r.ok) {
+          const d = await r.json();
+          if (d.available && d.open) {
+            applyWeekOpen(d.open);
+            return;
+          }
+        }
+      } catch(e) {}
     }
-  } catch(e) {}
+
+  } catch(e) { console.warn('fetchWeekOpen error:', e); }
 }
 
 // Schedules the next live-quote refresh at the appropriate interval
@@ -3535,7 +3425,6 @@ async function loadData(){
     safeRender(renderBonds, md);
     safeRender(renderBreadth, md, sd);
     safeRender(renderSentiment, md);
-    try { renderMacro(); } catch(e) {}
     safeRender(renderPriceHistory, sd);
     safeRender(renderVolHistory, sd);
     safeRender(renderWEM, md);
