@@ -1497,166 +1497,169 @@ function initMediaTab() {
 let _journalEntries = JSON.parse(localStorage.getItem('spyJournal')||'[]');
 let _currentChartBase64 = null;
 let _currentChartMime = 'image/png';
+let _journalOutcome = 'STUDY';
 
 function saveJournal() {
-  // Only keep last 50, and cap base64 images to save space
-  localStorage.setItem('spyJournal', JSON.stringify(_journalEntries.slice(0,50)));
+  localStorage.setItem('spyJournal', JSON.stringify(_journalEntries.slice(0,100)));
 }
 
+// ── Outcome button state ──────────────────────────────────────────────────────
+window.journalSetOutcome = function(oc) {
+  _journalOutcome = oc;
+  const colors = { WIN:'var(--green)', LOSS:'var(--red)', BE:'var(--yellow)', STUDY:'var(--cyan)' };
+  document.querySelectorAll('.joc-btn').forEach(btn => {
+    const isActive = btn.dataset.oc === oc;
+    btn.style.background = isActive ? colors[oc] : 'var(--bg3)';
+    btn.style.color       = isActive ? '#000'      : 'var(--text3)';
+    btn.style.border      = isActive ? 'none'       : '1px solid var(--border)';
+    btn.style.fontWeight  = isActive ? 'bold'       : 'normal';
+  });
+};
+
+// ── File handling ─────────────────────────────────────────────────────────────
 function handleJournalDrop(e) {
   e.preventDefault();
-  $('journalDropZone').style.borderColor = 'var(--border)';
+  document.getElementById('journalDropZone').style.borderColor = 'var(--border)';
   const file = e.dataTransfer.files[0];
-  if(file && file.type.startsWith('image/')) handleJournalFile(file);
+  if (file && file.type.startsWith('image/')) handleJournalFile(file);
 }
 
 function handleJournalFile(file) {
-  if(!file) return;
+  if (!file) return;
   _currentChartMime = file.type || 'image/png';
   const reader = new FileReader();
-  reader.onload = e => {
-    const dataUrl = e.target.result;
+  reader.onload = ev => {
+    const dataUrl = ev.target.result;
     _currentChartBase64 = dataUrl.split(',')[1];
-    // Show preview
-    const preview = $('journalPreviewArea');
-    if(preview) preview.innerHTML = `
-      <img src="${dataUrl}" style="width:100%;max-height:300px;object-fit:contain;border-radius:4px;border:1px solid var(--border);margin-bottom:10px;"/>
-      <div style="font-size:11px;color:var(--text3);">Ready to analyze. Add a note above if needed, then click ANALYZE.</div>`;
-    // Enable button
-    const btn = $('journalAnalyzeBtn');
-    if(btn) { btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer'; }
-    $('journalDropZone').style.borderColor = 'var(--cyan)';
+    const preview = document.getElementById('journalImgPreview');
+    const previewImg = document.getElementById('journalPreviewImg');
+    if (preview && previewImg) { previewImg.src = dataUrl; preview.style.display = 'block'; }
+    const dz = document.getElementById('journalDropZone');
+    if (dz) {
+      dz.style.padding = '10px 16px';
+      dz.style.borderColor = 'var(--cyan)';
+      const icon = document.getElementById('journalDropIcon');
+      if (icon) icon.style.display = 'none';
+    }
+    const btn = document.getElementById('journalSaveBtn');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+    const dateEl = document.getElementById('journalChartDate');
+    if (dateEl && !dateEl.value) {
+      const ct = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+      dateEl.value = ct.toISOString().slice(0,10);
+    }
   };
   reader.readAsDataURL(file);
 }
 
 function clearJournalUpload() {
   _currentChartBase64 = null;
-  $('journalPreviewArea').innerHTML = '<div style="font-size:12px;color:var(--text3);padding:12px 0;">Upload a chart to begin analysis.</div>';
-  $('journalNote').value = '';
-  const btn = $('journalAnalyzeBtn');
-  if(btn) { btn.disabled=true; btn.style.opacity='0.5'; btn.style.cursor='not-allowed'; }
-  $('journalDropZone').style.borderColor = 'var(--border)';
-}
-
-async function analyzeChart() {
-  if(!_currentChartBase64) return;
-  const btn = $('journalAnalyzeBtn');
-  const preview = $('journalPreviewArea');
-  const note = $('journalNote').value.trim();
-
-  btn.textContent = '⟳ ANALYZING...';
-  btn.disabled = true;
-
-  try {
-    const context = _md ? buildContext(_md, _sd) : 'No live market data available.';
-    const userNote = note ? `\n\nTrader's note: "${note}"` : '';
-
-    const messages = [{
-      role: 'user',
-      content: [
-        {
-          type: 'image',
-          source: { type: 'base64', media_type: _currentChartMime, data: _currentChartBase64 }
-        },
-        {
-          type: 'text',
-          text: `Analyze this trading chart. Identify: timeframe and instrument if visible, key price levels (support/resistance, highs/lows), trend structure, notable patterns (consolidation, breakout, flags, wedges, etc.), volume if shown, and any divergences. Then give a concise read on what this chart suggests about near-term price action.${userNote}\n\nCurrent market context for reference:\n${context.slice(0,800)}`
-        }
-      ]
-    }];
-
-    const resp = await fetch('/ai', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        messages,
-        system: 'You are an experienced technical analyst. Analyze the chart image objectively. Be specific about price levels if visible. Keep analysis under 200 words. End with a one-sentence directional bias.',
-        max_tokens: 600
-      })
-    });
-    const data = await resp.json();
-    if(data.error) throw new Error(data.error);
-    const analysis = data.content;
-
-    // Save to journal
-    const entry = {
-      id: Date.now(),
-      ts: new Date().toISOString(),
-      note,
-      analysis,
-      // Store a smaller thumbnail version — just store the dataUrl reference in memory
-      // For persistence we'll store the analysis text + timestamp (images are too large for localStorage)
-      hasImage: true,
-      imageData: _currentChartBase64.slice(0,200), // just first 200 chars as a key
-    };
-    _journalEntries.unshift(entry);
-    saveJournal();
-    renderJournalEntries();
-
-    // Show result
-    const currentPreviewImg = preview.querySelector('img')?.src || '';
-    preview.innerHTML = `
-      ${currentPreviewImg ? `<img src="${currentPreviewImg}" style="width:100%;max-height:260px;object-fit:contain;border-radius:4px;border:1px solid var(--border);margin-bottom:10px;"/>` : ''}
-      <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:3px;padding:14px;font-size:13px;line-height:1.7;color:var(--text2);">${analysis.replace(/\n/g,'<br>')}</div>
-      ${note?`<div style="margin-top:8px;font-size:11px;color:var(--text3);">Note: ${note}</div>`:''}
-      <div style="margin-top:8px;font-size:10px;color:var(--text3);">Saved to journal · ${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})} CT</div>`;
-
-  } catch(e) {
-    preview.innerHTML += `<div style="color:#ff3355;font-size:12px;margin-top:8px;">Analysis failed: ${e.message}</div>`;
+  const preview = document.getElementById('journalImgPreview');
+  if (preview) preview.style.display = 'none';
+  const dz = document.getElementById('journalDropZone');
+  if (dz) {
+    dz.style.padding = '30px 16px';
+    dz.style.borderColor = 'var(--border)';
+    const icon = document.getElementById('journalDropIcon');
+    if (icon) icon.style.display = '';
   }
-
-  btn.textContent = '⬡ ANALYZE WITH AI';
-  btn.disabled = false;
+  const noteEl = document.getElementById('journalNote');
+  if (noteEl) noteEl.value = '';
+  const tagEl = document.getElementById('journalChartTag');
+  if (tagEl) tagEl.value = '';
+  const btn = document.getElementById('journalSaveBtn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed'; }
+  window.journalSetOutcome('STUDY');
 }
 
+// ── Save chart entry ──────────────────────────────────────────────────────────
+window.saveJournalChart = function() {
+  if (!_currentChartBase64) return;
+  const note  = (document.getElementById('journalNote')?.value || '').trim();
+  const tag   = (document.getElementById('journalChartTag')?.value || '').trim();
+  const date  = document.getElementById('journalChartDate')?.value || new Date().toISOString().slice(0,10);
+  const entry = {
+    id:       Date.now(),
+    ts:       new Date().toISOString(),
+    date,
+    tag,
+    note,
+    outcome:  _journalOutcome,
+    mime:     _currentChartMime,
+    imageB64: _currentChartBase64,
+  };
+  _journalEntries.unshift(entry);
+  saveJournal();
+  renderJournalEntries();
+  clearJournalUpload();
+  const btn = document.getElementById('journalSaveBtn');
+  if (btn) {
+    btn.textContent = '\u2713 SAVED';
+    setTimeout(() => { btn.textContent = '\u29c6 SAVE TO JOURNAL'; }, 1400);
+  }
+};
+
+// ── Gallery render ────────────────────────────────────────────────────────────
 function renderJournalEntries() {
-  const el = $('journalEntries');
-  if(!el) return;
-  if(!_journalEntries.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No entries yet.</div>';
+  const el = document.getElementById('journalEntries');
+  if (!el) return;
+  const filterOC = document.getElementById('journalFilterOC')?.value || '';
+  let entries = _journalEntries;
+  if (filterOC) entries = entries.filter(e => e.outcome === filterOC);
+  if (!entries.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No charts saved yet.</div>';
     return;
   }
-  el.innerHTML = _journalEntries.map((e,i) => {
+  const ocColors = { WIN:'var(--green)', LOSS:'var(--red)', BE:'var(--yellow)', STUDY:'var(--cyan)' };
+  el.innerHTML = entries.map(e => {
     const d = new Date(e.ts);
     const dateStr = d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
-    const timeStr = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'}) + ' CT';
-    const preview = e.analysis ? e.analysis.slice(0,120)+'…' : 'No analysis';
-    return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:10px;margin-bottom:6px;cursor:pointer;"
-      onclick="expandJournalEntry(${i})"
-      onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);">${dateStr} ${timeStr}</span>
-        <button onclick="event.stopPropagation();deleteJournalEntry(${i})"
-          style="background:none;border:none;color:#ff335566;cursor:pointer;font-size:12px;padding:0;">✕</button>
+    const timeStr = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CT';
+    const oc = e.outcome || 'STUDY';
+    const ocColor = ocColors[oc] || 'var(--cyan)';
+    const imgSrc = e.imageB64 ? `data:${e.mime||'image/png'};base64,${e.imageB64}` : '';
+    const realIdx = _journalEntries.indexOf(e);
+    return `<div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${ocColor};border-radius:3px;margin-bottom:8px;overflow:hidden;">
+      ${imgSrc ? `<img src="${imgSrc}" onclick="openJournalLightbox('${imgSrc}')"
+        style="width:100%;max-height:160px;object-fit:cover;display:block;cursor:zoom-in;"/>` : ''}
+      <div style="padding:8px 10px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+          <div>
+            <span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${dateStr} ${timeStr}</span>
+            ${e.tag ? `<span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);margin-left:8px;">${e.tag}</span>` : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-family:'Orbitron',monospace;font-size:8px;color:${ocColor};border:1px solid ${ocColor}44;border-radius:2px;padding:1px 5px;">${oc}</span>
+            <button onclick="deleteJournalEntry(${realIdx})" style="background:none;border:none;color:#ff335566;cursor:pointer;font-size:11px;padding:0;line-height:1;">\u2715</button>
+          </div>
+        </div>
+        ${e.note ? `<div style="font-size:11px;color:var(--text2);line-height:1.5;">${e.note}</div>` : ''}
       </div>
-      ${e.note?`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-style:italic;">"${e.note}"</div>`:''}
-      <div style="font-size:11px;color:var(--text2);line-height:1.5;">${preview}</div>
     </div>`;
   }).join('');
 }
 
-function expandJournalEntry(i) {
-  const e = _journalEntries[i];
-  if(!e) return;
-  const preview = $('journalPreviewArea');
-  const d = new Date(e.ts);
-  preview.innerHTML = `
-    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:10px;">
-      ${d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})} · ${d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Chicago'})} CT
-    </div>
-    ${e.note?`<div style="margin-bottom:10px;font-size:12px;color:var(--text3);font-style:italic;">"${e.note}"</div>`:''}
-    <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:3px;padding:14px;font-size:13px;line-height:1.7;color:var(--text2);">${(e.analysis||'').replace(/\n/g,'<br>')}</div>`;
-}
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+window.openJournalLightbox = function(src) {
+  const lb = document.getElementById('journalLightbox');
+  const img = document.getElementById('journalLightboxImg');
+  if (!lb || !img) return;
+  img.src = src;
+  lb.style.display = 'flex';
+};
+window.closeJournalLightbox = function() {
+  const lb = document.getElementById('journalLightbox');
+  if (lb) lb.style.display = 'none';
+};
 
 function deleteJournalEntry(i) {
-  _journalEntries.splice(i,1);
+  _journalEntries.splice(i, 1);
   saveJournal();
   renderJournalEntries();
 }
 
 function clearJournal() {
-  if(confirm('Clear all journal entries? This cannot be undone.')) {
+  if (confirm('Clear all chart journal entries? This cannot be undone.')) {
     _journalEntries = [];
     saveJournal();
     renderJournalEntries();
