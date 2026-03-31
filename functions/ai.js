@@ -39,7 +39,7 @@ export async function onRequestPost(context) {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: env.GROK_MODEL || 'grok-3-mini',
+        model: env.GROK_MODEL || 'grok-beta',
         max_tokens: max_tokens || 800,
         messages: fullMessages,
       })
