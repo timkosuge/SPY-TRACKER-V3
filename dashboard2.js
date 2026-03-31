@@ -3386,6 +3386,7 @@ async function loadData(){
     safeRender(renderBonds, md);
     safeRender(renderBreadth, md, sd);
     safeRender(renderSentiment, md);
+    try { renderMacro(); } catch(e) {}
     safeRender(renderPriceHistory, sd);
     safeRender(renderVolHistory, sd);
     safeRender(renderWEM, md);
