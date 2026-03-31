@@ -307,47 +307,80 @@ function tjRenderPnlChart(filtered) {
 
   const color = cum >= 0 ? '#00ff88' : '#ff3355';
 
-  if (typeof Chart === 'undefined') return;
+  // SVG-based renderer — no Chart.js dependency
+  const W = 600, H = 80;
+  const PAD = { t: 8, r: 12, b: 20, l: 44 };
+  const cW = W - PAD.l - PAD.r;
+  const cH = H - PAD.t - PAD.b;
 
-  _pnlChart = new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data,
-        borderColor: color,
-        backgroundColor: color + '22',
-        borderWidth: 2,
-        pointRadius: data.length > 40 ? 0 : 2,
-        pointHoverRadius: 4,
-        fill: true,
-        tension: 0.3,
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: { legend: { display: false }, tooltip: {
-        callbacks: {
-          label: ctx => ' $' + ctx.parsed.y.toFixed(2)
-        },
-        backgroundColor: '#0c0c14',
-        borderColor: '#252545',
-        borderWidth: 1,
-        titleColor: '#9090c0',
-        bodyColor: color,
-        titleFont: { family: 'Share Tech Mono', size: 10 },
-        bodyFont:  { family: 'Share Tech Mono', size: 12 },
-      }},
-      scales: {
-        x: { ticks: { color: '#606080', font: { family:'Share Tech Mono', size:9 }, maxTicksLimit: 10 }, grid: { color: '#25254522' } },
-        y: { ticks: { color: '#606080', font: { family:'Share Tech Mono', size:9 },
-              callback: v => '$'+v }, grid: { color: '#25254522' },
-             border: { dash: [3,3] } }
-      }
-    }
-  });
+  const minV = Math.min(...data);
+  const maxV = Math.max(...data);
+  const range = maxV - minV || 1;
+
+  const xScale = i => PAD.l + (i / (data.length - 1)) * cW;
+  const yScale = v => PAD.t + cH - ((v - minV) / range) * cH;
+
+  // Zero line
+  const zeroY = yScale(0).toFixed(1);
+  const zeroLine = (minV < 0 && maxV > 0)
+    ? `<line x1="${PAD.l}" x2="${PAD.l + cW}" y1="${zeroY}" y2="${zeroY}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,3"/>`
+    : '';
+
+  // Filled area path
+  const pts = data.map((v, i) => `${xScale(i).toFixed(1)},${yScale(v).toFixed(1)}`).join(' ');
+  const firstX = xScale(0).toFixed(1);
+  const lastX  = xScale(data.length - 1).toFixed(1);
+  const baseY  = yScale(Math.max(minV, 0)).toFixed(1);
+  const areaPath = `M${firstX},${baseY} L${firstX},${yScale(data[0]).toFixed(1)} ` +
+    data.slice(1).map((v, i) => `L${xScale(i+1).toFixed(1)},${yScale(v).toFixed(1)}`).join(' ') +
+    ` L${lastX},${baseY} Z`;
+
+  const showDots = data.length <= 30;
+  const dots = showDots
+    ? data.map((v, i) => `<circle cx="${xScale(i).toFixed(1)}" cy="${yScale(v).toFixed(1)}" r="2" fill="${color}"/>`)
+        .join('')
+    : '';
+
+  // X axis labels — up to 8 evenly spaced
+  const maxLabels = 8;
+  const labelStep = Math.max(1, Math.ceil((labels.length) / maxLabels));
+  const xlbls = labels.map((lbl, i) => {
+    if (lbl === '' || (i % labelStep !== 0 && i !== labels.length - 1)) return '';
+    const x = xScale(i).toFixed(1);
+    return `<text x="${x}" y="${H - 3}" text-anchor="middle" font-size="8" fill="#606080" font-family="Share Tech Mono,monospace">${lbl}</text>`;
+  }).join('');
+
+  // Y axis: min, 0 (if in range), max
+  const yTicks = [...new Set([minV, maxV, (minV < 0 && maxV > 0) ? 0 : null].filter(v => v !== null))];
+  const ylbls = yTicks.map(v => {
+    const y = (yScale(v) + 3).toFixed(1);
+    const label = (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(0);
+    return `<text x="${PAD.l - 4}" y="${y}" text-anchor="end" font-size="8" fill="#606080" font-family="Share Tech Mono,monospace">${label}</text>`;
+  }).join('');
+
+  // Polyline
+  const polyline = `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+
+  canvas.outerHTML; // no-op, just confirming canvas exists
+  // Replace canvas with svg
+  const wrapper = canvas.parentElement;
+  const svgStr = `<svg id="tjPnlSvg" viewBox="0 0 ${W} ${H}" style="width:100%;height:80px;display:block;">
+    ${zeroLine}
+    <path d="${areaPath}" fill="${color}22"/>
+    ${polyline}
+    ${dots}
+    ${xlbls}
+    ${ylbls}
+  </svg>`;
+
+  // Insert SVG replacing canvas (keep canvas hidden for future re-renders)
+  const existing = document.getElementById('tjPnlSvg');
+  if (existing) {
+    existing.outerHTML = svgStr;
+  } else {
+    canvas.insertAdjacentHTML('afterend', svgStr);
+    canvas.style.display = 'none';
+  }
 }
 
 // ── Setup breakdown panel ─────────────────────────────────────────────────────
