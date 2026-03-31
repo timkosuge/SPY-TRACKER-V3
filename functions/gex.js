@@ -215,14 +215,21 @@ export async function onRequest(context) {
       }
 
       const strikes = Object.keys(strikeMap).map(Number);
+      // ITM only: calls with strike < spot, puts with strike > spot
+      const itmCallLevels = strikes.filter(k => k < spot);
+      const itmPutLevels  = strikes.filter(k => k > spot);
       let minPain = Infinity;
       let maxPainStrike = null;
 
       for (const strike of strikes) {
         let loss = 0;
-        for (const level of strikes) {
-          loss += strikeMap[level].call * Math.max(level - strike, 0) * 100;
-          loss += strikeMap[level].put * Math.max(strike - level, 0) * 100;
+        // ITM calls: strike < spot, payout when candidate price > strike
+        for (const level of itmCallLevels) {
+          loss += strikeMap[level].call * Math.max(strike - level, 0) * 100;
+        }
+        // ITM puts: strike > spot, payout when candidate price < strike
+        for (const level of itmPutLevels) {
+          loss += strikeMap[level].put * Math.max(level - strike, 0) * 100;
         }
         if (loss < minPain) {
           minPain = loss;
