@@ -33,6 +33,42 @@ def init_db(conn):
     c.execute("""CREATE TABLE IF NOT EXISTS intraday_bars (
         date TEXT, timestamp TEXT, open REAL, high REAL, low REAL,
         close REAL, volume INTEGER, vwap REAL, PRIMARY KEY (date, timestamp))""")
+    # ── New: persistent 1m and 5m intraday bars (grow daily, never purge) ──
+    c.execute("""CREATE TABLE IF NOT EXISTS intraday_1m (
+        date TEXT, time TEXT, open REAL, high REAL, low REAL,
+        close REAL, volume INTEGER,
+        PRIMARY KEY (date, time))""")
+    c.execute("""CREATE TABLE IF NOT EXISTS intraday_5m (
+        date TEXT, time TEXT, open REAL, high REAL, low REAL,
+        close REAL, volume INTEGER,
+        PRIMARY KEY (date, time))""")
+    # ── New: one row per session — derived stats for fast querying ──────────
+    c.execute("""CREATE TABLE IF NOT EXISTS intraday_session_stats (
+        date TEXT PRIMARY KEY,
+        gap_pct REAL,
+        gap_type TEXT,
+        or_high REAL,
+        or_low REAL,
+        or_range REAL,
+        initial_move_dir TEXT,
+        initial_move_pct REAL,
+        gap_filled INTEGER,
+        gap_fill_time TEXT,
+        or_break_dir TEXT,
+        or_break_time TEXT,
+        or_break_pct REAL,
+        best_5m_time TEXT,
+        best_5m_pct REAL,
+        worst_5m_time TEXT,
+        worst_5m_pct REAL,
+        power_hour_dir TEXT,
+        power_hour_pct REAL,
+        lunch_range_pct REAL,
+        open_price REAL,
+        close_price REAL,
+        prev_close REAL,
+        day_range_pct REAL
+    )""")
     c.execute("""CREATE TABLE IF NOT EXISTS volume_analysis (
         date TEXT PRIMARY KEY, total_volume INTEGER,
         vol_830_900 INTEGER, vol_900_930 INTEGER, vol_930_1030 INTEGER,
@@ -1048,6 +1084,248 @@ def print_summary(conn, target_date):
     print('='*60)
 
 
+# ── Intraday 1m / 5m Storage ───────────────────────────────────────────────────
+def fetch_and_store_intraday_1m(conn, target_date):
+    """Fetch 1-min bars from yfinance and upsert into intraday_1m. Max lookback ~7 days."""
+    try:
+        import yfinance as yf
+        from datetime import datetime as _dt, timedelta as _td
+        next_day = (_dt.strptime(target_date, "%Y-%m-%d") + _td(days=1)).strftime("%Y-%m-%d")
+        hist = yf.Ticker("SPY").history(start=target_date, end=next_day, interval="1m", prepost=False)
+        if hist.empty:
+            print(f"  1m: no bars for {target_date}")
+            return 0
+        c = conn.cursor()
+        inserted = 0
+        for ts, row in hist.iterrows():
+            # Normalize to ET HH:MM
+            import pytz as _tz
+            et = ts.astimezone(_tz.timezone("America/New_York"))
+            t_str = et.strftime("%H:%M")
+            mins = et.hour * 60 + et.minute
+            if not (9 * 60 + 30 <= mins < 16 * 60):
+                continue
+            c.execute(
+                "INSERT OR IGNORE INTO intraday_1m VALUES (?,?,?,?,?,?,?)",
+                (target_date, t_str,
+                 round(float(row["Open"]), 4), round(float(row["High"]), 4),
+                 round(float(row["Low"]), 4),  round(float(row["Close"]), 4),
+                 int(row["Volume"]))
+            )
+            inserted += c.rowcount
+        conn.commit()
+        print(f"  1m {target_date}: {inserted} new bars (session total in DB: {c.execute('SELECT COUNT(*) FROM intraday_1m WHERE date=?', (target_date,)).fetchone()[0]})")
+        return inserted
+    except Exception as e:
+        print(f"  1m error {target_date}: {e}")
+        return 0
+
+
+def fetch_and_store_intraday_5m(conn, target_date):
+    """Fetch 5-min bars from yfinance and upsert into intraday_5m. Max lookback ~60 days."""
+    try:
+        import yfinance as yf
+        from datetime import datetime as _dt, timedelta as _td
+        next_day = (_dt.strptime(target_date, "%Y-%m-%d") + _td(days=1)).strftime("%Y-%m-%d")
+        hist = yf.Ticker("SPY").history(start=target_date, end=next_day, interval="5m", prepost=False)
+        if hist.empty:
+            print(f"  5m: no bars for {target_date}")
+            return 0
+        c = conn.cursor()
+        inserted = 0
+        for ts, row in hist.iterrows():
+            import pytz as _tz
+            et = ts.astimezone(_tz.timezone("America/New_York"))
+            t_str = et.strftime("%H:%M")
+            mins = et.hour * 60 + et.minute
+            if not (9 * 60 + 30 <= mins < 16 * 60):
+                continue
+            c.execute(
+                "INSERT OR IGNORE INTO intraday_5m VALUES (?,?,?,?,?,?,?)",
+                (target_date, t_str,
+                 round(float(row["Open"]), 4), round(float(row["High"]), 4),
+                 round(float(row["Low"]), 4),  round(float(row["Close"]), 4),
+                 int(row["Volume"]))
+            )
+            inserted += c.rowcount
+        conn.commit()
+        print(f"  5m {target_date}: {inserted} new bars")
+        return inserted
+    except Exception as e:
+        print(f"  5m error {target_date}: {e}")
+        return 0
+
+
+def compute_session_stats(conn, target_date):
+    """
+    Derive per-session trading stats from intraday_1m and store in intraday_session_stats.
+    Computes: gap, opening range, initial move, gap fill, OR break, best/worst 5m,
+    power hour, lunch range.
+    """
+    try:
+        c = conn.cursor()
+        bars = c.execute(
+            "SELECT time, open, high, low, close, volume FROM intraday_1m WHERE date=? ORDER BY time",
+            (target_date,)
+        ).fetchall()
+        if len(bars) < 10:
+            return
+
+        # Session open/close price from daily_ohlcv
+        daily = c.execute(
+            "SELECT open, close FROM daily_ohlcv WHERE date=?", (target_date,)
+        ).fetchone()
+        prev = c.execute(
+            "SELECT close FROM daily_ohlcv WHERE date<? ORDER BY date DESC LIMIT 1", (target_date,)
+        ).fetchone()
+        if not daily or not prev:
+            return
+
+        day_open   = daily[0]
+        day_close  = daily[1]
+        prev_close = prev[0]
+
+        # ── Gap ─────────────────────────────────────────────────────────────
+        gap_pct = round((day_open - prev_close) / prev_close * 100, 4)
+        if gap_pct > 0.25:   gap_type = "GAP_UP"
+        elif gap_pct < -0.25: gap_type = "GAP_DOWN"
+        else:                  gap_type = "FLAT"
+
+        # ── Opening Range: first 30 bars (30 minutes) ────────────────────────
+        or_bars = bars[:30]
+        or_high = max(b[2] for b in or_bars)
+        or_low  = min(b[3] for b in or_bars)
+        or_range = round((or_high - or_low) / day_open * 100, 4)
+
+        # ── Initial move: direction at bar 15 (15 min in) ────────────────────
+        bar15 = bars[14] if len(bars) > 14 else bars[-1]
+        initial_move_dir = "UP" if bar15[4] >= day_open else "DOWN"
+        initial_move_pct = round((bar15[4] - day_open) / day_open * 100, 4)
+
+        # ── Gap fill: did price cross prev_close during session? ─────────────
+        gap_filled = None
+        gap_fill_time = None
+        if gap_type == "GAP_UP":
+            for b in bars:
+                if b[3] <= prev_close:
+                    gap_filled = 1
+                    gap_fill_time = b[0]
+                    break
+            if gap_filled is None: gap_filled = 0
+        elif gap_type == "GAP_DOWN":
+            for b in bars:
+                if b[2] >= prev_close:
+                    gap_filled = 1
+                    gap_fill_time = b[0]
+                    break
+            if gap_filled is None: gap_filled = 0
+
+        # ── OR break: first time price closes outside opening range ──────────
+        or_break_dir  = None
+        or_break_time = None
+        or_break_pct  = None
+        for b in bars[30:]:
+            if b[4] > or_high:
+                or_break_dir  = "UP"
+                or_break_time = b[0]
+                or_break_pct  = round((b[4] - or_high) / or_high * 100, 4)
+                break
+            elif b[4] < or_low:
+                or_break_dir  = "DOWN"
+                or_break_time = b[0]
+                or_break_pct  = round((b[4] - or_low) / or_low * 100, 4)
+                break
+
+        # ── Best and worst individual 1-min bars (by % move) ─────────────────
+        bar_pcts = [(b[0], round((b[4] - b[1]) / b[1] * 100, 4)) for b in bars if b[1] > 0]
+        best  = max(bar_pcts, key=lambda x: x[1])
+        worst = min(bar_pcts, key=lambda x: x[1])
+
+        # ── Power hour (15:00–16:00 ET) ──────────────────────────────────────
+        ph_bars = [b for b in bars if b[0] >= "15:00"]
+        power_hour_dir = None
+        power_hour_pct = None
+        if ph_bars:
+            ph_start = ph_bars[0][1]   # open of first bar
+            ph_end   = ph_bars[-1][4]  # close of last bar
+            power_hour_pct = round((ph_end - ph_start) / ph_start * 100, 4)
+            power_hour_dir = "UP" if power_hour_pct >= 0 else "DOWN"
+
+        # ── Lunch range (11:30–13:00 ET) ─────────────────────────────────────
+        lunch_bars = [b for b in bars if "11:30" <= b[0] < "13:00"]
+        lunch_range_pct = None
+        if lunch_bars:
+            lh = max(b[2] for b in lunch_bars)
+            ll = min(b[3] for b in lunch_bars)
+            lunch_range_pct = round((lh - ll) / ll * 100, 4)
+
+        day_range_pct = round((max(b[2] for b in bars) - min(b[3] for b in bars)) / day_open * 100, 4)
+
+        c.execute("""INSERT OR REPLACE INTO intraday_session_stats VALUES
+            (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (target_date, gap_pct, gap_type,
+             or_high, or_low, or_range,
+             initial_move_dir, initial_move_pct,
+             gap_filled, gap_fill_time,
+             or_break_dir, or_break_time, or_break_pct,
+             best[0], best[1], worst[0], worst[1],
+             power_hour_dir, power_hour_pct,
+             lunch_range_pct,
+             day_open, day_close, prev_close, day_range_pct))
+        conn.commit()
+        print(f"  Session stats {target_date}: gap={gap_pct:+.2f}% OR={or_range:.2f}% OR_break={or_break_dir} PH={power_hour_pct}")
+    except Exception as e:
+        print(f"  Session stats error {target_date}: {e}")
+        import traceback; traceback.print_exc()
+
+
+def export_intraday_json(conn):
+    """Export intraday_session_stats as intraday_data.js for the frontend."""
+    c = conn.cursor()
+    rows = c.execute("""
+        SELECT date, gap_pct, gap_type, or_high, or_low, or_range,
+               initial_move_dir, initial_move_pct,
+               gap_filled, gap_fill_time,
+               or_break_dir, or_break_time, or_break_pct,
+               best_5m_time, best_5m_pct, worst_5m_time, worst_5m_pct,
+               power_hour_dir, power_hour_pct, lunch_range_pct,
+               open_price, close_price, prev_close, day_range_pct
+        FROM intraday_session_stats ORDER BY date DESC
+    """).fetchall()
+
+    if not rows:
+        print("  intraday_data.js: no session stats yet")
+        return
+
+    cols = ["date","gap_pct","gap_type","or_high","or_low","or_range",
+            "initial_move_dir","initial_move_pct",
+            "gap_filled","gap_fill_time",
+            "or_break_dir","or_break_time","or_break_pct",
+            "best_5m_time","best_5m_pct","worst_5m_time","worst_5m_pct",
+            "power_hour_dir","power_hour_pct","lunch_range_pct",
+            "open_price","close_price","prev_close","day_range_pct"]
+
+    records = [dict(zip(cols, r)) for r in rows]
+
+    # Also attach the 1m bars for the most recent day (for live chart use)
+    if records:
+        recent_date = records[0]["date"]
+        bars_1m = c.execute(
+            "SELECT time, open, high, low, close, volume FROM intraday_1m WHERE date=? ORDER BY time",
+            (recent_date,)
+        ).fetchall()
+        records[0]["bars_1m"] = [
+            {"t": b[0], "o": b[1], "h": b[2], "l": b[3], "c": b[4], "v": b[5]}
+            for b in bars_1m
+        ]
+
+    with open("intraday_data.js", "w") as f:
+        f.write("const INTRADAY_SESSION_STATS = ")
+        json.dump(records, f)
+        f.write(";\n")
+    print(f"  intraday_data.js: {len(records)} sessions exported")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 def get_trading_days_to_process(conn):
     """
@@ -1214,6 +1492,74 @@ def main():
             export_market_data(conn, options_data=options_data)
         except Exception as e:
             print(f"  market_data.json error: {e}")
+
+        # ── Step 5: Intraday 1m + 5m accumulation ────────────────────────────
+        print("\n── Intraday 1m / 5m Accumulation ───────────────────────────")
+        # Determine which recent trading days are missing intraday data
+        # 1m: only fetch last 7 calendar days (yfinance limit)
+        # 5m: fetch last 60 calendar days (yfinance limit)
+        from datetime import timedelta as _td2
+        try:
+            today_str  = today.strftime("%Y-%m-%d")
+            # Dates to try for 1m (last 7 trading days)
+            candidate_1m = []
+            for i in range(8):
+                d = today - _td2(days=i)
+                if d.weekday() < 5:
+                    candidate_1m.append(d.strftime("%Y-%m-%d"))
+
+            # Dates to try for 5m (last 60 calendar days of trading days)
+            candidate_5m = []
+            for i in range(65):
+                d = today - _td2(days=i)
+                if d.weekday() < 5:
+                    candidate_5m.append(d.strftime("%Y-%m-%d"))
+
+            # Only fetch if bars not already in DB for that date
+            existing_1m = set(r[0] for r in conn.execute(
+                "SELECT DISTINCT date FROM intraday_1m WHERE date >= ?",
+                ((today - _td2(days=8)).strftime("%Y-%m-%d"),)
+            ).fetchall())
+
+            existing_5m = set(r[0] for r in conn.execute(
+                "SELECT DISTINCT date FROM intraday_5m WHERE date >= ?",
+                ((today - _td2(days=65)).strftime("%Y-%m-%d"),)
+            ).fetchall())
+
+            # Always re-fetch today to get latest bars
+            to_fetch_1m = [d for d in candidate_1m if d not in existing_1m or d == today_str]
+            to_fetch_5m = [d for d in candidate_5m if d not in existing_5m or d == today_str]
+
+            print(f"  1m: fetching {len(to_fetch_1m)} dates: {to_fetch_1m[:3]}{'...' if len(to_fetch_1m)>3 else ''}")
+            for d_str in to_fetch_1m:
+                fetch_and_store_intraday_1m(conn, d_str)
+
+            print(f"  5m: fetching {len(to_fetch_5m)} dates")
+            for d_str in to_fetch_5m:
+                fetch_and_store_intraday_5m(conn, d_str)
+
+            # Compute session stats for any date with 1m bars but missing stats
+            missing_stats = [r[0] for r in conn.execute("""
+                SELECT DISTINCT i.date FROM intraday_1m i
+                LEFT JOIN intraday_session_stats s ON i.date = s.date
+                WHERE s.date IS NULL
+                ORDER BY i.date DESC LIMIT 60
+            """).fetchall()]
+            # Also recompute today always (bars may have been updated)
+            if today_str not in missing_stats and today_str in existing_1m | set(to_fetch_1m):
+                missing_stats.insert(0, today_str)
+            print(f"  Computing session stats for {len(missing_stats)} dates")
+            for d_str in missing_stats:
+                compute_session_stats(conn, d_str)
+
+            # Export intraday JS
+            export_intraday_json(conn)
+
+            # Update GitHub Actions commit list
+            print("  Intraday accumulation complete")
+        except Exception as e:
+            print(f"  Intraday accumulation error: {e}")
+            import traceback; traceback.print_exc()
 
         print_summary(conn, ref_str)
 
