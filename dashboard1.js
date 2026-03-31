@@ -1376,16 +1376,23 @@ function renderDeskSession(md,sd){
     if(pml) pml.textContent = l ? '$'+fmt(l,2) : '—';
   };
   // PM cache — memory + localStorage keyed to today's date (ET)
-  // This survives page refreshes during RTH and avoids re-fetching when PM window is closed.
+  // IMPORTANT: we only hard-lock the cache once the PM window is CLOSED (>= 9:30 ET).
+  // During pre-market we always re-fetch so bad early-session ticks don't get permanently
+  // baked in as the PM Low before the session has finished.
   const _pmToday = (() => {
     try {
       return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
     } catch(e) { return new Date().toISOString().slice(0,10); }
   })();
   const PM_CACHE_KEY = 'spy_pm_cache_v2';
+  // PM session is final once we're at or past 9:30 ET (reuses isPremarket computed above)
+  const _pmSessionClosed = !isPremarket;
 
   const loadPMCache = () => {
-    // 1. In-memory (fastest, set earlier in same session)
+    // Only trust localStorage cache if PM session is definitively closed.
+    // During pre-market, skip the cache so we always get a fresh fetch.
+    if (!_pmSessionClosed) return null;
+    // 1. In-memory (fastest)
     if (window._pmCache && window._pmCache.high && window._pmCache.date === _pmToday) {
       return window._pmCache;
     }
@@ -1401,9 +1408,14 @@ function renderDeskSession(md,sd){
   };
 
   const savePMCache = (pm) => {
+    // Always update in-memory so the display stays current this session.
+    // Only persist to localStorage once PM session is closed — during pre-market
+    // we don't lock the values to disk until the session is complete.
     const entry = { date: _pmToday, high: pm.high, mid: pm.mid, low: pm.low };
     window._pmCache = entry;
-    try { localStorage.setItem(PM_CACHE_KEY, JSON.stringify(entry)); } catch(e) {}
+    if (_pmSessionClosed) {
+      try { localStorage.setItem(PM_CACHE_KEY, JSON.stringify(entry)); } catch(e) {}
+    }
   };
 
   const cached = loadPMCache();
