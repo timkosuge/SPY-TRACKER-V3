@@ -3170,29 +3170,24 @@ function isExtendedHours() {
 // Sources tried in order: intraday (if Mon), market_data weekly_em, _sd rows, /quotes
 async function fetchWeekOpen() {
   try {
-    // Use CT for all day-of-week logic — avoids UTC/CT date boundary issues
     const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    const dow = ctNow.getDay(); // 0=Sun,1=Mon,2=Tue,...6=Sat
+    const dow = ctNow.getDay(); // 0=Sun,1=Mon...6=Sat
+    const isWeekend = dow === 0 || dow === 6;
+    const isMon = dow === 1;
 
-    // CT date string: pad month/day to avoid Intl quirks
+    // Build date strings in CT
+    const pad = n => String(n).padStart(2, '0');
     const ctY = ctNow.getFullYear();
-    const ctM = String(ctNow.getMonth() + 1).padStart(2, '0');
-    const ctD = String(ctNow.getDate()).padStart(2, '0');
+    const ctM = pad(ctNow.getMonth() + 1);
+    const ctD = pad(ctNow.getDate());
     const ctTodayStr = `${ctY}-${ctM}-${ctD}`;
 
-    // Monday of current week in CT
-    const daysFromMon = dow === 0 ? 6 : dow - 1; // Sun→6, Mon→0, Tue→1...
+    // Monday of current week
+    const daysFromMon = dow === 0 ? 6 : dow - 1;
     const monCT = new Date(ctNow);
     monCT.setDate(ctNow.getDate() - daysFromMon);
-    const monY = monCT.getFullYear();
-    const monM = String(monCT.getMonth() + 1).padStart(2, '0');
-    const monD = String(monCT.getDate()).padStart(2, '0');
-    const monStr = `${monY}-${monM}-${monD}`;
+    const monStr = `${monCT.getFullYear()}-${pad(monCT.getMonth()+1)}-${pad(monCT.getDate())}`;
 
-    const isMon = dow === 1;
-    const isWeekend = dow === 0 || dow === 6;
-
-    // Helper: apply a week open value and re-render level bar
     const applyWeekOpen = (val) => {
       if (!val || isNaN(val)) return false;
       window._spyWeekOpen = val;
@@ -3203,8 +3198,10 @@ async function fetchWeekOpen() {
       return true;
     };
 
-    // ── Source 1: /spyintraday — live Monday open ─────────────────────────────
-    // On Monday, intraday open = week open. Also always updates todayOpen.
+    // ── Source 1: /spyintraday — best for live market hours ──────────────────
+    // On Monday this IS the week open. Any other day during/after market open,
+    // the intraday open = today's RTH open, not week open — so only use on Monday.
+    // EXCEPTION: if no other source has week open, try intraday as last resort.
     if (!isWeekend) {
       try {
         const r = await fetch('/spyintraday?t=' + Date.now());
@@ -3221,11 +3218,9 @@ async function fetchWeekOpen() {
       } catch(e) {}
     }
 
-    // ── Source 2: market_data.json weekly_em — has week_open once Mon bar closes ──
-    // The workflow stamps week_open into the current week's WEM record each run.
+    // ── Source 2: market_data.json weekly_em — has week_open once pipeline runs ─
     if (_md) {
       const wems = _md.weekly_em || [];
-      // Current week = entry with no week_close yet
       const curWem = wems.find(w => !w.week_close) || wems[0];
       if (curWem?.week_open) {
         applyWeekOpen(curWem.week_open);
@@ -3233,18 +3228,42 @@ async function fetchWeekOpen() {
       }
     }
 
-    // ── Source 3: _sd (spy_data.json) — find first trading day of this week ──
-    // Sorted newest-first. Filter to [monStr, ctTodayStr], take the oldest (last) row.
+    // ── Source 3: _sd daily data — first trading day of this week ────────────
     if (_sd && _sd.length) {
+      // _sd sorted newest-first; filter to [monStr, today]
       const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
       const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
       if (firstDay?.open) {
         applyWeekOpen(firstDay.open);
         return;
       }
+
+      // Week has no DB rows yet (pipeline hasn't run this week).
+      // Try to find Monday's row specifically — even if pipeline ran Friday,
+      // Monday might be in _sd if page was loaded after Mon close.
+      // If truly not there, use most recent row's close as best approximation
+      // (prev Friday close is the reference the week opened from).
+      // But don't apply it as weekOpen — just log and fall through to live sources.
     }
 
-    // ── Source 4: /quotes — fallback for Mon pre-market or if _sd not loaded ──
+    // ── Source 4: live /spyintraday open for Tue-Fri when week not in DB ─────
+    // This handles the gap between Mon open and when the pipeline first runs
+    if (!isWeekend && !isMon) {
+      try {
+        const r = await fetch('/spyintraday?t=' + Date.now());
+        if (r.ok) {
+          const d = await r.json();
+          // d.open is today's RTH open — not the week open.
+          // But we can get the week open from the /quotes weekOpen field if available
+          if (d.available && d.week_open) {
+            applyWeekOpen(d.week_open);
+            return;
+          }
+        }
+      } catch(e) {}
+    }
+
+    // ── Source 5: /quotes SPY — check for open ───────────────────────────────
     try {
       const r = await fetch('/quotes?symbols=SPY');
       if (r.ok) {
@@ -3260,7 +3279,7 @@ async function fetchWeekOpen() {
       }
     } catch(e) {}
 
-    // ── Source 5: premarket open on Monday (8:30am CT before RTH) ────────────
+    // ── Source 6: premarket open on Monday ───────────────────────────────────
     if (isMon) {
       try {
         const r = await fetch('/premarket?t=' + Date.now());
@@ -3519,7 +3538,9 @@ async function loadData(){
     }
 
     _md=md; _sd=sd;
-    if (spyOHLC?.available) _spyIntraday = spyOHLC; // store live intraday for desk volume box
+    if (spyOHLC?.available) _spyIntraday = spyOHLC;
+    fetchWeekOpen(); // retry now that _sd is populated
+    // (startup call runs before _sd is loaded — this ensures week open is always found)
     const safeRender = (fn, ...args) => { try { fn(...args); } catch(e) { console.error(fn.name, e); } };
     safeRender(renderHub, md, sd);
     safeRender(renderDesk, md, sd);
