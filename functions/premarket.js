@@ -64,10 +64,18 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ error: 'No pre-market bars found', available: false }), { headers });
     }
 
-    // Filter to actual pre-market window (some bars may be from extended hours outside range)
+    // Filter STRICTLY to pre-market window [p1, p2]
+    // Yahoo with includePrePost=true ignores period2 and keeps returning bars into RTH —
+    // if we don't enforce the timestamp bounds, RTH lows bleed into PM LOW, skewing mid too.
     const bars = timestamps.map((t, i) => ({
       t, open: opens[i], high: highs[i], low: lows[i], close: closes[i], vol: vols[i]
-    })).filter(b => b.high != null && b.low != null && b.close != null);
+    })).filter(b =>
+      b.t >= p1 &&
+      b.t <= p2 &&
+      b.high  != null &&
+      b.low   != null &&
+      b.close != null
+    );
 
     if (!bars.length) {
       return new Response(JSON.stringify({ error: 'No valid bars in pre-market window', available: false }), { headers });
