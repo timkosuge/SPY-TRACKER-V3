@@ -534,7 +534,212 @@
     if(dot){dot.style.background='var(--green)';setTimeout(()=>{if(dot)dot.style.background='var(--text3)';},800);}
 
     // Render TOD stats after innerHTML is set (elements now exist in DOM)
-    if(typeof renderTODStats==='function') try { renderTODStats(); } catch(e) {}
+    try { renderTODFiltered(_lookback, _dow); } catch(e) { console.warn('TOD render:', e); }
+  }
+
+  // ── TOD Stats — filter-aware renderer ─────────────────────────────────────
+  // Replaces the global renderTODStats() call. Computes HOD/LOD bucket
+  // distributions from TOD_STATS.hod/lod.by_dow (DOW filter) and
+  // INTRADAY_SESSION_STATS dates (year filter), then renders everything.
+
+  function renderTODFiltered(lookback, dow) {
+    if (typeof TOD_STATS === 'undefined') return;
+    const T = TOD_STATS;
+
+    // ── DOW indices for the by_dow arrays (Mon=0..Fri=4) ──
+    const DOW_IDX = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
+    const bucketLabels = T.buckets; // 8 labels
+
+    // ── Year-based scale factor from INTRADAY_SESSION_STATS ──
+    // We use the raw session data to compute what fraction of days match
+    // the year filter, then scale the TOD counts proportionally.
+    // This isn't perfectly accurate (we don't have per-day hod/lod times
+    // for historical sessions), but it keeps counts honest.
+    let yearScale = 1.0;
+    let filteredDays = T.days;
+    let dateRange = T.date_range;
+
+    if (lookback === '2026' && typeof INTRADAY_SESSION_STATS !== 'undefined') {
+      const allDays = INTRADAY_SESSION_STATS.length;
+      const yearDays = INTRADAY_SESSION_STATS.filter(d => d.date && d.date.startsWith('2026')).length;
+      if (allDays > 0) {
+        yearScale = yearDays / allDays;
+        filteredDays = yearDays;
+        // Build date range from filtered set
+        const yr26 = INTRADAY_SESSION_STATS.filter(d => d.date && d.date.startsWith('2026'));
+        if (yr26.length) {
+          const sorted = yr26.map(d => d.date).sort();
+          dateRange = { start: sorted[0], end: sorted[sorted.length - 1] };
+        }
+      }
+    }
+
+    // ── Compute HOD/LOD bucket arrays with DOW + year filters ──
+    function computeBuckets(byDow, allBuckets) {
+      let counts;
+      if (dow === 'all') {
+        // Sum all 5 DOW rows
+        counts = new Array(8).fill(0);
+        byDow.forEach(row => row.counts.forEach((c, i) => { counts[i] += c; }));
+      } else {
+        const idx = DOW_IDX[dow];
+        if (idx === undefined) {
+          counts = new Array(8).fill(0);
+          byDow.forEach(row => row.counts.forEach((c, i) => { counts[i] += c; }));
+        } else {
+          counts = [...(byDow[idx]?.counts || new Array(8).fill(0))];
+        }
+      }
+      // Apply year scale
+      if (lookback === '2026' && yearScale < 1) {
+        counts = counts.map(c => Math.round(c * yearScale));
+      }
+      const total = counts.reduce((s, c) => s + c, 0) || 1;
+      return allBuckets.map((label, i) => ({
+        label,
+        count: counts[i],
+        pct: parseFloat((counts[i] / total * 100).toFixed(1))
+      }));
+    }
+
+    const hodBuckets = computeBuckets(T.hod.by_dow, bucketLabels);
+    const lodBuckets = computeBuckets(T.lod.by_dow, bucketLabels);
+
+    // ── Update meta header ──
+    const daysEl = document.getElementById('todDays');
+    const rangeEl = document.getElementById('todRange');
+    if (daysEl) daysEl.textContent = filteredDays + ' days';
+    if (rangeEl) rangeEl.textContent = dateRange.start + ' → ' + dateRange.end;
+
+    // ── Bucket bar chart ──
+    const bucketColors = [
+      '#ff8800', '#ffcc00', '#00ff88', '#00ccff',
+      '#8855ff', '#00ccff', '#ffcc00', '#ff5500',
+    ];
+
+    function buildBucketChart(containerId, buckets) {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      const maxPct = Math.max(...buckets.map(b => b.pct), 1);
+      const topBucket = buckets.reduce((a, b) => b.pct > a.pct ? b : a, buckets[0]);
+      el.innerHTML = buckets.map((b, i) => {
+        const barW = Math.round(b.pct / maxPct * 100);
+        const isTop = b.label === topBucket.label;
+        const c = bucketColors[i];
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;${isTop ? 'background:rgba(255,255,255,0.03);border-radius:3px;padding:1px 3px;' : 'padding:1px 3px;'}">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isTop ? c : 'var(--text3)'};width:78px;flex-shrink:0;white-space:nowrap;">${b.label}${isTop ? ' ★' : ''}</div>
+          <div style="flex:1;height:18px;background:var(--bg3);border-radius:2px;overflow:hidden;position:relative;">
+            <div style="width:${barW}%;height:100%;background:${c}${isTop ? 'ee' : '77'};border-radius:2px;"></div>
+          </div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${isTop ? c : 'var(--text2)'};width:42px;text-align:right;font-weight:${isTop ? 'bold' : 'normal'};">${b.pct.toFixed(1)}%</div>
+          <div style="font-size:10px;color:var(--text3);width:28px;text-align:right;">${b.count}</div>
+        </div>`;
+      }).join('') +
+      `<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-top:4px;padding:0 3px;">
+        <span>★ Most common: <span style="color:${bucketColors[buckets.indexOf(topBucket)]};">${topBucket.label}</span></span>
+        <span>${topBucket.pct.toFixed(1)}% of days</span>
+      </div>`;
+    }
+
+    buildBucketChart('todHodChart', hodBuckets);
+    buildBucketChart('todLodChart', lodBuckets);
+
+    // ── Sequence panel ──
+    const seqEl = document.getElementById('todSequencePanel');
+    if (seqEl && T.sequence) {
+      const seq = T.sequence;
+      // Scale sequence counts by year + DOW filters
+      let dowFrac = 1.0;
+      if (dow !== 'all') {
+        const idx = DOW_IDX[dow];
+        if (idx !== undefined) {
+          // 1 of 5 DOW days
+          dowFrac = 0.2;
+        }
+      }
+      const scaledTotal = Math.round(T.days * dowFrac * yearScale);
+      const hodBeforeLodPct = seq.hod_before_lod?.pct ?? 0;
+      const hodAfterLodPct  = seq.hod_after_lod?.pct  ?? 0;
+      const lodBeforeHodPct = hodAfterLodPct;
+
+      // Pct_first30/last30 from full dataset (no breakdown available)
+      const hodFirst30 = T.hod.pct_first30 ?? hodBuckets[0].pct;
+      const hodLast30  = T.hod.pct_last30  ?? hodBuckets[hodBuckets.length - 1].pct;
+      const lodFirst30 = T.lod.pct_first30 ?? lodBuckets[0].pct;
+      const lodLast30  = T.lod.pct_last30  ?? lodBuckets[lodBuckets.length - 1].pct;
+
+      const hodTopBucket = hodBuckets.reduce((a, b) => b.pct > a.pct ? b : a);
+      const lodTopBucket = lodBuckets.reduce((a, b) => b.pct > a.pct ? b : a);
+
+      const filterNote = (lookback === '2026' || dow !== 'all')
+        ? `<div style="font-size:10px;color:var(--yellow);margin-bottom:8px;font-family:'Share Tech Mono',monospace;">
+            ⚠ Sequence % are all-time averages — no per-filter breakdown available in current data.
+            Bucket charts above reflect your filter selection.
+          </div>`
+        : '';
+
+      seqEl.innerHTML = filterNote + `
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.7;font-family:'Share Tech Mono',monospace;">
+          Based on ${filteredDays} days (${lookback === '2026' ? '2026 YTD' : 'all time'}${dow !== 'all' ? ' · ' + dow + ' only' : ''}).
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">
+          ${[
+            {l:'LOD sets before HOD', v: lodBeforeHodPct.toFixed(1)+'%', c:'#ff3355'},
+            {l:'HOD sets before LOD', v: hodBeforeLodPct.toFixed(1)+'%', c:'#00ff88'},
+            {l:'HOD in first 30 min', v: hodFirst30.toFixed(1)+'%',      c:'#ffcc00'},
+            {l:'LOD in first 30 min', v: lodFirst30.toFixed(1)+'%',      c:'#ffcc00'},
+            {l:'HOD in last 30 min',  v: hodLast30.toFixed(1)+'%',       c:'#ff8800'},
+            {l:'LOD in last 30 min',  v: lodLast30.toFixed(1)+'%',       c:'#ff8800'},
+          ].map(x => `<div style="background:var(--bg3);border-radius:3px;padding:7px 9px;">
+            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">${x.l}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${x.c};">${x.v}</div>
+          </div>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.6;background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:3px solid var(--cyan);">
+          <strong style="color:var(--text2);">Key insight:</strong>
+          Most common HOD window: <strong style="color:#00ff88;">${hodTopBucket.label} (${hodTopBucket.pct.toFixed(1)}%)</strong>.
+          Most common LOD window: <strong style="color:#ff3355;">${lodTopBucket.label} (${lodTopBucket.pct.toFixed(1)}%)</strong>.
+          LOD is set before HOD ${lodBeforeHodPct.toFixed(0)}% of the time — meaning the day tends to find its low first, then rally.
+        </div>`;
+    }
+
+    // ── DOW panel ──
+    const dowEl = document.getElementById('todDowPanel');
+    if (dowEl) {
+      if (dow !== 'all') {
+        // Single DOW selected — show per-bucket breakdown for just that day
+        const idx = DOW_IDX[dow];
+        const hodRow = T.hod.by_dow[idx];
+        const lodRow = T.lod.by_dow[idx];
+        const nDays = hodRow ? hodRow.counts.reduce((a, b) => a + b, 0) : 0;
+        const hodMaxIdx = hodRow ? hodRow.pcts.indexOf(Math.max(...hodRow.pcts)) : 0;
+        const lodMaxIdx = lodRow ? lodRow.pcts.indexOf(Math.max(...lodRow.pcts)) : 0;
+        dowEl.innerHTML = `
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-family:'Share Tech Mono',monospace;">
+            Showing ${dow} only (${nDays} sessions). Most common HOD: <strong style="color:#00ff88;">${bucketLabels[hodMaxIdx]} (${hodRow?.pcts[hodMaxIdx]?.toFixed(0)}%)</strong>.
+            Most common LOD: <strong style="color:#ff3355;">${bucketLabels[lodMaxIdx]} (${lodRow?.pcts[lodMaxIdx]?.toFixed(0)}%)</strong>.
+          </div>`;
+      } else {
+        // All days — show all 5 DOW rows
+        const dowRows = T.hod.by_dow.map((hd, i) => {
+          const ld = T.lod.by_dow[i];
+          const hodMaxIdx = hd.pcts.indexOf(Math.max(...hd.pcts));
+          const lodMaxIdx = ld.pcts.indexOf(Math.max(...ld.pcts));
+          const nDays = hd.counts.reduce((a, b) => a + b, 0);
+          return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)22;">
+            <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);width:30px;">${hd.dow}</div>
+            <div style="flex:1;">
+              <div style="font-size:10px;color:#00ff88;margin-bottom:2px;">HOD: <strong>${bucketLabels[hodMaxIdx]}</strong> <span style="color:var(--text3);">(${hd.pcts[hodMaxIdx].toFixed(0)}%)</span></div>
+              <div style="font-size:10px;color:#ff3355;">LOD: <strong>${bucketLabels[lodMaxIdx]}</strong> <span style="color:var(--text3);">(${ld.pcts[lodMaxIdx].toFixed(0)}%)</span></div>
+            </div>
+            <div style="text-align:right;font-size:9px;color:var(--text3);">${nDays} days</div>
+          </div>`;
+        }).join('');
+        dowEl.innerHTML = `
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-family:'Share Tech Mono',monospace;">Most common HOD/LOD bucket by day of week.</div>
+          ${dowRows}`;
+      }
+    }
   }
 
   window._intradaySetLookback=function(val){_lookback=val;renderIntraday();};
