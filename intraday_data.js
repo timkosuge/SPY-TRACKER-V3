@@ -104,11 +104,14 @@
 
   // ── Component helpers ─────────────────────────────────────────────────────
 
-  function kpi(label,val,rawVal,sub) {
+  function kpi(label,val,rawVal,sub,dolAmt) {
     const color=rawVal==null?'var(--text2)':rawVal>=0?'var(--green)':'var(--red)';
+    const dolPart=dolAmt!=null
+      ?'<span style="font-family:\'Share Tech Mono\',monospace;font-size:13px;color:var(--text3);margin-left:6px;">$'+Number(dolAmt).toFixed(2)+'</span>'
+      :'';
     return '<div class="stat-box" style="padding:10px;text-align:center;">'
       +'<div style="font-family:\'Orbitron\',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px">'+label+'</div>'
-      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:17px;color:'+color+'">'+val+'</div>'
+      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:17px;color:'+color+'">'+val+dolPart+'</div>'
       +(sub?'<div style="font-size:9px;color:var(--text3);margin-top:2px">'+sub+'</div>':'')
       +'</div>';
   }
@@ -118,7 +121,7 @@
     const upPct=total?Math.round(upCount/total*100):0;
     const dnPct=total?Math.round(dnCount/total*100):0;
     const pctStr=fmtp(avgPct);
-    const dolPart=spy&&avgPct!=null?'<span style="color:var(--text3);font-size:13px;margin-left:6px;">\u00b7 $'+(spy*Math.abs(avgPct)/100).toFixed(2)+'</span>':'';
+    const dolPart=spy&&avgPct!=null?'<span style="color:var(--text3);font-size:15px;margin-left:8px;">$'+(spy*Math.abs(avgPct)/100).toFixed(2)+'</span>':'';
     return '<div class="stat-box" style="padding:12px;text-align:center;">'
       +'<div style="font-family:\'Orbitron\',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);margin-bottom:2px">'+title+'</div>'
       +'<div style="font-size:9px;color:var(--text3);margin-bottom:8px">'+timeLabel+'</div>'
@@ -307,7 +310,7 @@
         +'<td class="'+cls(d.gap_pct)+'">'+fmtp(d.gap_pct)+'</td>'
         +'<td style="color:'+(d.gap_type==='GAP_UP'?'var(--green)':d.gap_type==='GAP_DOWN'?'var(--red)':'var(--text3)')+'">'+
           (d.gap_type==='GAP_UP'?'\u25b2 UP':d.gap_type==='GAP_DOWN'?'\u25bc DN':'FLAT')+'</td>'
-        +'<td>'+(d.or_range!=null?fmt(d.or_range)+'%':'\u2014')+'</td>'
+        +'<td>'+(d.or_range!=null?fmt(d.or_range)+'%'+(spy?' <span style="color:var(--text3);font-size:9px">$'+(spy*d.or_range/100).toFixed(2)+'</span>':''):'\u2014')+'</td>'
         +'<td style="color:'+(d.gap_filled===1?'var(--green)':d.gap_filled===0?'var(--red)':'var(--text3)')+'">'+
           (d.gap_filled===1?'\u2713':d.gap_filled===0?'\u2717':'\u2014')+'</td>'
         +'<td style="color:'+(d.or_break_dir==='UP'?'var(--green)':d.or_break_dir==='DOWN'?'var(--red)':'var(--text3)')+'">'+
@@ -365,7 +368,7 @@
     +'<div style="font-size:9px;color:var(--text3);margin-bottom:8px">10:30 AM\u201312:00 PM CT</div>'
     +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:18px;color:var(--text2)">'
       +(avgLunch!=null?fmt(avgLunch)+'%':'\u2014')
-      +(spy&&avgLunch?'<span style="color:var(--text3);font-size:13px;margin-left:6px;">\u00b7 $'+(spy*avgLunch/100).toFixed(2)+'</span>':'')
+      +(spy&&avgLunch?'<span style="color:var(--text3);font-size:15px;margin-left:8px;">$'+(spy*avgLunch/100).toFixed(2)+'</span>':'')
     +'</div>'
     +'<div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;">Avg range (no direction).<br>Tight \u2192 watch for PM vol expansion.</div>'
   +'</div>'
@@ -374,8 +377,8 @@
 
 // ── KPI strip ──
 +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px;">'
-  +kpi('AVG DAY RANGE',  fmtp(avgRangePct), null,   'H to L'+dol(avgRangePct))
-  +kpi('AVG OR RANGE',   avgOR!=null?fmt(avgOR)+'%':'\u2014', null, '30-min range'+dol(avgOR))
+  +kpi('AVG DAY RANGE',  fmtp(avgRangePct), null,   'H to L', spy&&avgRangePct!=null?spy*Math.abs(avgRangePct)/100:null)
+  +kpi('AVG OR RANGE',   avgOR!=null?fmt(avgOR)+'%':'\u2014', null, '30-min range', spy&&avgOR!=null?spy*avgOR/100:null)
   +kpi('GAP UP FILL',    gapUp.length?Math.round(gapUpFilled.length/gapUp.length*100)+'%':'\u2014', null, gapUpFilled.length+' of '+gapUp.length)
   +kpi('GAP DOWN FILL',  gapDown.length?Math.round(gapDownFilled.length/gapDown.length*100)+'%':'\u2014', null, gapDownFilled.length+' of '+gapDown.length)
   +kpi('OR BREAK UP',    n?Math.round(orBreakUp.length/n*100)+'%':'\u2014', null, 'holds above OR: '+(orBreakUp.length?Math.round(orBreakUpHolds.length/orBreakUp.length*100)+'%':'\u2014'))
