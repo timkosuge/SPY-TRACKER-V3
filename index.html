@@ -350,35 +350,164 @@
   .breach-day .bd-name{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;}
   .breach-day .bd-val{font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;}
 
-  /* AI features removed */
-  .ai-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;max-height:400px;}
-  .ai-msg{padding:10px 12px;border-radius:6px;font-size:13px;line-height:1.5;}
-  .ai-msg.user{background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.2);margin-left:20px;color:var(--cyan);}
-  .ai-msg.assistant{background:var(--bg3);border:1px solid var(--border);margin-right:20px;}
-  .ai-msg.thinking{color:var(--text3);font-style:italic;font-family:'Share Tech Mono',monospace;font-size:11px;}
-  .ai-input-row{padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;}
-  .ai-input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:8px 12px;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:13px;outline:none;}
+  /* ── AI CHAT PANEL ── */
+  /* Floating trigger button */
+  #aiTrigger{
+    position:fixed;bottom:28px;right:28px;z-index:9100;
+    width:48px;height:48px;border-radius:50%;
+    background:linear-gradient(135deg,#00ccff22,#00ff8822);
+    border:1px solid var(--cyan);
+    cursor:pointer;display:flex;align-items:center;justify-content:center;
+    font-family:'Orbitron',monospace;font-size:13px;color:var(--cyan);
+    box-shadow:0 0 18px rgba(0,204,255,0.25);
+    transition:box-shadow 0.2s,transform 0.2s;
+    user-select:none;
+  }
+  #aiTrigger:hover{box-shadow:0 0 28px rgba(0,204,255,0.45);transform:scale(1.05);}
+  #aiTrigger.has-unread::after{
+    content:'';position:absolute;top:6px;right:6px;width:8px;height:8px;
+    border-radius:50%;background:#ff3355;border:2px solid var(--bg);
+  }
+  /* Chat window */
+  #aiPanel{
+    position:fixed;bottom:90px;right:28px;z-index:9099;
+    width:400px;
+    background:var(--bg2);
+    border:1px solid var(--border);
+    border-radius:12px;
+    box-shadow:0 8px 48px rgba(0,0,0,0.7),0 0 0 1px rgba(0,204,255,0.08);
+    display:flex;flex-direction:column;
+    max-height:580px;
+    overflow:hidden;
+    opacity:0;transform:translateY(12px) scale(0.97);
+    pointer-events:none;
+    transition:opacity 0.2s ease,transform 0.2s ease;
+  }
+  #aiPanel.open{opacity:1;transform:translateY(0) scale(1);pointer-events:all;}
+  /* Header */
+  #aiPanelHeader{
+    display:flex;align-items:center;gap:8px;
+    padding:12px 14px 10px;
+    border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+  #aiPanelTitle{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);}
+  #aiProviderBadge{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;margin-left:auto;}
+  #aiSettingsBtn{
+    background:none;border:1px solid var(--border);border-radius:3px;
+    color:var(--text3);font-size:10px;padding:2px 8px;cursor:pointer;
+    font-family:'Share Tech Mono',monospace;transition:border-color 0.15s,color 0.15s;
+  }
+  #aiSettingsBtn:hover{border-color:var(--cyan);color:var(--cyan);}
+  #aiCloseBtn{
+    background:none;border:none;color:var(--text3);font-size:18px;
+    cursor:pointer;padding:0 2px;line-height:1;transition:color 0.15s;
+  }
+  #aiCloseBtn:hover{color:var(--text);}
+  /* Settings panel */
+  #aiSettingsPanel{
+    background:var(--bg3);border-bottom:1px solid var(--border);
+    padding:14px;font-size:12px;display:none;flex-shrink:0;
+  }
+  #aiSettingsPanel label{
+    display:block;color:var(--text3);font-family:'Orbitron',monospace;
+    font-size:8px;letter-spacing:1px;margin:8px 0 3px;
+  }
+  #aiSettingsPanel label:first-child{margin-top:0;}
+  #aiSettingsPanel input,#aiSettingsPanel select{
+    width:100%;background:var(--bg2);border:1px solid var(--border2);
+    border-radius:3px;padding:6px 9px;color:var(--text);
+    font-family:'Share Tech Mono',monospace;font-size:12px;
+    box-sizing:border-box;outline:none;
+  }
+  #aiSettingsPanel input:focus,#aiSettingsPanel select:focus{border-color:var(--cyan);}
+  .ai-settings-row{display:flex;align-items:center;gap:10px;margin-top:12px;}
+  .ai-settings-save{
+    background:var(--cyan);border:none;border-radius:4px;
+    padding:6px 16px;color:var(--bg);font-family:'Orbitron',monospace;
+    font-size:9px;letter-spacing:1px;cursor:pointer;font-weight:700;
+  }
+  .ai-settings-save:hover{opacity:0.85;}
+  #ollamaStatusRow{
+    display:flex;align-items:center;gap:7px;
+    margin-top:10px;padding:7px 9px;
+    background:var(--bg2);border-radius:4px;
+  }
+  #ollamaStatusDot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0;}
+  #ollamaStatusLbl{font-size:11px;color:var(--text3);font-family:'Share Tech Mono',monospace;}
+  /* Messages area */
+  #aiMessages{
+    flex:1;overflow-y:auto;padding:14px;
+    display:flex;flex-direction:column;gap:10px;
+    scroll-behavior:smooth;
+  }
+  #aiMessages::-webkit-scrollbar{width:4px;}
+  #aiMessages::-webkit-scrollbar-track{background:transparent;}
+  #aiMessages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+  .ai-msg{padding:10px 13px;border-radius:8px;font-size:13px;line-height:1.6;max-width:94%;}
+  .ai-msg.user{
+    background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.2);
+    align-self:flex-end;color:var(--cyan);border-radius:8px 8px 2px 8px;
+  }
+  .ai-msg.assistant{
+    background:var(--bg3);border:1px solid var(--border);
+    align-self:flex-start;border-radius:8px 8px 8px 2px;
+  }
+  .ai-msg.thinking{
+    color:var(--text3);font-style:italic;
+    font-family:'Share Tech Mono',monospace;font-size:11px;
+    align-self:flex-start;background:transparent;border:none;padding:4px 0;
+  }
+  /* Typing dots animation */
+  .ai-msg.thinking::after{
+    content:'...';display:inline-block;
+    animation:dotPulse 1.2s infinite;letter-spacing:2px;
+  }
+  @keyframes dotPulse{0%,100%{opacity:0.3;}50%{opacity:1;}}
+  /* Input row */
+  .ai-input-row{
+    padding:12px;border-top:1px solid var(--border);
+    display:flex;gap:8px;flex-shrink:0;
+    background:var(--bg2);
+  }
+  .ai-input{
+    flex:1;background:var(--bg3);border:1px solid var(--border2);
+    border-radius:20px;padding:9px 16px;
+    color:var(--text);font-family:'Rajdhani',sans-serif;font-size:13px;
+    outline:none;transition:border-color 0.15s;
+  }
   .ai-input:focus{border-color:var(--cyan);}
-  .ai-send{background:var(--cyan);border:none;border-radius:4px;padding:8px 14px;color:var(--bg);font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;cursor:pointer;font-weight:700;}
-  .ai-send:hover{opacity:0.85;}
-  .ai-send:disabled{opacity:0.4;cursor:not-allowed;}
-  .alert-bar{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;}
-  .alert-pill{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:4px;border-left:3px solid;font-size:14px;}
-  .alert-pill .al-icon{font-size:18px;flex-shrink:0;}
-  .alert-pill .al-text{flex:1;}
-  .alert-pill .al-badge{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 8px;border-radius:2px;}
-  .alert-high{background:rgba(255,51,85,0.1);border-color:#ff3355;}
-  .alert-med{background:rgba(255,136,0,0.1);border-color:#ff8800;}
-  .alert-low{background:rgba(255,204,0,0.08);border-color:#ffcc00;}
-  .alert-info{background:rgba(0,204,255,0.08);border-color:#00ccff;}
-  .ai-summary-box{background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:4px;padding:14px;font-size:13px;line-height:1.7;color:var(--text);font-family:'Rajdhani',sans-serif;}
-  .ai-summary-box.loading{color:var(--text3);font-family:'Share Tech Mono',monospace;font-size:11px;}
-  .trade-idea{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:14px;margin-bottom:8px;}
-  .trade-idea-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
-  .trade-idea-type{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;padding:3px 8px;border-radius:2px;}
-  .trade-idea-body{font-size:13px;line-height:1.6;color:var(--text);}
+  .ai-input::placeholder{color:var(--text3);}
+  .ai-send{
+    background:var(--cyan);border:none;border-radius:50%;
+    width:38px;height:38px;flex-shrink:0;
+    color:var(--bg);font-size:16px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:opacity 0.15s,transform 0.1s;
+  }
+  .ai-send:hover{opacity:0.85;transform:scale(1.05);}
+  .ai-send:disabled{opacity:0.35;cursor:not-allowed;transform:none;}
+  /* Welcome message */
+  .ai-welcome{
+    text-align:center;padding:20px 10px;
+    color:var(--text3);font-size:12px;
+    font-family:'Share Tech Mono',monospace;line-height:1.8;
+  }
+  .ai-welcome-title{
+    font-family:'Orbitron',monospace;font-size:11px;
+    color:var(--text2);letter-spacing:1px;margin-bottom:8px;
+  }
+  /* Quick prompt chips */
+  .ai-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 12px;}
+  .ai-chip{
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:14px;padding:4px 12px;font-size:11px;
+    color:var(--text2);cursor:pointer;font-family:'Share Tech Mono',monospace;
+    transition:border-color 0.15s,color 0.15s;white-space:nowrap;
+  }
+  .ai-chip:hover{border-color:var(--cyan);color:var(--cyan);}
 
-  /* ── VOLUME TAB ── */
+/* ── VOLUME TAB ── */
   .vol-session{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;}
   .vol-sess-card{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;text-align:center;}
   .vol-sess-card .vs-lbl{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--cyan);margin-bottom:6px;opacity:0.8;}
@@ -406,9 +535,10 @@
 <div class="tabs">
   <div class="tab active" onclick="switchTab('hub')">MARKET HUB</div>
   <div class="tab" onclick="switchTab('desk')">TRADING DESK</div>
-  <div class="tab" onclick="switchTab('overview')">MARKET OVERVIEW</div>
+  <div class="tab" onclick="switchTab('intraday')">INTRADAY</div>
+  <div class="tab group-tab" onclick="switchGroupTab('overview','overview')">MARKET OVERVIEW ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('derivatives','options')">DERIVATIVES ▾</div>
-  <div class="tab group-tab" onclick="switchGroupTab('macro','bonds')">MACRO ▾</div>
+  <div class="tab" onclick="switchTab('macro')">MACRO</div>
   <div class="tab group-tab" onclick="switchGroupTab('history','pricehistory')">HISTORY ▾</div>
   <div class="tab" onclick="switchTab('media')">▶ MEDIA</div>
   <div class="tab" onclick="switchTab('journal')">⬡ JOURNAL</div>
@@ -423,9 +553,10 @@
     <div class="subtab" onclick="switchGroupSub('wem',this)">EXPECTED MOVE</div>
     <div class="subtab" onclick="switchGroupSub('volatility',this)">VOLATILITY</div>
   </div>
-  <!-- Macro subtabs -->
-  <div class="subtab-group" id="subtabs-macro" style="display:none;">
-    <div class="subtab active" onclick="switchGroupSub('bonds',this)">⬡ BONDS</div>
+  <!-- Overview subtabs (overview gets bonds/breadth/sentiment) -->
+  <div class="subtab-group" id="subtabs-overview" style="display:none;">
+    <div class="subtab active" onclick="switchGroupSub('overview',this)">OVERVIEW</div>
+    <div class="subtab" onclick="switchGroupSub('bonds',this)">⬡ BONDS</div>
     <div class="subtab" onclick="switchGroupSub('breadth',this)">BREADTH</div>
     <div class="subtab" onclick="switchGroupSub('sentiment',this)">SENTIMENT</div>
   </div>
@@ -515,6 +646,13 @@
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-desk">
   <div id="deskContent"><div class="no-data">Loading Trading Desk...</div></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     INTRADAY
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-intraday">
+  <div id="intradayContent"><div class="no-data">Loading Intraday...</div></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -634,6 +772,14 @@
       <div id="volRangeHistory"></div>
     </div>
   </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     MACRO
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-macro">
+  <div id="macroContent"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -910,30 +1056,6 @@
     <div class="panel">
       <div class="panel-label">⬡ WEEKLY GAP STATS</div>
       <div id="gapStats"></div>
-    </div>
-  </div>
-
-  <!-- TIME OF DAY: HOD/LOD -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-    <div class="panel">
-      <div class="panel-label">⬡ TIME OF DAY — HIGH OF DAY (HOD)</div>
-      <div style="font-size:11px;color:var(--text3);padding:4px 0 8px;line-height:1.6;">What time bucket was the session high set in? Based on <span id="todDays">—</span> trading days of 1-min bar data (<span id="todRange">—</span>). CT time buckets.</div>
-      <div id="todHodChart"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-label">⬡ TIME OF DAY — LOW OF DAY (LOD)</div>
-      <div style="font-size:11px;color:var(--text3);padding:4px 0 8px;line-height:1.6;">What time bucket was the session low set in? Same dataset. Bars extend right = more frequent. Numbers show % of days.</div>
-      <div id="todLodChart"></div>
-    </div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-    <div class="panel">
-      <div class="panel-label">⬡ HOD/LOD SEQUENCE & KEY STATS</div>
-      <div id="todSequencePanel"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-label">⬡ HOD BUCKET BY DAY OF WEEK</div>
-      <div id="todDowPanel"></div>
     </div>
   </div>
   <!-- Raw table -->
@@ -1492,7 +1614,8 @@
 <!-- FLOATING CHAT -->
 
 
-<script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="tod_data.js"></script><script src="expiry_data.js"></script><script src="dashboard1.js"></script><script src="dashboard2.js"></script>
+<script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script>
+<script src="dashboard1.js"></script><script src="dashboard2.js"></script><script src="intraday_data.js"></script>
 
 <!-- ============================================================
      EDGE STATS TAB — INLINE PANEL v3
@@ -1639,7 +1762,6 @@
   <div class="es-subtab" onclick="esSub('quarterly',this)">QUARTERLY</div>
   <div class="es-subtab" onclick="esSub('yearly',this)">YEARLY</div>
   <div class="es-subtab" onclick="esSub('streaks',this)">STREAKS</div>
-  <div class="es-subtab" onclick="esSub('tod',this)">INTRADAY TIMING</div>
   <div class="es-subtab" onclick="esSub('declines',this)">DECLINE STATS</div>
   <div class="es-subtab" onclick="esSub('recovery',this)">RECOVERY</div>
   <div class="es-subtab" onclick="esSub('political',this)">POLITICAL CYCLE</div>
@@ -1739,13 +1861,6 @@
 </div>
 
 <!-- RECOVERY -->
-<!-- INTRADAY TIMING sub-panel -->
-<div class="es-panel" id="es-tod">
-  <div class="es-topbar" style="min-height:0;margin-bottom:10px;"><div id="es-tod-lb"></div><div class="es-meta" id="es-tod-meta"></div></div>
-  <div class="es-insight" id="es-tod-explainer"></div>
-  <div id="es-tod-content"><div class="no-data">Loading...</div></div>
-</div>
-
 <!-- DECLINE STATS sub-panel (inside panel-edgestats) -->
 <div class="es-panel" id="es-declines">
   <div class="es-topbar"><div id="es-decl-lb"></div><div class="es-meta" id="es-decl-meta"></div></div>
@@ -2668,4 +2783,106 @@ window.renderEvReleases();
 
 })();
 </script>
+
+<!-- ═══════════════ AI CHAT PANEL ═══════════════ -->
+
+<!-- Floating trigger button -->
+<div id="aiTrigger" onclick="toggleChat()" title="AI Assistant">⬡</div>
+
+<!-- Chat window -->
+<div id="aiPanel">
+
+  <!-- Header -->
+  <div id="aiPanelHeader">
+    <span id="aiPanelTitle">AI ASSISTANT</span>
+    <span id="aiProviderBadge">● READY</span>
+    <button id="aiSettingsBtn" onclick="toggleAISettings()">⚙</button>
+    <button id="aiCloseBtn" onclick="toggleChat()">×</button>
+  </div>
+
+  <!-- Settings panel -->
+  <div id="aiSettingsPanel">
+    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.5px;color:var(--text2);margin-bottom:10px;">LOCAL AI — OLLAMA</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="ollamaEnabledChk" style="width:auto;accent-color:var(--cyan);">
+      <span style="font-size:12px;color:var(--text2);font-family:'Share Tech Mono',monospace;">Use Ollama when available</span>
+    </div>
+    <label>OLLAMA BASE URL</label>
+    <input type="text" id="ollamaUrlInput" placeholder="http://localhost:11434">
+    <label>MODEL</label>
+    <select id="ollamaModelSel">
+      <option value="llama3.2:latest">llama3.2:latest</option>
+      <option value="llama3:latest">llama3:latest</option>
+      <option value="llama3.2:1b">llama3.2:1b (fast)</option>
+      <option value="llava:latest">llava:latest (vision)</option>
+    </select>
+    <div id="ollamaStatusRow">
+      <div id="ollamaStatusDot"></div>
+      <span id="ollamaStatusLbl">Not tested yet</span>
+    </div>
+    <div class="ai-settings-row">
+      <button class="ai-settings-save" onclick="saveAISettings()">SAVE</button>
+      <span style="font-size:10px;color:var(--text3);font-family:'Share Tech Mono',monospace;">Falls back to Grok if unreachable</span>
+    </div>
+    <div style="margin-top:10px;padding:8px;background:var(--bg2);border-radius:3px;font-size:10px;color:var(--text3);line-height:1.7;font-family:'Share Tech Mono',monospace;">
+      Requires: <span style="color:var(--cyan);">OLLAMA_ORIGINS=https://spy-tracker-v3.pages.dev ollama serve</span>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div id="aiMessages">
+    <div class="ai-welcome">
+      <div class="ai-welcome-title">⬡ SPY TRACKER AI</div>
+      Live market data loaded. Ask me anything.
+    </div>
+  </div>
+
+  <!-- Quick prompts -->
+  <div class="ai-chips" id="aiChips">
+    <div class="ai-chip" onclick="chipSend('What is SPY doing today?')">Today's action</div>
+    <div class="ai-chip" onclick="chipSend('Key levels to watch')">Key levels</div>
+    <div class="ai-chip" onclick="chipSend('What does VIX say about risk right now?')">VIX risk</div>
+    <div class="ai-chip" onclick="chipSend('Summarise the macro environment')">Macro</div>
+  </div>
+
+  <!-- Input -->
+  <div class="ai-input-row">
+    <input class="ai-input" id="aiInput" type="text"
+      placeholder="Ask about SPY, levels, macro..."
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}">
+    <button class="ai-send" id="aiSendBtn" onclick="sendChat()" title="Send">➤</button>
+  </div>
+
+</div>
+
+<script>
+function chipSend(text) {
+  const input = document.getElementById('aiInput');
+  if (input) { input.value = text; sendChat(); }
+  // Hide chips after first use
+  const chips = document.getElementById('aiChips');
+  if (chips) chips.style.display = 'none';
+}
+
+(function initAISettings() {
+  const settings = JSON.parse(localStorage.getItem('spyAI') || '{}');
+  const chk  = document.getElementById('ollamaEnabledChk');
+  const urlI = document.getElementById('ollamaUrlInput');
+  const sel  = document.getElementById('ollamaModelSel');
+  if (chk)  chk.checked = settings.ollamaEnabled ?? true;
+  if (urlI) urlI.value  = settings.ollamaUrl || 'http://localhost:11434';
+  if (sel && settings.ollamaModel) {
+    const exists = [...sel.options].some(o => o.value === settings.ollamaModel);
+    if (!exists) {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = settings.ollamaModel;
+      sel.prepend(opt);
+    }
+    sel.value = settings.ollamaModel;
+  }
+})();
+</script>
+
+
+
 </body></html>
