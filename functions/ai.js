@@ -1,57 +1,62 @@
+// Cloudflare Pages Function — /ai
+// Routes to Grok (xAI) primary, with model config via env var.
+// Set XAI_API_KEY in Cloudflare Pages environment variables.
+
+const CORS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function onRequestOptions() {
+  return new Response(null, { headers: CORS });
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
-
-  // CORS headers
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Content-Type': 'application/json'
-  };
 
   try {
     const body = await request.json();
     const { messages, system, max_tokens } = body;
 
-    const apiKey = env.ANTHROPIC_API_KEY;
+    const apiKey = env.XAI_API_KEY;
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API key not configured' }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'XAI_API_KEY not configured in Cloudflare env vars' }), {
+        status: 500, headers: CORS
+      });
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // Build messages array — system prompt goes as first message with role 'system'
+    const fullMessages = [];
+    if (system) fullMessages.push({ role: 'system', content: system });
+    fullMessages.push(...(messages || []));
+
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: max_tokens || 1024,
-        system: system || '',
-        messages: messages
+        model: env.GROK_MODEL || 'grok-3-mini',
+        max_tokens: max_tokens || 800,
+        messages: fullMessages,
       })
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      return new Response(JSON.stringify({ error: data.error?.message || 'API error' }), { status: response.status, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: data.error?.message || `xAI API error ${response.status}` }), {
+        status: response.status, headers: CORS
+      });
     }
 
-    return new Response(JSON.stringify({ content: data.content?.[0]?.text || '' }), { headers: corsHeaders });
+    const content = data.choices?.[0]?.message?.content || '';
+    return new Response(JSON.stringify({ content }), { headers: CORS });
 
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: CORS });
   }
-}
-
-export async function onRequestOptions() {
-  return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
-    }
-  });
 }
