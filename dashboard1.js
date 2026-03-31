@@ -4618,7 +4618,7 @@ function renderExpiryBehavior(md) {
 
     return `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:8px;">${cards}</div>
     <div style="display:flex;flex-direction:column;gap:4px;">${insights.join('')}</div>
-    <div style="font-size:10px;color:var(--text3);margin-top:6px;">n = ${stats.n} historical sessions · ${_expiryLookback==='2026'?'2026 only':'2020–2026 (all)'}</div>`;
+    <div style="font-size:10px;color:var(--text3);margin-top:6px;">n = ${stats.n} historical sessions · ${_expiryLookback==='2026'?'2026 only':'1993–2026 (all)'}</div>`;
   }
 
   // ── Per-day row in the week table ─────────────────────────────────────────
@@ -4720,7 +4720,7 @@ function renderExpiryBehavior(md) {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
       <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">⬡ EXPIRY BEHAVIOR — HISTORICAL STATS FOR TODAY'S SESSION TYPE</div>
       <div style="display:flex;gap:5px;">
-        <button class="exp-lb-btn${_expiryLookback==='all'?' active':''}" onclick="expirySetLookback('all',this)">2020–2026</button>
+        <button class="exp-lb-btn${_expiryLookback==='all'?' active':''}" onclick="expirySetLookback('all',this)">1993–2026</button>
         <button class="exp-lb-btn${_expiryLookback==='2026'?' active':''}" onclick="expirySetLookback('2026',this)">2026 ONLY</button>
       </div>
     </div>
@@ -4751,7 +4751,7 @@ function renderExpiryBehavior(md) {
         'OPEX WEEK — EACH DAY\'S STATS (ALL ${weeklyFridays.length} OPEX WEEKS)',
         'Mon open price through Fri close price for each opex week',
         '#00ffcc',
-        `n = ${weeklyDayStats.weekN} complete opex weeks · ${_expiryLookback==='2026'?'2026 only':'2020–2026'}`
+        `n = ${weeklyDayStats.weekN} complete opex weeks · ${_expiryLookback==='2026'?'2026 only':'1993–2026'}`
       )}
 
       <!-- Friday expiry day stats -->
@@ -4791,7 +4791,7 @@ function renderExpiryBehavior(md) {
         'T−2 · TWO WEEKS BEFORE MONTHLY OPEX',
         'Historical behavior of the week 2 weeks prior to the monthly expiration Friday',
         '#ff880088',
-        `n = ${monthlyT2.weekN} complete periods · ${_expiryLookback==='2026'?'2026 only':'2020–2026'}`
+        `n = ${monthlyT2.weekN} complete periods · ${_expiryLookback==='2026'?'2026 only':'1993–2026'}`
       )}
 
       <!-- T-1: Week before opex -->
@@ -4800,7 +4800,7 @@ function renderExpiryBehavior(md) {
         'T−1 · WEEK BEFORE MONTHLY OPEX',
         'Historical behavior of the week immediately before the monthly expiration week',
         '#ff8800bb',
-        `n = ${monthlyT1.weekN} complete periods · ${_expiryLookback==='2026'?'2026 only':'2020–2026'}`
+        `n = ${monthlyT1.weekN} complete periods · ${_expiryLookback==='2026'?'2026 only':'1993–2026'}`
       )}
 
       <!-- T: Opex week -->
@@ -4809,7 +4809,7 @@ function renderExpiryBehavior(md) {
         'T · MONTHLY OPEX WEEK (MON OPEN → FRI CLOSE)',
         'The expiration week itself — dealer unwind, pin risk, and elevated volatility',
         '#ff8800',
-        `n = ${monthlyT0.weekN} complete opex weeks · ${_expiryLookback==='2026'?'2026 only':'2020–2026'}`
+        `n = ${monthlyT0.weekN} complete opex weeks · ${_expiryLookback==='2026'?'2026 only':'1993–2026'}`
       )}
 
       <!-- Friday expiry day stats -->
