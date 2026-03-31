@@ -374,7 +374,9 @@ export async function onRequest(context) {
     const wallsByExpiry = [];
     if (todayWalls) wallsByExpiry.push({ label: '0DTE (Today)', ...todayWalls });
     fridayWalls.forEach(w => {
-      const label = w.dte <= 7 ? 'Weekly (Fri)' : w.dte <= 35 ? 'Monthly (Fri)' : `Fri +${w.dte}d`;
+      // Label by ordinal position: 1st Friday = This Week, 2nd = Next Week, 3rd/4th = Monthly
+      const fridayIndex = fridayWalls.indexOf(w);
+      const label = fridayIndex === 0 ? 'Weekly (Fri)' : fridayIndex === 1 ? 'Next Week (Fri)' : w.dte <= 42 ? 'Monthly (Fri)' : `Fri +${w.dte}d`;
       wallsByExpiry.push({ label, ...w });
     });
 
