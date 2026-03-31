@@ -474,23 +474,6 @@
   +'</div>'
 +'</div>'
 
-// ── Recent Sessions ──
-+'<div class="stat-box" style="padding:14px;margin-bottom:12px;">'
-  +'<div class="es-section" style="margin-bottom:10px;">RECENT SESSIONS (LAST 20 IN FILTER) \u2014 TIMES IN CT</div>'
-  +'<div style="overflow-x:auto;">'
-    +'<table class="data-table" style="font-size:11px;">'
-      +'<thead><tr>'
-        +'<th style="text-align:left">DATE</th>'
-        +'<th>GAP %</th><th>TYPE</th><th>OR WIDTH</th>'
-        +'<th>GAP FILL</th><th>OR BREAK</th>'
-        +'<th>PWR HR</th><th>DAY O\u2192C</th>'
-      +'</tr></thead>'
-      +'<tbody>'+rows+'</tbody>'
-    +'</table>'
-  +'</div>'
-+'</div>'
-
-
 // ── Time of Day Stats ──────────────────────────────────────────────────────
 +(typeof TOD_STATS !== 'undefined' ? `
 <div class="stat-box" style="padding:14px;margin-bottom:12px;">
@@ -527,6 +510,23 @@
   </div>
 </div>
 ` : '<div style="padding:14px;color:var(--text3);font-size:12px;font-family:Share Tech Mono,monospace;">TIME OF DAY data not loaded — run generate_tod_stats.py to generate tod_stats.js</div>')
+
+
+// ── Recent Sessions ──
++'<div class="stat-box" style="padding:14px;margin-bottom:12px;">'
+  +'<div class="es-section" style="margin-bottom:10px;">RECENT SESSIONS (LAST 20 IN FILTER) \u2014 TIMES IN CT</div>'
+  +'<div style="overflow-x:auto;">'
+    +'<table class="data-table" style="font-size:11px;">'
+      +'<thead><tr>'
+        +'<th style="text-align:left">DATE</th>'
+        +'<th>GAP %</th><th>TYPE</th><th>OR WIDTH</th>'
+        +'<th>GAP FILL</th><th>OR BREAK</th>'
+        +'<th>PWR HR</th><th>DAY O\u2192C</th>'
+      +'</tr></thead>'
+      +'<tbody>'+rows+'</tbody>'
+    +'</table>'
+  +'</div>'
++'</div>'
 
 +'</div>';
 
