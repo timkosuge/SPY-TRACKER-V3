@@ -873,11 +873,9 @@ function renderWEM(md){
       {l:'AVG RANGE ±',   v:'$'+fmt(stats.avg_range/2,2)},
       {l:'% INSIDE',      v:fmt(stats.pct_inside,1)+'%'},
       {l:'% OUTSIDE',     v:fmt(stats.pct_outside,1)+'%'},
-      {l:'HIGH BREACH %', v:fmt(stats.pct_high_breach,1)+'%'},
-      {l:'LOW BREACH %',  v:fmt(stats.pct_low_breach,1)+'%'},
-      {l:'AVG UP BREACH',   v:(()=>{ const hb=wems.filter(w=>w.week_close!=null&&w.week_close>w.wem_high); return hb.length?'+$'+fmt(hb.reduce((s,w)=>s+(w.week_close-w.wem_high),0)/hb.length,2):'—'; })(), c:'#00ff88'},
-      {l:'AVG DOWN BREACH', v:(()=>{ const lb=wems.filter(w=>w.week_close!=null&&w.week_close<w.wem_low);  return lb.length?'-$'+fmt(lb.reduce((s,w)=>s+(w.wem_low-w.week_close),0)/lb.length,2):'—'; })(), c:'#ff3355'},
-    ].map(({l,v,c})=>`<div class="wem-stat"><div class="ws-lbl">${l}</div><div class="ws-val"${c?` style="color:${c}"`:''}}>${v}</div></div>`).join('');
+      {l:'HIGH BREACH',   v:fmt(stats.pct_high_breach,1)+'%', sub: stats.avg_high_breach_amt!=null?'avg +$'+fmt(stats.avg_high_breach_amt,2):null, c:'#00ff88'},
+      {l:'LOW BREACH',    v:fmt(stats.pct_low_breach,1)+'%',  sub: stats.avg_low_breach_amt !=null?'avg -$'+fmt(stats.avg_low_breach_amt,2):null,  c:'#ff3355'},
+    ].map(({l,v,sub,c})=>`<div class="wem-stat"><div class="ws-lbl">${l}</div><div class="ws-val"${c?` style="color:${c}"`:''}}>${v}</div>${sub?`<div style="font-size:11px;color:${c||'var(--text3)'};margin-top:3px;">${sub}</div>`:''}</div>`).join('');
   }
 
   if(stats.breach_by_day){
