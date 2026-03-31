@@ -9,7 +9,7 @@ export async function onRequest(context) {
   const API_PATHS = [
     '/quotes', '/spyintraday', '/spy', '/gex', '/futures', '/news',
     '/fg', '/breadth', '/sentiment', '/cal', '/fomc', '/cot',
-    '/premarket', '/ai', '/liquidity'
+    '/premarket', '/ai', '/liquidity', '/ollama'
   ];
   if (API_PATHS.some(p => path === p || path.startsWith(p + '?') || path.startsWith(p + '/'))) {
     return next();
