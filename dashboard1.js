@@ -53,6 +53,7 @@ function _switchPanelOnly(id) {
   // Tab-specific renders
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
+  if(id==='macro' && typeof _M !== 'undefined') _M.init();
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
   if(id==='declines') { try { renderDeclines(); } catch(e){ console.warn('declines:',e); } }
