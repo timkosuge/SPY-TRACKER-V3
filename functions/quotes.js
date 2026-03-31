@@ -15,13 +15,36 @@ export async function onRequestGet(context) {
     const url = new URL(context.request.url);
     const symbols = url.searchParams.get('symbols') || 'SPY';
 
-    const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols)}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketPreviousClose,preMarketPrice,preMarketChange,preMarketChangePercent,postMarketPrice`;
+    // Yahoo v7 now requires a crumb + cookie. Fetch both first.
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+    const consentResp = await fetch('https://fc.yahoo.com', {
+      headers: { 'User-Agent': UA },
+      redirect: 'follow',
+    });
+    const cookieHeader = consentResp.headers.get('set-cookie') || '';
+    const cookieVal = cookieHeader.split(',').map(s => s.trim()).find(s => s.startsWith('A3=')) || '';
+    const cookie = cookieVal ? cookieVal.split(';')[0] : '';
+
+    const crumbResp = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+      headers: {
+        'User-Agent': UA,
+        'Accept': '*/*',
+        ...(cookie ? { 'Cookie': cookie } : {}),
+      },
+    });
+    const crumb = crumbResp.ok ? (await crumbResp.text()).trim() : null;
+
+    const fields = 'regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketPreviousClose,preMarketPrice,preMarketChange,preMarketChangePercent,postMarketPrice';
+    const base = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols)}&fields=${fields}`;
+    const yahooUrl = crumb ? `${base}&crumb=${encodeURIComponent(crumb)}` : base;
 
     const resp = await fetch(yahooUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; SPYTracker/3.0)',
+        'User-Agent': UA,
         'Accept': 'application/json',
-      }
+        ...(cookie ? { 'Cookie': cookie } : {}),
+      },
     });
 
     if (!resp.ok) throw new Error(`Yahoo returned ${resp.status}`);
