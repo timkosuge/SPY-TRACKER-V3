@@ -450,7 +450,9 @@ def fetch_spy_options_cboe():
                 w = build_walls(exp)
                 if w:
                     dte = (exp - today).days
-                    label = "Weekly (Fri)" if dte <= 7 else "Monthly (Fri)" if dte <= 35 else f"Fri +{dte}d"
+                    # Label by position: 1st Friday = This Week, 2nd = Next Week, then Monthly
+                    fri_idx = len([x for x in walls_by_expiry if not x.get("label","").startswith("0DTE")])
+                    label = "Weekly (Fri)" if fri_idx == 0 else "Next Week (Fri)" if fri_idx == 1 else "Monthly (Fri)" if dte <= 42 else f"Fri +{dte}d"
                     walls_by_expiry.append({"label": label, **w})
             if len(walls_by_expiry) >= 5: break
 
