@@ -874,7 +874,7 @@ function renderWEM(md){
       {l:'% INSIDE',      v:fmt(stats.pct_inside,1)+'%'},
       {l:'% OUTSIDE',     v:fmt(stats.pct_outside,1)+'%'},
       {l:'HIGH BREACH',   v:fmt(stats.pct_high_breach,1)+'%', sub: stats.avg_high_breach_amt!=null?'avg +$'+fmt(stats.avg_high_breach_amt,2):null, c:'#00ff88'},
-      {l:'LOW BREACH',    v:fmt(stats.pct_low_breach,1)+'%',  sub: stats.avg_low_breach_amt !=null?'avg -$'+fmt(stats.avg_low_breach_amt,2):null,  c:'#ff3355'},
+      {l:'LOW BREACH',    v:fmt(stats.pct_low_breach,1)+'%',  sub: stats.avg_low_breach_amt !=null?'avg $'+fmt(stats.avg_low_breach_amt,2):null,  c:'#ff3355'},
     ].map(({l,v,sub,c})=>`<div class="wem-stat"><div class="ws-lbl">${l}</div><div class="ws-val"${c?` style="color:${c}"`:''}}>${v}</div>${sub?`<div style="font-size:11px;color:${c||'var(--text3)'};margin-top:3px;">${sub}</div>`:''}</div>`).join('');
   }
 
@@ -3573,6 +3573,7 @@ async function loadData(){
     if (liveGEX?.gex?.flip_point) {
       md.gex = liveGEX.gex;
       if (liveGEX.max_pain?.length) md.max_pain = liveGEX.max_pain;
+      if (liveGEX.walls_by_expiry?.length) md.walls_by_expiry = liveGEX.walls_by_expiry;
       if (liveGEX.atm_iv && md.weekly_em?.[0]) md.weekly_em[0].atm_iv = liveGEX.atm_iv;
       if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
     }
@@ -3622,6 +3623,7 @@ async function loadData(){
       if (fresh?.gex?.flip_point && _md) {
         _md.gex = fresh.gex;
         if (fresh.max_pain?.length) _md.max_pain = fresh.max_pain;
+        if (fresh.walls_by_expiry?.length) _md.walls_by_expiry = fresh.walls_by_expiry;
         if (fresh.pcr_vol && _md.options_summary) _md.options_summary.pc_ratio_vol = fresh.pcr_vol;
         renderGEX(_md);
         renderDesk(_md, _sd);
