@@ -1370,9 +1370,8 @@ function renderDeskSession(md,sd){
     if(pmm) pmm.textContent = m ? '$'+fmt(m,2) : '—';
     if(pml) pml.textContent = l ? '$'+fmt(l,2) : '—';
   };
-  // Cache premarket data — only fetch once per session (or if not yet populated)
-  // Re-fetching during RTH can return stale/wrong data from Yahoo
-  if (window._pmCache?.high) {
+  // Cache PM data for the session — re-fetching during RTH returns stale/wrong data
+  if (window._pmCache && window._pmCache.high) {
     setPM(window._pmCache.high, window._pmCache.mid, window._pmCache.low);
   } else {
     fetch('/premarket').then(r=>r.ok?r.json():null).then(pm=>{
@@ -1380,9 +1379,9 @@ function renderDeskSession(md,sd){
         window._pmCache = { high: pm.high, mid: pm.mid, low: pm.low };
         setPM(pm.high, pm.mid, pm.low);
       } else {
-        setPM(null,null,null);
+        setPM(null, null, null);
       }
-    }).catch(()=>setPM(null,null,null));
+    }).catch(()=>setPM(null, null, null));
   }
 
   // OHLCV
