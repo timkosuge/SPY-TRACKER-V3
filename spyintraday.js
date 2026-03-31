@@ -138,6 +138,43 @@ export async function onRequest(context) {
       if (vol > hvnVolume) { hvnVolume = vol; hvnPrice = parseFloat(price); }
     }
 
+    // ── Week open: Monday's regular session open ────────────────────────────
+    // Fetch a 5-day daily chart to get Monday's open regardless of current day
+    let weekOpen = null;
+    try {
+      const ctOffsetHrs = (() => {
+        const s = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Chicago', hour: 'numeric', hour12: false, timeZoneName: 'shortOffset'
+        }).format(now);
+        const m = s.match(/GMT([+-]\d+)/);
+        return m ? parseInt(m[1]) : -5;
+      })();
+      // Monday of current week in CT
+      const ctNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+      const dow = ctNow.getDay(); // 0=Sun,1=Mon..
+      const daysFromMon = dow === 0 ? 6 : dow - 1;
+      const monCT = new Date(ctNow);
+      monCT.setDate(ctNow.getDate() - daysFromMon);
+      monCT.setHours(9, 35, 0, 0); // after open
+      // p1 = Monday 9:30am CT in UTC
+      const monOpenUTC = new Date(monCT.getTime() - ctOffsetHrs * 3600000);
+      const p1w = Math.floor(monOpenUTC.getTime() / 1000);
+      const p2w = Math.floor(now.getTime() / 1000);
+
+      if (p2w > p1w) {
+        const wUrl = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=${p1w}&period2=${p2w}`;
+        const wResp = await fetch(wUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible)', 'Accept': 'application/json' } });
+        if (wResp.ok) {
+          const wData = await wResp.json();
+          const wResult = wData?.chart?.result?.[0];
+          const wOpens = wResult?.indicators?.quote?.[0]?.open || [];
+          if (wOpens.length && wOpens[0] != null) {
+            weekOpen = Math.round(wOpens[0] * 100) / 100;
+          }
+        }
+      }
+    } catch(e) { /* week_open unavailable */ }
+
     return new Response(JSON.stringify({
       available:    true,
       open:         Math.round(sessionOpen  * 100) / 100,
@@ -160,6 +197,7 @@ export async function onRequest(context) {
       hvn_price:    hvnPrice,
       hvn_volume:   Math.round(hvnVolume),
       buckets,
+      week_open: weekOpen,
     }), { headers });
 
   } catch (e) {
