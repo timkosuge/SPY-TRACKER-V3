@@ -496,16 +496,25 @@ function phApplyFilter(mode) {
 
 // ── TIME OF DAY STATS ─────────────────────────────────────────────────────────
 function renderTODStats() {
-  if (typeof TOD_DATA === 'undefined') return;
-  const T = TOD_DATA;
+  if (typeof TOD_STATS === 'undefined') return;
+  const T = TOD_STATS;
+
+  // Map TOD_STATS shape → normalized locals
+  const totalDays    = T.days;
+  const dateRange    = T.date_range;
+  const hodBuckets   = T.hod.by_bucket;   // [{label, count, pct}, ...]
+  const lodBuckets   = T.lod.by_bucket;
+  const hodByDow     = T.hod.by_dow;      // [{dow, counts:[], pcts:[]}, ...]
+  const lodByDow     = T.lod.by_dow;
+  const seq          = T.sequence;        // {hod_before_lod, hod_after_lod, hod_same_lod}
 
   // Header meta
   const daysEl = document.getElementById('todDays');
   const rangeEl = document.getElementById('todRange');
-  if (daysEl) daysEl.textContent = T.total_days + ' days';
-  if (rangeEl) rangeEl.textContent = T.date_range.start + ' → ' + T.date_range.end;
+  if (daysEl) daysEl.textContent = totalDays + ' days';
+  if (rangeEl) rangeEl.textContent = dateRange.start + ' → ' + dateRange.end;
 
-  // Color ramp: low freq = dim, high freq = bright
+  // Color ramp
   const bucketColors = [
     '#ff8800', // 8:30-9:00   Open Auction
     '#ffcc00', // 9:00-9:30   Early Open
@@ -517,7 +526,7 @@ function renderTODStats() {
     '#ff5500', // 2:30-3:00   Close
   ];
 
-  function buildBucketChart(containerId, buckets, accentColor) {
+  function buildBucketChart(containerId, buckets) {
     const el = document.getElementById(containerId);
     if (!el) return;
     const maxPct = Math.max(...buckets.map(b => b.pct), 1);
@@ -537,32 +546,41 @@ function renderTODStats() {
       </div>`;
     }).join('') +
     `<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-top:4px;padding:0 3px;">
-      <span>★ Most common: <span style="color:${bucketColors[buckets.indexOf(topBucket)]};">${topBucket.name || topBucket.label}</span></span>
+      <span>★ Most common: <span style="color:${bucketColors[buckets.indexOf(topBucket)]};">${topBucket.label}</span></span>
       <span>${topBucket.pct.toFixed(1)}% of days</span>
     </div>`;
   }
 
-  buildBucketChart('todHodChart', T.hod_by_bucket, '#00ff88');
-  buildBucketChart('todLodChart', T.lod_by_bucket, '#ff3355');
+  buildBucketChart('todHodChart', hodBuckets);
+  buildBucketChart('todLodChart', lodBuckets);
 
-  // Sequence panel
+  // Sequence panel — derive stats from TOD_STATS.sequence + hod/lod bucket data
   const seqEl = document.getElementById('todSequencePanel');
-  if (seqEl && T.summary) {
-    const s = T.summary;
-    const hodTopBucket = T.hod_by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
-    const lodTopBucket = T.lod_by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
+  if (seqEl && seq) {
+    const hodBeforeLodPct = seq.hod_before_lod ? seq.hod_before_lod.pct : 0;
+    const hodAfterLodPct  = seq.hod_after_lod  ? seq.hod_after_lod.pct  : 0;
+    const lodBeforeHodPct = hodAfterLodPct; // LOD before HOD = HOD after LOD
+    // first/last 30-min pcts come from the bucket arrays directly
+    const hodFirst30 = T.hod.pct_first30 != null ? T.hod.pct_first30 : hodBuckets[0].pct;
+    const hodLast30  = T.hod.pct_last30  != null ? T.hod.pct_last30  : hodBuckets[hodBuckets.length-1].pct;
+    const lodFirst30 = T.lod.pct_first30 != null ? T.lod.pct_first30 : lodBuckets[0].pct;
+    const lodLast30  = T.lod.pct_last30  != null ? T.lod.pct_last30  : lodBuckets[lodBuckets.length-1].pct;
+
+    const hodTopBucket = hodBuckets.reduce((a, b) => b.pct > a.pct ? b : a);
+    const lodTopBucket = lodBuckets.reduce((a, b) => b.pct > a.pct ? b : a);
+
     seqEl.innerHTML = `
       <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.7;font-family:'Share Tech Mono',monospace;">
-        Based on ${T.total_days} days of 1-minute SPY bars (CT time).
+        Based on ${totalDays} days of 1-minute SPY bars (CT time).
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">
         ${[
-          {l:'LOD sets before HOD', v: s.lod_before_hod_pct.toFixed(1)+'%', c:'#ff3355'},
-          {l:'HOD sets before LOD', v: s.hod_before_lod_pct.toFixed(1)+'%', c:'#00ff88'},
-          {l:'HOD in first 30 min', v: s.hod_first_30min_pct.toFixed(1)+'%', c:'#ffcc00'},
-          {l:'LOD in first 30 min', v: s.lod_first_30min_pct.toFixed(1)+'%', c:'#ffcc00'},
-          {l:'HOD in last 30 min',  v: s.hod_last_30min_pct.toFixed(1)+'%',  c:'#ff8800'},
-          {l:'LOD in last 30 min',  v: s.lod_last_30min_pct.toFixed(1)+'%',  c:'#ff8800'},
+          {l:'LOD sets before HOD', v: lodBeforeHodPct.toFixed(1)+'%', c:'#ff3355'},
+          {l:'HOD sets before LOD', v: hodBeforeLodPct.toFixed(1)+'%', c:'#00ff88'},
+          {l:'HOD in first 30 min', v: hodFirst30.toFixed(1)+'%',      c:'#ffcc00'},
+          {l:'LOD in first 30 min', v: lodFirst30.toFixed(1)+'%',      c:'#ffcc00'},
+          {l:'HOD in last 30 min',  v: hodLast30.toFixed(1)+'%',       c:'#ff8800'},
+          {l:'LOD in last 30 min',  v: lodLast30.toFixed(1)+'%',       c:'#ff8800'},
         ].map(x => `<div style="background:var(--bg3);border-radius:3px;padding:7px 9px;">
           <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">${x.l}</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${x.c};">${x.v}</div>
@@ -570,27 +588,36 @@ function renderTODStats() {
       </div>
       <div style="font-size:11px;color:var(--text3);line-height:1.6;background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:3px solid var(--cyan);">
         <strong style="color:var(--text2);">Key insight:</strong>
-        Most common HOD window: <strong style="color:#00ff88;">${hodTopBucket.name || hodTopBucket.label} (${hodTopBucket.pct.toFixed(1)}%)</strong>.
-        Most common LOD window: <strong style="color:#ff3355;">${lodTopBucket.name || lodTopBucket.label} (${lodTopBucket.pct.toFixed(1)}%)</strong>.
-        LOD is set before HOD ${s.lod_before_hod_pct.toFixed(0)}% of the time — meaning the day tends to find its low first, then rally.
-        ${s.hod_first_30min_pct > 15 || s.lod_first_30min_pct > 15
-          ? `The first 30 min (8:30–9:00 CT) sets the HOD ${s.hod_first_30min_pct.toFixed(0)}% of the time and LOD ${s.lod_first_30min_pct.toFixed(0)}% — the open auction is the single most important window.`
+        Most common HOD window: <strong style="color:#00ff88;">${hodTopBucket.label} (${hodTopBucket.pct.toFixed(1)}%)</strong>.
+        Most common LOD window: <strong style="color:#ff3355;">${lodTopBucket.label} (${lodTopBucket.pct.toFixed(1)}%)</strong>.
+        LOD is set before HOD ${lodBeforeHodPct.toFixed(0)}% of the time — meaning the day tends to find its low first, then rally.
+        ${hodFirst30 > 15 || lodFirst30 > 15
+          ? `The first 30 min (8:30–9:00 CT) sets the HOD ${hodFirst30.toFixed(0)}% of the time and LOD ${lodFirst30.toFixed(0)}% — the open auction is the single most important window.`
           : ''}
       </div>`;
   }
 
-  // DOW panel — show top bucket per day
+  // DOW panel — derive top bucket per day from by_dow arrays
   const dowEl = document.getElementById('todDowPanel');
-  if (dowEl && T.hod_by_dow && T.lod_by_dow) {
-    const dowRows = T.hod_by_dow.map((hd, i) => {
-      const ld = T.lod_by_dow[i];
+  if (dowEl && hodByDow && lodByDow) {
+    const bucketLabels = T.buckets;
+    const dowRows = hodByDow.map((hd, i) => {
+      const ld = lodByDow[i];
+      // Find index of max pct for HOD
+      const hodMaxIdx = hd.pcts.indexOf(Math.max(...hd.pcts));
+      const lodMaxIdx = ld.pcts.indexOf(Math.max(...ld.pcts));
+      const hodTopLabel = bucketLabels[hodMaxIdx] || '—';
+      const lodTopLabel = bucketLabels[lodMaxIdx] || '—';
+      const hodTopPct   = hd.pcts[hodMaxIdx] || 0;
+      const lodTopPct   = ld.pcts[lodMaxIdx] || 0;
+      const nDays = hd.counts.reduce((a, b) => a + b, 0);
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)22;">
-        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);width:30px;">${hd.day}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);width:30px;">${hd.dow}</div>
         <div style="flex:1;">
-          <div style="font-size:10px;color:#00ff88;margin-bottom:2px;">HOD: <strong>${hd.top_bucket}</strong> <span style="color:var(--text3);">(${hd.top_pct.toFixed(0)}%)</span></div>
-          <div style="font-size:10px;color:#ff3355;">LOD: <strong>${ld.top_bucket}</strong> <span style="color:var(--text3);">(${ld.top_pct.toFixed(0)}%)</span></div>
+          <div style="font-size:10px;color:#00ff88;margin-bottom:2px;">HOD: <strong>${hodTopLabel}</strong> <span style="color:var(--text3);">(${hodTopPct.toFixed(0)}%)</span></div>
+          <div style="font-size:10px;color:#ff3355;">LOD: <strong>${lodTopLabel}</strong> <span style="color:var(--text3);">(${lodTopPct.toFixed(0)}%)</span></div>
         </div>
-        <div style="text-align:right;font-size:9px;color:var(--text3);">${hd.n} days</div>
+        <div style="text-align:right;font-size:9px;color:var(--text3);">${nDays} days</div>
       </div>`;
     }).join('');
     dowEl.innerHTML = `
