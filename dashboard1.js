@@ -80,7 +80,7 @@ function switchTab(id){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
   // Find and activate the correct top-level tab button
-  const topTabs = ['hub','desk','overview','derivatives','macro','history','media','journal'];
+  const topTabs = ['hub','desk','intraday','overview','derivatives','macro','history','media','journal'];
   const btnIdx = topTabs.indexOf(id);
   const allTabs = document.querySelectorAll('.tab');
   if(btnIdx>=0 && allTabs[btnIdx]) allTabs[btnIdx].classList.add('active');
