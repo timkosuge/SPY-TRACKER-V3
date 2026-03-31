@@ -7,8 +7,8 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
+  overview:    ['overview','bonds','breadth','sentiment'],
   derivatives: ['options','gex','wem','volatility'],
-  macro:       ['bonds','breadth','sentiment'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
 const TAB_TO_GROUP = {};
@@ -55,12 +55,14 @@ function _switchPanelOnly(id) {
   if(id==='journal') renderJournalEntries();
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
+  if(id==='macro') { try { renderMacro(); } catch(e){ console.warn('macro:',e); } }
   if(id==='declines') { try { renderDeclines(); } catch(e){ console.warn('declines:',e); } }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
   if(id==='edgestats') { if(typeof renderEdgeStats==='function') renderEdgeStats(); }
+  if(id==='overview' && _md && _sd) { try { renderOverview(_md); } catch(e){ console.warn('overview:',e); } }
   if(id==='breadth' && _md && _sd) { try { renderBreadth(_md,_sd); } catch(e){} }
   if(id==='volatility' && _md) { try { renderVolatility(_md); } catch(e){} }
   if(id==='bonds' && _md) { try { renderBonds(_md); } catch(e){} }
@@ -79,11 +81,10 @@ function switchTab(id){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
-  // Find and activate the correct top-level tab button
-  const topTabs = ['hub','desk','intraday','overview','derivatives','macro','history','media','journal'];
-  const btnIdx = topTabs.indexOf(id);
-  const allTabs = document.querySelectorAll('.tab');
-  if(btnIdx>=0 && allTabs[btnIdx]) allTabs[btnIdx].classList.add('active');
+  // Find and activate the correct top-level tab button by onclick content
+  document.querySelectorAll('.tab').forEach(t => {
+    if(t.getAttribute('onclick') && t.getAttribute('onclick').includes("'"+id+"'")) t.classList.add('active');
+  });
 
   const p=$('panel-'+id); if(p)p.classList.add('active');
   if(id==='media') initMediaTab();
@@ -91,6 +92,7 @@ function switchTab(id){
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
+  if(id==='macro') { try { renderMacro(); } catch(e){ console.warn('macro:',e); } }
 }
 
 // ── VIX bar marker ──
@@ -5330,4 +5332,281 @@ function renderDeclines() {
     const s = document.getElementById(id), d = document.getElementById('es-' + id);
     if(s && d) d.textContent = s.textContent;
   });
+}
+
+// ─── MACRO TAB ────────────────────────────────────────────────────────────────
+// Data-driven macro dashboard. Uses live quotes already in _md.quotes.
+// Reads: rates (TNX/IRX/FVX/TYX), credit (HYG/LQD/JNK/TLT),
+//        FX (DXY), commodities (GC=F/CL=F), volatility (VIX),
+//        and contextualises with SPY historical performance in each regime.
+
+function renderMacro() {
+  const el = $('macroContent');
+  if(!el) return;
+  const md = window._md;
+  if(!md) { el.innerHTML='<div class="no-data">Awaiting live data...</div>'; return; }
+
+  const q   = md.quotes || {};
+  const fmt2 = (v,d=2) => v!=null ? Number(v).toFixed(d) : '—';
+  const pctFmt = v => v!=null ? (v>=0?'+':'')+Number(v).toFixed(2)+'%' : '—';
+  const clr  = v => v==null?'var(--text2)':v>0?'#00ff88':'#ff3355';
+  const sign = v => v>=0?'+':'';
+
+  // ── Pull all macro fields ──────────────────────────────────────────────────
+  const t2   = q['^IRX']?.price,  t2c  = q['^IRX']?.pct_change;
+  const t5   = q['^FVX']?.price,  t5c  = q['^FVX']?.pct_change;
+  const t10  = q['^TNX']?.price,  t10c = q['^TNX']?.pct_change;
+  const t30  = q['^TYX']?.price,  t30c = q['^TYX']?.pct_change;
+  const tlt  = q['TLT']?.price,   tltc = q['TLT']?.pct_change;
+  const hyg  = q['HYG']?.price,   hygc = q['HYG']?.pct_change;
+  const lqd  = q['LQD']?.price,   lqdc = q['LQD']?.pct_change;
+  const jnk  = q['JNK']?.price,   jnkc = q['JNK']?.pct_change;
+  const dxy  = q['DX-Y.NYB']?.price, dxyc = q['DX-Y.NYB']?.pct_change;
+  const gold = q['GC=F']?.price,  goldc = q['GC=F']?.pct_change;
+  const oil  = q['CL=F']?.price,  oilc  = q['CL=F']?.pct_change;
+  const btc  = q['BTC-USD']?.price, btcc = q['BTC-USD']?.pct_change;
+  const vix  = q['^VIX']?.price;
+  const spy  = q['SPY']?.price,   spyc  = q['SPY']?.pct_change;
+  const qqq  = q['QQQ']?.price,   qqqc  = q['QQQ']?.pct_change;
+  const iwm  = q['IWM']?.price,   iwmc  = q['IWM']?.pct_change;
+
+  // ── Derived regime signals ─────────────────────────────────────────────────
+  const s2_10  = t10 && t2  ? +(t10-t2).toFixed(3) : null;
+  const s5_30  = t30 && t5  ? +(t30-t5).toFixed(3) : null;
+  const hyg_lqd = hygc!=null && lqdc!=null ? +(hygc-lqdc).toFixed(3) : null;
+
+  // Curve regime
+  const chg10 = q['^TNX']?.change||0, chg2 = q['^IRX']?.change||0;
+  const spreadChg = chg10 - chg2, ratesDir = (chg10+chg2)/2;
+  let curveRegime, curveColor, curveDesc;
+  if(t10 && t2) {
+    if(ratesDir>0.01 && spreadChg>0.005)       { curveRegime='BEAR STEEPENER'; curveColor='#ff3355'; curveDesc='Rates rising, long-end leading. Inflation/growth fear pricing.'; }
+    else if(ratesDir>0.01 && spreadChg<=0.005)  { curveRegime='BEAR FLATTENER'; curveColor='#ff8800'; curveDesc='Rates rising, short-end leading. Tightening cycle in motion.'; }
+    else if(ratesDir<-0.01 && spreadChg>0.005)  { curveRegime='BULL STEEPENER'; curveColor='#ffcc00'; curveDesc='Rates falling, long-end lagging. Recession risk being priced.'; }
+    else if(ratesDir<-0.01 && spreadChg<=0.005) { curveRegime='BULL FLATTENER'; curveColor='#00ff88'; curveDesc='Rates falling, short-end leading. Safe haven / Fed pivot bid.'; }
+    else                                          { curveRegime='SIDEWAYS';       curveColor='var(--text3)'; curveDesc='No clear directional move in rates today.'; }
+  } else { curveRegime='—'; curveColor='var(--text3)'; curveDesc='Awaiting yield data.'; }
+
+  // Credit regime (HYG vs LQD spread tells risk appetite)
+  const creditRegime = hyg_lqd==null ? null : hyg_lqd > 0.2 ? 'RISK-ON' : hyg_lqd < -0.2 ? 'RISK-OFF' : 'NEUTRAL';
+  const creditColor  = creditRegime==='RISK-ON'?'#00ff88':creditRegime==='RISK-OFF'?'#ff3355':'#ffcc00';
+  const creditDesc   = creditRegime==='RISK-ON'
+    ? 'High yield outperforming investment grade — market is seeking risk.'
+    : creditRegime==='RISK-OFF'
+    ? 'Investment grade outperforming high yield — credit stress / flight to quality.'
+    : creditRegime==='NEUTRAL' ? 'No significant divergence between HY and IG credit.' : 'Awaiting credit data.';
+
+  // DXY regime
+  const dxyRegime = dxyc==null ? null : dxyc > 0.3 ? 'STRONG DOLLAR' : dxyc < -0.3 ? 'WEAK DOLLAR' : 'FLAT';
+  const dxyColor  = dxyRegime==='STRONG DOLLAR'?'#ff8800':dxyRegime==='WEAK DOLLAR'?'#00ff88':'var(--text3)';
+
+  // VIX regime
+  const vixRegime = vix==null ? null : vix >= 30 ? 'FEAR' : vix >= 20 ? 'ELEVATED' : vix >= 15 ? 'NORMAL' : 'COMPLACENT';
+  const vixColor  = vix>=30?'#ff3355':vix>=20?'#ff8800':vix>=15?'#ffcc00':'#00ff88';
+
+  // Gold regime
+  const goldRegime = goldc==null ? null : goldc > 0.5 ? 'SAFE HAVEN BID' : goldc < -0.5 ? 'RISK-ON SELLING' : 'NEUTRAL';
+
+  // ── SPY context stats (hardcoded from DB analysis) ─────────────────────────
+  const spyStats = {
+    rateHike:   { label:'2022 hike cycle',   spy: -19.9, note:'Most aggressive hike cycle since 1980' },
+    rateStable: { label:'2023 pause',        spy: +24.8, note:'Market rallied as hikes paused' },
+    rateCut:    { label:'2024 cut cycle',    spy: +24.0, note:'First cut Sep 2024; equities held gains' },
+    zeroRate:   { label:'2020–2021 ZIRP',    spy: +15.1, note:'Zero rates → SPY +15% → +29%' },
+    highRateMonthly: { avg: +0.65, n: 51, note: 'Monthly SPY avg in high-rate era (2022+)' },
+    lowRateMonthly:  { avg: +0.99, n: 156, note: 'Monthly SPY avg in low-rate era (2009–2021)' },
+  };
+
+  // ── Overall macro score ────────────────────────────────────────────────────
+  let macroScore = 50; // neutral baseline
+  const signals = [];
+
+  if(s2_10 !== null) {
+    if(s2_10 < 0)         { macroScore -= 15; signals.push({c:'#ff3355', t:'Curve INVERTED ('+s2_10.toFixed(2)+'bp)', w:-15}); }
+    else if(s2_10 < 0.25) { macroScore -= 5;  signals.push({c:'#ff8800', t:'Curve flat ('+s2_10.toFixed(2)+'bp)', w:-5}); }
+    else                  { macroScore += 10; signals.push({c:'#00ff88', t:'Curve normal/steep ('+s2_10.toFixed(2)+'bp)', w:+10}); }
+  }
+  if(creditRegime==='RISK-ON')   { macroScore += 10; signals.push({c:'#00ff88', t:'Credit RISK-ON (HY outperforming)', w:+10}); }
+  if(creditRegime==='RISK-OFF')  { macroScore -= 10; signals.push({c:'#ff3355', t:'Credit RISK-OFF (HY underperforming)', w:-10}); }
+  if(vix !== null) {
+    if(vix >= 30)        { macroScore -= 15; signals.push({c:'#ff3355', t:`VIX ${fmt2(vix,1)} — fear regime`, w:-15}); }
+    else if(vix >= 20)   { macroScore -= 5;  signals.push({c:'#ff8800', t:`VIX ${fmt2(vix,1)} — elevated`, w:-5}); }
+    else if(vix < 15)    { macroScore += 10; signals.push({c:'#00ff88', t:`VIX ${fmt2(vix,1)} — complacency/calm`, w:+10}); }
+    else                 {                   signals.push({c:'#ffcc00', t:`VIX ${fmt2(vix,1)} — normal`, w:0}); }
+  }
+  if(dxyc !== null) {
+    if(dxyc > 0.5)       { macroScore -= 8;  signals.push({c:'#ff8800', t:`DXY +${fmt2(dxyc,2)}% — dollar squeeze`, w:-8}); }
+    else if(dxyc < -0.5) { macroScore += 5;  signals.push({c:'#00ff88', t:`DXY ${fmt2(dxyc,2)}% — dollar weakness (SPY tailwind)`, w:+5}); }
+  }
+  if(goldc !== null) {
+    if(goldc > 1.0)      { macroScore -= 8;  signals.push({c:'#ffcc00', t:`Gold +${fmt2(goldc,2)}% — safe haven demand`, w:-8}); }
+    else if(goldc < -1.0){ macroScore += 5;  signals.push({c:'#00ff88', t:`Gold ${fmt2(goldc,2)}% — risk-on mood`, w:+5}); }
+  }
+  macroScore = Math.max(0, Math.min(100, macroScore));
+  const scoreColor = macroScore >= 65 ? '#00ff88' : macroScore >= 45 ? '#ffcc00' : '#ff3355';
+  const scoreLabel = macroScore >= 65 ? 'RISK-ON' : macroScore >= 45 ? 'MIXED' : 'RISK-OFF';
+
+  // ── Build HTML ─────────────────────────────────────────────────────────────
+
+  const rateRow = (label, price, chg, change) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)22;">
+      <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);width:36px;">${label}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:var(--text);">${price!=null?fmt2(price,3)+'%':'—'}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${clr(change)};margin-left:auto;">${change!=null?(sign(change)+fmt2(change,3)):''}</span>
+      <span style="font-size:11px;color:${clr(chg)};width:52px;text-align:right;">${pctFmt(chg)}</span>
+    </div>`;
+
+  const assetRow = (label, price, chg, prefix='$', decimals=2) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)22;">
+      <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);width:56px;">${label}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:var(--text);">${price!=null?prefix+fmt2(price,decimals):'—'}</span>
+      <span style="font-size:12px;color:${clr(chg)};margin-left:auto;">${pctFmt(chg)}</span>
+    </div>`;
+
+  el.innerHTML = `
+
+  <!-- Row 1: Score + Regime Summary -->
+  <div style="display:grid;grid-template-columns:200px 1fr;gap:10px;margin-bottom:14px;">
+
+    <!-- Score gauge -->
+    <div class="panel" style="text-align:center;border-top:3px solid ${scoreColor};">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:2px;margin-bottom:6px;">MACRO REGIME</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:44px;font-weight:bold;color:${scoreColor};line-height:1;">${macroScore}</div>
+      <div style="font-family:'Orbitron',monospace;font-size:11px;color:${scoreColor};margin:4px 0 10px;">${scoreLabel}</div>
+      <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:8px;">
+        <div style="width:${macroScore}%;height:100%;background:${scoreColor};border-radius:4px;transition:width 0.5s;"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);">0 = full risk-off · 100 = full risk-on</div>
+    </div>
+
+    <!-- Signal breakdown -->
+    <div class="panel">
+      <div class="panel-label">⬡ ACTIVE MACRO SIGNALS</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${signals.length ? signals.map(s => `
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 8px;background:${s.c}11;border-left:3px solid ${s.c};border-radius:2px;">
+            <span style="font-size:12px;color:${s.c};">${s.w>0?'▲':s.w<0?'▼':'●'}</span>
+            <span style="font-size:12px;color:var(--text2);">${s.t}</span>
+            <span style="margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:11px;color:${s.c};">${s.w>0?'+':''}${s.w}</span>
+          </div>`).join('') : '<div style="color:var(--text3);font-size:12px;">No live data — signals will populate when market opens.</div>'}
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Rates + Credit + FX/Commodities -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+
+    <!-- Treasury Yields -->
+    <div class="panel">
+      <div class="panel-label">⬡ TREASURY YIELDS</div>
+      ${rateRow('2Y',  t2,  t2c,  q['^IRX']?.change)}
+      ${rateRow('5Y',  t5,  t5c,  q['^FVX']?.change)}
+      ${rateRow('10Y', t10, t10c, q['^TNX']?.change)}
+      ${rateRow('30Y', t30, t30c, q['^TYX']?.change)}
+      <div style="margin-top:10px;padding:8px;background:var(--bg3);border-radius:3px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">CURVE REGIME</div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;color:${curveColor};font-weight:bold;">${curveRegime}</div>
+        ${s2_10!=null?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">2s10s spread: <span style="color:${s2_10<0?'#ff3355':s2_10<0.25?'#ff8800':'#00ff88'}">${s2_10>=0?'+':''}${s2_10.toFixed(3)}%</span></div>`:''}
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">${curveDesc}</div>
+      </div>
+    </div>
+
+    <!-- Credit Markets -->
+    <div class="panel">
+      <div class="panel-label">⬡ CREDIT MARKETS</div>
+      ${assetRow('TLT',  tlt,  tltc)}
+      ${assetRow('HYG',  hyg,  hygc)}
+      ${assetRow('LQD',  lqd,  lqdc)}
+      ${assetRow('JNK',  jnk,  jnkc)}
+      <div style="margin-top:10px;padding:8px;background:var(--bg3);border-radius:3px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">CREDIT REGIME</div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;color:${creditColor};font-weight:bold;">${creditRegime||'—'}</div>
+        ${hyg_lqd!=null?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">HYG vs LQD spread: <span style="color:${clr(hyg_lqd)}">${sign(hyg_lqd||0)}${fmt2(hyg_lqd,2)}%</span></div>`:''}
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">${creditDesc}</div>
+      </div>
+    </div>
+
+    <!-- FX + Commodities -->
+    <div class="panel">
+      <div class="panel-label">⬡ FX & COMMODITIES</div>
+      ${assetRow('DXY',  dxy,  dxyc, '', 3)}
+      ${assetRow('Gold', gold, goldc, '$', 0)}
+      ${assetRow('Oil',  oil,  oilc,  '$', 2)}
+      ${assetRow('BTC',  btc,  btcc,  '$', 0)}
+      <div style="margin-top:10px;padding:8px;background:var(--bg3);border-radius:3px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">DOLLAR REGIME</div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;color:${dxyColor};font-weight:bold;">${dxyRegime||'—'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">${
+          dxyRegime==='STRONG DOLLAR' ? 'Dollar strength typically headwinds SPY — multinationals earn less in USD terms, commodities compress, EM pressure.'
+          : dxyRegime==='WEAK DOLLAR' ? 'Dollar weakness typically tailwinds SPY — boosts multinational earnings, commodities, risk appetite.'
+          : 'Dollar holding range. No major FX headwind or tailwind for equities today.'
+        }</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: SPY vs Macro History -->
+  <div class="panel" style="margin-bottom:14px;">
+    <div class="panel-label">⬡ SPY PERFORMANCE IN MACRO REGIMES — HISTORICAL CONTEXT</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+      ${[
+        {l:'RATE HIKE YEAR',     v:'-19.9%', sub:'2022: aggressive tightening', c:'#ff3355', note:'S&P fell 20%+ as Fed raised 425bp in 12 months'},
+        {l:'RATE PAUSE/PIVOT',   v:'+24.8%', sub:'2023: hikes stopped, cuts priced', c:'#00ff88', note:'Market rallied hard once Fed signalled peak rates'},
+        {l:'CUT CYCLE STARTS',   v:'+24.0%', sub:'2024: first cut Sep 2024', c:'#00ff88', note:'Soft landing narrative — equities held near ATH'},
+        {l:'ZERO RATE (ZIRP)',   v:'+28.8%', sub:'2021: near-zero rates', c:'#00ff88', note:'Easiest environment for equities — TINA effect'},
+      ].map(s=>`<div style="border-top:3px solid ${s.c};padding:10px;background:var(--bg3);border-radius:3px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">${s.l}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;font-weight:bold;color:${s.c};">${s.v}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">${s.sub}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.5;border-top:1px solid var(--border);padding-top:6px;">${s.note}</div>
+      </div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="padding:10px;background:var(--bg3);border-radius:3px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:6px;">SPY MONTHLY AVG — RATE ENVIRONMENT</div>
+        <div style="display:flex;gap:20px;">
+          <div>
+            <div style="font-size:10px;color:var(--text3);">High-rate era (2022+, n=51)</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#ffcc00;">+0.65%<span style="font-size:11px;color:var(--text3);">/mo</span></div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);">Low-rate era (2009–2021, n=156)</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#00ff88;">+0.99%<span style="font-size:11px;color:var(--text3);">/mo</span></div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;">Higher rates compress multiples and increase the discount rate on future earnings. SPY still positive in high-rate regimes — but the edge is meaningfully smaller. The full rate-hike year (2022) was the exception where the speed of hikes overwhelmed the market.</div>
+      </div>
+      <div style="padding:10px;background:var(--bg3);border-radius:3px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:6px;">KEY MACRO-SPY RELATIONSHIPS</div>
+        ${[
+          ['10Y YIELD RISING FAST', 'Headwind. P/E compression. Growth stocks hit hardest (longer duration).'],
+          ['INVERTED CURVE', 'Historically precedes recession by 12–18 months. Not a market timing signal on its own.'],
+          ['STRONG DXY', 'Headwind for multinational earnings (40%+ of S&P revenue is foreign). Also pressures commodities.'],
+          ['HIGH YIELD SPREADS WIDEN', 'Risk-off signal. HYG leading SPY lower is an early warning. Watch JNK/LQD divergence.'],
+          ['VIX > 30', 'Short-term SPY often oversold at extremes — but sustained fear = real market stress.'],
+          ['GOLD SURGING', 'Safe haven bid = risk-off. BUT: gold and SPY can both rise in dollar-weakness environments.'],
+        ].map(([k,v])=>`<div style="display:flex;gap:8px;margin-bottom:5px;">
+          <span style="font-size:10px;color:var(--cyan);min-width:160px;">${k}</span>
+          <span style="font-size:10px;color:var(--text3);">${v}</span>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 4: Real-time macro scorecard -->
+  <div class="panel">
+    <div class="panel-label">⬡ EQUITY INDICES — MACRO CONTEXT</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+      ${[[spy,'SPY','S&P 500',spyc],[qqq,'QQQ','Nasdaq 100',qqqc],[iwm,'IWM','Russell 2000',iwmc]].map(([price,sym,name,chg])=>{
+        if(!price) return '';
+        const c = clr(chg);
+        return `<div style="padding:10px;background:var(--bg3);border-radius:3px;text-align:center;">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">${sym} · ${name}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:var(--text);margin:4px 0;">$${fmt2(price,2)}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${c};">${pctFmt(chg)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px;">VIX: ${vix!=null?fmt2(vix,1):' —'} · ${vixRegime||'—'}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
 }
