@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1569,7 +1570,7 @@
     </div>
     <div id="jsubtab-chart" class="journal-subtab" onclick="switchJournalSubtab('chart')"
       style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;padding:7px 16px;cursor:pointer;border-bottom:2px solid transparent;color:var(--text3);margin-bottom:-1px;">
-      ⬡ CHART ANALYSIS
+      ⬡ CHART JOURNAL
     </div>
   </div>
 
@@ -1783,6 +1784,9 @@
           <canvas id="tjPnlChart" height="80" style="width:100%;display:block;"></canvas>
         </div>
 
+        <!-- Extended stats panel -->
+        <div class="panel" style="padding:12px 14px;" id="tjStatsPanel"></div>
+
         <!-- Trade table -->
         <div class="panel" style="padding:0;overflow:hidden;">
           <div style="overflow-x:auto;">
@@ -1819,30 +1823,67 @@
     </div>
   </div><!-- /jpanel-trades -->
 
-  <!-- ── CHART ANALYSIS SUBTAB ─────────────────────── -->
+  <!-- ── CHART JOURNAL SUBTAB ─────────────────────── -->
   <div id="jpanel-chart" style="display:none;">
-    <div style="display:grid;grid-template-columns:1fr 380px;gap:12px;height:calc(100vh - 160px);min-height:600px;">
-      <!-- Left: upload + analysis -->
+    <div style="display:grid;grid-template-columns:1fr 360px;gap:12px;min-height:600px;">
+
+      <!-- Left: upload + save -->
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <div class="panel" style="flex-shrink:0;">
-          <div class="panel-label">⬡ CHART ANALYSIS — UPLOAD IMAGE</div>
+        <div class="panel" style="flex-shrink:0;padding:14px;">
+          <div class="panel-label" style="margin-bottom:12px;">⬡ SAVE CHART TO JOURNAL</div>
+
+          <!-- Drop zone -->
           <div id="journalDropZone"
-            style="border:2px dashed var(--border);border-radius:4px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.2s;margin-bottom:10px;"
+            style="border:2px dashed var(--border);border-radius:4px;padding:30px 16px;text-align:center;cursor:pointer;transition:border-color 0.2s;margin-bottom:10px;position:relative;"
             onclick="document.getElementById('journalFileInput').click()"
             ondragover="event.preventDefault();this.style.borderColor='var(--cyan)'"
             ondragleave="this.style.borderColor='var(--border)'"
             ondrop="handleJournalDrop(event)">
-            <div style="font-size:32px;margin-bottom:8px;opacity:0.4;">📊</div>
+            <div id="journalDropIcon" style="font-size:32px;margin-bottom:8px;opacity:0.4;">📊</div>
             <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;color:var(--text3);">DRAG & DROP CHART IMAGE OR CLICK TO BROWSE</div>
             <div style="font-size:11px;color:var(--text3);margin-top:4px;">PNG, JPG, WebP supported</div>
           </div>
           <input id="journalFileInput" type="file" accept="image/*" style="display:none" onchange="handleJournalFile(this.files[0])"/>
-          <textarea id="journalNote" placeholder="Add a note about this chart (optional)..."
-            style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;resize:none;height:60px;outline:none;margin-bottom:8px;"></textarea>
+
+          <!-- Preview -->
+          <div id="journalImgPreview" style="display:none;margin-bottom:10px;">
+            <img id="journalPreviewImg" src="" style="width:100%;max-height:280px;object-fit:contain;border-radius:4px;border:1px solid var(--border);display:block;"/>
+          </div>
+
+          <!-- Date / ticker fields -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div>
+              <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DATE</div>
+              <input id="journalChartDate" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;box-sizing:border-box;"/>
+            </div>
+            <div>
+              <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">TIMEFRAME / TAG</div>
+              <input id="journalChartTag" type="text" placeholder="e.g. 5min, Entry, Setup" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;box-sizing:border-box;"/>
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div style="margin-bottom:10px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">NOTES</div>
+            <textarea id="journalNote" placeholder="What did you see? Entry thesis, key levels, mistakes…" rows="3"
+              style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;resize:vertical;outline:none;"></textarea>
+          </div>
+
+          <!-- Outcome tag -->
+          <div style="margin-bottom:12px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">OUTCOME TAG</div>
+            <div id="journalOutcomeBtns" style="display:flex;gap:6px;">
+              <button onclick="journalSetOutcome('WIN')"  class="joc-btn" data-oc="WIN"  style="flex:1;padding:6px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">WIN</button>
+              <button onclick="journalSetOutcome('LOSS')" class="joc-btn" data-oc="LOSS" style="flex:1;padding:6px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">LOSS</button>
+              <button onclick="journalSetOutcome('BE')"   class="joc-btn" data-oc="BE"   style="flex:1;padding:6px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">B/E</button>
+              <button onclick="journalSetOutcome('STUDY')" class="joc-btn" data-oc="STUDY" style="flex:1;padding:6px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--cyan);color:#000;border:none;">STUDY</button>
+            </div>
+          </div>
+
           <div style="display:flex;gap:8px;">
-            <button onclick="analyzeChart()" id="journalAnalyzeBtn" disabled
-              style="flex:1;background:var(--cyan);color:#000;border:none;border-radius:3px;padding:10px 16px;font-family:'Orbitron',monospace;font-size:10px;cursor:not-allowed;opacity:0.5;font-weight:bold;">
-              ⬡ ANALYZE WITH AI
+            <button onclick="saveJournalChart()" id="journalSaveBtn" disabled
+              style="flex:1;background:var(--green);color:#000;border:none;border-radius:3px;padding:10px 16px;font-family:'Orbitron',monospace;font-size:10px;cursor:not-allowed;opacity:0.4;font-weight:bold;letter-spacing:1px;">
+              ⬡ SAVE TO JOURNAL
             </button>
             <button onclick="clearJournalUpload()"
               style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);border-radius:3px;padding:10px 16px;font-family:'Orbitron',monospace;font-size:10px;cursor:pointer;">
@@ -1850,23 +1891,31 @@
             </button>
           </div>
         </div>
-        <div class="panel" style="flex:1;overflow-y:auto;">
-          <div class="panel-label">⬡ ANALYSIS</div>
-          <div id="journalPreviewArea">
-            <div style="font-size:12px;color:var(--text3);padding:12px 0;">Upload a chart to begin analysis.</div>
-          </div>
-        </div>
       </div>
-      <!-- Right: journal entries -->
-      <div class="panel" style="overflow-y:auto;">
+
+      <!-- Right: gallery -->
+      <div class="panel" style="overflow-y:auto;padding:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div class="panel-label" style="margin-bottom:0;">⬡ CHART JOURNAL</div>
           <button onclick="clearJournal()" style="background:none;border:1px solid #ff335544;color:#ff335566;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:'Orbitron',monospace;">CLEAR ALL</button>
         </div>
+        <!-- Filter bar -->
+        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+          <select id="journalFilterOC" onchange="renderJournalEntries()" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 6px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:10px;outline:none;">
+            <option value="">ALL OUTCOMES</option>
+            <option>WIN</option><option>LOSS</option><option>BE</option><option>STUDY</option>
+          </select>
+        </div>
         <div id="journalEntries">
-          <div style="font-size:12px;color:var(--text3);">No entries yet.</div>
+          <div style="font-size:12px;color:var(--text3);">No charts saved yet.</div>
         </div>
       </div>
+
+    </div>
+
+    <!-- Lightbox overlay -->
+    <div id="journalLightbox" onclick="closeJournalLightbox()" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.88);z-index:9999;cursor:zoom-out;align-items:center;justify-content:center;">
+      <img id="journalLightboxImg" src="" style="max-width:90%;max-height:90%;object-fit:contain;border-radius:4px;border:1px solid var(--border);"/>
     </div>
   </div><!-- /jpanel-chart -->
 
