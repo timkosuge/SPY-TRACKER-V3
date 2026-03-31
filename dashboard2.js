@@ -1190,18 +1190,21 @@ function updateAIProviderBadge() {
 }
 
 function toggleChat() {
-  const p = document.getElementById('aiPanel');
-  if (!p) return;
-  const isOpen = p.classList.toggle('open');
+  const panel   = document.getElementById('aiPanel');
+  const trigger = document.getElementById('aiTrigger');
+  if (!panel) return;
+  const isOpen = panel.classList.toggle('open');
+  if (trigger) trigger.textContent = isOpen ? '×' : '⬡';
   if (isOpen) {
-    // Probe Ollama status on open
-    const ollamaUrl = aiSettings('ollamaUrl');
+    setTimeout(() => document.getElementById('aiInput')?.focus(), 220);
     if (aiSettings('ollamaEnabled')) {
-      probeOllama(ollamaUrl).then(res => {
+      probeOllama(aiSettings('ollamaUrl')).then(res => {
         const dot = document.getElementById('ollamaStatusDot');
         const lbl = document.getElementById('ollamaStatusLbl');
         if (dot) dot.style.background = res.ok ? '#00ff88' : '#ff3355';
-        if (lbl) lbl.textContent = res.ok ? 'Ollama connected' : 'Ollama not reachable — using Claude fallback';
+        if (lbl) lbl.textContent = res.ok
+          ? 'Ollama connected — ' + (res.models?.length || 0) + ' models'
+          : 'Ollama offline — using Grok';
         if (res.ok && res.models?.length) {
           const sel = document.getElementById('ollamaModelSel');
           if (sel) {
