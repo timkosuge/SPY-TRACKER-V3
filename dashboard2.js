@@ -919,7 +919,7 @@ function renderWEM(md){
     const rectY  = dH/2 - rectH/2 + 10;
     const overY  = 50;
     const plotW  = dW - padX*2;
-    const slotW  = plotW / Math.max(total, 1);
+    const slotW  = plotW / Math.max(total + 1, 2); // +1 slot reserved for current open week
 
     // Time labels every ~5 weeks
     const step = Math.max(1, Math.floor(total/6));
@@ -949,6 +949,28 @@ function renderWEM(md){
         fill="${color}" opacity="${isNewest?1:0.72}"
         stroke="${isNewest?'white':'none'}" stroke-width="${isNewest?1.5:0}"/>`;
     }).join('');
+
+    // Current-week dot: live price vs open WEM (excluded from histWeeks because week_close is null)
+    var _cwDot = '';
+    if (lo && hi && price && (hi - lo) > 0) {
+      var _cwRange = hi - lo;
+      var _cwX = (padX + (total + 0.5) * slotW).toFixed(1);
+      var _cwCy, _cwCol;
+      if (price > hi) {
+        _cwCy = (rectY - Math.min((price - hi) / (_cwRange * 0.5), 1) * (overY - 4) - dotR).toFixed(1);
+        _cwCol = '#00ff88';
+      } else if (price < lo) {
+        _cwCy = (rectY + rectH + Math.min((lo - price) / (_cwRange * 0.5), 1) * (overY - 4) + dotR).toFixed(1);
+        _cwCol = '#ff3355';
+      } else {
+        _cwCy = (rectY + rectH - ((price - lo) / _cwRange) * rectH).toFixed(1);
+        _cwCol = '#ffcc00';
+      }
+      var _cwLY = (parseFloat(_cwCy) - dotR - 5).toFixed(1);
+      _cwDot = '<circle cx="' + _cwX + '" cy="' + _cwCy + '" r="' + (dotR+3) + '" fill="none" stroke="' + _cwCol + '" stroke-width="1.5" opacity="0.4"/>'
+             + '<circle cx="' + _cwX + '" cy="' + _cwCy + '" r="' + dotR + '" fill="' + _cwCol + '" opacity="0.95" stroke="white" stroke-width="2"/>'
+             + '<text x="' + _cwX + '" y="' + _cwLY + '" text-anchor="middle" fill="' + _cwCol + '" font-size="8" font-family="Orbitron,monospace" letter-spacing="1">NOW</text>';
+    }
 
     dotEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px;">
@@ -984,6 +1006,7 @@ function renderWEM(md){
           return `<text x="${tx.toFixed(1)}" y="${rectY+rectH+overY+32}" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8" font-family="Share Tech Mono,monospace">${label}</text>`;
         }).join('')}
         <line x1="${padX}" y1="${rectY+rectH+overY+24}" x2="${padX+plotW}" y2="${rectY+rectH+overY+24}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+        ${_cwDot}
       </svg>
       <div style="font-size:10px;color:var(--text3);margin-top:2px;">Oldest → Newest · newest dot has white ring · ${total} weeks</div>`;
   }
