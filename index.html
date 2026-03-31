@@ -1560,54 +1560,317 @@
 </div>
 
 <div class="tab-panel" id="panel-journal">
-  <div style="display:grid;grid-template-columns:1fr 380px;gap:12px;height:calc(100vh - 120px);min-height:600px;">
-    <!-- Left: upload + analysis -->
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <div class="panel" style="flex-shrink:0;">
-        <div class="panel-label">⬡ CHART ANALYSIS — UPLOAD IMAGE</div>
-        <!-- Drop zone -->
-        <div id="journalDropZone"
-          style="border:2px dashed var(--border);border-radius:4px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.2s;margin-bottom:10px;"
-          onclick="document.getElementById('journalFileInput').click()"
-          ondragover="event.preventDefault();this.style.borderColor='var(--cyan)'"
-          ondragleave="this.style.borderColor='var(--border)'"
-          ondrop="handleJournalDrop(event)">
-          <div style="font-size:32px;margin-bottom:8px;opacity:0.4;">📊</div>
-          <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;color:var(--text3);">DRAG & DROP CHART IMAGE OR CLICK TO BROWSE</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px;">PNG, JPG, WebP supported</div>
+
+  <!-- Journal subtab nav -->
+  <div style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:0;">
+    <div id="jsubtab-trades" class="journal-subtab active" onclick="switchJournalSubtab('trades')"
+      style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;padding:7px 16px;cursor:pointer;border-bottom:2px solid var(--green);color:var(--green);margin-bottom:-1px;">
+      ⬡ TRADE LOG
+    </div>
+    <div id="jsubtab-chart" class="journal-subtab" onclick="switchJournalSubtab('chart')"
+      style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;padding:7px 16px;cursor:pointer;border-bottom:2px solid transparent;color:var(--text3);margin-bottom:-1px;">
+      ⬡ CHART ANALYSIS
+    </div>
+  </div>
+
+  <!-- ── TRADE LOG SUBTAB ───────────────────────────── -->
+  <div id="jpanel-trades">
+
+    <!-- Summary strip -->
+    <div id="tjSummaryStrip" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:12px;"></div>
+
+    <!-- Main layout: form left, log right -->
+    <div style="display:grid;grid-template-columns:320px 1fr;gap:12px;align-items:start;">
+
+      <!-- ADD TRADE FORM -->
+      <div class="panel" style="position:sticky;top:0;">
+        <div class="panel-label" style="margin-bottom:12px;">⬡ LOG TRADE</div>
+
+        <!-- Date / Time -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DATE</div>
+            <input id="tj_date" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">TIME (CT)</div>
+            <input id="tj_time" type="time" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
         </div>
-        <input id="journalFileInput" type="file" accept="image/*" style="display:none" onchange="handleJournalFile(this.files[0])"/>
-        <!-- Note input -->
-        <textarea id="journalNote" placeholder="Add a note about this chart (optional)..."
-          style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;resize:none;height:60px;outline:none;margin-bottom:8px;"></textarea>
+
+        <!-- Direction + Type -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DIRECTION</div>
+            <div style="display:flex;gap:4px;">
+              <button id="tj_dir_call" onclick="tjSetDir('CALL')"
+                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--green);color:#000;border:none;font-weight:bold;">
+                CALL
+              </button>
+              <button id="tj_dir_put" onclick="tjSetDir('PUT')"
+                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">
+                PUT
+              </button>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">TRADE TYPE</div>
+            <select id="tj_type" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:7px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;">
+              <option>Buy to Open</option>
+              <option>Sell to Close</option>
+              <option>Sell to Open</option>
+              <option>Buy to Close</option>
+              <option>Spread</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Strike / Expiry -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">STRIKE</div>
+            <input id="tj_strike" type="number" step="0.5" placeholder="e.g. 555" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">EXPIRY</div>
+            <input id="tj_expiry" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+        </div>
+
+        <!-- Entry / Exit price -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">ENTRY PRICE</div>
+            <input id="tj_entry" type="number" step="0.01" placeholder="0.00" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">EXIT PRICE</div>
+            <input id="tj_exit" type="number" step="0.01" placeholder="0.00 (blank=open)" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+        </div>
+
+        <!-- Contracts / SPY price at entry -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">CONTRACTS (QTY)</div>
+            <input id="tj_qty" type="number" step="1" min="1" placeholder="1" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">SPY @ ENTRY</div>
+            <input id="tj_spy_price" type="number" step="0.01" placeholder="auto-fill" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+        </div>
+
+        <!-- Setup tag / DTE -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">SETUP / TAG</div>
+            <select id="tj_setup" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:7px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
+              <option value="">— none —</option>
+              <option>OR Breakout</option>
+              <option>OR Fade</option>
+              <option>Gap Fill</option>
+              <option>VWAP Reclaim</option>
+              <option>VWAP Rejection</option>
+              <option>Support Bounce</option>
+              <option>Resistance Reject</option>
+              <option>HOD/LOD Chase</option>
+              <option>Power Hour</option>
+              <option>News/Catalyst</option>
+              <option>Scalp</option>
+              <option>Swing</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">OUTCOME</div>
+            <div style="display:flex;gap:4px;">
+              <button id="tj_out_win" onclick="tjSetOutcome('WIN')"
+                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">
+                WIN
+              </button>
+              <button id="tj_out_loss" onclick="tjSetOutcome('LOSS')"
+                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">
+                LOSS
+              </button>
+              <button id="tj_out_be" onclick="tjSetOutcome('BE')"
+                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">
+                B/E
+              </button>
+              <button id="tj_out_open" onclick="tjSetOutcome('OPEN')"
+                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--cyan);color:#000;border:none;">
+                OPEN
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div style="margin-bottom:10px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">NOTES / THESIS</div>
+          <textarea id="tj_notes" placeholder="Why did you take this trade? What did you see?" rows="3"
+            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:11px;resize:vertical;outline:none;"></textarea>
+        </div>
+
+        <!-- Mistake / lesson -->
+        <div style="margin-bottom:12px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">MISTAKE / LESSON</div>
+          <textarea id="tj_lesson" placeholder="What would you do differently?" rows="2"
+            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:11px;resize:vertical;outline:none;"></textarea>
+        </div>
+
         <div style="display:flex;gap:8px;">
-          
-          <button onclick="clearJournalUpload()"
-            style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);border-radius:3px;padding:10px 16px;font-family:'Orbitron',monospace;font-size:10px;cursor:pointer;">
-            CLEAR
+          <button onclick="tjAddTrade()"
+            style="flex:1;padding:10px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;background:var(--green);color:#000;border:none;border-radius:3px;cursor:pointer;font-weight:bold;">
+            + LOG TRADE
+          </button>
+          <button onclick="tjClearForm()"
+            style="padding:10px 14px;font-family:'Orbitron',monospace;font-size:10px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;">
+            CLR
+          </button>
+        </div>
+
+        <!-- Import/Export -->
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button onclick="tjExportCSV()"
+            style="flex:1;padding:7px;font-family:'Orbitron',monospace;font-size:9px;background:var(--bg3);color:var(--cyan);border:1px solid var(--cyan)44;border-radius:3px;cursor:pointer;">
+            ↓ CSV
+          </button>
+          <button onclick="document.getElementById('tjImportInput').click()"
+            style="flex:1;padding:7px;font-family:'Orbitron',monospace;font-size:9px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;">
+            ↑ IMPORT
+          </button>
+          <input id="tjImportInput" type="file" accept=".json" style="display:none" onchange="tjImportJSON(this)"/>
+          <button onclick="tjExportJSON()"
+            style="flex:1;padding:7px;font-family:'Orbitron',monospace;font-size:9px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;">
+            ↓ JSON
           </button>
         </div>
       </div>
-      <!-- Preview + analysis result -->
-      <div class="panel" style="flex:1;overflow-y:auto;">
-        <div class="panel-label">⬡ ANALYSIS</div>
-        <div id="journalPreviewArea">
-          <div style="font-size:12px;color:var(--text3);padding:12px 0;">Upload a chart to begin analysis.</div>
+
+      <!-- RIGHT: filter bar + trade log table -->
+      <div style="display:flex;flex-direction:column;gap:10px;">
+
+        <!-- Filter / sort bar -->
+        <div class="panel" style="padding:10px 14px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;margin-right:4px;">FILTER:</div>
+            <select id="tj_filt_dir" onchange="tjRender()" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
+              <option value="">ALL</option><option>CALL</option><option>PUT</option>
+            </select>
+            <select id="tj_filt_outcome" onchange="tjRender()" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
+              <option value="">ALL OUTCOMES</option><option>WIN</option><option>LOSS</option><option>BE</option><option>OPEN</option>
+            </select>
+            <select id="tj_filt_setup" onchange="tjRender()" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
+              <option value="">ALL SETUPS</option>
+            </select>
+            <input id="tj_filt_search" type="text" placeholder="search notes…" oninput="tjRender()"
+              style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;width:130px;"/>
+            <button onclick="tjClearFilters()"
+              style="padding:5px 10px;font-family:'Orbitron',monospace;font-size:9px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;margin-left:auto;">
+              RESET
+            </button>
+            <button onclick="tjClearAll()"
+              style="padding:5px 10px;font-family:'Orbitron',monospace;font-size:9px;background:none;color:#ff335566;border:1px solid #ff335530;border-radius:3px;cursor:pointer;">
+              DELETE ALL
+            </button>
+          </div>
+        </div>
+
+        <!-- P&L Equity curve -->
+        <div class="panel" style="padding:12px 14px;">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;margin-bottom:8px;">P&amp;L CURVE — CUMULATIVE</div>
+          <canvas id="tjPnlChart" height="80" style="width:100%;display:block;"></canvas>
+        </div>
+
+        <!-- Trade table -->
+        <div class="panel" style="padding:0;overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <table class="data-table" id="tjTradeTable" style="font-size:11px;">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding-left:12px;" onclick="tjSortBy('date')">DATE ⇅</th>
+                  <th onclick="tjSortBy('direction')">DIR ⇅</th>
+                  <th onclick="tjSortBy('strike')">STRIKE ⇅</th>
+                  <th>EXPIRY</th>
+                  <th>TYPE</th>
+                  <th>SETUP</th>
+                  <th onclick="tjSortBy('entry')">ENTRY ⇅</th>
+                  <th onclick="tjSortBy('exit')">EXIT ⇅</th>
+                  <th>QTY</th>
+                  <th onclick="tjSortBy('pnl')">P&amp;L ⇅</th>
+                  <th onclick="tjSortBy('pnlpct')">P&amp;L % ⇅</th>
+                  <th onclick="tjSortBy('outcome')">RESULT ⇅</th>
+                  <th style="text-align:left;">NOTES</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tjTradeBody">
+                <tr><td colspan="14" style="text-align:center;color:var(--text3);padding:24px;font-size:12px;">No trades logged yet. Use the form to add your first trade.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Setup breakdown -->
+        <div class="panel" style="padding:12px 14px;" id="tjSetupBreakdownPanel"></div>
+
+      </div>
+    </div>
+  </div><!-- /jpanel-trades -->
+
+  <!-- ── CHART ANALYSIS SUBTAB ─────────────────────── -->
+  <div id="jpanel-chart" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:12px;height:calc(100vh - 160px);min-height:600px;">
+      <!-- Left: upload + analysis -->
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="panel" style="flex-shrink:0;">
+          <div class="panel-label">⬡ CHART ANALYSIS — UPLOAD IMAGE</div>
+          <div id="journalDropZone"
+            style="border:2px dashed var(--border);border-radius:4px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.2s;margin-bottom:10px;"
+            onclick="document.getElementById('journalFileInput').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--cyan)'"
+            ondragleave="this.style.borderColor='var(--border)'"
+            ondrop="handleJournalDrop(event)">
+            <div style="font-size:32px;margin-bottom:8px;opacity:0.4;">📊</div>
+            <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;color:var(--text3);">DRAG & DROP CHART IMAGE OR CLICK TO BROWSE</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">PNG, JPG, WebP supported</div>
+          </div>
+          <input id="journalFileInput" type="file" accept="image/*" style="display:none" onchange="handleJournalFile(this.files[0])"/>
+          <textarea id="journalNote" placeholder="Add a note about this chart (optional)..."
+            style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;resize:none;height:60px;outline:none;margin-bottom:8px;"></textarea>
+          <div style="display:flex;gap:8px;">
+            <button onclick="analyzeChart()" id="journalAnalyzeBtn" disabled
+              style="flex:1;background:var(--cyan);color:#000;border:none;border-radius:3px;padding:10px 16px;font-family:'Orbitron',monospace;font-size:10px;cursor:not-allowed;opacity:0.5;font-weight:bold;">
+              ⬡ ANALYZE WITH AI
+            </button>
+            <button onclick="clearJournalUpload()"
+              style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);border-radius:3px;padding:10px 16px;font-family:'Orbitron',monospace;font-size:10px;cursor:pointer;">
+              CLEAR
+            </button>
+          </div>
+        </div>
+        <div class="panel" style="flex:1;overflow-y:auto;">
+          <div class="panel-label">⬡ ANALYSIS</div>
+          <div id="journalPreviewArea">
+            <div style="font-size:12px;color:var(--text3);padding:12px 0;">Upload a chart to begin analysis.</div>
+          </div>
+        </div>
+      </div>
+      <!-- Right: journal entries -->
+      <div class="panel" style="overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="panel-label" style="margin-bottom:0;">⬡ CHART JOURNAL</div>
+          <button onclick="clearJournal()" style="background:none;border:1px solid #ff335544;color:#ff335566;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:'Orbitron',monospace;">CLEAR ALL</button>
+        </div>
+        <div id="journalEntries">
+          <div style="font-size:12px;color:var(--text3);">No entries yet.</div>
         </div>
       </div>
     </div>
-    <!-- Right: journal entries -->
-    <div class="panel" style="overflow-y:auto;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <div class="panel-label" style="margin-bottom:0;">⬡ CHART JOURNAL</div>
-        <button onclick="clearJournal()" style="background:none;border:1px solid #ff335544;color:#ff335566;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:'Orbitron',monospace;">CLEAR ALL</button>
-      </div>
-      <div id="journalEntries">
-        <div style="font-size:12px;color:var(--text3);">No entries yet. Upload and analyze charts to build your journal.</div>
-      </div>
-    </div>
-  </div>
-</div>
+  </div><!-- /jpanel-chart -->
+
+</div><!-- /panel-journal -->
 
 </div><!-- /content -->
 
@@ -1615,7 +1878,7 @@
 
 
 <script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script>
-<script src="dashboard1.js"></script><script src="dashboard2.js"></script><script src="intraday_data.js"></script>
+<script src="dashboard1.js"></script><script src="dashboard2.js"></script><script src="intraday_data.js"></script><script src="journal_trades.js"></script>
 
 <!-- ============================================================
      EDGE STATS TAB — INLINE PANEL v3
