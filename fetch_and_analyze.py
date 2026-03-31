@@ -338,11 +338,11 @@ def fetch_spy_options_cboe():
         # ── Max Pain per expiry ────────────────────────────────────────────────
         max_pain_list = []
         for exp in near_expiries:
-            # Use strikes within ±20% of spot — matches industry standard
+            # Use strikes within ±20% of spot for OI map
             exp_opts = [o for o in parsed
                         if o["exp"] == exp
                         and o["oi"] > 0
-                        and spot * 0.95 <= o["strike"] <= spot * 1]
+                        and spot * 0.80 <= o["strike"] <= spot * 1.20]
             if not exp_opts:
                 continue
 
@@ -358,12 +358,15 @@ def fetch_spy_options_cboe():
                     strike_oi[s]["put"] += o["oi"]
 
             # Max pain = strike that minimizes total ITM payout to option buyers
+            # ITM only: calls with strike < spot, puts with strike > spot
             # Call ITM when candidate price s > strike k: payout = (s-k) × OI × 100
             # Put ITM when candidate price s < strike k: payout = (k-s) × OI × 100
+            itm_call_strikes = {k: v for k, v in strike_oi.items() if k < spot}
+            itm_put_strikes  = {k: v for k, v in strike_oi.items() if k > spot}
             pain = {}
             for s in strike_oi:
-                loss  = sum(strike_oi[k]["call"] * max(s - k, 0) * 100 for k in strike_oi)
-                loss += sum(strike_oi[k]["put"]  * max(k - s, 0) * 100 for k in strike_oi)
+                loss  = sum(itm_call_strikes[k]["call"] * max(s - k, 0) * 100 for k in itm_call_strikes)
+                loss += sum(itm_put_strikes[k]["put"]   * max(k - s, 0) * 100 for k in itm_put_strikes)
                 pain[s] = loss
 
             if pain:
@@ -569,7 +572,7 @@ def fetch_spy_options_yf_fallback():
                     s=float(r['strike']); oi=int(r['openInterest']) if pd.notna(r['openInterest']) else 0; v=int(r['volume']) if pd.notna(r['volume']) else 0
                     if oi<=0: continue
                     soi.setdefault(s,{'call':0,'put':0})['put']+=oi; pv+=v; poi+=oi; pr.append({'strike':s,'oi':oi,'vol':v})
-                pain={s:sum(soi[k]['call']*max(s-k,0)+soi[k]['put']*max(k-s,0) for k in soi) for s in soi}
+                itm_calls_yf={k:v for k,v in soi.items() if k<spot}; itm_puts_yf={k:v for k,v in soi.items() if k>spot}; pain={s:sum(itm_calls_yf[k]['call']*max(s-k,0) for k in itm_calls_yf)+sum(itm_puts_yf[k]['put']*max(k-s,0) for k in itm_puts_yf) for s in soi}
                 if pain:
                     mp=min(pain,key=pain.get); toi=sum(d['call']+d['put'] for d in soi.values())
                     max_pain_list.append({"expiry":exp,"max_pain":mp,"total_oi":toi,"dist_from_spot":round(mp-spot,2)})
@@ -690,7 +693,7 @@ def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=Fals
                     break
                 elif r[3] < wem_low:
                     breach = 1; breach_side = "LOW"
-                    breach_amount = round(wem_low - r[3], 2)
+                    breach_amount = round(r[3] - wem_low, 2)  # negative when close < low
                     breach_day = datetime.strptime(r[4], "%Y-%m-%d").strftime("%A").upper()
                     break
             if breach is None: breach = 0
@@ -846,7 +849,7 @@ def build_wem_stats(weekly_em_list):
         "pct_low_breach":    round(len(low_breaches)/len(completed)*100,1),
         "avg_breach_amt":    round(sum(d["breach_amount"] for d in breaches if d["breach_amount"])/len(breaches),2) if breaches else None,
         "avg_high_breach_amt": round(sum(abs(d["breach_amount"]) for d in high_breaches if d["breach_amount"] is not None)/len(high_breaches),2) if high_breaches else None,
-        "avg_low_breach_amt":  round(-sum(abs(d["breach_amount"]) for d in low_breaches  if d["breach_amount"] is not None)/len(low_breaches), 2) if low_breaches  else None,
+        "avg_low_breach_amt":  round(sum(d["breach_amount"] for d in low_breaches  if d["breach_amount"] is not None)/len(low_breaches), 2) if low_breaches  else None,
         "pct_gap_weeks":     round(len(gap_up+gap_down)/len(completed)*100,1) if completed else None,
         "pct_gaps_filled":   round(len(gaps_filled)/len(gaps)*100,1) if gaps else None,
         "avg_gap_up":        round(sum(d["weekly_gap"] for d in gap_up)/len(gap_up),2) if gap_up else None,
