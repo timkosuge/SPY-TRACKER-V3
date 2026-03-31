@@ -1,0 +1,561 @@
+// ─── SPY OPTIONS TRADE JOURNAL ─────────────────────────────────────────────
+// Persists to localStorage under key 'spyTradeJournal'
+
+(function() {
+
+const STORE_KEY = 'spyTradeJournal';
+let _trades = [];
+let _sortKey = 'date';
+let _sortDir = -1; // -1 = desc, 1 = asc
+let _direction = 'CALL';
+let _outcome = 'OPEN';
+let _pnlChart = null;
+
+// ── Persistence ──────────────────────────────────────────────────────────────
+
+function tjLoad() {
+  try { _trades = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch(e) { _trades = []; }
+}
+
+function tjSave() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(_trades)); } catch(e) {}
+}
+
+// ── Form helpers ─────────────────────────────────────────────────────────────
+
+window.tjSetDir = function(dir) {
+  _direction = dir;
+  const callBtn = document.getElementById('tj_dir_call');
+  const putBtn  = document.getElementById('tj_dir_put');
+  if (!callBtn || !putBtn) return;
+  if (dir === 'CALL') {
+    callBtn.style.cssText = 'flex:1;padding:7px 4px;font-family:\'Orbitron\',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--green);color:#000;border:none;font-weight:bold;';
+    putBtn.style.cssText  = 'flex:1;padding:7px 4px;font-family:\'Orbitron\',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);';
+  } else {
+    putBtn.style.cssText  = 'flex:1;padding:7px 4px;font-family:\'Orbitron\',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--red);color:#000;border:none;font-weight:bold;';
+    callBtn.style.cssText = 'flex:1;padding:7px 4px;font-family:\'Orbitron\',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);';
+  }
+};
+
+window.tjSetOutcome = function(out) {
+  _outcome = out;
+  const btns = { WIN: 'tj_out_win', LOSS: 'tj_out_loss', BE: 'tj_out_be', OPEN: 'tj_out_open' };
+  const colors = { WIN: 'var(--green)', LOSS: 'var(--red)', BE: 'var(--yellow)', OPEN: 'var(--cyan)' };
+  Object.entries(btns).forEach(([k, id]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (k === out) {
+      el.style.background = colors[k];
+      el.style.color = '#000';
+      el.style.border = 'none';
+      el.style.fontWeight = 'bold';
+    } else {
+      el.style.background = 'var(--bg3)';
+      el.style.color = 'var(--text3)';
+      el.style.border = '1px solid var(--border)';
+      el.style.fontWeight = 'normal';
+    }
+  });
+};
+
+function tjGetVal(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+window.tjClearForm = function() {
+  ['tj_date','tj_time','tj_strike','tj_expiry','tj_entry','tj_exit','tj_qty','tj_spy_price','tj_notes','tj_lesson'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const setupEl = document.getElementById('tj_setup');
+  if (setupEl) setupEl.value = '';
+  const typeEl = document.getElementById('tj_type');
+  if (typeEl) typeEl.value = 'Buy to Open';
+  tjSetDir('CALL');
+  tjSetOutcome('OPEN');
+  // prefill today's date
+  tjPrefillDate();
+};
+
+function tjPrefillDate() {
+  const dateEl = document.getElementById('tj_date');
+  if (dateEl && !dateEl.value) {
+    const now = new Date();
+    // display in CT — offset from UTC
+    const ct = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    dateEl.value = ct.toISOString().slice(0,10);
+  }
+  const timeEl = document.getElementById('tj_time');
+  if (timeEl && !timeEl.value) {
+    const ct = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    timeEl.value = ct.toTimeString().slice(0,5);
+  }
+  // auto-fill spy price from live data if available
+  const spyEl = document.getElementById('tj_spy_price');
+  if (spyEl && !spyEl.value) {
+    // try to grab live price from the dashboard
+    const priceEl = document.querySelector('.spy-price');
+    if (priceEl) {
+      const raw = priceEl.textContent.replace(/[^0-9.]/g,'');
+      if (raw) spyEl.value = raw;
+    }
+  }
+}
+
+// ── Add trade ─────────────────────────────────────────────────────────────────
+
+window.tjAddTrade = function() {
+  const date    = tjGetVal('tj_date');
+  const time    = tjGetVal('tj_time');
+  const strike  = parseFloat(tjGetVal('tj_strike'));
+  const expiry  = tjGetVal('tj_expiry');
+  const entry   = parseFloat(tjGetVal('tj_entry'));
+  const exitRaw = tjGetVal('tj_exit');
+  const exit    = exitRaw !== '' ? parseFloat(exitRaw) : null;
+  const qty     = parseInt(tjGetVal('tj_qty') || '1', 10) || 1;
+  const spyPx   = parseFloat(tjGetVal('tj_spy_price')) || null;
+  const setup   = tjGetVal('tj_setup');
+  const type    = tjGetVal('tj_type');
+  const notes   = tjGetVal('tj_notes');
+  const lesson  = tjGetVal('tj_lesson');
+
+  if (!date) { alert('Date is required.'); return; }
+  if (isNaN(entry) || entry <= 0) { alert('Entry price is required.'); return; }
+
+  // P&L per contract = (exit - entry) * 100  [for long options; flip for shorts]
+  const isSell = type && (type.includes('Sell to Open') || type.includes('Sell to Close'));
+  let pnl = null;
+  if (exit !== null && !isNaN(exit)) {
+    pnl = isSell
+      ? (entry - exit) * 100 * qty
+      : (exit - entry) * 100 * qty;
+  }
+
+  // pnl% relative to cost basis
+  const cost = entry * 100 * qty;
+  const pnlPct = (pnl !== null && cost > 0) ? (pnl / cost * 100) : null;
+
+  const trade = {
+    id:        Date.now() + Math.random(),
+    date, time,
+    direction: _direction,
+    type,
+    strike:    isNaN(strike) ? null : strike,
+    expiry,
+    entry,
+    exit,
+    qty,
+    spyPx,
+    setup,
+    outcome:   _outcome,
+    notes,
+    lesson,
+    pnl,
+    pnlPct,
+  };
+
+  _trades.unshift(trade);
+  tjSave();
+  tjRender();
+  tjClearForm();
+};
+
+// ── Edit (inline exit price update) ──────────────────────────────────────────
+
+window.tjUpdateExit = function(id, newExit) {
+  const t = _trades.find(t => t.id === id);
+  if (!t) return;
+  const exit = parseFloat(newExit);
+  if (isNaN(exit)) return;
+  t.exit = exit;
+  const isSell = t.type && (t.type.includes('Sell to Open') || t.type.includes('Sell to Close'));
+  t.pnl = isSell ? (t.entry - exit) * 100 * t.qty : (exit - t.entry) * 100 * t.qty;
+  const cost = t.entry * 100 * t.qty;
+  t.pnlPct = cost > 0 ? (t.pnl / cost * 100) : null;
+  if (t.outcome === 'OPEN') {
+    t.outcome = t.pnl >= 0 ? (t.pnl === 0 ? 'BE' : 'WIN') : 'LOSS';
+  }
+  tjSave();
+  tjRender();
+};
+
+window.tjDeleteTrade = function(id) {
+  _trades = _trades.filter(t => t.id !== id);
+  tjSave();
+  tjRender();
+};
+
+window.tjClearAll = function() {
+  if (!confirm('Delete ALL trade journal entries? This cannot be undone.')) return;
+  _trades = [];
+  tjSave();
+  tjRender();
+};
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+window.tjSortBy = function(key) {
+  if (_sortKey === key) _sortDir *= -1;
+  else { _sortKey = key; _sortDir = -1; }
+  tjRender();
+};
+
+function tjSort(arr) {
+  return [...arr].sort((a, b) => {
+    let va = a[_sortKey], vb = b[_sortKey];
+    if (_sortKey === 'date') { va = (a.date + a.time); vb = (b.date + b.time); }
+    if (va === null || va === undefined) return 1;
+    if (vb === null || vb === undefined) return -1;
+    if (typeof va === 'string') return _sortDir * va.localeCompare(vb);
+    return _sortDir * (va - vb);
+  });
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+
+window.tjClearFilters = function() {
+  ['tj_filt_dir','tj_filt_outcome','tj_filt_setup'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const s = document.getElementById('tj_filt_search'); if (s) s.value = '';
+  tjRender();
+};
+
+function tjFiltered() {
+  const dir     = (document.getElementById('tj_filt_dir')     || {}).value || '';
+  const outcome = (document.getElementById('tj_filt_outcome') || {}).value || '';
+  const setup   = (document.getElementById('tj_filt_setup')   || {}).value || '';
+  const search  = ((document.getElementById('tj_filt_search') || {}).value || '').toLowerCase();
+  return _trades.filter(t => {
+    if (dir && t.direction !== dir) return false;
+    if (outcome && t.outcome !== outcome) return false;
+    if (setup && t.setup !== setup) return false;
+    if (search && !(
+      (t.notes||'').toLowerCase().includes(search) ||
+      (t.lesson||'').toLowerCase().includes(search) ||
+      (t.setup||'').toLowerCase().includes(search) ||
+      String(t.strike||'').includes(search)
+    )) return false;
+    return true;
+  });
+}
+
+// ── Summary strip ─────────────────────────────────────────────────────────────
+
+function tjRenderSummary(filtered) {
+  const el = document.getElementById('tjSummaryStrip');
+  if (!el) return;
+
+  const closed = filtered.filter(t => t.pnl !== null);
+  const wins   = closed.filter(t => t.pnl > 0);
+  const losses = closed.filter(t => t.pnl < 0);
+  const totalPnl = closed.reduce((a, t) => a + t.pnl, 0);
+  const winRate = closed.length ? (wins.length / closed.length * 100) : 0;
+  const avgWin  = wins.length   ? wins.reduce((a,t)=>a+t.pnl,0)   / wins.length   : 0;
+  const avgLoss = losses.length ? losses.reduce((a,t)=>a+t.pnl,0) / losses.length : 0;
+  const rr = avgLoss !== 0 ? Math.abs(avgWin / avgLoss) : null;
+  const profitFactor = losses.length && Math.abs(losses.reduce((a,t)=>a+t.pnl,0)) > 0
+    ? wins.reduce((a,t)=>a+t.pnl,0) / Math.abs(losses.reduce((a,t)=>a+t.pnl,0))
+    : null;
+
+  const pnlColor = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  const wrColor  = winRate >= 50 ? 'var(--green)' : 'var(--red)';
+  const fmt$ = v => (v >= 0 ? '+' : '') + '$' + v.toFixed(0);
+
+  function box(label, val, color) {
+    return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px 10px;text-align:center;">
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">${label}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${color};">${val}</div>
+    </div>`;
+  }
+
+  el.innerHTML =
+    box('TOTAL P&amp;L', fmt$(totalPnl), pnlColor) +
+    box('WIN RATE', closed.length ? winRate.toFixed(0)+'%' : '—', wrColor) +
+    box('TRADES', filtered.length + (filtered.filter(t=>t.outcome==='OPEN').length ? ' ('+filtered.filter(t=>t.outcome==='OPEN').length+' open)' : ''), 'var(--text2)') +
+    box('AVG WIN', wins.length ? fmt$(avgWin) : '—', 'var(--green)') +
+    box('AVG LOSS', losses.length ? fmt$(avgLoss) : '—', 'var(--red)') +
+    box('R:R', rr !== null ? rr.toFixed(2) : '—', rr && rr >= 1 ? 'var(--green)' : 'var(--yellow)') +
+    box('PROF. FACTOR', profitFactor !== null ? profitFactor.toFixed(2) : '—', profitFactor && profitFactor >= 1 ? 'var(--green)' : 'var(--red)');
+}
+
+// ── P&L Chart ─────────────────────────────────────────────────────────────────
+
+function tjRenderPnlChart(filtered) {
+  const canvas = document.getElementById('tjPnlChart');
+  if (!canvas) return;
+
+  // Only closed trades, sorted chronologically
+  const closed = [...filtered].filter(t => t.pnl !== null)
+    .sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+
+  if (_pnlChart) { try { _pnlChart.destroy(); } catch(e) {} _pnlChart = null; }
+
+  if (!closed.length) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  let cum = 0;
+  const labels = [];
+  const data   = [0];
+  closed.forEach(t => {
+    cum += t.pnl;
+    labels.push(t.date.slice(5)); // MM-DD
+    data.push(parseFloat(cum.toFixed(2)));
+  });
+  labels.unshift('');
+
+  const color = cum >= 0 ? '#00ff88' : '#ff3355';
+
+  if (typeof Chart === 'undefined') return;
+
+  _pnlChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        borderColor: color,
+        backgroundColor: color + '22',
+        borderWidth: 2,
+        pointRadius: data.length > 40 ? 0 : 2,
+        pointHoverRadius: 4,
+        fill: true,
+        tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: {
+          label: ctx => ' $' + ctx.parsed.y.toFixed(2)
+        },
+        backgroundColor: '#0c0c14',
+        borderColor: '#252545',
+        borderWidth: 1,
+        titleColor: '#9090c0',
+        bodyColor: color,
+        titleFont: { family: 'Share Tech Mono', size: 10 },
+        bodyFont:  { family: 'Share Tech Mono', size: 12 },
+      }},
+      scales: {
+        x: { ticks: { color: '#606080', font: { family:'Share Tech Mono', size:9 }, maxTicksLimit: 10 }, grid: { color: '#25254522' } },
+        y: { ticks: { color: '#606080', font: { family:'Share Tech Mono', size:9 },
+              callback: v => '$'+v }, grid: { color: '#25254522' },
+             border: { dash: [3,3] } }
+      }
+    }
+  });
+}
+
+// ── Setup breakdown panel ─────────────────────────────────────────────────────
+
+function tjRenderSetupBreakdown(filtered) {
+  const el = document.getElementById('tjSetupBreakdownPanel');
+  if (!el) return;
+
+  const bySetup = {};
+  filtered.forEach(t => {
+    const key = t.setup || 'Untagged';
+    if (!bySetup[key]) bySetup[key] = { wins:0, losses:0, be:0, pnl:0, count:0 };
+    bySetup[key].count++;
+    bySetup[key].pnl += t.pnl || 0;
+    if (t.outcome === 'WIN')  bySetup[key].wins++;
+    if (t.outcome === 'LOSS') bySetup[key].losses++;
+    if (t.outcome === 'BE')   bySetup[key].be++;
+  });
+
+  const rows = Object.entries(bySetup).sort((a,b) => b[1].count - a[1].count);
+  if (!rows.length) { el.innerHTML = ''; return; }
+
+  const maxPnl = Math.max(...rows.map(r => Math.abs(r[1].pnl)), 1);
+
+  el.innerHTML = `
+    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;margin-bottom:10px;">SETUP BREAKDOWN</div>
+    <div style="display:grid;grid-template-columns:140px 60px 1fr 80px 70px;gap:4px;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;padding:0 2px;">
+      <div>SETUP</div><div style="text-align:center;">TRADES</div><div>P&amp;L BAR</div><div style="text-align:right;">NET P&amp;L</div><div style="text-align:right;">WIN%</div>
+    </div>` +
+    rows.map(([setup, s]) => {
+      const wr = s.wins + s.losses > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+      const barW = Math.round(Math.abs(s.pnl) / maxPnl * 100);
+      const c = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<div style="display:grid;grid-template-columns:140px 60px 1fr 80px 70px;gap:4px;align-items:center;padding:4px 2px;border-bottom:1px solid var(--border)22;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${setup}</div>
+        <div style="text-align:center;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">${s.count}</div>
+        <div style="height:12px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+          <div style="width:${barW}%;height:100%;background:${c}88;border-radius:2px;"></div>
+        </div>
+        <div style="text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${c};font-weight:bold;">${s.pnl >= 0 ? '+' : ''}$${s.pnl.toFixed(0)}</div>
+        <div style="text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${wr>=50?'var(--green)':'var(--red)'};">${wr.toFixed(0)}%</div>
+      </div>`;
+    }).join('');
+}
+
+// ── Populate setup filter dropdown ────────────────────────────────────────────
+
+function tjPopulateSetupFilter() {
+  const el = document.getElementById('tj_filt_setup');
+  if (!el) return;
+  const setups = [...new Set(_trades.map(t => t.setup).filter(Boolean))].sort();
+  const cur = el.value;
+  el.innerHTML = '<option value="">ALL SETUPS</option>' +
+    setups.map(s => `<option${s===cur?' selected':''}>${s}</option>`).join('');
+}
+
+// ── Main render ───────────────────────────────────────────────────────────────
+
+window.tjRender = function() {
+  tjPopulateSetupFilter();
+  const filtered = tjFiltered();
+  const sorted   = tjSort(filtered);
+
+  tjRenderSummary(filtered);
+  tjRenderPnlChart(filtered);
+  tjRenderSetupBreakdown(filtered);
+
+  const tbody = document.getElementById('tjTradeBody');
+  if (!tbody) return;
+
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text3);padding:24px;font-size:12px;">No trades match current filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = sorted.map(t => {
+    const dirColor = t.direction === 'CALL' ? 'var(--green)' : 'var(--red)';
+    const outColor = { WIN:'var(--green)', LOSS:'var(--red)', BE:'var(--yellow)', OPEN:'var(--cyan)' }[t.outcome] || 'var(--text3)';
+    const pnlColor = t.pnl === null ? 'var(--text3)' : t.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const pnlStr   = t.pnl === null ? '—' : (t.pnl >= 0 ? '+' : '') + '$' + t.pnl.toFixed(0);
+    const pnlPctStr= t.pnlPct === null ? '—' : (t.pnlPct >= 0 ? '+' : '') + t.pnlPct.toFixed(1) + '%';
+    const exitField = t.exit !== null
+      ? `<span style="color:var(--text2);">$${t.exit.toFixed(2)}</span>`
+      : `<input type="number" step="0.01" placeholder="exit" onblur="tjUpdateExit(${t.id},this.value)"
+           style="width:62px;background:var(--bg3);border:1px solid var(--border);border-radius:2px;padding:2px 4px;color:var(--cyan);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;"/>`;
+    const noteShort = (t.notes||'').length > 40 ? t.notes.slice(0,40)+'…' : (t.notes||'—');
+    const titleAttr = [t.notes, t.lesson ? ('📌 '+t.lesson) : ''].filter(Boolean).join('\n\n');
+
+    return `<tr title="${escHtml(titleAttr)}">
+      <td style="text-align:left;padding-left:12px;white-space:nowrap;">${t.date}${t.time?' <span style="color:var(--text3);font-size:10px;">'+t.time+'</span>':''}</td>
+      <td style="color:${dirColor};font-weight:bold;">${t.direction}</td>
+      <td style="color:var(--text2);">${t.strike !== null ? '$'+t.strike : '—'}</td>
+      <td style="color:var(--text3);font-size:10px;">${t.expiry || '—'}</td>
+      <td style="color:var(--text3);font-size:10px;white-space:nowrap;">${t.type}</td>
+      <td style="color:var(--purple);font-size:10px;">${t.setup || '—'}</td>
+      <td>$${t.entry.toFixed(2)}</td>
+      <td>${exitField}</td>
+      <td>${t.qty}</td>
+      <td style="color:${pnlColor};font-weight:bold;">${pnlStr}</td>
+      <td style="color:${pnlColor};font-size:11px;">${pnlPctStr}</td>
+      <td style="color:${outColor};font-family:'Orbitron',monospace;font-size:9px;font-weight:bold;">${t.outcome}</td>
+      <td style="text-align:left;color:var(--text3);font-size:10px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(noteShort)}</td>
+      <td style="text-align:right;padding-right:10px;">
+        <button onclick="tjDeleteTrade(${t.id})"
+          style="background:none;border:none;color:#ff335555;cursor:pointer;font-size:12px;padding:2px 4px;" title="Delete">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+};
+
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Export / Import ───────────────────────────────────────────────────────────
+
+window.tjExportCSV = function() {
+  const cols = ['date','time','direction','type','strike','expiry','entry','exit','qty','spyPx','setup','outcome','pnl','pnlPct','notes','lesson'];
+  const header = cols.join(',');
+  const rows = _trades.map(t => cols.map(k => {
+    const v = t[k] ?? '';
+    const s = String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(','));
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'spy_trades_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+};
+
+window.tjExportJSON = function() {
+  const blob = new Blob([JSON.stringify(_trades, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'spy_trades_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+};
+
+window.tjImportJSON = function(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) throw new Error('Expected array');
+      if (!confirm(`Import ${imported.length} trades? This will MERGE with existing ${_trades.length} trades.`)) return;
+      // Merge by id — no duplicates
+      const existingIds = new Set(_trades.map(t => t.id));
+      let added = 0;
+      imported.forEach(t => { if (!existingIds.has(t.id)) { _trades.push(t); added++; } });
+      tjSave();
+      tjRender();
+      alert(`Imported ${added} new trades.`);
+    } catch(err) {
+      alert('Import failed: ' + err.message);
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+};
+
+// ── Subtab switching ──────────────────────────────────────────────────────────
+
+window.switchJournalSubtab = function(tab) {
+  ['trades','chart'].forEach(t => {
+    const panel = document.getElementById('jpanel-'+t);
+    const btn   = document.getElementById('jsubtab-'+t);
+    if (!panel || !btn) return;
+    if (t === tab) {
+      panel.style.display = '';
+      btn.style.borderBottomColor = t === 'trades' ? 'var(--green)' : 'var(--cyan)';
+      btn.style.color = t === 'trades' ? 'var(--green)' : 'var(--cyan)';
+    } else {
+      panel.style.display = 'none';
+      btn.style.borderBottomColor = 'transparent';
+      btn.style.color = 'var(--text3)';
+    }
+  });
+  if (tab === 'trades') tjRender();
+};
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+function tjInit() {
+  tjLoad();
+  tjPrefillDate();
+  tjSetDir('CALL');
+  tjSetOutcome('OPEN');
+  tjRender();
+}
+
+// Hook into the dashboard's switchTab so journal tab triggers render
+const _origSwitchTab = window.switchTab;
+window.switchTab = function(id, ...args) {
+  if (typeof _origSwitchTab === 'function') _origSwitchTab(id, ...args);
+  if (id === 'journal') {
+    setTimeout(() => { tjInit(); }, 50);
+  }
+};
+
+// Also init on DOMContentLoaded in case journal is the active tab
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', tjInit);
+} else {
+  tjInit();
+}
+
+})();
