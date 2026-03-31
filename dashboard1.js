@@ -4293,20 +4293,151 @@ function renderIntradayPattern(md, sd) {
   const low = spy.low||today.low||0, cur = spy.price||0;
   const prevClose = spy.prev_close||sd?.[1]?.close||0;
 
-  // Before market open: show yesterday's completed session
-  if(!open_||!prevClose) {
+  // ── Determine if market is open ──────────────────────────────────────────
+  const _now = new Date();
+  const _etNow = new Date(_now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const _etMins = _etNow.getHours()*60 + _etNow.getMinutes();
+  const _isMarketOpen = _etMins >= 9*60+30 && _etMins < 16*60 && _etNow.getDay()>0 && _etNow.getDay()<6;
+  const _isPremarket  = _etMins >= 4*60    && _etMins < 9*60+30 && _etNow.getDay()>0 && _etNow.getDay()<6;
+
+  // ── Pre-market: use futures to estimate gap ───────────────────────────────
+  if(!_isMarketOpen && prevClose) {
     const P = INTRADAY_PATTERNS;
     const yest = P[P.length-1];
     if(!yest) { el.innerHTML='<div class="no-data">No pattern data</div>'; return; }
+
+    // Try to get a futures-implied SPY price for gap estimation
+    // ES=F ratio to SPY is stored — use it to back-compute estimated SPY open
+    const esFut  = q['ES=F']?.price  || 0;
+    const spxSpy = q['^GSPC']?.price && cur ? q['^GSPC'].price / (cur||prevClose) : null;
+    // ES is S&P 500 futures — divide by SPX/SPY ratio to get estimated SPY
+    const estSpyFromES = esFut && spxSpy ? esFut / spxSpy : 0;
+    // Also try pre/post market price directly from SPY quote
+    const preMarketPrice = spy.pre_market_price || spy.post_market_price || 0;
+    // Pick best available estimate: pre_market_price first, then ES-derived
+    const estPrice = preMarketPrice || estSpyFromES || 0;
+    const estGapPct   = estPrice && prevClose ? (estPrice - prevClose) / prevClose * 100 : null;
+    const estGapType  = estGapPct == null ? null : estGapPct > 0.3 ? 'GAP_UP' : estGapPct < -0.3 ? 'GAP_DOWN' : 'FLAT';
+
+    // Historical stats for yesterday's completed session
     const ytMatches = P.filter(p=>p.gt===yest.gt&&p.f3d===yest.f3d);
     const followPct = ytMatches.length ? ytMatches.filter(p=>p.fl).length/ytMatches.length*100 : 0;
     const avgR = ytMatches.length ? ytMatches.reduce((a,p)=>a+p.dr,0)/ytMatches.length : 0;
     const gtc = yest.gt==='GAP_UP'?'#00ff88':yest.gt==='GAP_DOWN'?'#ff3355':'#ffcc00';
     const dc  = yest.f3d==='UP'?'#00ff88':'#ff3355';
     const stc = yest.st==='TREND_UP'?'#00ff88':yest.st==='TREND_DOWN'?'#ff3355':yest.st==='REVERSAL'?'#ff8800':'#ffcc00';
+
+    // If we have an estimated gap, show pre-market pattern projection
+    if(estGapType && estGapPct != null) {
+      const estGtc = estGapType==='GAP_UP'?'#00ff88':estGapType==='GAP_DOWN'?'#ff3355':'#ffcc00';
+      // Match against both possible first-30min directions to show both scenarios
+      const matchesUp   = P.filter(p=>p.gt===estGapType&&p.f3d==='UP');
+      const matchesDown = P.filter(p=>p.gt===estGapType&&p.f3d==='DOWN');
+      const ftUp   = matchesUp.length   ? matchesUp.filter(p=>p.fl).length/matchesUp.length*100     : 0;
+      const ftDown = matchesDown.length ? matchesDown.filter(p=>p.fl).length/matchesDown.length*100 : 0;
+      const arUp   = matchesUp.length   ? matchesUp.reduce((a,p)=>a+p.dr,0)/matchesUp.length        : 0;
+      const arDown = matchesDown.length ? matchesDown.reduce((a,p)=>a+p.dr,0)/matchesDown.length    : 0;
+      const gfUp   = matchesUp.filter(p=>p.gf!==null).length   ? matchesUp.filter(p=>p.gf).length/matchesUp.filter(p=>p.gf!==null).length*100     : null;
+      const gfDown = matchesDown.filter(p=>p.gf!==null).length ? matchesDown.filter(p=>p.gf).length/matchesDown.filter(p=>p.gf!==null).length*100 : null;
+      const priceSource = preMarketPrice ? 'SPY PRE-MKT' : 'ES FUTURES';
+
+      el.innerHTML = `
+        <div style="padding:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;letter-spacing:1px;">
+              ⚠ PRE-MARKET EST. · SOURCE: ${priceSource} · PATTERN LOCKS AT 9:30 ET
+            </div>
+            <div style="font-size:10px;color:var(--text3);">
+              Est. open: <span style="color:${estGtc};font-family:'Share Tech Mono',monospace;">${estPrice.toFixed(2)}</span>
+              &nbsp;|&nbsp; Prev close: <span style="font-family:'Share Tech Mono',monospace;color:var(--text2);">${prevClose.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <!-- Estimated gap type -->
+          <div style="display:grid;grid-template-columns:160px 1fr;gap:10px;margin-bottom:10px;">
+            <div style="background:${estGtc}15;border:1px solid ${estGtc}44;border-left:3px solid ${estGtc};border-radius:3px;padding:10px;">
+              <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">EST. GAP TYPE</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${estGtc};">${estGapType.replace('_',' ')} ${estGapPct>=0?'+':''}${estGapPct.toFixed(2)}%</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:4px;">Updates until open</div>
+            </div>
+
+            <!-- Two scenarios side by side -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <!-- Scenario: first 30 UP -->
+              <div style="background:rgba(0,255,136,0.05);border:1px solid rgba(0,255,136,0.2);border-top:2px solid #00ff88;border-radius:3px;padding:8px;">
+                <div style="font-family:'Orbitron',monospace;font-size:7px;color:#00ff88;margin-bottom:6px;letter-spacing:1px;">IF FIRST 30MIN → UP (${matchesUp.length} sess)</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">
+                  <div style="text-align:center;">
+                    <div style="font-size:9px;color:var(--text3)">FOLLOW-THRU</div>
+                    <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:${ftUp>65?'#00ff88':ftUp>50?'#ffcc00':'#ff3355'}">${ftUp.toFixed(0)}%</div>
+                  </div>
+                  <div style="text-align:center;">
+                    <div style="font-size:9px;color:var(--text3)">AVG RANGE</div>
+                    <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:var(--cyan)">$${arUp.toFixed(2)}</div>
+                  </div>
+                  <div style="text-align:center;">
+                    <div style="font-size:9px;color:var(--text3)">GAP FILL</div>
+                    <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#ff8800">${gfUp!=null?gfUp.toFixed(0)+'%':'—'}</div>
+                  </div>
+                </div>
+              </div>
+              <!-- Scenario: first 30 DOWN -->
+              <div style="background:rgba(255,51,85,0.05);border:1px solid rgba(255,51,85,0.2);border-top:2px solid #ff3355;border-radius:3px;padding:8px;">
+                <div style="font-family:'Orbitron',monospace;font-size:7px;color:#ff3355;margin-bottom:6px;letter-spacing:1px;">IF FIRST 30MIN → DOWN (${matchesDown.length} sess)</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">
+                  <div style="text-align:center;">
+                    <div style="font-size:9px;color:var(--text3)">FOLLOW-THRU</div>
+                    <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:${ftDown>65?'#00ff88':ftDown>50?'#ffcc00':'#ff3355'}">${ftDown.toFixed(0)}%</div>
+                  </div>
+                  <div style="text-align:center;">
+                    <div style="font-size:9px;color:var(--text3)">AVG RANGE</div>
+                    <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:var(--cyan)">$${arDown.toFixed(2)}</div>
+                  </div>
+                  <div style="text-align:center;">
+                    <div style="font-size:9px;color:var(--text3)">GAP FILL</div>
+                    <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#ff8800">${gfDown!=null?gfDown.toFixed(0)+'%':'—'}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Yesterday's completed session below -->
+          <div style="border-top:1px solid var(--border);padding-top:8px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:6px;letter-spacing:1px;">YESTERDAY: ${yest.d}</div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;">
+              <div style="background:${gtc}15;border-top:2px solid ${gtc};border-radius:3px;padding:6px;text-align:center;">
+                <div style="font-size:8px;color:var(--text3)">GAP TYPE</div>
+                <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${gtc};">${yest.gt.replace('_',' ')}</div>
+                <div style="font-size:9px;color:${gtc};">${yest.g>=0?'+':''}${yest.g.toFixed(2)}%</div>
+              </div>
+              <div style="background:${dc}15;border-top:2px solid ${dc};border-radius:3px;padding:6px;text-align:center;">
+                <div style="font-size:8px;color:var(--text3)">1ST 30MIN</div>
+                <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${dc};">${yest.f3d}</div>
+              </div>
+              <div style="background:${stc}15;border-top:2px solid ${stc};border-radius:3px;padding:6px;text-align:center;">
+                <div style="font-size:8px;color:var(--text3)">SESSION</div>
+                <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${stc};">${yest.st.replace('_',' ')}</div>
+              </div>
+              <div style="background:var(--bg3);border-top:2px solid ${followPct>65?'#00ff88':followPct>50?'#ffcc00':'#ff3355'};border-radius:3px;padding:6px;text-align:center;">
+                <div style="font-size:8px;color:var(--text3)">FOLLOW-THRU</div>
+                <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${followPct>65?'#00ff88':followPct>50?'#ffcc00':'#ff3355'};">${followPct.toFixed(0)}%</div>
+                <div style="font-size:9px;color:var(--text3);">${ytMatches.length} sess</div>
+              </div>
+              <div style="background:var(--bg3);border-top:2px solid var(--cyan);border-radius:3px;padding:6px;text-align:center;">
+                <div style="font-size:8px;color:var(--text3)">AVG RANGE</div>
+                <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);">$${avgR.toFixed(2)}</div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      return;
+    }
+
+    // Fallback: no futures price available — show yesterday only
     el.innerHTML = `
       <div style="padding:8px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:10px;letter-spacing:1px;">LAST SESSION: ${yest.d} — TODAY'S PATTERN LOADS AT MARKET OPEN</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:10px;letter-spacing:1px;">LAST SESSION: ${yest.d} — PATTERN LOADS AT 9:30 ET · NO FUTURES PRICE AVAILABLE</div>
         <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">
           <div style="background:${gtc}15;border:1px solid ${gtc}33;border-top:3px solid ${gtc};border-radius:3px;padding:8px;text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">GAP TYPE</div>
