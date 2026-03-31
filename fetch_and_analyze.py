@@ -845,6 +845,8 @@ def build_wem_stats(weekly_em_list):
         "pct_high_breach":   round(len(high_breaches)/len(completed)*100,1),
         "pct_low_breach":    round(len(low_breaches)/len(completed)*100,1),
         "avg_breach_amt":    round(sum(d["breach_amount"] for d in breaches if d["breach_amount"])/len(breaches),2) if breaches else None,
+        "avg_high_breach_amt": round(sum(abs(d["breach_amount"]) for d in high_breaches if d["breach_amount"] is not None)/len(high_breaches),2) if high_breaches else None,
+        "avg_low_breach_amt":  round(-sum(abs(d["breach_amount"]) for d in low_breaches  if d["breach_amount"] is not None)/len(low_breaches), 2) if low_breaches  else None,
         "pct_gap_weeks":     round(len(gap_up+gap_down)/len(completed)*100,1) if completed else None,
         "pct_gaps_filled":   round(len(gaps_filled)/len(gaps)*100,1) if gaps else None,
         "avg_gap_up":        round(sum(d["weekly_gap"] for d in gap_up)/len(gap_up),2) if gap_up else None,
