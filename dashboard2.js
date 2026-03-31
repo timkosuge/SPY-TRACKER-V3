@@ -1160,7 +1160,7 @@ async function callAI(messages, system, maxTokens = 800) {
     }
   }
 
-  // Anthropic fallback via CF /ai
+  // Grok fallback via CF /ai
   const resp = await fetch('/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1180,8 +1180,8 @@ function updateAIProviderBadge() {
   if (!b) return;
   const cfg = {
     ollama:    { label: '⬡ OLLAMA', color: '#00ff88' },
-    anthropic: { label: '◈ CLAUDE', color: '#00ccff' },
-    fallback:  { label: '◈ CLAUDE (fallback)', color: '#ff8800' },
+    anthropic: { label: '◈ GROK', color: '#00ccff' },
+    fallback:  { label: '◈ GROK (fallback)', color: '#ff8800' },
     unknown:   { label: '● READY', color: 'var(--text3)' },
   };
   const c = cfg[_aiLastProvider] || cfg.unknown;
@@ -1704,7 +1704,7 @@ ${context}`;
       .replace(/\n/g, '<br>');
     const providerLabel = _aiLastProvider === 'ollama'
       ? `<span style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;opacity:0.6;display:block;margin-top:6px;">⬡ ${model}</span>`
-      : `<span style="font-family:'Orbitron',monospace;font-size:8px;color:#00ccff;opacity:0.6;display:block;margin-top:6px;">◈ claude</span>`;
+      : `<span style="font-family:'Orbitron',monospace;font-size:8px;color:#00ccff;opacity:0.6;display:block;margin-top:6px;">◈ grok</span>`;
     msgs.innerHTML += `<div class="ai-msg assistant">${formatted}${providerLabel}</div>`;
   } catch(e) {
     document.getElementById('thinkingMsg')?.remove();
