@@ -420,12 +420,47 @@ def fetch_spy_options_cboe():
                 "top_put_strikes":  top_put_strikes,
             }
 
+        # ── Walls by expiry: today's 0DTE + each Friday ────────────────────────
+        def build_walls(exp_date):
+            opts = [o for o in parsed if o["exp"] == exp_date and o["oi"] >= 10]
+            if not opts: return None
+            calls = sorted([o for o in opts if o["cp"]=="C"], key=lambda x: x["oi"], reverse=True)
+            puts  = sorted([o for o in opts if o["cp"]=="P"], key=lambda x: x["oi"], reverse=True)
+            top_calls = [{"strike":o["strike"],"oi":o["oi"],"vol":o["vol"]} for o in calls[:5]]
+            top_puts  = [{"strike":o["strike"],"oi":o["oi"],"vol":o["vol"]} for o in puts[:5]]
+            dte = (exp_date - today).days
+            return {"exp": exp_date.strftime("%Y-%m-%d"), "dte": dte,
+                    "callWall": top_calls[0]["strike"] if top_calls else None,
+                    "putWall":  top_puts[0]["strike"]  if top_puts  else None,
+                    "topCalls": top_calls, "topPuts": top_puts}
+
+        from datetime import date as date_type
+        all_exp_dates = sorted(set(o["exp"] for o in parsed))
+        walls_by_expiry = []
+
+        # Today's 0DTE
+        if today in all_exp_dates:
+            w = build_walls(today)
+            if w: walls_by_expiry.append({"label": "0DTE (Today)", **w})
+
+        # Each Friday expiry
+        for exp in all_exp_dates:
+            if exp == today: continue
+            if exp.weekday() == 4:  # Friday
+                w = build_walls(exp)
+                if w:
+                    dte = (exp - today).days
+                    label = "Weekly (Fri)" if dte <= 7 else "Monthly (Fri)" if dte <= 35 else f"Fri +{dte}d"
+                    walls_by_expiry.append({"label": label, **w})
+            if len(walls_by_expiry) >= 5: break
+
         # ── GEX — using CBOE's actual gamma values ─────────────────────────────
         gex = compute_gex_cboe(parsed, spot, near_expiries)
 
         return {
             "max_pain":        max_pain_list,
             "options_summary": options_summary,
+            "walls_by_expiry": walls_by_expiry,
             "atm_iv":          atm_iv,
             "spot":            float(spot),
             "gex":             gex,
@@ -987,6 +1022,7 @@ def export_market_data(conn, options_data=None):
         output["options_summary"] = options_data.get("options_summary", {})
         output["top_call_strikes"] = options_data.get("options_summary", {}).get("top_call_strikes", [])
         output["top_put_strikes"]  = options_data.get("options_summary", {}).get("top_put_strikes", [])
+        output["walls_by_expiry"]  = options_data.get("walls_by_expiry", [])
         output["gex"]             = options_data.get("gex", None)
         print(f"  Max pain: {len(output['max_pain'])} expirations")
     else:
@@ -994,6 +1030,7 @@ def export_market_data(conn, options_data=None):
         output["options_summary"] = {}
         output["top_call_strikes"] = []
         output["top_put_strikes"]  = []
+        output["walls_by_expiry"]  = []
 
     # ── Fear & Greed (CNN via direct request) ─────────────────────────────────
     try:
