@@ -496,13 +496,13 @@ function phApplyFilter(mode) {
 
 // ── TIME OF DAY STATS ─────────────────────────────────────────────────────────
 function renderTODStats() {
-  if (typeof TOD_STATS === 'undefined') return;
-  const T = TOD_STATS;
+  if (typeof TOD_DATA === 'undefined') return;
+  const T = TOD_DATA;
 
   // Header meta
   const daysEl = document.getElementById('todDays');
   const rangeEl = document.getElementById('todRange');
-  if (daysEl) daysEl.textContent = T.days + ' sessions';
+  if (daysEl) daysEl.textContent = T.total_days + ' days';
   if (rangeEl) rangeEl.textContent = T.date_range.start + ' → ' + T.date_range.end;
 
   // Color ramp: low freq = dim, high freq = bright
@@ -542,27 +542,27 @@ function renderTODStats() {
     </div>`;
   }
 
-  buildBucketChart('todHodChart', T.hod.by_bucket, '#00ff88');
-  buildBucketChart('todLodChart', T.lod.by_bucket, '#ff3355');
+  buildBucketChart('todHodChart', T.hod_by_bucket, '#00ff88');
+  buildBucketChart('todLodChart', T.lod_by_bucket, '#ff3355');
 
   // Sequence panel
   const seqEl = document.getElementById('todSequencePanel');
-  if (seqEl && T.sequence) {
-    const s = T.sequence;
-    const hodTopBucket = T.hod.by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
-    const lodTopBucket = T.lod.by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
+  if (seqEl && T.summary) {
+    const s = T.summary;
+    const hodTopBucket = T.hod_by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
+    const lodTopBucket = T.lod_by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
     seqEl.innerHTML = `
       <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.7;font-family:'Share Tech Mono',monospace;">
-        Based on ${T.days} sessions of 1-minute SPY bars (CT time). Avg HOD: <strong style="color:#00ff88;">${T.hod.avg_time} CT</strong> &nbsp;·&nbsp; Avg LOD: <strong style="color:#ff3355;">${T.lod.avg_time} CT</strong>
+        Based on ${T.total_days} days of 1-minute SPY bars (CT time).
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">
         ${[
-          {l:'HOD before LOD', v: s.hod_before_lod.pct.toFixed(1)+'%', c:'#00ff88'},
-          {l:'LOD before HOD', v: s.hod_after_lod.pct.toFixed(1)+'%',  c:'#ff3355'},
-          {l:'Same bucket',    v: s.hod_same_lod.pct.toFixed(1)+'%',   c:'var(--text3)'},
-          {l:'HOD in first 30 min', v: T.hod.pct_first30.toFixed(1)+'%', c:'#ffcc00'},
-          {l:'LOD in first 30 min', v: T.lod.pct_first30.toFixed(1)+'%', c:'#ffcc00'},
-          {l:'HOD in last 30 min',  v: T.hod.pct_last30.toFixed(1)+'%',  c:'#ff8800'},
+          {l:'LOD sets before HOD', v: s.lod_before_hod_pct.toFixed(1)+'%', c:'#ff3355'},
+          {l:'HOD sets before LOD', v: s.hod_before_lod_pct.toFixed(1)+'%', c:'#00ff88'},
+          {l:'HOD in first 30 min', v: s.hod_first_30min_pct.toFixed(1)+'%', c:'#ffcc00'},
+          {l:'LOD in first 30 min', v: s.lod_first_30min_pct.toFixed(1)+'%', c:'#ffcc00'},
+          {l:'HOD in last 30 min',  v: s.hod_last_30min_pct.toFixed(1)+'%',  c:'#ff8800'},
+          {l:'LOD in last 30 min',  v: s.lod_last_30min_pct.toFixed(1)+'%',  c:'#ff8800'},
         ].map(x => `<div style="background:var(--bg3);border-radius:3px;padding:7px 9px;">
           <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">${x.l}</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${x.c};">${x.v}</div>
@@ -570,33 +570,31 @@ function renderTODStats() {
       </div>
       <div style="font-size:11px;color:var(--text3);line-height:1.6;background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:3px solid var(--cyan);">
         <strong style="color:var(--text2);">Key insight:</strong>
-        Most common HOD window: <strong style="color:#00ff88;">${hodTopBucket.label} (${hodTopBucket.pct.toFixed(1)}%)</strong>.
-        Most common LOD window: <strong style="color:#ff3355;">${lodTopBucket.label} (${lodTopBucket.pct.toFixed(1)}%)</strong>.
-        HOD sets before LOD ${s.hod_before_lod.pct.toFixed(0)}% of the time vs LOD first ${s.hod_after_lod.pct.toFixed(0)}% — nearly even.
-        The open (8:30–9:00 CT) sets the HOD ${T.hod.pct_first30.toFixed(0)}% and LOD ${T.lod.pct_first30.toFixed(0)}% of days — the most important single window.
+        Most common HOD window: <strong style="color:#00ff88;">${hodTopBucket.name || hodTopBucket.label} (${hodTopBucket.pct.toFixed(1)}%)</strong>.
+        Most common LOD window: <strong style="color:#ff3355;">${lodTopBucket.name || lodTopBucket.label} (${lodTopBucket.pct.toFixed(1)}%)</strong>.
+        LOD is set before HOD ${s.lod_before_hod_pct.toFixed(0)}% of the time — meaning the day tends to find its low first, then rally.
+        ${s.hod_first_30min_pct > 15 || s.lod_first_30min_pct > 15
+          ? `The first 30 min (8:30–9:00 CT) sets the HOD ${s.hod_first_30min_pct.toFixed(0)}% of the time and LOD ${s.lod_first_30min_pct.toFixed(0)}% — the open auction is the single most important window.`
+          : ''}
       </div>`;
   }
 
   // DOW panel — show top bucket per day
   const dowEl = document.getElementById('todDowPanel');
-  if (dowEl && T.hod.by_dow && T.lod.by_dow) {
-    const bucketLabels = T.buckets;
-    const dowRows = T.hod.by_dow.map((hd, i) => {
-      const ld = T.lod.by_dow[i];
-      // Find top bucket index for each
-      const hodTopIdx = hd.pcts.indexOf(Math.max(...hd.pcts));
-      const lodTopIdx = ld.pcts.indexOf(Math.max(...ld.pcts));
+  if (dowEl && T.hod_by_dow && T.lod_by_dow) {
+    const dowRows = T.hod_by_dow.map((hd, i) => {
+      const ld = T.lod_by_dow[i];
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)22;">
-        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);width:30px;">${hd.dow}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);width:30px;">${hd.day}</div>
         <div style="flex:1;">
-          <div style="font-size:10px;color:#00ff88;margin-bottom:2px;">HOD: <strong>${bucketLabels[hodTopIdx]}</strong> <span style="color:var(--text3);">(${hd.pcts[hodTopIdx].toFixed(0)}%)</span></div>
-          <div style="font-size:10px;color:#ff3355;">LOD: <strong>${bucketLabels[lodTopIdx]}</strong> <span style="color:var(--text3);">(${ld.pcts[lodTopIdx].toFixed(0)}%)</span></div>
+          <div style="font-size:10px;color:#00ff88;margin-bottom:2px;">HOD: <strong>${hd.top_bucket}</strong> <span style="color:var(--text3);">(${hd.top_pct.toFixed(0)}%)</span></div>
+          <div style="font-size:10px;color:#ff3355;">LOD: <strong>${ld.top_bucket}</strong> <span style="color:var(--text3);">(${ld.top_pct.toFixed(0)}%)</span></div>
         </div>
-        <div style="text-align:right;font-size:9px;color:var(--text3);">${hd.counts.reduce((a,b)=>a+b,0)} days</div>
+        <div style="text-align:right;font-size:9px;color:var(--text3);">${hd.n} days</div>
       </div>`;
     }).join('');
     dowEl.innerHTML = `
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-family:'Share Tech Mono',monospace;">Most common HOD and LOD bucket by day of week.</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-family:'Share Tech Mono',monospace;">Most common bucket for HOD and LOD by day of week.</div>
       ${dowRows}`;
   }
 }
@@ -3171,16 +3169,11 @@ function isExtendedHours() {
 async function fetchWeekOpen() {
   try {
     const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    const dow = ctNow.getDay(); // 0=Sun,1=Mon...6=Sat
+    const dow = ctNow.getDay();
     const isWeekend = dow === 0 || dow === 6;
     const isMon = dow === 1;
-
-    // Build date strings in CT
     const pad = n => String(n).padStart(2, '0');
-    const ctY = ctNow.getFullYear();
-    const ctM = pad(ctNow.getMonth() + 1);
-    const ctD = pad(ctNow.getDate());
-    const ctTodayStr = `${ctY}-${ctM}-${ctD}`;
+    const ctTodayStr = `${ctNow.getFullYear()}-${pad(ctNow.getMonth()+1)}-${pad(ctNow.getDate())}`;
 
     // Monday of current week
     const daysFromMon = dow === 0 ? 6 : dow - 1;
@@ -3198,95 +3191,75 @@ async function fetchWeekOpen() {
       return true;
     };
 
-    // ── Source 1: /spyintraday — best for live market hours ──────────────────
-    // On Monday this IS the week open. Any other day during/after market open,
-    // the intraday open = today's RTH open, not week open — so only use on Monday.
-    // EXCEPTION: if no other source has week open, try intraday as last resort.
-    if (!isWeekend) {
+    // Source 1: /spyintraday on Monday — intraday open IS week open
+    if (!isWeekend && isMon) {
       try {
         const r = await fetch('/spyintraday?t=' + Date.now());
         if (r.ok) {
           const d = await r.json();
           if (d.available && d.open) {
             if (window._spyLevels) window._spyLevels.todayOpen = d.open;
-            if (isMon) {
-              applyWeekOpen(d.open);
-              return;
-            }
-          }
-        }
-      } catch(e) {}
-    }
-
-    // ── Source 2: market_data.json weekly_em — has week_open once pipeline runs ─
-    if (_md) {
-      const wems = _md.weekly_em || [];
-      const curWem = wems.find(w => !w.week_close) || wems[0];
-      if (curWem?.week_open) {
-        applyWeekOpen(curWem.week_open);
-        return;
-      }
-    }
-
-    // ── Source 3: _sd daily data — first trading day of this week ────────────
-    if (_sd && _sd.length) {
-      // _sd sorted newest-first; filter to [monStr, today]
-      const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
-      const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
-      if (firstDay?.open) {
-        applyWeekOpen(firstDay.open);
-        return;
-      }
-
-      // Week has no DB rows yet (pipeline hasn't run this week).
-      // Try to find Monday's row specifically — even if pipeline ran Friday,
-      // Monday might be in _sd if page was loaded after Mon close.
-      // If truly not there, use most recent row's close as best approximation
-      // (prev Friday close is the reference the week opened from).
-      // But don't apply it as weekOpen — just log and fall through to live sources.
-    }
-
-    // ── Source 4: live /spyintraday open for Tue-Fri when week not in DB ─────
-    // This handles the gap between Mon open and when the pipeline first runs
-    if (!isWeekend && !isMon) {
-      try {
-        const r = await fetch('/spyintraday?t=' + Date.now());
-        if (r.ok) {
-          const d = await r.json();
-          // d.open is today's RTH open — not the week open.
-          // But we can get the week open from the /quotes weekOpen field if available
-          if (d.available && d.week_open) {
-            applyWeekOpen(d.week_open);
+            applyWeekOpen(d.open);
             return;
           }
         }
       } catch(e) {}
     }
 
-    // ── Source 5: /quotes SPY — check for open ───────────────────────────────
+    // Source 2: market_data.json weekly_em week_open field
+    if (_md) {
+      const wems = _md.weekly_em || [];
+      const curWem = wems.find(w => !w.week_close) || wems[0];
+      if (curWem && curWem.week_open) {
+        applyWeekOpen(curWem.week_open);
+        return;
+      }
+    }
+
+    // Source 3: _sd daily data — first trading day of this week
+    if (_sd && _sd.length) {
+      const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
+      const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
+      if (firstDay && firstDay.open) {
+        applyWeekOpen(firstDay.open);
+        return;
+      }
+    }
+
+    // Source 4: Yahoo Finance daily API — fetch Monday's open directly
+    // Handles the gap when DB hasn't updated yet this week (e.g. Tue morning
+    // before pipeline runs, or when market_data.json has week_open: null)
     try {
-      const r = await fetch('/quotes?symbols=SPY');
-      if (r.ok) {
-        const data = await r.json();
-        const spyQ = data.quotes?.['SPY'];
-        if (spyQ?.open && window._spyLevels) {
-          window._spyLevels.todayOpen = spyQ.open;
-        }
-        if (isMon && spyQ?.open) {
-          applyWeekOpen(spyQ.open);
-          return;
+      const now = new Date();
+      const p1 = Math.floor(new Date(monStr + 'T14:00:00Z').getTime() / 1000);
+      const p2 = Math.floor(now.getTime() / 1000);
+      if (p2 > p1) {
+        const yUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=' + p1 + '&period2=' + p2;
+        const r = await fetch(yUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
+        if (r.ok) {
+          const data = await r.json();
+          const opens = data && data.chart && data.chart.result && data.chart.result[0] &&
+                        data.chart.result[0].indicators && data.chart.result[0].indicators.quote &&
+                        data.chart.result[0].indicators.quote[0] &&
+                        data.chart.result[0].indicators.quote[0].open || [];
+          if (opens.length && opens[0] != null) {
+            applyWeekOpen(Math.round(opens[0] * 100) / 100);
+            return;
+          }
         }
       }
-    } catch(e) {}
+    } catch(e) { console.warn('[fetchWeekOpen] Yahoo daily fallback failed:', e.message); }
 
-    // ── Source 6: premarket open on Monday ───────────────────────────────────
+    // Source 5: /quotes SPY open — last resort on Monday only
     if (isMon) {
       try {
-        const r = await fetch('/premarket?t=' + Date.now());
+        const r = await fetch('/quotes?symbols=SPY');
         if (r.ok) {
-          const d = await r.json();
-          if (d.available && d.open) {
-            applyWeekOpen(d.open);
+          const data = await r.json();
+          const spyQ = data.quotes && data.quotes['SPY'];
+          if (spyQ && spyQ.open) {
+            if (window._spyLevels) window._spyLevels.todayOpen = spyQ.open;
+            applyWeekOpen(spyQ.open);
             return;
           }
         }
@@ -3538,9 +3511,7 @@ async function loadData(){
     }
 
     _md=md; _sd=sd;
-    if (spyOHLC?.available) _spyIntraday = spyOHLC;
-    fetchWeekOpen(); // retry now that _sd is populated
-    // (startup call runs before _sd is loaded — this ensures week open is always found)
+    if (spyOHLC?.available) _spyIntraday = spyOHLC; // store live intraday for desk volume box
     const safeRender = (fn, ...args) => { try { fn(...args); } catch(e) { console.error(fn.name, e); } };
     safeRender(renderHub, md, sd);
     safeRender(renderDesk, md, sd);
