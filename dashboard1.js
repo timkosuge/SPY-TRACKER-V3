@@ -4447,6 +4447,7 @@ function renderExpiryBehavior(md) {
   const E_ALL = EXPIRY_DATA;
   const E = _expiryLookback === '2026' ? E_ALL.filter(e => e.d.startsWith('2026')) : E_ALL;
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
   const avg    = arr => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : 0;
   const med    = arr => { if (!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
   const pctFn  = (arr, fn) => arr.length ? arr.filter(fn).length / arr.length * 100 : 0;
@@ -4462,7 +4463,17 @@ function renderExpiryBehavior(md) {
   const mpDist   = nearest && cur ? nearest.max_pain - cur : null;
   const mpColor  = mpDist === null ? 'var(--text3)' : Math.abs(mpDist)<2 ? '#00ff88' : Math.abs(mpDist)<5 ? '#ffcc00' : '#ff8800';
 
-  // ── data slicers ──────────────────────────────────────────────────────────
+  // Date -> record lookup (full dataset for cross-week lookups)
+  const byDate = {};
+  E_ALL.forEach(r => { byDate[r.d] = r; });
+
+  function addDays(dateStr, n) {
+    const d = new Date(dateStr + 'T12:00:00');
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0,10);
+  }
+
+  // ── Day stats slicer ──────────────────────────────────────────────────────
   function sliceStats(rows) {
     if (!rows.length) return null;
     const pctUp    = pctFn(rows, e => e.r > 0);
@@ -4470,65 +4481,87 @@ function renderExpiryBehavior(md) {
     const medRet   = med(rows.map(e => e.r));
     const avgRange = avg(rows.map(e => e.dr));
     const avgCP    = avg(rows.map(e => e.cp));
-    const avgGap   = avg(rows.map(e => e.g));
-
-    // gap fill rates
     const gapUpRows    = rows.filter(e => e.g >  0.3 && e.gf !== null);
     const gapDnRows    = rows.filter(e => e.g < -0.3 && e.gf !== null);
     const gapUpFill    = gapUpRows.length ? pctFn(gapUpRows, e => e.gf) : null;
     const gapDnFill    = gapDnRows.length ? pctFn(gapDnRows, e => e.gf) : null;
-
-    // today's gap context
     const todayGapRows = rows.filter(e => gapType==='GAP_UP'?e.g>0.3:gapType==='GAP_DOWN'?e.g<-0.3:Math.abs(e.g)<=0.3);
     const todayGapFill = (gapType !== 'FLAT' && todayGapRows.filter(e=>e.gf!==null).length)
                          ? pctFn(todayGapRows.filter(e=>e.gf!==null), e=>e.gf) : null;
-
-    // close position buckets (morning reversal: closes in bottom 30%)
-    const closeHigh = pctFn(rows, e => e.cp > 0.7);  // closes near HOD
-    const closeLow  = pctFn(rows, e => e.cp < 0.3);  // closes near LOD
-
-    // return distribution
+    const closeHigh = pctFn(rows, e => e.cp > 0.7);
+    const closeLow  = pctFn(rows, e => e.cp < 0.3);
     const bigUp   = pctFn(rows, e => e.r >  1.0);
     const bigDn   = pctFn(rows, e => e.r < -1.0);
     const flatDay = pctFn(rows, e => Math.abs(e.r) <= 0.3);
-
-    // best/worst
-    const best  = Math.max(...rows.map(e => e.r));
-    const worst = Math.min(...rows.map(e => e.r));
-
-    return { n: rows.length, pctUp, avgRet, medRet, avgRange, avgCP, avgGap,
+    const best  = rows.length ? Math.max(...rows.map(e => e.r)) : 0;
+    const worst = rows.length ? Math.min(...rows.map(e => e.r)) : 0;
+    return { n: rows.length, pctUp, avgRet, medRet, avgRange, avgCP,
              gapUpFill, gapDnFill, todayGapFill,
              closeHigh, closeLow, bigUp, bigDn, flatDay, best, worst };
   }
 
-  // ── build panels data ──────────────────────────────────────────────────────
-  const todayDow   = dow === 0 || dow === 6 ? 1 : dow; // weekend → preview Monday
-  const isWeekend  = dow === 0 || dow === 6;
-  const isFri      = dow === 5;
-  const isMonthly  = isFri && now.getDate() >= 15 && now.getDate() <= 21;
+  // ── Week stats builder ────────────────────────────────────────────────────
+  // weeksBack: 0 = opex week itself, 1 = week before, 2 = two weeks before
+  function computeWeekStats(opexFridays, weeksBack) {
+    const dayRows = [[], [], [], [], []]; // Mon..Fri
+    const weekRets = [];
+    opexFridays.forEach(fri => {
+      // Reference Friday for this offset week
+      const refFri = addDays(fri.d, weeksBack * -7);
+      const monDate = addDays(refFri, -4);
+      const monRec  = byDate[monDate];
+      const friRec  = byDate[refFri];
+      if (monRec && friRec && monRec.o && friRec.c) {
+        weekRets.push((friRec.c - monRec.o) / monRec.o * 100);
+      }
+      [-4,-3,-2,-1,0].forEach((offset, i) => {
+        const rec = byDate[addDays(refFri, offset)];
+        if (rec) dayRows[i].push(rec);
+      });
+    });
+    const weekAvg   = avg(weekRets);
+    const weekWR    = weekRets.length ? pctFn(weekRets.map(r=>({r})), e=>e.r>0) : 0;
+    const weekN     = weekRets.length;
+    const weekBest  = weekRets.length ? Math.max(...weekRets) : 0;
+    const weekWorst = weekRets.length ? Math.min(...weekRets) : 0;
+    const days = ['Mon','Tue','Wed','Thu','Fri'].map((name, i) => ({
+      name, stats: sliceStats(dayRows[i])
+    }));
+    return { days, weekAvg, weekWR, weekN, weekBest, weekWorst };
+  }
 
-  // Today's 0DTE panel
-  const todaySame    = E.filter(e => e.dow === todayDow);
-  const todayGroup   = isMonthly ? todaySame.filter(e => e.mo)
-                     : isFri     ? todaySame.filter(e => !e.mo)
-                     : todaySame;
-  const todayStats   = sliceStats(todayGroup);
+  // ── Groupings ─────────────────────────────────────────────────────────────
+  const todayDow     = dow === 0 || dow === 6 ? 1 : dow;
+  const isWeekend    = dow === 0 || dow === 6;
+  const isFri        = dow === 5;
+  const isMonthly    = isFri && now.getDate() >= 15 && now.getDate() <= 21;
 
-  // Weekly Friday OPEX (non-monthly Fridays)
-  const weeklyGroup  = E.filter(e => e.dow === 5 && !e.mo);
-  const weeklyStats  = sliceStats(weeklyGroup);
+  const weeklyFridays  = E.filter(e => e.dow === 5 && !e.mo);
+  const monthlyFridays = E.filter(e => e.mo);
 
-  // Monthly OPEX (3rd Friday)
-  const monthlyGroup = E.filter(e => e.mo);
-  const monthlyStats = sliceStats(monthlyGroup);
+  const todaySame  = E.filter(e => e.dow === todayDow);
+  const todayGroup = isMonthly ? todaySame.filter(e => e.mo)
+                   : isFri     ? todaySame.filter(e => !e.mo)
+                   : todaySame;
+  const todayStats = sliceStats(todayGroup);
 
-  const todayLabel   = isWeekend ? 'MONDAY 0DTE (PREVIEW)'
-                     : isMonthly ? 'MONTHLY OPEX'
-                     : isFri     ? 'WEEKLY OPEX (FRI)'
-                     : `0DTE ${['','MON','TUE','WED','THU','FRI','SAT'][todayDow]}`;
-  const todayColor   = isMonthly ? '#ff8800' : isFri ? '#00ffcc' : '#ffcc00';
+  // Weekly: current opex week (T+0)
+  const weeklyDayStats = computeWeekStats(weeklyFridays, 0);
+  const weeklyStats    = sliceStats(weeklyFridays);
 
-  // ── card builder ──────────────────────────────────────────────────────────
+  // Monthly: T-2, T-1, T-0, plus Friday stats
+  const monthlyT2      = computeWeekStats(monthlyFridays, 2);
+  const monthlyT1      = computeWeekStats(monthlyFridays, 1);
+  const monthlyT0      = computeWeekStats(monthlyFridays, 0);
+  const monthlyStats   = sliceStats(monthlyFridays);
+
+  const todayLabel = isWeekend ? 'MONDAY 0DTE (PREVIEW)'
+                   : isMonthly ? 'MONTHLY OPEX'
+                   : isFri     ? 'WEEKLY OPEX (FRI)'
+                   : `0DTE ${['','MON','TUE','WED','THU','FRI','SAT'][todayDow]}`;
+  const todayColor = isMonthly ? '#ff8800' : isFri ? '#00ffcc' : '#ffcc00';
+
+  // ── UI builders ────────────────────────────────────────────────────────────
   function statCard(label, value, color, sub) {
     return `<div style="background:var(--bg3);border-top:2px solid ${color};border-radius:3px;padding:8px;text-align:center;">
       <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:3px;">${label}</div>
@@ -4541,7 +4574,7 @@ function renderExpiryBehavior(md) {
     return `<div style="display:flex;gap:8px;padding:6px 10px;border-left:3px solid ${color};background:${color}11;border-radius:0 3px 3px 0;font-size:12px;color:var(--text2);line-height:1.5;">${text}</div>`;
   }
 
-  function renderPanel(stats, label, color, showTodayContext) {
+  function renderDayPanel(stats, label, color, showTodayContext) {
     if (!stats) return `<div style="color:var(--text3);font-size:12px;padding:8px;">No data for this lookback.</div>`;
     const wr    = stats.pctUp;
     const wrClr = clr(wr);
@@ -4557,36 +4590,29 @@ function renderExpiryBehavior(md) {
       ${statCard('MED RETURN', fmtPct(stats.medRet,3), stats.medRet>=0?'#00ff88':'#ff3355', 'median (less skew)')}
       ${statCard('AVG RANGE', '$'+fmt2(stats.avgRange), 'var(--cyan)', 'H−L on expiry day')}
       ${statCard('AVG CLOSE POS', (stats.avgCP*100).toFixed(0)+'%', 'var(--text2)', '0%=LOD · 100%=HOD')}
-      ${statCard('CLOSE NEAR HOD', stats.closeHigh.toFixed(0)+'%', stats.closeHigh>50?'#00ff88':'#ff8800', 'closes top 30%')}
       ${gapFillDisplay}
+      ${statCard('CLOSE NEAR HOD', stats.closeHigh.toFixed(0)+'%', stats.closeHigh>50?'#00ff88':'#ff8800', 'closes top 30%')}
       ${statCard('BIG UP (>1%)', stats.bigUp.toFixed(0)+'%', '#00ff88', 'sessions >+1%')}
       ${statCard('BIG DN (<-1%)', stats.bigDn.toFixed(0)+'%', '#ff3355', 'sessions <-1%')}
       ${statCard('FLAT (±0.3%)', stats.flatDay.toFixed(0)+'%', '#ffcc00', 'pinned sessions')}
     `;
-
-    // Insights
     const insights = [];
     insights.push(insightBar(wrClr,
       wr > 55 ? `<b>${label}</b> closes higher ${wr.toFixed(0)}% of the time — bullish lean. Avg gain: ${fmtPct(stats.avgRet,2)}.`
       : wr < 45 ? `<b>${label}</b> has a bearish lean — only ${wr.toFixed(0)}% close up. Avg loss: ${fmtPct(stats.avgRet,2)}.`
       : `<b>${label}</b> is near coin-flip (${wr.toFixed(0)}% up). No strong directional edge.`));
-
     insights.push(insightBar('var(--cyan)',
       `Avg range $${fmt2(stats.avgRange)}. Expect most movement inside that envelope. ` +
       `${stats.closeHigh.toFixed(0)}% close near HOD vs ${stats.closeLow.toFixed(0)}% near LOD — ` +
       (stats.closeHigh > stats.closeLow ? 'buyers tend to control into close.' : 'sellers tend to control into close.')));
-
-    if (stats.flatDay > 35) insights.push(insightBar('#ffcc00',
-      `${stats.flatDay.toFixed(0)}% of sessions are flat (±0.3%). Pin risk is elevated — dealers may defend strikes near current price.`));
-
-    if (showTodayContext && stats.todayGapFill !== null) insights.push(insightBar(stats.todayGapFill>55?'#ff8800':'#00ff88',
-      `Today's ${gapType.replace('_',' ')} gap fills same day ${stats.todayGapFill.toFixed(0)}% of the time historically on ${label}.`));
-    else if (stats.gapUpFill !== null) insights.push(insightBar('#ff8800',
-      `Gap-up opens fill same day ${stats.gapUpFill.toFixed(0)}% on ${label}. Gap-down fills: ${stats.gapDnFill!==null?stats.gapDnFill.toFixed(0)+'%':'n/a'}.`));
-
+    if (showTodayContext && stats.todayGapFill !== null)
+      insights.push(insightBar(stats.todayGapFill>55?'#ff8800':'#00ff88',
+        `Today's ${gapType.replace('_',' ')} gap fills same day ${stats.todayGapFill.toFixed(0)}% of the time on ${label}.`));
+    else if (stats.gapUpFill !== null)
+      insights.push(insightBar('#ff8800',
+        `Gap-up opens fill same day ${stats.gapUpFill.toFixed(0)}% on ${label}. Gap-down fills: ${stats.gapDnFill!==null?stats.gapDnFill.toFixed(0)+'%':'n/a'}.`));
     if (label.includes('MONTHLY') || label.includes('OPEX'))
       insights.push(insightBar('#ff8800', `OPEX effect: dealers unwind hedges — expect elevated volatility and pin action near max pain. Watch for late-day mean reversion.`));
-
     insights.push(insightBar('#7878aa',
       `Range: best ${fmtPct(stats.best,2)}, worst ${fmtPct(stats.worst,2)}. Big moves (>1%) happen ${(stats.bigUp+stats.bigDn).toFixed(0)}% of sessions.`));
 
@@ -4595,9 +4621,87 @@ function renderExpiryBehavior(md) {
     <div style="font-size:10px;color:var(--text3);margin-top:6px;">n = ${stats.n} historical sessions · ${_expiryLookback==='2026'?'2026 only':'2020–2026 (all)'}</div>`;
   }
 
-  // ── assemble output ───────────────────────────────────────────────────────
+  // ── Per-day row in the week table ─────────────────────────────────────────
+  function renderWeekRow(name, stats, color) {
+    if (!stats) return '';
+    const wr = stats.pctUp;
+    const wrClr = clr(wr);
+    const barW = Math.min(Math.round(Math.abs(stats.avgRet) / 0.5 * 80), 80);
+    const barColor = stats.avgRet >= 0 ? '#00ff8880' : '#ff335580';
+    return `<div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)22;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:${color};">${name}</div>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <div style="width:${barW}px;height:8px;background:${barColor};border-radius:2px;flex-shrink:0;"></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${stats.avgRet>=0?'#00ff88':'#ff3355'};">${fmtPct(stats.avgRet,2)}</div>
+      </div>
+      <div></div>
+      <div style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${wrClr};">${wr.toFixed(0)}%</div>
+        <div style="font-size:9px;color:var(--text3);">win rate</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);">$${fmt2(stats.avgRange)}</div>
+        <div style="font-size:9px;color:var(--text3);">avg range</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#00ff88;">${stats.bigUp.toFixed(0)}%</div>
+        <div style="font-size:9px;color:var(--text3);">big up</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3355;">${stats.bigDn.toFixed(0)}%</div>
+        <div style="font-size:9px;color:var(--text3);">big dn</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:9px;color:var(--text3);">n=${stats.n}</div>
+      </div>
+    </div>`;
+  }
+
+  function renderWeekBlock(weekStats, heading, subheading, color, weeklySummaryNote) {
+    if (!weekStats || !weekStats.days.length) return '';
+    const { days, weekAvg, weekWR, weekN, weekBest, weekWorst } = weekStats;
+    const weekColor = weekAvg >= 0 ? '#00ff88' : '#ff3355';
+
+    return `
+    <div style="margin-bottom:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:${color};letter-spacing:1px;margin-bottom:2px;">${heading}</div>
+      ${subheading ? `<div style="font-size:10px;color:var(--text3);margin-bottom:8px;">${subheading}</div>` : ''}
+
+      <!-- Week summary KPIs -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
+        ${statCard('WEEK WIN RATE', weekWR.toFixed(0)+'%', clr(weekWR), 'Mon open → Fri close')}
+        ${statCard('AVG WEEK RETURN', fmtPct(weekAvg,2), weekAvg>=0?'#00ff88':'#ff3355', 'Mon open → Fri close')}
+        ${statCard('BEST WEEK', fmtPct(weekBest,2), '#00ff88', 'of '+weekN+' periods')}
+        ${statCard('WORST WEEK', fmtPct(weekWorst,2), '#ff3355', 'of '+weekN+' periods')}
+      </div>
+
+      <!-- Header row -->
+      <div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)33;margin-bottom:2px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">DAY</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RETURN</div>
+        <div></div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">WIN RATE</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RANGE</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG UP</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG DN</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">N</div>
+      </div>
+      ${days.map(({name, stats}) => renderWeekRow(name, stats, color)).join('')}
+      ${weeklySummaryNote ? `<div style="font-size:10px;color:var(--text3);margin-top:4px;">${weeklySummaryNote}</div>` : ''}
+    </div>`;
+  }
+
+  // ── Section divider ────────────────────────────────────────────────────────
+  function sectionHeader(title, n, color, icon) {
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid ${color}33;">
+      <div style="font-family:'Orbitron',monospace;font-size:11px;color:${color};letter-spacing:1px;">${icon} ${title}</div>
+      <div style="font-size:10px;color:var(--text3);">${n} sessions</div>
+    </div>`;
+  }
+
+  // ── Max pain box ───────────────────────────────────────────────────────────
   const maxPainBox = nearest ? `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
       <div style="background:var(--bg3);border:1px solid ${mpColor}44;border-radius:4px;padding:8px 14px;text-align:center;min-width:110px;">
         <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">MAX PAIN</div>
         <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${mpColor};">$${fmt2(nearest.max_pain)}</div>
@@ -4610,11 +4714,11 @@ function renderExpiryBehavior(md) {
       </div>
     </div>` : '';
 
+  // ── ASSEMBLE ──────────────────────────────────────────────────────────────
   el.innerHTML = `
   <div style="padding:4px 0 8px;">
-    <!-- lookback + header row -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">⬡ EXPIRY BEHAVIOR ANALYSIS</div>
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">⬡ EXPIRY BEHAVIOR — HISTORICAL STATS FOR TODAY'S SESSION TYPE</div>
       <div style="display:flex;gap:5px;">
         <button class="exp-lb-btn${_expiryLookback==='all'?' active':''}" onclick="expirySetLookback('all',this)">2020–2026</button>
         <button class="exp-lb-btn${_expiryLookback==='2026'?' active':''}" onclick="expirySetLookback('2026',this)">2026 ONLY</button>
@@ -4623,37 +4727,101 @@ function renderExpiryBehavior(md) {
 
     ${maxPainBox}
 
-    <!-- Today's expiry panel -->
-    <div style="margin-bottom:12px;">
+    <!-- ══ TODAY panel ═══════════════════════════════════════════════════════ -->
+    <div style="margin-bottom:20px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <div style="font-family:'Orbitron',monospace;font-size:10px;color:${todayColor};letter-spacing:1px;">TODAY — ${todayLabel}</div>
         ${isWeekend?'<span style="font-size:10px;color:var(--text3);">(market closed — Monday preview)</span>':''}
       </div>
-      ${renderPanel(todayStats, todayLabel, todayColor, true)}
+      ${renderDayPanel(todayStats, todayLabel, todayColor, true)}
     </div>
 
-    <!-- Weekly OPEX panel — always open -->
-    <div style="margin-bottom:16px;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;color:#00ffcc;letter-spacing:1px;padding:6px 0;border-bottom:1px solid #00ffcc33;margin-bottom:8px;">
-        WEEKLY OPEX — ALL FRIDAYS (NON-MONTHLY) · ${weeklyStats?.n||0} SESSIONS
+    <!-- ══ WEEKLY OPEX ════════════════════════════════════════════════════════ -->
+    <div style="margin-bottom:24px;border-top:2px solid #00ffcc33;padding-top:16px;">
+      ${sectionHeader('WEEKLY OPEX — ALL FRIDAYS (NON-MONTHLY)', weeklyStats?.n||0, '#00ffcc', '⚡')}
+
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:14px;padding:10px;background:#00ffcc08;border-radius:4px;border-left:3px solid #00ffcc33;">
+        Weekly OPEX runs <strong style="color:#00ffcc;">Mon–Fri</strong> with pins and unwinding building throughout the week.
+        The table below shows how each day of an opex week trades historically — Mon open through Fri close.
       </div>
-      <div>
-        ${renderPanel(weeklyStats, 'WEEKLY OPEX (FRI)', '#00ffcc', false)}
+
+      <!-- Full opex week day-by-day -->
+      ${renderWeekBlock(
+        weeklyDayStats,
+        'OPEX WEEK — EACH DAY\'S STATS (ALL ${weeklyFridays.length} OPEX WEEKS)',
+        'Mon open price through Fri close price for each opex week',
+        '#00ffcc',
+        `n = ${weeklyDayStats.weekN} complete opex weeks · ${_expiryLookback==='2026'?'2026 only':'2020–2026'}`
+      )}
+
+      <!-- Friday expiry day stats -->
+      <div style="border-top:1px solid var(--border)33;padding-top:12px;margin-top:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ffcc99;letter-spacing:1px;margin-bottom:8px;">
+          FRIDAY EXPIRY DAY — THE DAY OF EXPIRATION ITSELF
+        </div>
+        ${renderDayPanel(weeklyStats, 'WEEKLY OPEX (FRI)', '#00ffcc', false)}
       </div>
     </div>
 
-    <!-- Monthly OPEX panel — always open -->
-    <div style="margin-bottom:8px;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;color:#ff8800;letter-spacing:1px;padding:6px 0;border-bottom:1px solid #ff880033;margin-bottom:8px;">
-        MONTHLY OPEX — 3RD FRIDAY · ${monthlyStats?.n||0} SESSIONS
+    <!-- ══ MONTHLY OPEX ════════════════════════════════════════════════════════ -->
+    <div style="margin-bottom:8px;border-top:2px solid #ff880033;padding-top:16px;">
+      ${sectionHeader('MONTHLY OPEX — 3RD FRIDAY', monthlyStats?.n||0, '#ff8800', '📅')}
+
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:14px;padding:10px;background:#ff880008;border-radius:4px;border-left:3px solid #ff880033;">
+        Monthly OPEX has a multi-week setup. Dealer hedging and positioning builds 2+ weeks in advance.
+        The sections below show how SPY trades in the <strong style="color:#ff8800;">2 weeks leading up to OPEX</strong>,
+        the <strong style="color:#ff8800;">opex week itself</strong>, and the <strong style="color:#ff8800;">Friday expiration day</strong>.
       </div>
-      <div>
-        ${renderPanel(monthlyStats, 'MONTHLY OPEX', '#ff8800', false)}
+
+      <!-- Timeline indicator -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:16px;">
+        ${[
+          {label:'T−2', sub:'2 WEEKS OUT', color:'#ff880044', border:'#ff880066'},
+          {label:'T−1', sub:'WEEK BEFORE', color:'#ff880066', border:'#ff880099'},
+          {label:'T', sub:'OPEX WEEK', color:'#ff8800aa', border:'#ff8800'},
+        ].map(x => `<div style="text-align:center;padding:6px;background:${x.color};border:1px solid ${x.border};border-radius:3px;">
+          <div style="font-family:'Orbitron',monospace;font-size:11px;color:#ff8800;">${x.label}</div>
+          <div style="font-size:9px;color:var(--text3);">${x.sub}</div>
+        </div>`).join('<div style="display:flex;align-items:center;justify-content:center;font-size:16px;color:#ff880066;">→</div>')}
+      </div>
+
+      <!-- T-2: Two weeks before opex -->
+      ${renderWeekBlock(
+        monthlyT2,
+        'T−2 · TWO WEEKS BEFORE MONTHLY OPEX',
+        'Historical behavior of the week 2 weeks prior to the monthly expiration Friday',
+        '#ff880088',
+        `n = ${monthlyT2.weekN} complete periods · ${_expiryLookback==='2026'?'2026 only':'2020–2026'}`
+      )}
+
+      <!-- T-1: Week before opex -->
+      ${renderWeekBlock(
+        monthlyT1,
+        'T−1 · WEEK BEFORE MONTHLY OPEX',
+        'Historical behavior of the week immediately before the monthly expiration week',
+        '#ff8800bb',
+        `n = ${monthlyT1.weekN} complete periods · ${_expiryLookback==='2026'?'2026 only':'2020–2026'}`
+      )}
+
+      <!-- T: Opex week -->
+      ${renderWeekBlock(
+        monthlyT0,
+        'T · MONTHLY OPEX WEEK (MON OPEN → FRI CLOSE)',
+        'The expiration week itself — dealer unwind, pin risk, and elevated volatility',
+        '#ff8800',
+        `n = ${monthlyT0.weekN} complete opex weeks · ${_expiryLookback==='2026'?'2026 only':'2020–2026'}`
+      )}
+
+      <!-- Friday expiry day stats -->
+      <div style="border-top:1px solid var(--border)33;padding-top:12px;margin-top:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#ff880099;letter-spacing:1px;margin-bottom:8px;">
+          MONTHLY OPEX FRIDAY — THE DAY OF EXPIRATION ITSELF
+        </div>
+        ${renderDayPanel(monthlyStats, 'MONTHLY OPEX', '#ff8800', false)}
       </div>
     </div>
   </div>`;
 
-  // inject button styles if not yet present
   if (!document.getElementById('expiry-btn-style')) {
     const s = document.createElement('style');
     s.id = 'expiry-btn-style';
@@ -4662,6 +4830,8 @@ function renderExpiryBehavior(md) {
     document.head.appendChild(s);
   }
 }
+
+
 
 // ─── MAG 7 EARNINGS SPY ANALYSIS ─────────────────────────────────────────────
 let _mag7Lookback = 'all';
