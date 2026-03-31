@@ -383,6 +383,244 @@ function tjRenderPnlChart(filtered) {
   }
 }
 
+// ── Extended stats panel ──────────────────────────────────────────────────────
+
+function tjRenderStats(filtered) {
+  const el = document.getElementById('tjStatsPanel');
+  if (!el) return;
+
+  const closed = filtered.filter(t => t.pnl !== null && t.outcome !== 'OPEN');
+  if (!closed.length) { el.innerHTML = ''; return; }
+
+  const wins   = closed.filter(t => t.pnl > 0);
+  const losses = closed.filter(t => t.pnl < 0);
+  const bes    = closed.filter(t => t.pnl === 0);
+
+  const totalPnl  = closed.reduce((a, t) => a + t.pnl, 0);
+  const avgWin    = wins.length   ? wins.reduce((a,t)=>a+t.pnl,0)/wins.length : 0;
+  const avgLoss   = losses.length ? losses.reduce((a,t)=>a+t.pnl,0)/losses.length : 0;
+  const largestW  = wins.length   ? Math.max(...wins.map(t=>t.pnl))   : 0;
+  const largestL  = losses.length ? Math.min(...losses.map(t=>t.pnl)) : 0;
+  const expectancy = wins.length && losses.length
+    ? (wins.length/closed.length)*avgWin + (losses.length/closed.length)*avgLoss : null;
+
+  // ── Streak analysis ──
+  const chronoAll = [...closed].sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  let curWStreak=0, maxWStreak=0, curLStreak=0, maxLStreak=0;
+  let latestWStreak=0, latestLStreak=0;
+  chronoAll.forEach(t => {
+    if (t.pnl > 0) {
+      curWStreak++; curLStreak=0;
+      if (curWStreak > maxWStreak) maxWStreak = curWStreak;
+    } else if (t.pnl < 0) {
+      curLStreak++; curWStreak=0;
+      if (curLStreak > maxLStreak) maxLStreak = curLStreak;
+    } else {
+      curWStreak=0; curLStreak=0;
+    }
+  });
+  latestWStreak = curWStreak;
+  latestLStreak = curLStreak;
+
+  // ── Daily P&L ──
+  const byDay = {};
+  closed.forEach(t => {
+    if (!t.date) return;
+    byDay[t.date] = (byDay[t.date] || 0) + t.pnl;
+  });
+  const dayEntries = Object.entries(byDay).sort((a,b)=>a[0].localeCompare(b[0]));
+  const greenDays  = dayEntries.filter(([,v])=>v>0).length;
+  const redDays    = dayEntries.filter(([,v])=>v<0).length;
+  const flatDays   = dayEntries.filter(([,v])=>v===0).length;
+  const bestDay    = dayEntries.length ? dayEntries.reduce((a,b)=>b[1]>a[1]?b:a) : null;
+  const worstDay   = dayEntries.length ? dayEntries.reduce((a,b)=>b[1]<a[1]?b:a) : null;
+
+  // ── DOW breakdown ──
+  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dowStats = {};
+  closed.forEach(t => {
+    if (!t.date) return;
+    const d = DOW[new Date(t.date+'T12:00:00').getDay()];
+    if (!dowStats[d]) dowStats[d] = { pnl:0, wins:0, total:0 };
+    dowStats[d].pnl += t.pnl;
+    dowStats[d].total++;
+    if (t.pnl > 0) dowStats[d].wins++;
+  });
+  const tradingDOW = ['Mon','Tue','Wed','Thu','Fri'].filter(d=>dowStats[d]);
+
+  // ── Hour breakdown (CT) ──
+  const hourStats = {};
+  closed.forEach(t => {
+    if (!t.time) return;
+    const [hStr] = t.time.split(':');
+    const h = parseInt(hStr, 10);
+    if (!hourStats[h]) hourStats[h] = { pnl:0, wins:0, total:0 };
+    hourStats[h].pnl += t.pnl;
+    hourStats[h].total++;
+    if (t.pnl > 0) hourStats[h].wins++;
+  });
+  const sortedHours = Object.entries(hourStats).sort((a,b)=>+a[0]-+b[0]);
+
+  // ── Calendar heatmap (last 8 weeks) ──
+  const today = new Date();
+  const calDays = [];
+  for (let i = 55; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0,10);
+    calDays.push({ key, dow: d.getDay(), pnl: byDay[key] ?? null });
+  }
+  // Align to start of week
+  const startDow = calDays[0].dow; // 0=Sun
+  const padDays = Array(startDow).fill(null);
+  const calCells = [...padDays, ...calDays];
+  const allPnlVals = dayEntries.map(([,v])=>Math.abs(v));
+  const maxAbsPnl  = allPnlVals.length ? Math.max(...allPnlVals, 1) : 1;
+
+  function calColor(pnl) {
+    if (pnl === null) return 'var(--bg3)';
+    if (pnl === 0)    return 'var(--border)';
+    if (pnl > 0) {
+      const intensity = Math.min(pnl / maxAbsPnl, 1);
+      return `rgba(0,255,136,${0.15 + intensity * 0.75})`;
+    }
+    const intensity = Math.min(Math.abs(pnl) / maxAbsPnl, 1);
+    return `rgba(255,51,85,${0.15 + intensity * 0.75})`;
+  }
+
+  const calWeeks = [];
+  for (let i = 0; i < calCells.length; i += 7) {
+    calWeeks.push(calCells.slice(i, i+7));
+  }
+
+  const calHtml = `
+    <div style="display:flex;gap:3px;flex-wrap:nowrap;">
+      ${calWeeks.map(week => `
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          ${week.map(d => {
+            if (!d) return '<div style="width:14px;height:14px;"></div>';
+            const pnlTip = d.pnl !== null ? (d.pnl >= 0 ? '+$' : '-$') + Math.abs(d.pnl).toFixed(0) : 'no trades';
+            return `<div style="width:14px;height:14px;border-radius:2px;background:${calColor(d.pnl)};cursor:default;"
+              title="${d.key}: ${pnlTip}"></div>`;
+          }).join('')}
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:12px;margin-top:6px;font-size:9px;color:var(--text3);font-family:'Share Tech Mono',monospace;">
+      <span>■ <span style="color:var(--green)">profit</span></span>
+      <span>■ <span style="color:var(--red)">loss</span></span>
+      <span>■ <span style="color:var(--text3)">no trades</span></span>
+    </div>`;
+
+  // ── Dollar helpers ──
+  const fmt$ = v => (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(0);
+  const fmtPnl = v => `<span style="color:${v>=0?'var(--green)':'var(--red)'}">${fmt$(v)}</span>`;
+
+  // ── Render ──
+  el.innerHTML = `
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+
+    <!-- Streak box -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:10px;">STREAK STATS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        ${[
+          ['MAX WIN STREAK',  maxWStreak + ' trades', 'var(--green)'],
+          ['MAX LOSS STREAK', maxLStreak + ' trades', 'var(--red)'],
+          ['CURRENT W',  latestWStreak + ' in a row', latestWStreak > 0 ? 'var(--green)' : 'var(--text3)'],
+          ['CURRENT L',  latestLStreak + ' in a row', latestLStreak > 0 ? 'var(--red)'   : 'var(--text3)'],
+        ].map(([l,v,c])=>`<div>
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">${l}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${c};">${v}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- Edge box -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:10px;">EDGE METRICS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        ${[
+          ['EXPECTANCY',  expectancy !== null ? fmt$(expectancy) : '—',  expectancy && expectancy >= 0 ? 'var(--green)' : 'var(--red)'],
+          ['LARGEST WIN', largestW ? fmt$(largestW) : '—', 'var(--green)'],
+          ['LARGEST LOSS',largestL ? fmt$(largestL) : '—', 'var(--red)'],
+          ['OPEN TRADES', filtered.filter(t=>t.outcome==='OPEN').length + ' open', 'var(--cyan)'],
+        ].map(([l,v,c])=>`<div>
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">${l}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${c};">${v}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- Daily P&L box -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:10px;">DAILY RESULTS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        ${[
+          ['GREEN DAYS',  greenDays + ' days', 'var(--green)'],
+          ['RED DAYS',    redDays   + ' days', 'var(--red)'],
+          ['BEST DAY',    bestDay  ? fmt$(bestDay[1])  : '—', 'var(--green)'],
+          ['WORST DAY',   worstDay ? fmt$(worstDay[1]) : '—', 'var(--red)'],
+        ].map(([l,v,c])=>`<div>
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">${l}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${c};">${v}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+
+    <!-- DOW breakdown -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:10px;">P&amp;L BY DAY OF WEEK</div>
+      ${tradingDOW.length ? tradingDOW.map(d => {
+        const s = dowStats[d];
+        const wr = s.total ? Math.round(s.wins/s.total*100) : 0;
+        const barW = Math.round(Math.abs(s.pnl)/maxAbsPnl*100);
+        const c = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)22;">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text2);width:28px;">${d}</div>
+          <div style="flex:1;height:10px;background:var(--bg2);border-radius:2px;overflow:hidden;">
+            <div style="width:${barW}%;height:100%;background:${c}88;border-radius:2px;"></div>
+          </div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${c};width:60px;text-align:right;">${fmt$(s.pnl)}</div>
+          <div style="font-size:9px;color:var(--text3);width:42px;text-align:right;">${wr}% (${s.total})</div>
+        </div>`;
+      }).join('') : '<div style="font-size:11px;color:var(--text3);">No data</div>'}
+    </div>
+
+    <!-- Calendar heatmap -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:8px;">DAILY P&amp;L HEATMAP — LAST 8 WEEKS</div>
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
+        ${['S','M','T','W','T','F','S'].map(d=>`<div style="width:14px;font-size:8px;color:var(--text3);text-align:center;">${d}</div>`).join('')}
+      </div>
+      ${calHtml}
+    </div>
+  </div>
+
+  ${sortedHours.length >= 2 ? `
+  <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;margin-top:10px;">
+    <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:10px;">P&amp;L BY HOUR OF DAY (CT)</div>
+    <div style="display:flex;gap:4px;align-items:flex-end;height:60px;">
+      ${(()=>{
+        const mx = Math.max(...sortedHours.map(([,s])=>Math.abs(s.pnl)),1);
+        return sortedHours.map(([h,s])=>{
+          const pct = Math.abs(s.pnl)/mx;
+          const barH = Math.max(4, Math.round(pct*52));
+          const c = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+          const ap = +h >= 12 ? 'pm' : 'am';
+          const h12 = +h % 12 || 12;
+          return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;" title="${h12}${ap} CT: ${fmt$(s.pnl)} (${s.total} trades, ${Math.round(s.wins/s.total*100)}% win)">
+            <div style="width:100%;height:${barH}px;background:${c}99;border-radius:2px 2px 0 0;"></div>
+            <div style="font-size:8px;color:var(--text3);white-space:nowrap;">${h12}${ap}</div>
+          </div>`;
+        }).join('');
+      })()}
+    </div>
+  </div>` : ''}`;
+}
+
 // ── Setup breakdown panel ─────────────────────────────────────────────────────
 
 function tjRenderSetupBreakdown(filtered) {
@@ -446,6 +684,7 @@ window.tjRender = function() {
 
   tjRenderSummary(filtered);
   tjRenderPnlChart(filtered);
+  tjRenderStats(filtered);
   tjRenderSetupBreakdown(filtered);
 
   const tbody = document.getElementById('tjTradeBody');
