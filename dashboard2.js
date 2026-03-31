@@ -3200,18 +3200,23 @@ function isExtendedHours() {
 async function fetchWeekOpen() {
   try {
     const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    const dow = ctNow.getDay();
+    const dow = ctNow.getDay(); // 0=Sun, 1=Mon … 6=Sat
     const isWeekend = dow === 0 || dow === 6;
-    const isMon = dow === 1;
+    const isMon     = dow === 1;
     const pad = n => String(n).padStart(2, '0');
     const ctTodayStr = `${ctNow.getFullYear()}-${pad(ctNow.getMonth()+1)}-${pad(ctNow.getDate())}`;
 
-    // Monday of current week
+    // Monday of the current (or just-ended) trading week
+    // On weekends: find the most recent Monday (Sat→5 days back, Sun→6 days back… handled by daysFromMon)
     const daysFromMon = dow === 0 ? 6 : dow - 1;
     const monCT = new Date(ctNow);
     monCT.setDate(ctNow.getDate() - daysFromMon);
     const monStr = `${monCT.getFullYear()}-${pad(monCT.getMonth()+1)}-${pad(monCT.getDate())}`;
 
+    // ── localStorage cache keyed to this week's Monday ──────────────────────
+    // Store: { monStr, weekOpen }
+    // This survives page refreshes, all-day, and through the weekend.
+    const CACHE_KEY = 'spy_week_open_v2';
     const applyWeekOpen = (val) => {
       if (!val || isNaN(val)) return false;
       window._spyWeekOpen = val;
@@ -3219,10 +3224,24 @@ async function fetchWeekOpen() {
         window._spyLevels.weekOpen = val;
         updateLevelBar(window._spyLevels?.cur);
       }
+      // Persist to localStorage
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ monStr, weekOpen: val }));
+      } catch(e) {}
       return true;
     };
 
-    // Source 1: /spyintraday on Monday — intraday open IS week open
+    // Check localStorage first — fastest path, survives refresh + weekend
+    try {
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (cached && cached.monStr === monStr && cached.weekOpen) {
+        applyWeekOpen(cached.weekOpen);
+        // Still fall through to live sources on Monday pre-market to ensure freshness
+        if (!isMon) return;
+      }
+    } catch(e) {}
+
+    // ── Source 1: /spyintraday on Monday — intraday open IS the week open ───
     if (!isWeekend && isMon) {
       try {
         const r = await fetch('/spyintraday?t=' + Date.now());
@@ -3230,59 +3249,54 @@ async function fetchWeekOpen() {
           const d = await r.json();
           if (d.available && d.open) {
             if (window._spyLevels) window._spyLevels.todayOpen = d.open;
-            applyWeekOpen(d.open);
-            return;
+            if (applyWeekOpen(d.open)) return;
           }
         }
       } catch(e) {}
     }
 
-    // Source 2: market_data.json weekly_em week_open field
+    // ── Source 2: market_data.json weekly_em week_open field ────────────────
     if (_md) {
       const wems = _md.weekly_em || [];
       const curWem = wems.find(w => !w.week_close) || wems[0];
       if (curWem && curWem.week_open) {
-        applyWeekOpen(curWem.week_open);
-        return;
+        if (applyWeekOpen(curWem.week_open)) return;
       }
     }
 
-    // Source 3: _sd daily data — first trading day of this week
+    // ── Source 3: _sd daily data — first trading day of this week ───────────
     if (_sd && _sd.length) {
       const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
       const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
       if (firstDay && firstDay.open) {
-        applyWeekOpen(firstDay.open);
-        return;
+        if (applyWeekOpen(firstDay.open)) return;
       }
     }
 
-    // Source 4: Yahoo Finance daily API — fetch Monday's open directly
-    // Handles the gap when DB hasn't updated yet this week (e.g. Tue morning
-    // before pipeline runs, or when market_data.json has week_open: null)
+    // ── Source 4: Yahoo Finance daily API — fetch Monday's open directly ────
+    // Works any day of the week including weekends (uses monStr as period1)
     try {
-      const now = new Date();
-      const p1 = Math.floor(new Date(monStr + 'T14:00:00Z').getTime() / 1000);
-      const p2 = Math.floor(now.getTime() / 1000);
+      const p1 = Math.floor(new Date(monStr + 'T14:30:00Z').getTime() / 1000); // ~9:30am ET on Monday
+      const p2 = Math.floor(Date.now() / 1000);
       if (p2 > p1) {
-        const yUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=' + p1 + '&period2=' + p2;
-        const r = await fetch(yUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
+        const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=${p1}&period2=${p2}`;
+        const r = await fetch(yUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+        });
         if (r.ok) {
           const data = await r.json();
-          const opens = data && data.chart && data.chart.result && data.chart.result[0] &&
-                        data.chart.result[0].indicators && data.chart.result[0].indicators.quote &&
-                        data.chart.result[0].indicators.quote[0] &&
-                        data.chart.result[0].indicators.quote[0].open || [];
+          const q0 = data?.chart?.result?.[0];
+          const opens = q0?.indicators?.quote?.[0]?.open || [];
+          // First bar = Monday's open (or first trading day of the week)
           if (opens.length && opens[0] != null) {
-            applyWeekOpen(Math.round(opens[0] * 100) / 100);
-            return;
+            if (applyWeekOpen(Math.round(opens[0] * 100) / 100)) return;
           }
         }
       }
     } catch(e) { console.warn('[fetchWeekOpen] Yahoo daily fallback failed:', e.message); }
 
-    // Source 5: /quotes SPY open — last resort on Monday only
-    if (isMon) {
+    // ── Source 5: /quotes SPY open — last resort on Monday only ─────────────
+    if (isMon && !isWeekend) {
       try {
         const r = await fetch('/quotes?symbols=SPY');
         if (r.ok) {
@@ -3291,7 +3305,6 @@ async function fetchWeekOpen() {
           if (spyQ && spyQ.open) {
             if (window._spyLevels) window._spyLevels.todayOpen = spyQ.open;
             applyWeekOpen(spyQ.open);
-            return;
           }
         }
       } catch(e) {}
