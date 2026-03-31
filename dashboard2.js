@@ -496,25 +496,16 @@ function phApplyFilter(mode) {
 
 // ── TIME OF DAY STATS ─────────────────────────────────────────────────────────
 function renderTODStats() {
-  if (typeof TOD_STATS === 'undefined') return;
-  const T = TOD_STATS;
-
-  // Map TOD_STATS shape → normalized locals
-  const totalDays    = T.days;
-  const dateRange    = T.date_range;
-  const hodBuckets   = T.hod.by_bucket;   // [{label, count, pct}, ...]
-  const lodBuckets   = T.lod.by_bucket;
-  const hodByDow     = T.hod.by_dow;      // [{dow, counts:[], pcts:[]}, ...]
-  const lodByDow     = T.lod.by_dow;
-  const seq          = T.sequence;        // {hod_before_lod, hod_after_lod, hod_same_lod}
+  if (typeof TOD_DATA === 'undefined') return;
+  const T = TOD_DATA;
 
   // Header meta
   const daysEl = document.getElementById('todDays');
   const rangeEl = document.getElementById('todRange');
-  if (daysEl) daysEl.textContent = totalDays + ' days';
-  if (rangeEl) rangeEl.textContent = dateRange.start + ' → ' + dateRange.end;
+  if (daysEl) daysEl.textContent = T.total_days + ' days';
+  if (rangeEl) rangeEl.textContent = T.date_range.start + ' → ' + T.date_range.end;
 
-  // Color ramp
+  // Color ramp: low freq = dim, high freq = bright
   const bucketColors = [
     '#ff8800', // 8:30-9:00   Open Auction
     '#ffcc00', // 9:00-9:30   Early Open
@@ -526,7 +517,7 @@ function renderTODStats() {
     '#ff5500', // 2:30-3:00   Close
   ];
 
-  function buildBucketChart(containerId, buckets) {
+  function buildBucketChart(containerId, buckets, accentColor) {
     const el = document.getElementById(containerId);
     if (!el) return;
     const maxPct = Math.max(...buckets.map(b => b.pct), 1);
@@ -546,41 +537,32 @@ function renderTODStats() {
       </div>`;
     }).join('') +
     `<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-top:4px;padding:0 3px;">
-      <span>★ Most common: <span style="color:${bucketColors[buckets.indexOf(topBucket)]};">${topBucket.label}</span></span>
+      <span>★ Most common: <span style="color:${bucketColors[buckets.indexOf(topBucket)]};">${topBucket.name || topBucket.label}</span></span>
       <span>${topBucket.pct.toFixed(1)}% of days</span>
     </div>`;
   }
 
-  buildBucketChart('todHodChart', hodBuckets);
-  buildBucketChart('todLodChart', lodBuckets);
+  buildBucketChart('todHodChart', T.hod_by_bucket, '#00ff88');
+  buildBucketChart('todLodChart', T.lod_by_bucket, '#ff3355');
 
-  // Sequence panel — derive stats from TOD_STATS.sequence + hod/lod bucket data
+  // Sequence panel
   const seqEl = document.getElementById('todSequencePanel');
-  if (seqEl && seq) {
-    const hodBeforeLodPct = seq.hod_before_lod ? seq.hod_before_lod.pct : 0;
-    const hodAfterLodPct  = seq.hod_after_lod  ? seq.hod_after_lod.pct  : 0;
-    const lodBeforeHodPct = hodAfterLodPct; // LOD before HOD = HOD after LOD
-    // first/last 30-min pcts come from the bucket arrays directly
-    const hodFirst30 = T.hod.pct_first30 != null ? T.hod.pct_first30 : hodBuckets[0].pct;
-    const hodLast30  = T.hod.pct_last30  != null ? T.hod.pct_last30  : hodBuckets[hodBuckets.length-1].pct;
-    const lodFirst30 = T.lod.pct_first30 != null ? T.lod.pct_first30 : lodBuckets[0].pct;
-    const lodLast30  = T.lod.pct_last30  != null ? T.lod.pct_last30  : lodBuckets[lodBuckets.length-1].pct;
-
-    const hodTopBucket = hodBuckets.reduce((a, b) => b.pct > a.pct ? b : a);
-    const lodTopBucket = lodBuckets.reduce((a, b) => b.pct > a.pct ? b : a);
-
+  if (seqEl && T.summary) {
+    const s = T.summary;
+    const hodTopBucket = T.hod_by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
+    const lodTopBucket = T.lod_by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
     seqEl.innerHTML = `
       <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.7;font-family:'Share Tech Mono',monospace;">
-        Based on ${totalDays} days of 1-minute SPY bars (CT time).
+        Based on ${T.total_days} days of 1-minute SPY bars (CT time).
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">
         ${[
-          {l:'LOD sets before HOD', v: lodBeforeHodPct.toFixed(1)+'%', c:'#ff3355'},
-          {l:'HOD sets before LOD', v: hodBeforeLodPct.toFixed(1)+'%', c:'#00ff88'},
-          {l:'HOD in first 30 min', v: hodFirst30.toFixed(1)+'%',      c:'#ffcc00'},
-          {l:'LOD in first 30 min', v: lodFirst30.toFixed(1)+'%',      c:'#ffcc00'},
-          {l:'HOD in last 30 min',  v: hodLast30.toFixed(1)+'%',       c:'#ff8800'},
-          {l:'LOD in last 30 min',  v: lodLast30.toFixed(1)+'%',       c:'#ff8800'},
+          {l:'LOD sets before HOD', v: s.lod_before_hod_pct.toFixed(1)+'%', c:'#ff3355'},
+          {l:'HOD sets before LOD', v: s.hod_before_lod_pct.toFixed(1)+'%', c:'#00ff88'},
+          {l:'HOD in first 30 min', v: s.hod_first_30min_pct.toFixed(1)+'%', c:'#ffcc00'},
+          {l:'LOD in first 30 min', v: s.lod_first_30min_pct.toFixed(1)+'%', c:'#ffcc00'},
+          {l:'HOD in last 30 min',  v: s.hod_last_30min_pct.toFixed(1)+'%',  c:'#ff8800'},
+          {l:'LOD in last 30 min',  v: s.lod_last_30min_pct.toFixed(1)+'%',  c:'#ff8800'},
         ].map(x => `<div style="background:var(--bg3);border-radius:3px;padding:7px 9px;">
           <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">${x.l}</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${x.c};">${x.v}</div>
@@ -588,36 +570,27 @@ function renderTODStats() {
       </div>
       <div style="font-size:11px;color:var(--text3);line-height:1.6;background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:3px solid var(--cyan);">
         <strong style="color:var(--text2);">Key insight:</strong>
-        Most common HOD window: <strong style="color:#00ff88;">${hodTopBucket.label} (${hodTopBucket.pct.toFixed(1)}%)</strong>.
-        Most common LOD window: <strong style="color:#ff3355;">${lodTopBucket.label} (${lodTopBucket.pct.toFixed(1)}%)</strong>.
-        LOD is set before HOD ${lodBeforeHodPct.toFixed(0)}% of the time — meaning the day tends to find its low first, then rally.
-        ${hodFirst30 > 15 || lodFirst30 > 15
-          ? `The first 30 min (8:30–9:00 CT) sets the HOD ${hodFirst30.toFixed(0)}% of the time and LOD ${lodFirst30.toFixed(0)}% — the open auction is the single most important window.`
+        Most common HOD window: <strong style="color:#00ff88;">${hodTopBucket.name || hodTopBucket.label} (${hodTopBucket.pct.toFixed(1)}%)</strong>.
+        Most common LOD window: <strong style="color:#ff3355;">${lodTopBucket.name || lodTopBucket.label} (${lodTopBucket.pct.toFixed(1)}%)</strong>.
+        LOD is set before HOD ${s.lod_before_hod_pct.toFixed(0)}% of the time — meaning the day tends to find its low first, then rally.
+        ${s.hod_first_30min_pct > 15 || s.lod_first_30min_pct > 15
+          ? `The first 30 min (8:30–9:00 CT) sets the HOD ${s.hod_first_30min_pct.toFixed(0)}% of the time and LOD ${s.lod_first_30min_pct.toFixed(0)}% — the open auction is the single most important window.`
           : ''}
       </div>`;
   }
 
-  // DOW panel — derive top bucket per day from by_dow arrays
+  // DOW panel — show top bucket per day
   const dowEl = document.getElementById('todDowPanel');
-  if (dowEl && hodByDow && lodByDow) {
-    const bucketLabels = T.buckets;
-    const dowRows = hodByDow.map((hd, i) => {
-      const ld = lodByDow[i];
-      // Find index of max pct for HOD
-      const hodMaxIdx = hd.pcts.indexOf(Math.max(...hd.pcts));
-      const lodMaxIdx = ld.pcts.indexOf(Math.max(...ld.pcts));
-      const hodTopLabel = bucketLabels[hodMaxIdx] || '—';
-      const lodTopLabel = bucketLabels[lodMaxIdx] || '—';
-      const hodTopPct   = hd.pcts[hodMaxIdx] || 0;
-      const lodTopPct   = ld.pcts[lodMaxIdx] || 0;
-      const nDays = hd.counts.reduce((a, b) => a + b, 0);
+  if (dowEl && T.hod_by_dow && T.lod_by_dow) {
+    const dowRows = T.hod_by_dow.map((hd, i) => {
+      const ld = T.lod_by_dow[i];
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)22;">
-        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);width:30px;">${hd.dow}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);width:30px;">${hd.day}</div>
         <div style="flex:1;">
-          <div style="font-size:10px;color:#00ff88;margin-bottom:2px;">HOD: <strong>${hodTopLabel}</strong> <span style="color:var(--text3);">(${hodTopPct.toFixed(0)}%)</span></div>
-          <div style="font-size:10px;color:#ff3355;">LOD: <strong>${lodTopLabel}</strong> <span style="color:var(--text3);">(${lodTopPct.toFixed(0)}%)</span></div>
+          <div style="font-size:10px;color:#00ff88;margin-bottom:2px;">HOD: <strong>${hd.top_bucket}</strong> <span style="color:var(--text3);">(${hd.top_pct.toFixed(0)}%)</span></div>
+          <div style="font-size:10px;color:#ff3355;">LOD: <strong>${ld.top_bucket}</strong> <span style="color:var(--text3);">(${ld.top_pct.toFixed(0)}%)</span></div>
         </div>
-        <div style="text-align:right;font-size:9px;color:var(--text3);">${nDays} days</div>
+        <div style="text-align:right;font-size:9px;color:var(--text3);">${hd.n} days</div>
       </div>`;
     }).join('');
     dowEl.innerHTML = `
@@ -873,9 +846,9 @@ function renderWEM(md){
       {l:'AVG RANGE ±',   v:'$'+fmt(stats.avg_range/2,2)},
       {l:'% INSIDE',      v:fmt(stats.pct_inside,1)+'%'},
       {l:'% OUTSIDE',     v:fmt(stats.pct_outside,1)+'%'},
-      {l:'HIGH BREACH',   v:fmt(stats.pct_high_breach,1)+'%', sub: stats.avg_high_breach_amt!=null?'avg +$'+fmt(stats.avg_high_breach_amt,2):null, c:'#00ff88'},
-      {l:'LOW BREACH',    v:fmt(stats.pct_low_breach,1)+'%',  sub: stats.avg_low_breach_amt !=null?'avg $'+fmt(stats.avg_low_breach_amt,2):null,  c:'#ff3355'},
-    ].map(({l,v,sub,c})=>`<div class="wem-stat"><div class="ws-lbl">${l}</div><div class="ws-val"${c?` style="color:${c}"`:''}}>${v}</div>${sub?`<div style="font-size:11px;color:${c||'var(--text3)'};margin-top:3px;">${sub}</div>`:''}</div>`).join('');
+      {l:'HIGH BREACH %', v:fmt(stats.pct_high_breach,1)+'%'},
+      {l:'LOW BREACH %',  v:fmt(stats.pct_low_breach,1)+'%'},
+    ].map(({l,v})=>`<div class="wem-stat"><div class="ws-lbl">${l}</div><div class="ws-val">${v}</div></div>`).join('');
   }
 
   if(stats.breach_by_day){
@@ -919,7 +892,7 @@ function renderWEM(md){
     const rectY  = dH/2 - rectH/2 + 10;
     const overY  = 50;
     const plotW  = dW - padX*2;
-    const slotW  = plotW / Math.max(total + 1, 2); // +1 slot reserved for current open week
+    const slotW  = plotW / Math.max(total, 1);
 
     // Time labels every ~5 weeks
     const step = Math.max(1, Math.floor(total/6));
@@ -949,28 +922,6 @@ function renderWEM(md){
         fill="${color}" opacity="${isNewest?1:0.72}"
         stroke="${isNewest?'white':'none'}" stroke-width="${isNewest?1.5:0}"/>`;
     }).join('');
-
-    // Current-week dot: live price vs open WEM (excluded from histWeeks because week_close is null)
-    var _cwDot = '';
-    if (lo && hi && price && (hi - lo) > 0) {
-      var _cwRange = hi - lo;
-      var _cwX = (padX + (total + 0.5) * slotW).toFixed(1);
-      var _cwCy, _cwCol;
-      if (price > hi) {
-        _cwCy = (rectY - Math.min((price - hi) / (_cwRange * 0.5), 1) * (overY - 4) - dotR).toFixed(1);
-        _cwCol = '#00ff88';
-      } else if (price < lo) {
-        _cwCy = (rectY + rectH + Math.min((lo - price) / (_cwRange * 0.5), 1) * (overY - 4) + dotR).toFixed(1);
-        _cwCol = '#ff3355';
-      } else {
-        _cwCy = (rectY + rectH - ((price - lo) / _cwRange) * rectH).toFixed(1);
-        _cwCol = '#ffcc00';
-      }
-      var _cwLY = (parseFloat(_cwCy) - dotR - 5).toFixed(1);
-      _cwDot = '<circle cx="' + _cwX + '" cy="' + _cwCy + '" r="' + (dotR+3) + '" fill="none" stroke="' + _cwCol + '" stroke-width="1.5" opacity="0.4"/>'
-             + '<circle cx="' + _cwX + '" cy="' + _cwCy + '" r="' + dotR + '" fill="' + _cwCol + '" opacity="0.95" stroke="white" stroke-width="2"/>'
-             + '<text x="' + _cwX + '" y="' + _cwLY + '" text-anchor="middle" fill="' + _cwCol + '" font-size="8" font-family="Orbitron,monospace" letter-spacing="1">NOW</text>';
-    }
 
     dotEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px;">
@@ -1006,7 +957,6 @@ function renderWEM(md){
           return `<text x="${tx.toFixed(1)}" y="${rectY+rectH+overY+32}" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8" font-family="Share Tech Mono,monospace">${label}</text>`;
         }).join('')}
         <line x1="${padX}" y1="${rectY+rectH+overY+24}" x2="${padX+plotW}" y2="${rectY+rectH+overY+24}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-        ${_cwDot}
       </svg>
       <div style="font-size:10px;color:var(--text3);margin-top:2px;">Oldest → Newest · newest dot has white ring · ${total} weeks</div>`;
   }
@@ -1389,7 +1339,6 @@ const MEDIA_SOURCES = [
     group: 'LIVE STREAMS',
     items: [
       { name:'Bloomberg Television', channelId:'UCIALMKvObZNtJ6AmdCLP7Lg', color:'#00ccff', desc:'24/7 Business & Markets', live:true },
-      { name:'Fox News', channelId:'UCJg9wBPyKMNA5sRDnvzmkdg', color:'#00ccff', desc:'24/7 News', live:true },
     ]
   },
   // Channels with specific known video/stream IDs (from your URLs)
@@ -1521,169 +1470,166 @@ function initMediaTab() {
 let _journalEntries = JSON.parse(localStorage.getItem('spyJournal')||'[]');
 let _currentChartBase64 = null;
 let _currentChartMime = 'image/png';
-let _journalOutcome = 'STUDY';
 
 function saveJournal() {
-  localStorage.setItem('spyJournal', JSON.stringify(_journalEntries.slice(0,100)));
+  // Only keep last 50, and cap base64 images to save space
+  localStorage.setItem('spyJournal', JSON.stringify(_journalEntries.slice(0,50)));
 }
 
-// ── Outcome button state ──────────────────────────────────────────────────────
-window.journalSetOutcome = function(oc) {
-  _journalOutcome = oc;
-  const colors = { WIN:'var(--green)', LOSS:'var(--red)', BE:'var(--yellow)', STUDY:'var(--cyan)' };
-  document.querySelectorAll('.joc-btn').forEach(btn => {
-    const isActive = btn.dataset.oc === oc;
-    btn.style.background = isActive ? colors[oc] : 'var(--bg3)';
-    btn.style.color       = isActive ? '#000'      : 'var(--text3)';
-    btn.style.border      = isActive ? 'none'       : '1px solid var(--border)';
-    btn.style.fontWeight  = isActive ? 'bold'       : 'normal';
-  });
-};
-
-// ── File handling ─────────────────────────────────────────────────────────────
 function handleJournalDrop(e) {
   e.preventDefault();
-  document.getElementById('journalDropZone').style.borderColor = 'var(--border)';
+  $('journalDropZone').style.borderColor = 'var(--border)';
   const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('image/')) handleJournalFile(file);
+  if(file && file.type.startsWith('image/')) handleJournalFile(file);
 }
 
 function handleJournalFile(file) {
-  if (!file) return;
+  if(!file) return;
   _currentChartMime = file.type || 'image/png';
   const reader = new FileReader();
-  reader.onload = ev => {
-    const dataUrl = ev.target.result;
+  reader.onload = e => {
+    const dataUrl = e.target.result;
     _currentChartBase64 = dataUrl.split(',')[1];
-    const preview = document.getElementById('journalImgPreview');
-    const previewImg = document.getElementById('journalPreviewImg');
-    if (preview && previewImg) { previewImg.src = dataUrl; preview.style.display = 'block'; }
-    const dz = document.getElementById('journalDropZone');
-    if (dz) {
-      dz.style.padding = '10px 16px';
-      dz.style.borderColor = 'var(--cyan)';
-      const icon = document.getElementById('journalDropIcon');
-      if (icon) icon.style.display = 'none';
-    }
-    const btn = document.getElementById('journalSaveBtn');
-    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
-    const dateEl = document.getElementById('journalChartDate');
-    if (dateEl && !dateEl.value) {
-      const ct = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-      dateEl.value = ct.toISOString().slice(0,10);
-    }
+    // Show preview
+    const preview = $('journalPreviewArea');
+    if(preview) preview.innerHTML = `
+      <img src="${dataUrl}" style="width:100%;max-height:300px;object-fit:contain;border-radius:4px;border:1px solid var(--border);margin-bottom:10px;"/>
+      <div style="font-size:11px;color:var(--text3);">Ready to analyze. Add a note above if needed, then click ANALYZE.</div>`;
+    // Enable button
+    const btn = $('journalAnalyzeBtn');
+    if(btn) { btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer'; }
+    $('journalDropZone').style.borderColor = 'var(--cyan)';
   };
   reader.readAsDataURL(file);
 }
 
 function clearJournalUpload() {
   _currentChartBase64 = null;
-  const preview = document.getElementById('journalImgPreview');
-  if (preview) preview.style.display = 'none';
-  const dz = document.getElementById('journalDropZone');
-  if (dz) {
-    dz.style.padding = '30px 16px';
-    dz.style.borderColor = 'var(--border)';
-    const icon = document.getElementById('journalDropIcon');
-    if (icon) icon.style.display = '';
-  }
-  const noteEl = document.getElementById('journalNote');
-  if (noteEl) noteEl.value = '';
-  const tagEl = document.getElementById('journalChartTag');
-  if (tagEl) tagEl.value = '';
-  const btn = document.getElementById('journalSaveBtn');
-  if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed'; }
-  window.journalSetOutcome('STUDY');
+  $('journalPreviewArea').innerHTML = '<div style="font-size:12px;color:var(--text3);padding:12px 0;">Upload a chart to begin analysis.</div>';
+  $('journalNote').value = '';
+  const btn = $('journalAnalyzeBtn');
+  if(btn) { btn.disabled=true; btn.style.opacity='0.5'; btn.style.cursor='not-allowed'; }
+  $('journalDropZone').style.borderColor = 'var(--border)';
 }
 
-// ── Save chart entry ──────────────────────────────────────────────────────────
-window.saveJournalChart = function() {
-  if (!_currentChartBase64) return;
-  const note  = (document.getElementById('journalNote')?.value || '').trim();
-  const tag   = (document.getElementById('journalChartTag')?.value || '').trim();
-  const date  = document.getElementById('journalChartDate')?.value || new Date().toISOString().slice(0,10);
-  const entry = {
-    id:       Date.now(),
-    ts:       new Date().toISOString(),
-    date,
-    tag,
-    note,
-    outcome:  _journalOutcome,
-    mime:     _currentChartMime,
-    imageB64: _currentChartBase64,
-  };
-  _journalEntries.unshift(entry);
-  saveJournal();
-  renderJournalEntries();
-  clearJournalUpload();
-  const btn = document.getElementById('journalSaveBtn');
-  if (btn) {
-    btn.textContent = '\u2713 SAVED';
-    setTimeout(() => { btn.textContent = '\u29c6 SAVE TO JOURNAL'; }, 1400);
-  }
-};
+async function analyzeChart() {
+  if(!_currentChartBase64) return;
+  const btn = $('journalAnalyzeBtn');
+  const preview = $('journalPreviewArea');
+  const note = $('journalNote').value.trim();
 
-// ── Gallery render ────────────────────────────────────────────────────────────
+  btn.textContent = '⟳ ANALYZING...';
+  btn.disabled = true;
+
+  try {
+    const context = _md ? buildContext(_md, _sd) : 'No live market data available.';
+    const userNote = note ? `\n\nTrader's note: "${note}"` : '';
+
+    const messages = [{
+      role: 'user',
+      content: [
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: _currentChartMime, data: _currentChartBase64 }
+        },
+        {
+          type: 'text',
+          text: `Analyze this trading chart. Identify: timeframe and instrument if visible, key price levels (support/resistance, highs/lows), trend structure, notable patterns (consolidation, breakout, flags, wedges, etc.), volume if shown, and any divergences. Then give a concise read on what this chart suggests about near-term price action.${userNote}\n\nCurrent market context for reference:\n${context.slice(0,800)}`
+        }
+      ]
+    }];
+
+    const resp = await fetch('/ai', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        messages,
+        system: 'You are an experienced technical analyst. Analyze the chart image objectively. Be specific about price levels if visible. Keep analysis under 200 words. End with a one-sentence directional bias.',
+        max_tokens: 600
+      })
+    });
+    const data = await resp.json();
+    if(data.error) throw new Error(data.error);
+    const analysis = data.content;
+
+    // Save to journal
+    const entry = {
+      id: Date.now(),
+      ts: new Date().toISOString(),
+      note,
+      analysis,
+      // Store a smaller thumbnail version — just store the dataUrl reference in memory
+      // For persistence we'll store the analysis text + timestamp (images are too large for localStorage)
+      hasImage: true,
+      imageData: _currentChartBase64.slice(0,200), // just first 200 chars as a key
+    };
+    _journalEntries.unshift(entry);
+    saveJournal();
+    renderJournalEntries();
+
+    // Show result
+    const currentPreviewImg = preview.querySelector('img')?.src || '';
+    preview.innerHTML = `
+      ${currentPreviewImg ? `<img src="${currentPreviewImg}" style="width:100%;max-height:260px;object-fit:contain;border-radius:4px;border:1px solid var(--border);margin-bottom:10px;"/>` : ''}
+      <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:3px;padding:14px;font-size:13px;line-height:1.7;color:var(--text2);">${analysis.replace(/\n/g,'<br>')}</div>
+      ${note?`<div style="margin-top:8px;font-size:11px;color:var(--text3);">Note: ${note}</div>`:''}
+      <div style="margin-top:8px;font-size:10px;color:var(--text3);">Saved to journal · ${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})} CT</div>`;
+
+  } catch(e) {
+    preview.innerHTML += `<div style="color:#ff3355;font-size:12px;margin-top:8px;">Analysis failed: ${e.message}</div>`;
+  }
+
+  btn.textContent = '⬡ ANALYZE WITH AI';
+  btn.disabled = false;
+}
+
 function renderJournalEntries() {
-  const el = document.getElementById('journalEntries');
-  if (!el) return;
-  const filterOC = document.getElementById('journalFilterOC')?.value || '';
-  let entries = _journalEntries;
-  if (filterOC) entries = entries.filter(e => e.outcome === filterOC);
-  if (!entries.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No charts saved yet.</div>';
+  const el = $('journalEntries');
+  if(!el) return;
+  if(!_journalEntries.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No entries yet.</div>';
     return;
   }
-  const ocColors = { WIN:'var(--green)', LOSS:'var(--red)', BE:'var(--yellow)', STUDY:'var(--cyan)' };
-  el.innerHTML = entries.map(e => {
+  el.innerHTML = _journalEntries.map((e,i) => {
     const d = new Date(e.ts);
     const dateStr = d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
-    const timeStr = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CT';
-    const oc = e.outcome || 'STUDY';
-    const ocColor = ocColors[oc] || 'var(--cyan)';
-    const imgSrc = e.imageB64 ? `data:${e.mime||'image/png'};base64,${e.imageB64}` : '';
-    const realIdx = _journalEntries.indexOf(e);
-    return `<div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${ocColor};border-radius:3px;margin-bottom:8px;overflow:hidden;">
-      ${imgSrc ? `<img src="${imgSrc}" onclick="openJournalLightbox('${imgSrc}')"
-        style="width:100%;max-height:160px;object-fit:cover;display:block;cursor:zoom-in;"/>` : ''}
-      <div style="padding:8px 10px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-          <div>
-            <span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${dateStr} ${timeStr}</span>
-            ${e.tag ? `<span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);margin-left:8px;">${e.tag}</span>` : ''}
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-family:'Orbitron',monospace;font-size:8px;color:${ocColor};border:1px solid ${ocColor}44;border-radius:2px;padding:1px 5px;">${oc}</span>
-            <button onclick="deleteJournalEntry(${realIdx})" style="background:none;border:none;color:#ff335566;cursor:pointer;font-size:11px;padding:0;line-height:1;">\u2715</button>
-          </div>
-        </div>
-        ${e.note ? `<div style="font-size:11px;color:var(--text2);line-height:1.5;">${e.note}</div>` : ''}
+    const timeStr = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'}) + ' CT';
+    const preview = e.analysis ? e.analysis.slice(0,120)+'…' : 'No analysis';
+    return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:10px;margin-bottom:6px;cursor:pointer;"
+      onclick="expandJournalEntry(${i})"
+      onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);">${dateStr} ${timeStr}</span>
+        <button onclick="event.stopPropagation();deleteJournalEntry(${i})"
+          style="background:none;border:none;color:#ff335566;cursor:pointer;font-size:12px;padding:0;">✕</button>
       </div>
+      ${e.note?`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-style:italic;">"${e.note}"</div>`:''}
+      <div style="font-size:11px;color:var(--text2);line-height:1.5;">${preview}</div>
     </div>`;
   }).join('');
 }
 
-// ── Lightbox ──────────────────────────────────────────────────────────────────
-window.openJournalLightbox = function(src) {
-  const lb = document.getElementById('journalLightbox');
-  const img = document.getElementById('journalLightboxImg');
-  if (!lb || !img) return;
-  img.src = src;
-  lb.style.display = 'flex';
-};
-window.closeJournalLightbox = function() {
-  const lb = document.getElementById('journalLightbox');
-  if (lb) lb.style.display = 'none';
-};
+function expandJournalEntry(i) {
+  const e = _journalEntries[i];
+  if(!e) return;
+  const preview = $('journalPreviewArea');
+  const d = new Date(e.ts);
+  preview.innerHTML = `
+    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:10px;">
+      ${d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})} · ${d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Chicago'})} CT
+    </div>
+    ${e.note?`<div style="margin-bottom:10px;font-size:12px;color:var(--text3);font-style:italic;">"${e.note}"</div>`:''}
+    <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:3px;padding:14px;font-size:13px;line-height:1.7;color:var(--text2);">${(e.analysis||'').replace(/\n/g,'<br>')}</div>`;
+}
 
 function deleteJournalEntry(i) {
-  _journalEntries.splice(i, 1);
+  _journalEntries.splice(i,1);
   saveJournal();
   renderJournalEntries();
 }
 
 function clearJournal() {
-  if (confirm('Clear all chart journal entries? This cannot be undone.')) {
+  if(confirm('Clear all journal entries? This cannot be undone.')) {
     _journalEntries = [];
     saveJournal();
     renderJournalEntries();
@@ -3222,10 +3168,14 @@ function isExtendedHours() {
 // Sources tried in order: intraday (if Mon), market_data weekly_em, _sd rows, /quotes
 async function fetchWeekOpen() {
   try {
-    const pad = n => String(n).padStart(2, '0');
     const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
     const dow = ctNow.getDay();
     const isWeekend = dow === 0 || dow === 6;
+    const isMon = dow === 1;
+    const pad = n => String(n).padStart(2, '0');
+    const ctTodayStr = `${ctNow.getFullYear()}-${pad(ctNow.getMonth()+1)}-${pad(ctNow.getDate())}`;
+
+    // Monday of current week
     const daysFromMon = dow === 0 ? 6 : dow - 1;
     const monCT = new Date(ctNow);
     monCT.setDate(ctNow.getDate() - daysFromMon);
@@ -3238,51 +3188,11 @@ async function fetchWeekOpen() {
         window._spyLevels.weekOpen = val;
         updateLevelBar(window._spyLevels?.cur);
       }
-      try { localStorage.setItem('spy_week_open_v2', JSON.stringify({ monStr, weekOpen: val })); } catch(e) {}
       return true;
     };
 
-    // ── Check localStorage cache first ──────────────────────────────────────
-    try {
-      const cached = JSON.parse(localStorage.getItem('spy_week_open_v2') || 'null');
-      if (cached && cached.monStr === monStr && cached.weekOpen) {
-        applyWeekOpen(cached.weekOpen);
-        if (!isWeekend && dow !== 1) return; // Tue-Fri: cache is good enough
-      }
-    } catch(e) {}
-
-    // ── Source 1: /weekopen — server-side Yahoo fetch, works any day ─────────
-    try {
-      const r = await fetch('/weekopen?t=' + Date.now());
-      if (r.ok) {
-        const d = await r.json();
-        if (d.available && d.weekOpen) {
-          if (applyWeekOpen(d.weekOpen)) return;
-        }
-      }
-    } catch(e) { console.warn('[fetchWeekOpen] /weekopen failed:', e.message); }
-
-    // ── Source 2: market_data.json weekly_em week_open ───────────────────────
-    if (_md) {
-      const wems = _md.weekly_em || [];
-      const curWem = wems.find(w => !w.week_close) || wems[0];
-      if (curWem && curWem.week_open) {
-        if (applyWeekOpen(curWem.week_open)) return;
-      }
-    }
-
-    // ── Source 3: _sd daily data — first trading day of this week ───────────
-    if (_sd && _sd.length) {
-      const ctTodayStr = `${ctNow.getFullYear()}-${pad(ctNow.getMonth()+1)}-${pad(ctNow.getDate())}`;
-      const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
-      const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
-      if (firstDay && firstDay.open) {
-        if (applyWeekOpen(firstDay.open)) return;
-      }
-    }
-
-    // ── Source 4: /spyintraday on Monday only ────────────────────────────────
-    if (!isWeekend && dow === 1) {
+    // Source 1: /spyintraday on Monday — intraday open IS week open
+    if (!isWeekend && isMon) {
       try {
         const r = await fetch('/spyintraday?t=' + Date.now());
         if (r.ok) {
@@ -3290,6 +3200,67 @@ async function fetchWeekOpen() {
           if (d.available && d.open) {
             if (window._spyLevels) window._spyLevels.todayOpen = d.open;
             applyWeekOpen(d.open);
+            return;
+          }
+        }
+      } catch(e) {}
+    }
+
+    // Source 2: market_data.json weekly_em week_open field
+    if (_md) {
+      const wems = _md.weekly_em || [];
+      const curWem = wems.find(w => !w.week_close) || wems[0];
+      if (curWem && curWem.week_open) {
+        applyWeekOpen(curWem.week_open);
+        return;
+      }
+    }
+
+    // Source 3: _sd daily data — first trading day of this week
+    if (_sd && _sd.length) {
+      const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
+      const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
+      if (firstDay && firstDay.open) {
+        applyWeekOpen(firstDay.open);
+        return;
+      }
+    }
+
+    // Source 4: Yahoo Finance daily API — fetch Monday's open directly
+    // Handles the gap when DB hasn't updated yet this week (e.g. Tue morning
+    // before pipeline runs, or when market_data.json has week_open: null)
+    try {
+      const now = new Date();
+      const p1 = Math.floor(new Date(monStr + 'T14:00:00Z').getTime() / 1000);
+      const p2 = Math.floor(now.getTime() / 1000);
+      if (p2 > p1) {
+        const yUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=' + p1 + '&period2=' + p2;
+        const r = await fetch(yUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
+        if (r.ok) {
+          const data = await r.json();
+          const opens = data && data.chart && data.chart.result && data.chart.result[0] &&
+                        data.chart.result[0].indicators && data.chart.result[0].indicators.quote &&
+                        data.chart.result[0].indicators.quote[0] &&
+                        data.chart.result[0].indicators.quote[0].open || [];
+          if (opens.length && opens[0] != null) {
+            applyWeekOpen(Math.round(opens[0] * 100) / 100);
+            return;
+          }
+        }
+      }
+    } catch(e) { console.warn('[fetchWeekOpen] Yahoo daily fallback failed:', e.message); }
+
+    // Source 5: /quotes SPY open — last resort on Monday only
+    if (isMon) {
+      try {
+        const r = await fetch('/quotes?symbols=SPY');
+        if (r.ok) {
+          const data = await r.json();
+          const spyQ = data.quotes && data.quotes['SPY'];
+          if (spyQ && spyQ.open) {
+            if (window._spyLevels) window._spyLevels.todayOpen = spyQ.open;
+            applyWeekOpen(spyQ.open);
+            return;
           }
         }
       } catch(e) {}
@@ -3535,7 +3506,6 @@ async function loadData(){
     if (liveGEX?.gex?.flip_point) {
       md.gex = liveGEX.gex;
       if (liveGEX.max_pain?.length) md.max_pain = liveGEX.max_pain;
-      if (liveGEX.walls_by_expiry?.length) md.walls_by_expiry = liveGEX.walls_by_expiry;
       if (liveGEX.atm_iv && md.weekly_em?.[0]) md.weekly_em[0].atm_iv = liveGEX.atm_iv;
       if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
     }
@@ -3585,7 +3555,6 @@ async function loadData(){
       if (fresh?.gex?.flip_point && _md) {
         _md.gex = fresh.gex;
         if (fresh.max_pain?.length) _md.max_pain = fresh.max_pain;
-        if (fresh.walls_by_expiry?.length) _md.walls_by_expiry = fresh.walls_by_expiry;
         if (fresh.pcr_vol && _md.options_summary) _md.options_summary.pc_ratio_vol = fresh.pcr_vol;
         renderGEX(_md);
         renderDesk(_md, _sd);
