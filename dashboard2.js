@@ -1,145 +1,91 @@
 function renderPriceHistory(sd){
-  _phAllData = sd; // cache for filter/sort
-  const meta = document.getElementById('phFilterMeta');
-  if(meta) meta.textContent = (sd.length).toLocaleString() + ' sessions shown';
   if(!sd||!sd.length){$('priceHistBody').innerHTML='<tr><td colspan="14" class="no-data">No data</td></tr>';return;}
 
-  // Shared helpers (also used by phRenderFiltered)
-  const _phHelpers = _buildPhHelpers();
-
-  // Stats comparison panel — rendered by phRenderFiltered (so it updates on filter toggle)
-  // phRenderFiltered is called below; it will render the comparison against all-time baseline
-
-  // Weekly gap stats (uses wem_stats from md, not sd-filterable)
-    const gapStatsEl = $('gapStats');
-  if(gapStatsEl) {
-    const stats2 = _md?.wem_stats || {};
-    if(stats2.pct_gap_weeks != null) {
-      gapStatsEl.innerHTML = [
-        {l:'% Weeks w/ Gap',  v:fmt(stats2.pct_gap_weeks,1)+'%'},
-        {l:'% Gaps Filled',   v:fmt(stats2.pct_gaps_filled,1)+'%'},
-        {l:'Avg Gap Up',      v:'+$'+fmt(stats2.avg_gap_up,2),       c:'#00ff88'},
-        {l:'Avg Gap Down',    v:'-$'+fmt(Math.abs(stats2.avg_gap_down||0),2), c:'#ff3355'},
-      ].map(i=>`<div style="display:flex;justify-content:space-between;padding:6px 8px;background:var(--bg3);border-radius:3px;margin-bottom:3px;">
-        <span style="font-size:12px;color:var(--text2);">${i.l}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${i.c||'var(--text)'};">${i.v}</span>
-      </div>`).join('');
-    } else {
-      gapStatsEl.innerHTML = '<div class="no-data">Run workflow to populate WEM stats</div>';
-    }
-  }
-
-  // ── DAILY GAP ANALYSIS ──────────────────────────────────────────────────
-
-  // Render all filterable sections with full data on initial load
-  phRenderFiltered(sd);
-}
-
-// Build shared helper functions for price history rendering
-function _buildPhHelpers() {
   const keyMap = {oc_pts:'open_to_close',range_pts:'day_range',oh_pts:'open_to_high',ol_pts:'open_to_low',hc_pts:'high_to_close',lc_pts:'low_to_close'};
   const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
-  const pct2 = (arr,fn) => arr.length ? (arr.filter(fn).length/arr.length*100) : 0;
+  const pct = (arr,fn) => arr.length ? (arr.filter(fn).length/arr.length*100) : 0;
+
+  const days   = sd.filter(d=>d.measurements);
+  const days26 = days.filter(d=>d.date && d.date.startsWith('2026'));
+
   const getVals = (subset,k) => subset.map(d=>{const m=d.measurements||{};const v=m[k]!=null?m[k]:m[keyMap[k]];return v!=null?v:null;}).filter(v=>v!=null);
+
   function calcStats(subset){
     const ocVals=getVals(subset,'oc_pts'),rngVals=getVals(subset,'range_pts');
     const ohVals=getVals(subset,'oh_pts'),olVals=getVals(subset,'ol_pts');
     const hcVals=getVals(subset,'hc_pts'),lcVals=getVals(subset,'lc_pts');
     const upVals=ocVals.filter(v=>v>0),dnVals=ocVals.filter(v=>v<0);
     return{n:subset.length,avgRng:avg(rngVals),avgOC:avg(ocVals),
-      pctUp:pct2(ocVals,v=>v>0),avgUp:avg(upVals),avgDn:avg(dnVals),
+      pctUp:pct(ocVals,v=>v>0),avgUp:avg(upVals),avgDn:avg(dnVals),
       avgOH:avg(ohVals),avgOL:avg(olVals),avgHC:avg(hcVals),avgLC:avg(lcVals),
       maxUp:ocVals.length?Math.max(...ocVals):0,maxDn:ocVals.length?Math.min(...ocVals):0,
       rngVals,ocVals,ohVals,olVals};
   }
-  return { keyMap, avg, pct:pct2, getVals, calcStats };
-}
 
-// Render all filterable price history sections with a given dataset
-function phRenderFiltered(sd) {
-  if(!sd||!sd.length) return;
-  const { keyMap, avg, pct, getVals, calcStats } = _buildPhHelpers();
-  const days = sd.filter(d=>d.measurements);
   const all = calcStats(days);
-  const rngVals = all.rngVals, ocVals = all.ocVals, ohVals = all.ohVals, olVals = all.olVals;
-  const avgOC = all.avgOC, avgRng = all.avgRng, pctUp = all.pctUp, avgUp = all.avgUp, avgDn = all.avgDn;
-  const vals = (k) => getVals(days, k);
+  const ytd = calcStats(days26);
 
-  // ── Analytics header cards ──
+  // Keep existing vals/ocVals/rngVals/ohVals/olVals references working for code below
+  const vals = (k) => getVals(days, k);
+  const ocVals  = all.ocVals;
+  const rngVals = all.rngVals;
+  const ohVals  = all.ohVals;
+  const olVals  = all.olVals;
+  const avgOC   = all.avgOC;
+  const avgRng  = all.avgRng;
+  const pctUp   = all.pctUp;
+  const avgUp   = all.avgUp;
+  const avgDn   = all.avgDn;
+
+  // Analytics header cards (all history)
   const aRow = $('priceAnalyticsRow');
   if(aRow) aRow.innerHTML = [
-    {l:'AVG DAY RANGE',  v:'$'+fmt(all.avgRng,2),  sub:`${all.n} sessions`,          c:'var(--cyan)'},
-    {l:'% DAYS UP',      v:fmt(all.pctUp,1)+'%',   sub:`avg +$${fmt(all.avgUp,2)} up days`,   c:'#00ff88'},
-    {l:'% DAYS DOWN',    v:fmt(100-all.pctUp,1)+'%',sub:`avg -$${fmt(Math.abs(all.avgDn),2)} dn days`, c:'#ff3355'},
-    {l:'AVG O\u2192C',   v:(all.avgOC>=0?'+':'')+'$'+fmt(all.avgOC,2),sub:'open to close avg',c:all.avgOC>=0?'#00ff88':'#ff3355'},
+    {l:'AVG DAY RANGE',  v:'$'+fmt(all.avgRng,2),  sub:`${all.n} sessions all history`,    c:'var(--cyan)'},
+    {l:'% DAYS UP',      v:fmt(all.pctUp,1)+'%',   sub:`avg +$${fmt(all.avgUp,2)} on up days`, c:'#00ff88'},
+    {l:'% DAYS DOWN',    v:fmt(100-all.pctUp,1)+'%',sub:`avg -$${fmt(Math.abs(all.avgDn),2)} on dn days`, c:'#ff3355'},
+    {l:'AVG O\u2192C MOVE',v:(all.avgOC>=0?'+':'')+'$'+fmt(all.avgOC,2),sub:'open to close avg',c:all.avgOC>=0?'#00ff88':'#ff3355'},
   ].map(({l,v,sub,c})=>`<div class="panel" style="text-align:center;border-top:3px solid ${c};">
     <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">${l}</div>
     <div style="font-family:'Share Tech Mono',monospace;font-size:24px;font-weight:bold;color:${c};">${v}</div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px;">${sub}</div>
   </div>`).join('');
 
-  // ── Stats comparison table (filtered period vs all-time baseline) ──
-  const ytdEl2 = $('priceYTDPanel');
-  if(ytdEl2 && _phAllData) {
-    const allDays2 = _phAllData.filter(d=>d.measurements);
-    const allStats = calcStats(allDays2);
-    const curYear2 = new Date().getFullYear();
-    // Label the comparison columns based on what data is active
-    const isFiltered = days.length < allDays2.length * 0.95;
-    const filterLabel = days.length === allDays2.length ? `ALL HISTORY (${all.n}d)` :
-      days.length < 70 ? `${curYear2} YTD (${all.n}d)` :
-      days.length < 1600 ? `SINCE 2020 (${all.n}d)` : `FILTERED (${all.n}d)`;
-    const $d2 = v=>'$'+fmt(Math.abs(v),2);
-    const $p2 = v=>fmt(v,1)+'%';
-    const row2=(label,av,fv,fmtFn,hib)=>{
-      if(!isFiltered){
-        // When showing all data, compare all-time vs current year
-        const ytdDays2=allDays2.filter(d=>d.date&&d.date.startsWith(String(curYear2)));
-        const ytdStats=calcStats(ytdDays2);
-        av=fv=null; // handled separately below
-      }
-      const diff=av!=null&&fv!=null?fv-av:null;
-      const dc=diff===null?'var(--text2)':(diff===0?'var(--text2)':(diff>0)===hib?'#00ff88':'#ff3355');
-      return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:13px;color:var(--text2);">${label}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;text-align:right;">${fmtFn(av)}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--cyan);text-align:right;">${fmtFn(fv)}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${dc};text-align:right;">${diff!=null?(diff>=0?'+':'')+fmtFn(diff):'—'}</span>
-      </div>`;
-    };
-    // Simpler: always compare all-time baseline against the currently filtered data
-    const base = allStats; // all-time is always left column
-    const cur3 = all;      // currently filtered data is right column
-    ytdEl2.innerHTML=`
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;padding:5px 0;margin-bottom:2px;">
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">METRIC</span>
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);text-align:right;">ALL HISTORY (${base.n}d)</span>
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);text-align:right;">${filterLabel}</span>
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);text-align:right;">DIFF</span>
-      </div>
-      ${[
-        ['Avg Day Range',    base.avgRng,              cur3.avgRng,              $d2, false],
-        ['% Days Up',        base.pctUp,               cur3.pctUp,               $p2, true],
-        ['Avg Up Day',       base.avgUp,               cur3.avgUp,               $d2, true],
-        ['Avg Down Day',     Math.abs(base.avgDn),     Math.abs(cur3.avgDn),     $d2, false],
-        ['Avg O→C',     base.avgOC,               cur3.avgOC,               $d2, true],
-        ['Avg O→H',     base.avgOH,               cur3.avgOH,               $d2, true],
-        ['Avg O→L',     Math.abs(base.avgOL),     Math.abs(cur3.avgOL),     $d2, false],
-        ['Avg H→C',     base.avgHC,               cur3.avgHC,               $d2, true],
-        ['Avg L→C',     base.avgLC,               cur3.avgLC,               $d2, true],
-        ['Largest Up Day',   base.maxUp,               cur3.maxUp,               $d2, true],
-        ['Largest Down Day', Math.abs(base.maxDn),     Math.abs(cur3.maxDn),     $d2, false],
-      ].map(([label,av,fv,fmtFn,hib])=>{
-        const diff=fv-av;
-        const dc=diff===0?'var(--text2)':(diff>0)===hib?'#00ff88':'#ff3355';
+  // YTD 2026 vs All History comparison table
+  const ytdEl = $('priceYTDPanel');
+  if(ytdEl){
+    if(!days26.length){ytdEl.innerHTML='<div class="no-data">No 2026 data</div>';}
+    else{
+      const $d = v=>'$'+fmt(Math.abs(v),2);
+      const $p = v=>fmt(v,1)+'%';
+      const row=(label,av,yv,fmtFn,higherIsBetter)=>{
+        const diff=yv-av, dc=diff===0?'var(--text2)':(diff>0)===higherIsBetter?'#00ff88':'#ff3355';
         return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">
           <span style="font-size:13px;color:var(--text2);">${label}</span>
           <span style="font-family:'Share Tech Mono',monospace;font-size:13px;text-align:right;">${fmtFn(av)}</span>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--cyan);text-align:right;">${fmtFn(fv)}</span>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${dc};text-align:right;">${(diff>=0?'+':'')+fmtFn(diff)}</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--cyan);text-align:right;">${fmtFn(yv)}</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${dc};text-align:right;">${diff>=0?'+':''}${fmtFn(diff)}</span>
         </div>`;
-      }).join('')}
-    `;
+      };
+      ytdEl.innerHTML=`
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;padding:5px 0;margin-bottom:2px;">
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">METRIC</span>
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);text-align:right;">ALL HISTORY (${all.n}d)</span>
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);text-align:right;">2026 YTD (${ytd.n}d)</span>
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);text-align:right;">DIFF</span>
+        </div>
+        ${row('Avg Day Range',    all.avgRng,              ytd.avgRng,              $d, false)}
+        ${row('% Days Up',        all.pctUp,               ytd.pctUp,               $p, true)}
+        ${row('Avg Up Day',       all.avgUp,               ytd.avgUp,               $d, true)}
+        ${row('Avg Down Day',     Math.abs(all.avgDn),     Math.abs(ytd.avgDn),     $d, false)}
+        ${row('Avg O\u2192C',     all.avgOC,               ytd.avgOC,               $d, true)}
+        ${row('Avg O\u2192H',     all.avgOH,               ytd.avgOH,               $d, true)}
+        ${row('Avg O\u2192L',     Math.abs(all.avgOL),     Math.abs(ytd.avgOL),     $d, false)}
+        ${row('Avg H\u2192C',     all.avgHC,               ytd.avgHC,               $d, true)}
+        ${row('Avg L\u2192C',     all.avgLC,               ytd.avgLC,               $d, true)}
+        ${row('Largest Up Day',   all.maxUp,               ytd.maxUp,               $d, true)}
+        ${row('Largest Down Day', Math.abs(all.maxDn),     Math.abs(ytd.maxDn),     $d, false)}
+      `;
+    }
   }
 
   // Range distribution bar chart
@@ -246,7 +192,25 @@ function phRenderFiltered(sd) {
   }
 
   // Weekly gap stats — pulled from _md if available
+  const gapStatsEl = $('gapStats');
+  if(gapStatsEl) {
+    const stats2 = _md?.wem_stats || {};
+    if(stats2.pct_gap_weeks != null) {
+      gapStatsEl.innerHTML = [
+        {l:'% Weeks w/ Gap',  v:fmt(stats2.pct_gap_weeks,1)+'%'},
+        {l:'% Gaps Filled',   v:fmt(stats2.pct_gaps_filled,1)+'%'},
+        {l:'Avg Gap Up',      v:'+$'+fmt(stats2.avg_gap_up,2),       c:'#00ff88'},
+        {l:'Avg Gap Down',    v:'-$'+fmt(Math.abs(stats2.avg_gap_down||0),2), c:'#ff3355'},
+      ].map(i=>`<div style="display:flex;justify-content:space-between;padding:6px 8px;background:var(--bg3);border-radius:3px;margin-bottom:3px;">
+        <span style="font-size:12px;color:var(--text2);">${i.l}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${i.c||'var(--text)'};">${i.v}</span>
+      </div>`).join('');
+    } else {
+      gapStatsEl.innerHTML = '<div class="no-data">Run workflow to populate WEM stats</div>';
+    }
+  }
 
+  // ── DAILY GAP ANALYSIS ──────────────────────────────────────────────────
   const gapStatCardsEl = $('gapStatCards');
   const gapSizeChartEl = $('gapSizeChart');
   const gapByDayEl     = $('gapByDayChart');
@@ -419,7 +383,6 @@ function phRenderFiltered(sd) {
     }
   }
 
-  // ── Raw table ──
   // Raw table — price history
   $('priceHistBody').innerHTML=sd.map(day=>{
     const m=day.measurements||{};
@@ -440,163 +403,6 @@ function phRenderFiltered(sd) {
     <td class="${clr(hc)}">${sign(hc)}${fmt(hc,2)}</td>
     <td class="${clr(lc)}">${sign(lc)}${fmt(lc,2)}</td>
   </tr>`;}).join('');
-}
-
-
-// ─── PRICE HISTORY FILTER + SORT ─────────────────────────────────────────────
-let _phAllData = null;
-
-function phSetFilter(mode, btn) {
-  document.querySelectorAll('.ph-fb').forEach(b => b.classList.remove('active'));
-  if(btn) btn.classList.add('active');
-  phApplyFilter(mode);
-}
-
-function phApplyFilter(mode) {
-  if(!_phAllData) return;
-  const sd = _phAllData;
-  const curYear = new Date().getFullYear();
-
-  if(!mode || typeof mode !== 'string') {
-    const active = document.querySelector('.ph-fb.active');
-    mode = active ? (active.textContent.includes('2020') ? '2020' : active.textContent.includes('YTD') ? 'ytd' : 'all') : 'all';
-  }
-
-  let filtered;
-  if(mode === '2020')     filtered = sd.filter(d => d.date && d.date >= '2020-01-01');
-  else if(mode === 'ytd') filtered = sd.filter(d => d.date && d.date.startsWith(String(curYear)));
-  else                    filtered = sd;
-
-  // Sort
-  const sortVal = (document.getElementById('phSortCol') || {}).value || 'date_desc';
-  const km = {oc_pts:'open_to_close', range_pts:'day_range'};
-  const getM = (day, k) => { const m=day.measurements||{}; return m[k]!=null?m[k]:(m[km[k]]!=null?m[km[k]]:0); };
-  const sorted = [...filtered].sort((a,b) => {
-    switch(sortVal) {
-      case 'date_desc':  return (b.date||'').localeCompare(a.date||'');
-      case 'date_asc':   return (a.date||'').localeCompare(b.date||'');
-      case 'oc_desc':    return getM(b,'oc_pts') - getM(a,'oc_pts');
-      case 'oc_asc':     return getM(a,'oc_pts') - getM(b,'oc_pts');
-      case 'range_desc': return getM(b,'range_pts') - getM(a,'range_pts');
-      case 'range_asc':  return getM(a,'range_pts') - getM(b,'range_pts');
-      case 'vol_desc':   return (b.volume||0) - (a.volume||0);
-      case 'close_desc': return (b.close||0) - (a.close||0);
-      case 'close_asc':  return (a.close||0) - (b.close||0);
-      default: return 0;
-    }
-  });
-
-  const meta = document.getElementById('phFilterMeta');
-  if(meta) meta.textContent = sorted.length.toLocaleString() + ' sessions shown';
-
-  // Re-render ALL filterable sections with the sorted/filtered data
-  phRenderFiltered(sorted);
-}
-
-
-// ── TIME OF DAY STATS ─────────────────────────────────────────────────────────
-function renderTODStats() {
-  if (typeof TOD_DATA === 'undefined') return;
-  const T = TOD_DATA;
-
-  // Header meta
-  const daysEl = document.getElementById('todDays');
-  const rangeEl = document.getElementById('todRange');
-  if (daysEl) daysEl.textContent = T.total_days + ' days';
-  if (rangeEl) rangeEl.textContent = T.date_range.start + ' → ' + T.date_range.end;
-
-  // Color ramp: low freq = dim, high freq = bright
-  const bucketColors = [
-    '#ff8800', // 8:30-9:00   Open Auction
-    '#ffcc00', // 9:00-9:30   Early Open
-    '#00ff88', // 9:30-10:30  First Hour
-    '#00ccff', // 10:30-12:00 Mid Morning
-    '#8855ff', // 12:00-1:00  Lunch
-    '#00ccff', // 1:00-2:00   Early Afternoon
-    '#ffcc00', // 2:00-2:30   Pre-Close
-    '#ff5500', // 2:30-3:00   Close
-  ];
-
-  function buildBucketChart(containerId, buckets, accentColor) {
-    const el = document.getElementById(containerId);
-    if (!el) return;
-    const maxPct = Math.max(...buckets.map(b => b.pct), 1);
-    const topBucket = buckets.reduce((a, b) => b.pct > a.pct ? b : a, buckets[0]);
-
-    el.innerHTML = buckets.map((b, i) => {
-      const barW = Math.round(b.pct / maxPct * 100);
-      const isTop = b.label === topBucket.label;
-      const c = bucketColors[i];
-      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;${isTop ? 'background:rgba(255,255,255,0.03);border-radius:3px;padding:1px 3px;' : 'padding:1px 3px;'}">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isTop ? c : 'var(--text3)'};width:78px;flex-shrink:0;white-space:nowrap;">${b.label}${isTop ? ' ★' : ''}</div>
-        <div style="flex:1;height:18px;background:var(--bg3);border-radius:2px;overflow:hidden;position:relative;">
-          <div style="width:${barW}%;height:100%;background:${c}${isTop ? 'ee' : '77'};border-radius:2px;"></div>
-        </div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${isTop ? c : 'var(--text2)'};width:42px;text-align:right;font-weight:${isTop ? 'bold' : 'normal'};">${b.pct.toFixed(1)}%</div>
-        <div style="font-size:10px;color:var(--text3);width:28px;text-align:right;">${b.count}</div>
-      </div>`;
-    }).join('') +
-    `<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-top:4px;padding:0 3px;">
-      <span>★ Most common: <span style="color:${bucketColors[buckets.indexOf(topBucket)]};">${topBucket.name || topBucket.label}</span></span>
-      <span>${topBucket.pct.toFixed(1)}% of days</span>
-    </div>`;
-  }
-
-  buildBucketChart('todHodChart', T.hod_by_bucket, '#00ff88');
-  buildBucketChart('todLodChart', T.lod_by_bucket, '#ff3355');
-
-  // Sequence panel
-  const seqEl = document.getElementById('todSequencePanel');
-  if (seqEl && T.summary) {
-    const s = T.summary;
-    const hodTopBucket = T.hod_by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
-    const lodTopBucket = T.lod_by_bucket.reduce((a, b) => b.pct > a.pct ? b : a);
-    seqEl.innerHTML = `
-      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.7;font-family:'Share Tech Mono',monospace;">
-        Based on ${T.total_days} days of 1-minute SPY bars (CT time).
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">
-        ${[
-          {l:'LOD sets before HOD', v: s.lod_before_hod_pct.toFixed(1)+'%', c:'#ff3355'},
-          {l:'HOD sets before LOD', v: s.hod_before_lod_pct.toFixed(1)+'%', c:'#00ff88'},
-          {l:'HOD in first 30 min', v: s.hod_first_30min_pct.toFixed(1)+'%', c:'#ffcc00'},
-          {l:'LOD in first 30 min', v: s.lod_first_30min_pct.toFixed(1)+'%', c:'#ffcc00'},
-          {l:'HOD in last 30 min',  v: s.hod_last_30min_pct.toFixed(1)+'%',  c:'#ff8800'},
-          {l:'LOD in last 30 min',  v: s.lod_last_30min_pct.toFixed(1)+'%',  c:'#ff8800'},
-        ].map(x => `<div style="background:var(--bg3);border-radius:3px;padding:7px 9px;">
-          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">${x.l}</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${x.c};">${x.v}</div>
-        </div>`).join('')}
-      </div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.6;background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:3px solid var(--cyan);">
-        <strong style="color:var(--text2);">Key insight:</strong>
-        Most common HOD window: <strong style="color:#00ff88;">${hodTopBucket.name || hodTopBucket.label} (${hodTopBucket.pct.toFixed(1)}%)</strong>.
-        Most common LOD window: <strong style="color:#ff3355;">${lodTopBucket.name || lodTopBucket.label} (${lodTopBucket.pct.toFixed(1)}%)</strong>.
-        LOD is set before HOD ${s.lod_before_hod_pct.toFixed(0)}% of the time — meaning the day tends to find its low first, then rally.
-        ${s.hod_first_30min_pct > 15 || s.lod_first_30min_pct > 15
-          ? `The first 30 min (8:30–9:00 CT) sets the HOD ${s.hod_first_30min_pct.toFixed(0)}% of the time and LOD ${s.lod_first_30min_pct.toFixed(0)}% — the open auction is the single most important window.`
-          : ''}
-      </div>`;
-  }
-
-  // DOW panel — show top bucket per day
-  const dowEl = document.getElementById('todDowPanel');
-  if (dowEl && T.hod_by_dow && T.lod_by_dow) {
-    const dowRows = T.hod_by_dow.map((hd, i) => {
-      const ld = T.lod_by_dow[i];
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)22;">
-        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);width:30px;">${hd.day}</div>
-        <div style="flex:1;">
-          <div style="font-size:10px;color:#00ff88;margin-bottom:2px;">HOD: <strong>${hd.top_bucket}</strong> <span style="color:var(--text3);">(${hd.top_pct.toFixed(0)}%)</span></div>
-          <div style="font-size:10px;color:#ff3355;">LOD: <strong>${ld.top_bucket}</strong> <span style="color:var(--text3);">(${ld.top_pct.toFixed(0)}%)</span></div>
-        </div>
-        <div style="text-align:right;font-size:9px;color:var(--text3);">${hd.n} days</div>
-      </div>`;
-    }).join('');
-    dowEl.innerHTML = `
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-family:'Share Tech Mono',monospace;">Most common bucket for HOD and LOD by day of week.</div>
-      ${dowRows}`;
-  }
 }
 
 function renderVolHistory(sd){
@@ -1573,7 +1379,7 @@ async function analyzeChart() {
       ${currentPreviewImg ? `<img src="${currentPreviewImg}" style="width:100%;max-height:260px;object-fit:contain;border-radius:4px;border:1px solid var(--border);margin-bottom:10px;"/>` : ''}
       <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:3px;padding:14px;font-size:13px;line-height:1.7;color:var(--text2);">${analysis.replace(/\n/g,'<br>')}</div>
       ${note?`<div style="margin-top:8px;font-size:11px;color:var(--text3);">Note: ${note}</div>`:''}
-      <div style="margin-top:8px;font-size:10px;color:var(--text3);">Saved to journal · ${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})} CT</div>`;
+      <div style="margin-top:8px;font-size:10px;color:var(--text3);">Saved to journal · ${new Date().toLocaleString()}</div>`;
 
   } catch(e) {
     preview.innerHTML += `<div style="color:#ff3355;font-size:12px;margin-top:8px;">Analysis failed: ${e.message}</div>`;
@@ -1593,7 +1399,7 @@ function renderJournalEntries() {
   el.innerHTML = _journalEntries.map((e,i) => {
     const d = new Date(e.ts);
     const dateStr = d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
-    const timeStr = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'}) + ' CT';
+    const timeStr = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
     const preview = e.analysis ? e.analysis.slice(0,120)+'…' : 'No analysis';
     return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:10px;margin-bottom:6px;cursor:pointer;"
       onclick="expandJournalEntry(${i})"
@@ -1616,7 +1422,7 @@ function expandJournalEntry(i) {
   const d = new Date(e.ts);
   preview.innerHTML = `
     <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:10px;">
-      ${d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})} · ${d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Chicago'})} CT
+      ${d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})} · ${d.toLocaleTimeString()}
     </div>
     ${e.note?`<div style="margin-bottom:10px;font-size:12px;color:var(--text3);font-style:italic;">"${e.note}"</div>`:''}
     <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:3px;padding:14px;font-size:13px;line-height:1.7;color:var(--text2);">${(e.analysis||'').replace(/\n/g,'<br>')}</div>`;
@@ -2258,174 +2064,6 @@ async function renderKeyEvents() {
     </div>`;
 }
 
-
-// VOLATILITY STATS TAB RENDER
-// ─────────────────────────────────────────────
-function renderVolStats() {
-  // Use existing esRenderVolEdge() then mirror output into vs-* elements
-  if (typeof esRenderVolEdge === 'function') {
-    esRenderVolEdge();
-    const copy = (from, to) => {
-      const src = document.getElementById(from);
-      const dst = document.getElementById(to);
-      if (src && dst) dst.innerHTML = src.innerHTML;
-    };
-    copy('es-wvol-rows', 'vs-wvol-rows');
-    copy('es-dvol-rows', 'vs-dvol-rows');
-    copy('es-risk-cards', 'vs-risk-cards');
-    copy('es-consec-vol-cards', 'vs-consec-vol-cards');
-    copy('es-vol-explainer', 'vs-vol-explainer');
-  }
-
-  // ES_DATA and esLookback live in the edgestats inline script — access via window
-  const _esData = typeof window.ES_DATA !== 'undefined' ? window.ES_DATA
-                : typeof ES_DATA !== 'undefined' ? ES_DATA : null;
-  if (!_esData) { 
-    setTimeout(renderVolStats, 500);
-    return;
-  }
-  const _lb = typeof window.esLookback !== 'undefined' ? window.esLookback
-            : typeof esLookback !== 'undefined' ? esLookback : 'all_time';
-  const D = _esData[_lb] || _esData['all_time'];
-  if (!D) return;
-  const ve = D.vol_edge;
-  if (!ve) return;
-
-  // Weekly buckets
-  const wvolEl = document.getElementById('vs-wvol-rows');
-  if (wvolEl && ve.weekly_buckets) {
-    wvolEl.innerHTML = ve.weekly_buckets.map(b => {
-      const sc = b.self_avg >= 0 ? '#00ff88' : '#ff3355';
-      const ac = b.after_avg >= 0 ? '#00ff88' : '#ff3355';
-      return `<div class="es-vol-bucket">
-        <div>${b.bucket}</div>
-        <div>$${b.threshold_low.toFixed(2)}</div>
-        <div>$${b.threshold_high.toFixed(2)}</div>
-        <div style="color:${sc};">${b.self_avg >= 0 ? '+' : ''}${b.self_avg.toFixed(2)}%</div>
-        <div>${b.self_winrate.toFixed(1)}%</div>
-        <div style="color:${ac};">${b.after_avg >= 0 ? '+' : ''}${b.after_avg.toFixed(2)}%</div>
-      </div>`;
-    }).join('');
-  }
-
-  // Daily buckets
-  const dvolEl = document.getElementById('vs-dvol-rows');
-  if (dvolEl && ve.daily_buckets) {
-    dvolEl.innerHTML = ve.daily_buckets.map(b => {
-      const sc = b.self_avg >= 0 ? '#00ff88' : '#ff3355';
-      const ac = b.after_avg >= 0 ? '#00ff88' : '#ff3355';
-      return `<div class="es-vol-bucket">
-        <div>${b.bucket}</div>
-        <div>$${b.threshold_low.toFixed(2)}</div>
-        <div>$${b.threshold_high.toFixed(2)}</div>
-        <div style="color:${sc};">${b.self_avg >= 0 ? '+' : ''}${b.self_avg.toFixed(2)}%</div>
-        <div>${b.self_winrate.toFixed(1)}%</div>
-        <div style="color:${ac};">${b.after_avg >= 0 ? '+' : ''}${b.after_avg.toFixed(2)}%</div>
-      </div>`;
-    }).join('');
-  }
-
-  // Risk + consec cards
-  const riskEl = document.getElementById('vs-risk-cards');
-  if (riskEl) {
-    riskEl.innerHTML = [
-      { lbl: 'Risk-Adj (All)', val: ve.risk_adj_all?.toFixed(4) || '—', sub: 'return per $ of range' },
-      { lbl: 'High-Vol Self', val: (ve.hi_vol_self_avg >= 0 ? '+' : '') + (ve.hi_vol_self_avg?.toFixed(2) || '—') + '%', sub: ve.hi_vol_self_winrate?.toFixed(1) + '% up' },
-      { lbl: 'Low-Vol Self',  val: (ve.lo_vol_self_avg >= 0 ? '+' : '') + (ve.lo_vol_self_avg?.toFixed(2) || '—') + '%', sub: 'during low-vol weeks' },
-    ].map(c => `<div class="es-card"><div class="es-card-label">${c.lbl}</div><div class="es-card-val neu">${c.val}</div><div class="es-card-sub">${c.sub}</div></div>`).join('');
-  }
-
-  const consecEl = document.getElementById('vs-consec-vol-cards');
-  if (consecEl && ve.after_consec_hivol_avg != null) {
-    consecEl.innerHTML = [
-      { lbl: 'After 2+ High-Vol Wks Avg', val: (ve.after_consec_hivol_avg >= 0 ? '+' : '') + ve.after_consec_hivol_avg.toFixed(2) + '%', cls: ve.after_consec_hivol_avg >= 0 ? 'up' : 'dn' },
-      { lbl: 'Win Rate', val: ve.after_consec_hivol_winrate?.toFixed(1) + '%', cls: ve.after_consec_hivol_winrate >= 55 ? 'up' : 'dn' },
-    ].map(c => `<div class="es-card"><div class="es-card-label">${c.lbl}</div><div class="es-card-val ${c.cls}">${c.val}</div></div>`).join('');
-  }
-
-  // ── Charts: next-period return by vol bucket ────────────────────────────
-  function renderVolBucketChart(containerId, buckets, periodLabel) {
-    const el = document.getElementById(containerId);
-    if (!el || !buckets || !buckets.length) return;
-    const bucketColors = ['#00ff88','#88cc00','#ffcc00','#ff8800','#ff3355'];
-    // Find max absolute value for scale
-    const maxAbs = Math.max(...buckets.map(b => Math.abs(b.after_avg || 0)), 0.1);
-    const maxW = 140; // max bar half-width px
-
-    el.innerHTML = `
-      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:10px;">
-        NEXT ${periodLabel} AVG RETURN BY CURRENT VOLATILITY BUCKET
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        ${buckets.map((b, i) => {
-          const v = b.after_avg || 0;
-          const color = bucketColors[i];
-          const barW = Math.round(Math.abs(v) / maxAbs * maxW);
-          const isPos = v >= 0;
-          const wr = b.after_winrate != null ? b.after_winrate.toFixed(1)+'%' : '';
-          return `<div style="display:flex;align-items:center;gap:8px;">
-            <div style="font-size:10px;color:${color};width:72px;flex-shrink:0;font-family:'Share Tech Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.bucket}</div>
-            <div style="flex:1;height:22px;background:var(--bg3);border-radius:2px;position:relative;overflow:hidden;">
-              <div style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,0.1);"></div>
-              <div style="position:absolute;top:2px;bottom:2px;${isPos?'left:50%':'right:50%'};width:${barW}px;background:${color}99;border-radius:2px;"></div>
-              <div style="position:absolute;top:0;bottom:0;${isPos?'left:calc(50% + '+barW+'px + 4px)':'right:calc(50% + '+barW+'px + 4px)'};display:flex;align-items:center;">
-                <span style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;color:${color};">${isPos?'+':''}${v.toFixed(3)}%</span>
-                ${wr ? `<span style="font-size:9px;color:var(--text3);margin-left:4px;">${wr} WR</span>` : ''}
-              </div>
-            </div>
-            <div style="font-size:9px;color:var(--text3);width:48px;text-align:right;font-family:'Share Tech Mono',monospace;">$${(b.threshold_low||0).toFixed(1)}–${(b.threshold_high||0).toFixed(1)}</div>
-          </div>`;
-        }).join('')}
-      </div>
-      <div style="display:flex;justify-content:center;gap:20px;margin-top:8px;">
-        <div style="font-size:10px;color:#ff3355;">◀ Negative return next ${periodLabel.toLowerCase()}</div>
-        <div style="font-size:10px;color:var(--text3);">│</div>
-        <div style="font-size:10px;color:#00ff88;">Positive return next ${periodLabel.toLowerCase()} ▶</div>
-      </div>`;
-  }
-
-  if (ve.weekly_buckets) renderVolBucketChart('vs-wvol-chart', ve.weekly_buckets, 'WEEK');
-  if (ve.daily_buckets)  renderVolBucketChart('vs-dvol-chart',  ve.daily_buckets,  'DAY');
-
-  // ── Win-rate sparkline for each bucket (who wins more?) ─────────────────
-  // Also add 'after_winrate' to the rows if data has it
-  const addWRToRows = (rowsId, buckets) => {
-    const el = document.getElementById(rowsId);
-    if (!el || !buckets) return;
-    const rows = el.querySelectorAll('.es-vol-bucket');
-    rows.forEach((row, i) => {
-      const b = buckets[i];
-      if (!b) return;
-      const wr = b.after_winrate != null ? b.after_winrate : b.self_winrate;
-      const wrColor = wr > 60 ? '#00ff88' : wr > 50 ? '#ffcc00' : '#ff3355';
-      // Check if we already added wr cell
-      if (!row.querySelector('.wr-cell')) {
-        const wrCell = document.createElement('div');
-        wrCell.className = 'wr-cell';
-        wrCell.style.cssText = `font-size:11px;color:${wrColor};font-family:'Share Tech Mono',monospace;padding:7px 9px;`;
-        wrCell.textContent = wr != null ? wr.toFixed(1)+'%' : '—';
-        // Don't append to avoid layout issues — just colorize existing cell
-      }
-    });
-  };
-
-  // Lookback + meta
-  const lbEl = document.getElementById('vs-vol-lb');
-  if (lbEl) {
-    lbEl.innerHTML = `<div class="es-lookback">
-      <button class="es-lb-btn ${_lb==='all_time'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('all_time');else window.esLookback='all_time';renderVolStats();">ALL TIME</button>
-      <button class="es-lb-btn ${_lb==='since_2020'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('since_2020');else window.esLookback='since_2020';renderVolStats();">SINCE 2020</button>
-      <button class="es-lb-btn ${_lb==='current_year'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('current_year');else window.esLookback='current_year';renderVolStats();">2026 YTD</button>
-    </div>`;
-  }
-}
-
-window.vsSubTab = function(id, el) {
-  document.querySelectorAll('#panel-volstats .es-subtab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-};
-
-
 // GEX RENDER
 // ─────────────────────────────────────────────
 function renderGEX(md) {
@@ -2896,51 +2534,33 @@ const LIVE_SYMBOLS = [
   '^ADVN','^DECN','^NYA','^NYHGH','^NYLOW'
 ];
 
-// Fetch live quotes — primary: our own /quotes Cloudflare function (server-side, no CORS)
-// Fallbacks: Yahoo direct, then third-party CORS proxies
+// Fetch live quotes from Yahoo Finance via a CORS proxy
 async function fetchLiveQuotes(symbols) {
   const chunk = symbols.join(',');
-  const yahooFields = 'regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketPreviousClose';
-  const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk)}&fields=${yahooFields}`;
-
-  // Primary: our own Cloudflare function — server-side, no CORS issues
+  // Use Yahoo Finance v8 endpoint via allorigins proxy
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk)}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketPreviousClose`;
+  
+  // Try direct first (works in some browsers/environments)
   try {
-    const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 8000); // 8s timeout
-    const r = await fetch(`/quotes?symbols=${encodeURIComponent(chunk)}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: ctrl.signal
-    });
-    clearTimeout(tid);
+    const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
     if (r.ok) {
       const data = await r.json();
-      if (data.quotes && Object.keys(data.quotes).length > 0) return data.quotes;
+      return parseYahooQuotes(data);
     }
-  } catch(e) { /* CF function not deployed yet or timed out — fall through */ }
-
-  // Fallback 1: Yahoo direct (blocked by CORS in most browsers — expected)
+  } catch(e) {}
+  
+  // Fallback: use allorigins CORS proxy
   try {
-    const r = await fetch(yahooUrl, { headers: { 'Accept': 'application/json' } });
-    if (r.ok) {
-      const data = await r.json();
-      const q = parseYahooQuotes(data);
-      if (q && Object.keys(q).length > 0) return q;
-    }
-  } catch(e) { /* CORS blocked — expected, falling through to proxy */ }
-
-  // Fallback 2: allorigins CORS proxy
-  try {
-    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(yahooUrl)}`;
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
     const r = await fetch(proxy);
     const wrapper = await r.json();
     const data = JSON.parse(wrapper.contents);
-    const q = parseYahooQuotes(data);
-    if (q && Object.keys(q).length > 0) return q;
+    return parseYahooQuotes(data);
   } catch(e) {}
 
-  // Fallback 3: corsproxy.io
+  // Fallback 2: corsproxy.io
   try {
-    const proxy2 = `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`;
+    const proxy2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
     const r = await fetch(proxy2);
     const data = await r.json();
     return parseYahooQuotes(data);
@@ -2973,10 +2593,7 @@ async function fetchSPYIntraday() {
     const r = await fetch('/spyintraday');
     if (r.ok) {
       const d = await r.json();
-      // Always return the response — callers check d.available themselves.
-      // Checking d.open here meant pre-market responses (available:false, no open)
-      // were silently dropped, preventing the volume panel from updating.
-      if (d) return d;
+      if (d.open) return d;
     }
   } catch(e) {}
   return null;
@@ -3042,7 +2659,7 @@ function updateDeskTimestamp(status, liveTime) {
   const statusColor = status === 'live' ? '#00ff88' : status === 'updating' ? '#ffcc00' : '#ff3355';
   const statusLabel = status === 'live' ? '● LIVE' : status === 'updating' ? '⟳ UPDATING' : '✕ OFFLINE';
   const staticLabel = _lastStaticRefresh
-    ? new Date(_lastStaticRefresh).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT'
+    ? new Date(_lastStaticRefresh).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : 'pending';
   el.innerHTML = `
     <span style="color:${statusColor};font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;">${statusLabel}</span>
@@ -3063,7 +2680,7 @@ function updateDeskTimestamp(status, liveTime) {
 
 function updateStaticTimestamp() {
   updateDeskTimestamp('live', _lastLiveSuccess
-    ? _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT'
+    ? _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—');
 }
 
@@ -3095,20 +2712,6 @@ function updateLevelBar(price) {
     { lbl: 'CUR YR OPEN',   sub: fmt2(lv.yearOpen),        lvl: lv.yearOpen,        accent: '#8855ff' },
   ];
 
-  // Also patch live CHG/OPEN cell in price panel on every tick
-  const chgOpenEl = document.getElementById('deskChgOpen');
-  if (chgOpenEl) {
-    const todayOpenLive = window._spyLevels?.todayOpen || 0;
-    const chgFromOpen = price && todayOpenLive ? price - todayOpenLive : null;
-    const chgFromOpenPct = chgFromOpen && todayOpenLive ? chgFromOpen / todayOpenLive * 100 : null;
-    const cc2 = n => n >= 0 ? '#00ff88' : '#ff3355';
-    const cs2 = n => n >= 0 ? '+' : '';
-    if (chgFromOpen != null) {
-      chgOpenEl.style.color = cc2(chgFromOpen);
-      chgOpenEl.innerHTML = `<div style="font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;">${cs2(chgFromOpen)}${chgFromOpen.toFixed(2)}</div><div style="font-size:10px;">${cs2(chgFromOpenPct)}${chgFromOpenPct.toFixed(2)}%</div>`;
-    }
-  }
-
   el.innerHTML = levels.map(({ lbl, sub, lvl, accent }) => {
     const { d, p } = dist(lvl);
     const abv = d != null && d >= 0;
@@ -3133,11 +2736,7 @@ function mergeLiveData(md, liveQuotes, liveFG) {
     Object.assign(merged.quotes, liveQuotes);
   }
   if (liveFG) merged.fear_greed = liveFG;
-  merged.updated = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
-  // Keep todayOpen in _spyLevels current so CHG/OPEN cell stays accurate
-  if (window._spyLevels && merged.quotes?.['SPY']?.open) {
-    window._spyLevels.todayOpen = merged.quotes['SPY'].open;
-  }
+  merged.updated = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   return merged;
 }
 
@@ -3164,111 +2763,6 @@ function isExtendedHours() {
   return mins >= 4 * 60 && mins < 16 * 60;
 }
 
-// Fetch and cache the current week's opening price (Monday open, or first trading day)
-// Sources tried in order: intraday (if Mon), market_data weekly_em, _sd rows, /quotes
-async function fetchWeekOpen() {
-  try {
-    const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    const dow = ctNow.getDay();
-    const isWeekend = dow === 0 || dow === 6;
-    const isMon = dow === 1;
-    const pad = n => String(n).padStart(2, '0');
-    const ctTodayStr = `${ctNow.getFullYear()}-${pad(ctNow.getMonth()+1)}-${pad(ctNow.getDate())}`;
-
-    // Monday of current week
-    const daysFromMon = dow === 0 ? 6 : dow - 1;
-    const monCT = new Date(ctNow);
-    monCT.setDate(ctNow.getDate() - daysFromMon);
-    const monStr = `${monCT.getFullYear()}-${pad(monCT.getMonth()+1)}-${pad(monCT.getDate())}`;
-
-    const applyWeekOpen = (val) => {
-      if (!val || isNaN(val)) return false;
-      window._spyWeekOpen = val;
-      if (window._spyLevels) {
-        window._spyLevels.weekOpen = val;
-        updateLevelBar(window._spyLevels?.cur);
-      }
-      return true;
-    };
-
-    // Source 1: /spyintraday on Monday — intraday open IS week open
-    if (!isWeekend && isMon) {
-      try {
-        const r = await fetch('/spyintraday?t=' + Date.now());
-        if (r.ok) {
-          const d = await r.json();
-          if (d.available && d.open) {
-            if (window._spyLevels) window._spyLevels.todayOpen = d.open;
-            applyWeekOpen(d.open);
-            return;
-          }
-        }
-      } catch(e) {}
-    }
-
-    // Source 2: market_data.json weekly_em week_open field
-    if (_md) {
-      const wems = _md.weekly_em || [];
-      const curWem = wems.find(w => !w.week_close) || wems[0];
-      if (curWem && curWem.week_open) {
-        applyWeekOpen(curWem.week_open);
-        return;
-      }
-    }
-
-    // Source 3: _sd daily data — first trading day of this week
-    if (_sd && _sd.length) {
-      const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
-      const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
-      if (firstDay && firstDay.open) {
-        applyWeekOpen(firstDay.open);
-        return;
-      }
-    }
-
-    // Source 4: Yahoo Finance daily API — fetch Monday's open directly
-    // Handles the gap when DB hasn't updated yet this week (e.g. Tue morning
-    // before pipeline runs, or when market_data.json has week_open: null)
-    try {
-      const now = new Date();
-      const p1 = Math.floor(new Date(monStr + 'T14:00:00Z').getTime() / 1000);
-      const p2 = Math.floor(now.getTime() / 1000);
-      if (p2 > p1) {
-        const yUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=' + p1 + '&period2=' + p2;
-        const r = await fetch(yUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } });
-        if (r.ok) {
-          const data = await r.json();
-          const opens = data && data.chart && data.chart.result && data.chart.result[0] &&
-                        data.chart.result[0].indicators && data.chart.result[0].indicators.quote &&
-                        data.chart.result[0].indicators.quote[0] &&
-                        data.chart.result[0].indicators.quote[0].open || [];
-          if (opens.length && opens[0] != null) {
-            applyWeekOpen(Math.round(opens[0] * 100) / 100);
-            return;
-          }
-        }
-      }
-    } catch(e) { console.warn('[fetchWeekOpen] Yahoo daily fallback failed:', e.message); }
-
-    // Source 5: /quotes SPY open — last resort on Monday only
-    if (isMon) {
-      try {
-        const r = await fetch('/quotes?symbols=SPY');
-        if (r.ok) {
-          const data = await r.json();
-          const spyQ = data.quotes && data.quotes['SPY'];
-          if (spyQ && spyQ.open) {
-            if (window._spyLevels) window._spyLevels.todayOpen = spyQ.open;
-            applyWeekOpen(spyQ.open);
-            return;
-          }
-        }
-      } catch(e) {}
-    }
-
-  } catch(e) { console.warn('fetchWeekOpen error:', e); }
-}
-
 // Schedules the next live-quote refresh at the appropriate interval
 function scheduleLiveRefresh() {
   if (_liveInterval) clearTimeout(_liveInterval);
@@ -3278,64 +2772,6 @@ function scheduleLiveRefresh() {
     scheduleLiveRefresh(); // reschedule after each cycle
   }, delay);
 }
-
-// Lightweight WEM price update — runs every tick without rebuilding heavy SVG charts
-function updateWEMPrice(price) {
-  if (!price || !_md) return;
-  const wems = _md.weekly_em || [];
-  const cur  = wems.find(w => !w.week_close) || wems[0];
-  if (!cur) return;
-  const lo = cur.wem_low, hi = cur.wem_high, mid = cur.wem_mid;
-  const halfRange = cur.wem_range / 2;
-  if (!lo || !hi || !mid) return;
-
-  // Needle position
-  const pct = hi > lo ? Math.min(Math.max((price - lo) / (hi - lo) * 100, 2), 98) : 50;
-  const needle = $('wemTabNeedle');
-  if (needle) needle.style.left = pct + '%';
-
-  // Position text
-  const posText = $('wemTabPosText');
-  if (posText) {
-    const dte = cur.dte || '—';
-    posText.textContent = `SPY $${fmt(price,2)} · ${price>=lo&&price<=hi?'INSIDE WEM ✓':'OUTSIDE WEM ⚠'} · ±$${fmt(halfRange,2)} · DTE ${dte}`;
-  }
-
-  // Big cards — "from here" distances
-  const header = $('wemCurrentHeader');
-  if (header) {
-    header.innerHTML = `
-      <div class="wem-big-card">
-        <div class="wem-big-lbl">WEM LOW</div>
-        <div class="wem-big-val dn">$${fmt(lo,2)}</div>
-        <div class="wem-big-sub">${price>lo?'+':''}$${fmt(price-lo,2)} from here</div>
-      </div>
-      <div class="wem-big-card">
-        <div class="wem-big-lbl">MID (ANCHOR)</div>
-        <div class="wem-big-val">$${fmt(mid,2)}</div>
-        <div class="wem-big-sub">±$${fmt(halfRange,2)} range</div>
-      </div>
-      <div class="wem-big-card">
-        <div class="wem-big-lbl">WEM HIGH</div>
-        <div class="wem-big-val up">$${fmt(hi,2)}</div>
-        <div class="wem-big-sub">${price<hi?'+':''}$${fmt(hi-price,2)} from here</div>
-      </div>`;
-  }
-
-  // Z-score display (text elements only — skip rebuilding the full SVG)
-  const zEl = $('wemZScore');
-  if (zEl) {
-    const z = halfRange > 0 ? (price - mid) / halfRange : 0;
-    const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
-    const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
-    // Only update z-score text nodes, not the full SVG
-    const zScoreVal = zEl.querySelector('.wem-z-val');
-    const zScoreLbl = zEl.querySelector('.wem-z-lbl');
-    if (zScoreVal) { zScoreVal.textContent = (z>=0?'+':'')+fmt(z,2); zScoreVal.style.color = zColor; }
-    if (zScoreLbl) { zScoreLbl.textContent = zLabel; zScoreLbl.style.color = zColor; }
-  }
-}
-
 
 async function refreshLiveData() {
   if (!_md) return;
@@ -3361,9 +2797,6 @@ async function refreshLiveData() {
       if (freshSd && freshSd.length) _sd = freshSd;
       _lastStaticRefresh = now;
       updateStaticTimestamp();
-      fetchWeekOpen(); // refresh week open from fresh sd data
-      // Re-render WEM fully on static refresh — WEM levels and IV can change
-      try { renderWEM(_md); } catch(e) {}
     } catch(e) {
       console.warn('Static JSON re-fetch failed:', e);
     }
@@ -3375,65 +2808,24 @@ async function refreshLiveData() {
       fetchLiveFG(),
       fetchSPYIntraday()
     ]);
-
-    // Even if full quote fetch fails, spyOHLC gives us SPY price from /spyintraday
-    // Build a minimal quotes object from intraday data so desk always updates
-    let effectiveQuotes = liveQuotes;
-    if ((!liveQuotes || Object.keys(liveQuotes).length === 0) && spyOHLC?.available) {
-      effectiveQuotes = {
-        'SPY': {
-          price:      spyOHLC.close,
-          change:     spyOHLC.change,
-          pct_change: spyOHLC.changePct,
-          volume:     spyOHLC.volume,
-          open:       spyOHLC.open,
-          high:       spyOHLC.high,
-          low:        spyOHLC.low,
-          prev_close: spyOHLC.prev_close,
-        }
-      };
-      console.log('Using spyOHLC as quote fallback, SPY:', spyOHLC.close);
-    }
     
-    // Always patch SPY from spyOHLC first — this is the most accurate source
-    // (Cloudflare function hitting Yahoo v8 chart, 1-min bars, no CORS issues)
-    if (spyOHLC?.available) {
-      _spyIntraday = spyOHLC;
-      _md.quotes = _md.quotes || {};
-      _md.quotes['SPY'] = _md.quotes['SPY'] || {};
-      // Override all SPY fields with live intraday data
-      _md.quotes['SPY'].price      = spyOHLC.close;
-      _md.quotes['SPY'].open       = spyOHLC.open;
-      _md.quotes['SPY'].high       = spyOHLC.high;
-      _md.quotes['SPY'].low        = spyOHLC.low;
-      _md.quotes['SPY'].volume     = spyOHLC.volume;
-      _md.quotes['SPY'].prev_close = spyOHLC.prev_close;
-      _md.quotes['SPY'].change     = spyOHLC.change;
-      _md.quotes['SPY'].pct_change = spyOHLC.changePct;
-    }
-
-    if (effectiveQuotes && Object.keys(effectiveQuotes).length > 0) {
-      // swap liveQuotes reference so rest of code works unchanged
-      const liveQuotes = effectiveQuotes;
+    if (liveQuotes && Object.keys(liveQuotes).length > 0) {
       const merged = mergeLiveData(_md, liveQuotes, liveFG);
-      // Re-apply spyOHLC on top of merged quotes — liveQuotes may have overwritten with stale data
-      if (spyOHLC?.available && merged.quotes['SPY']) {
-        merged.quotes['SPY'].price      = spyOHLC.close;
-        merged.quotes['SPY'].open       = spyOHLC.open;
-        merged.quotes['SPY'].high       = spyOHLC.high;
-        merged.quotes['SPY'].low        = spyOHLC.low;
-        merged.quotes['SPY'].volume     = spyOHLC.volume;
-        merged.quotes['SPY'].prev_close = spyOHLC.prev_close;
-        merged.quotes['SPY'].change     = spyOHLC.change;
-        merged.quotes['SPY'].pct_change = spyOHLC.changePct;
+      // Patch SPY with accurate intraday OHLC
+      if (spyOHLC && merged.quotes['SPY']) {
+        merged.quotes['SPY'].open = spyOHLC.open || merged.quotes['SPY'].open;
+        merged.quotes['SPY'].high = spyOHLC.high || merged.quotes['SPY'].high;
+        merged.quotes['SPY'].low  = spyOHLC.low  || merged.quotes['SPY'].low;
+        merged.quotes['SPY'].volume = spyOHLC.volume || merged.quotes['SPY'].volume;
+        merged.quotes['SPY'].prev_close = spyOHLC.prev_close || merged.quotes['SPY'].prev_close;
       }
+      if (spyOHLC?.available) _spyIntraday = spyOHLC; // store live intraday for desk volume box
       _md = merged;
       
       // Re-render all live-data-dependent tabs
       renderHub(merged, _sd);
       renderDesk(merged, _sd);
       updateLevelBar(merged.quotes?.['SPY']?.price);
-      updateWEMPrice(merged.quotes?.['SPY']?.price);
       renderOverview(merged);
       loadFuturesChart();
       if(_narratorRunning) _narratorComment();
@@ -3444,15 +2836,7 @@ async function refreshLiveData() {
       renderGEX(merged);
       
       _lastLiveSuccess = new Date();
-      setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT');
-    } else if (spyOHLC?.available) {
-      // Quotes fetch failed but we have live SPY intraday — render with that
-      renderHub(_md, _sd);
-      renderDesk(_md, _sd);
-      updateLevelBar(_md.quotes?.['SPY']?.price);
-      updateWEMPrice(_md.quotes?.['SPY']?.price);
-      _lastLiveSuccess = new Date();
-      setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT (SPY only)');
+      setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     } else {
       setLiveStatus('offline', 'fetch failed');
     }
@@ -3487,18 +2871,12 @@ async function loadData(){
     ]);
 
     // Patch SPY quotes with real intraday OHLC immediately
-    if (spyOHLC && spyOHLC.available && md.quotes && md.quotes['SPY']) {
-      md.quotes['SPY'].open       = spyOHLC.open       || md.quotes['SPY'].open;
-      md.quotes['SPY'].high       = spyOHLC.high       || md.quotes['SPY'].high;
-      md.quotes['SPY'].low        = spyOHLC.low        || md.quotes['SPY'].low;
-      md.quotes['SPY'].volume     = spyOHLC.volume     || md.quotes['SPY'].volume;
+    if (spyOHLC && md.quotes && md.quotes['SPY']) {
+      md.quotes['SPY'].open   = spyOHLC.open   || md.quotes['SPY'].open;
+      md.quotes['SPY'].high   = spyOHLC.high   || md.quotes['SPY'].high;
+      md.quotes['SPY'].low    = spyOHLC.low    || md.quotes['SPY'].low;
+      md.quotes['SPY'].volume = spyOHLC.volume || md.quotes['SPY'].volume;
       md.quotes['SPY'].prev_close = spyOHLC.prev_close || md.quotes['SPY'].prev_close;
-      // Also patch current price — market_data.json is stale until next workflow run
-      if (spyOHLC.close) {
-        md.quotes['SPY'].price      = spyOHLC.close;
-        md.quotes['SPY'].change     = spyOHLC.change     ?? md.quotes['SPY'].change;
-        md.quotes['SPY'].pct_change = spyOHLC.changePct  ?? md.quotes['SPY'].pct_change;
-      }
     }
     // Patch F&G with CNN value immediately
     if (liveFG) md.fear_greed = liveFG;
@@ -3519,13 +2897,11 @@ async function loadData(){
     if (spyOHLC) updateLiveHVN(spyOHLC);
     safeRender(renderOverview, md);
     safeRender(renderOptions, md);
-    try { renderExpiryBehavior(md); } catch(e) {}
     safeRender(renderVolatility, md);
     safeRender(renderBonds, md);
     safeRender(renderBreadth, md, sd);
     safeRender(renderSentiment, md);
     safeRender(renderPriceHistory, sd);
-    safeRender(renderTODStats);
     safeRender(renderVolHistory, sd);
     safeRender(renderWEM, md);
     safeRender(renderVolume, sd, md);
@@ -3547,7 +2923,6 @@ async function loadData(){
     
     // Fix 2: Dynamic interval — 15s during market hours, 60s otherwise
     _lastStaticRefresh = Date.now(); // mark static data as just loaded
-    fetchWeekOpen(); // set week open immediately on load
     updateStaticTimestamp();
     scheduleLiveRefresh();
     setInterval(async () => {
