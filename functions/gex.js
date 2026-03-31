@@ -338,6 +338,46 @@ export async function onRequest(context) {
           ? "Dealers slightly short gamma. Moves may extend further than normal."
           : "Dealers short gamma - they amplify moves in either direction.";
 
+    // ── Walls by expiry: today's 0DTE + each Friday ─────────────────────────
+    const todayStr = today.toISOString().slice(0, 10);
+    const todayDow = today.getDay(); // 0=Sun, 1=Mon...5=Fri, 6=Sat
+
+    // Helper: build call/put walls for a given expiry
+    const buildWalls = (exp) => {
+      const opts = parsed.filter(o => o.exp === exp && o.oi >= 10);
+      if (!opts.length) return null;
+      const calls = opts.filter(o => o.cp === 'C');
+      const puts  = opts.filter(o => o.cp === 'P');
+      const topCalls = calls.sort((a,b) => b.oi - a.oi).slice(0, 5)
+        .map(o => ({ strike: o.strike, oi: o.oi, vol: o.vol }));
+      const topPuts  = puts.sort((a,b) => b.oi - a.oi).slice(0, 5)
+        .map(o => ({ strike: o.strike, oi: o.oi, vol: o.vol }));
+      const callWall = topCalls[0]?.strike || null;
+      const putWall  = topPuts[0]?.strike  || null;
+      const dte = Math.round((new Date(exp) - today) / 86400000);
+      return { exp, dte, callWall, putWall, topCalls, topPuts };
+    };
+
+    // Today's expiry (0DTE when market is open Mon-Fri)
+    const todayWalls = expiries.includes(todayStr) ? buildWalls(todayStr) : null;
+
+    // All Friday expiries in the chain
+    const fridayWalls = expiries
+      .filter(exp => {
+        const d = new Date(exp + 'T12:00:00Z');
+        return d.getDay() === 5 && exp !== todayStr;
+      })
+      .slice(0, 4)
+      .map(exp => buildWalls(exp))
+      .filter(Boolean);
+
+    const wallsByExpiry = [];
+    if (todayWalls) wallsByExpiry.push({ label: '0DTE (Today)', ...todayWalls });
+    fridayWalls.forEach(w => {
+      const label = w.dte <= 7 ? 'Weekly (Fri)' : w.dte <= 35 ? 'Monthly (Fri)' : `Fri +${w.dte}d`;
+      wallsByExpiry.push({ label, ...w });
+    });
+
     return new Response(JSON.stringify({
       spot,
       updated: new Date().toISOString(),
@@ -363,6 +403,7 @@ export async function onRequest(context) {
       total_put_vol: totalPutVol,
       total_call_oi: totalCallOI,
       total_put_oi: totalPutOI,
+      walls_by_expiry: wallsByExpiry,
     }), { headers });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { headers, status: 200 });
