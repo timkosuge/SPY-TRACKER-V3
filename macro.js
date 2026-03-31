@@ -1195,7 +1195,7 @@ End with one sentence on the primary risk to the base case.`);
   }
 
   return {
-    init: renderMacro,
+    init: (function() { let _done=false; return function(){ if(!_done){ _done=true; renderMacro(); } }; })(),
     reload: renderMacro,
     aiBase: () => loadAINarrative(STATIC, calcRegime(STATIC)),
     aiBull: async () => callClaude('Make the strongest possible BULL case for equities given the macro data. What tailwinds support continued market gains? Include the AI productivity story and transition upside.'),
@@ -1216,22 +1216,10 @@ function loadAINarrativeTransition(){ _M.aiTransition(); }
    BOOT — hook into existing switchTab mechanism
    Render once when tab is first activated, then cache.
 ═══════════════════════════════════════════════════════ */
+// Boot: switchTab('macro') in dashboard1.js calls _M.init() directly.
+// Also trigger on load if macro panel happens to be active.
 (function bootMacro() {
-  let rendered = false;
-
-  // Override or extend the existing switchTab to detect macro activation
-  const _origSwitchTab = window.switchTab;
-  window.switchTab = function(tab) {
-    if (_origSwitchTab) _origSwitchTab(tab);
-    if (tab === 'macro' && !rendered) {
-      rendered = true;
-      // Small defer to let DOM settle
-      setTimeout(() => _M.init(), 60);
-    }
-  };
-
-  // Also trigger if macro tab is somehow active on load
   if (document.getElementById('panel-macro')?.classList.contains('active')) {
-    setTimeout(() => { rendered = true; _M.init(); }, 200);
+    setTimeout(() => _M.init(), 200);
   }
 })();
