@@ -79,7 +79,7 @@ function switchTab(id){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
   // Find and activate the correct top-level tab button
-  const topTabs = ['hub','desk','intraday','overview','derivatives','macro','history','media','journal'];
+  const topTabs = ['hub','desk','intraday','overview','derivatives','history','media','journal'];
   const btnIdx = topTabs.indexOf(id);
   const allTabs = document.querySelectorAll('.tab');
   if(btnIdx>=0 && allTabs[btnIdx]) allTabs[btnIdx].classList.add('active');
@@ -87,7 +87,6 @@ function switchTab(id){
   const p=$('panel-'+id); if(p)p.classList.add('active');
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
-  if(id==='macro' && window._M) window._M.init();
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
@@ -1320,6 +1319,12 @@ function renderDesk(md,sd){
       })()}
     </div>
 
+    <!-- CALL / PUT WALLS BY EXPIRY -->
+    <div class="panel" style="margin-bottom:10px;" id="deskWallsPanel">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ CALL / PUT WALLS BY EXPIRY</div>
+      <div id="deskWallsByExpiry"><div style="font-size:12px;color:var(--text3);">Loading walls...</div></div>
+    </div>
+
     <!-- SESSION + DOD + VOL + SESSION VOL + GAPS -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 2fr;gap:10px;margin-bottom:10px;">
       <div class="panel">
@@ -1737,6 +1742,44 @@ function renderDeskSession(md,sd){
     }
   } else if(dodEl){
     dodEl.innerHTML='<div class="no-data">No prev day data yet</div>';
+  }
+
+  // ── WALLS BY EXPIRY on desk ─────────────────────────────────────────────
+  const deskWallsEl = $('deskWallsByExpiry');
+  if (deskWallsEl) {
+    const walls = (typeof _md !== 'undefined' ? _md?.walls_by_expiry : null) || [];
+    if (!walls.length) {
+      deskWallsEl.innerHTML = '<div style="font-size:12px;color:var(--text3);">No expiry wall data — run workflow or wait for live GEX refresh.</div>';
+    } else {
+      const deskCur = (typeof _md !== 'undefined' ? _md?.quotes?.SPY?.price : null) || 0;
+      deskWallsEl.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">'
+        + walls.map(w => {
+          const cDist = w.callWall && deskCur ? w.callWall - deskCur : null;
+          const pDist = w.putWall  && deskCur ? w.putWall  - deskCur : null;
+          const isToday = w.dte === 0;
+          const borderCol = isToday ? '#ffcc00' : '#00ccff';
+          return '<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid '+borderCol+';border-radius:3px;padding:10px;">'
+            + '<div style="font-family:Orbitron,monospace;font-size:8px;color:'+borderCol+';margin-bottom:6px;letter-spacing:1px;">'
+            + w.label.toUpperCase() + (w.exp ? ' · ' + w.exp.slice(5) : '') + (w.dte != null ? ' · ' + w.dte + 'DTE' : '') + '</div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+            + '<div style="text-align:center;padding:6px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:3px;">'
+            + '<div style="font-family:Orbitron,monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">CALL WALL</div>'
+            + '<div style="font-family:Share Tech Mono,monospace;font-size:16px;font-weight:bold;color:#00ff88;">' + (w.callWall ? '$'+w.callWall : '—') + '</div>'
+            + (cDist != null ? '<div style="font-size:10px;color:#00ff88;">+' + cDist.toFixed(1) + '</div>' : '')
+            + (w.topCalls?.[0]?.oi ? '<div style="font-size:9px;color:var(--text3);">' + Math.round(w.topCalls[0].oi/1000) + 'K OI</div>' : '')
+            + '</div>'
+            + '<div style="text-align:center;padding:6px;background:rgba(255,51,85,0.06);border:1px solid rgba(255,51,85,0.2);border-radius:3px;">'
+            + '<div style="font-family:Orbitron,monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">PUT WALL</div>'
+            + '<div style="font-family:Share Tech Mono,monospace;font-size:16px;font-weight:bold;color:#ff3355;">' + (w.putWall ? '$'+w.putWall : '—') + '</div>'
+            + (pDist != null ? '<div style="font-size:10px;color:'+(pDist>=0?'#00ff88':'#ff3355')+';">' + (pDist>=0?'+':'') + pDist.toFixed(1) + '</div>' : '')
+            + (w.topPuts?.[0]?.oi ? '<div style="font-size:9px;color:var(--text3);">' + Math.round(w.topPuts[0].oi/1000) + 'K OI</div>' : '')
+            + '</div>'
+            + '</div>'
+            + (w.callWall && w.putWall ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">Range: $' + w.putWall + ' — $' + w.callWall + ' (' + (w.callWall - w.putWall).toFixed(0) + ' pts)</div>' : '')
+            + '</div>';
+        }).join('')
+        + '</div>';
+    }
   }
 
   // ── SESSION VOLATILITY ────────────────────────────────────────────────────
@@ -3084,54 +3127,93 @@ function renderGEXAdditions(md) {
       </div>`;
   }
 
-  // ── CALL WALL vs PUT WALL ─────────────────────────────────────────────────
+  // ── CALL / PUT WALLS BY EXPIRY ───────────────────────────────────────────
   const wallsEl = $('gexWalls');
   if(wallsEl) {
-    const callStrikes = opt.top_call_strikes || [];
-    const putStrikes = opt.top_put_strikes || [];
-    const topCall = callStrikes[0];
-    const topPut = putStrikes[0];
+    const wallsByExp = opt.walls_by_expiry || [];
     let html = '';
-    if(topCall || topPut) {
-      const callWall = topCall?.strike, putWall = topPut?.strike;
+
+    if(wallsByExp.length) {
+      // Each expiry gets a card
+      wallsByExp.forEach(w => {
+        const isToday = w.dte === 0;
+        const borderCol = isToday ? '#ffcc00' : '#00ccff';
+        const cDist = w.callWall && spot ? w.callWall - spot : null;
+        const pDist = w.putWall  && spot ? w.putWall  - spot : null;
+        const range = w.callWall && w.putWall ? w.callWall - w.putWall : null;
+
+        html += `<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid ${borderCol};border-radius:3px;padding:10px;margin-bottom:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${borderCol};margin-bottom:8px;letter-spacing:1px;">
+            ${w.label?.toUpperCase()} ${w.exp?'· '+w.exp.slice(5):''} ${w.dte!=null?'· '+w.dte+'DTE':''}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+            <div style="text-align:center;padding:8px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.25);border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">CALL WALL</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:${isToday?'22':'18'}px;font-weight:bold;color:#00ff88;">$${w.callWall||'—'}</div>
+              ${cDist!=null?`<div style="font-size:10px;color:#00ff88;">+${fmt(cDist,1)} pts</div>`:''}
+              ${w.topCalls?.[0]?.oi?`<div style="font-size:10px;color:var(--text3);">${(w.topCalls[0].oi/1000).toFixed(0)}K OI</div>`:''}
+            </div>
+            <div style="text-align:center;padding:8px;background:rgba(255,51,85,0.06);border:1px solid rgba(255,51,85,0.25);border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">PUT WALL</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:${isToday?'22':'18'}px;font-weight:bold;color:#ff3355;">$${w.putWall||'—'}</div>
+              ${pDist!=null?`<div style="font-size:10px;color:${pDist>=0?'#00ff88':'#ff3355'};">${pDist>=0?'+':''}${fmt(pDist,1)} pts</div>`:''}
+              ${w.topPuts?.[0]?.oi?`<div style="font-size:10px;color:var(--text3);">${(w.topPuts[0].oi/1000).toFixed(0)}K OI</div>`:''}
+            </div>
+          </div>
+          ${range?`<div style="text-align:center;font-size:10px;color:var(--text3);">Range: $${w.putWall} — $${w.callWall} · ${fmt(range,0)} pts wide</div>`:''}
+          <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+            <div>
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">TOP CALLS (OI)</div>
+              ${(w.topCalls||[]).slice(0,5).map((s,i) => {
+                const bw = Math.round((s.oi/(w.topCalls[0]?.oi||1))*100);
+                return '<div style="display:flex;align-items:center;gap:4px;padding:2px 0;">'
+                  +'<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:#00ff88;width:48px;text-align:right;">$'+s.strike+'</span>'
+                  +'<div style="flex:1;height:7px;background:var(--bg2);border-radius:2px;overflow:hidden;">'
+                  +'<div style="width:'+bw+'%;height:100%;background:rgba(0,255,136,'+(i===0?'0.7':'0.4')+');border-radius:2px;"></div></div>'
+                  +'<span style="font-size:9px;color:var(--text3);width:36px;">'+Math.round(s.oi/1000)+'K</span>'
+                  +'</div>';
+              }).join('')}
+            </div>
+            <div>
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">TOP PUTS (OI)</div>
+              ${(w.topPuts||[]).slice(0,5).map((s,i) => {
+                const bw = Math.round((s.oi/(w.topPuts[0]?.oi||1))*100);
+                return '<div style="display:flex;align-items:center;gap:4px;padding:2px 0;">'
+                  +'<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:#ff3355;width:48px;text-align:right;">$'+s.strike+'</span>'
+                  +'<div style="flex:1;height:7px;background:var(--bg2);border-radius:2px;overflow:hidden;">'
+                  +'<div style="width:'+bw+'%;height:100%;background:rgba(255,51,85,'+(i===0?'0.7':'0.4')+');border-radius:2px;"></div></div>'
+                  +'<span style="font-size:9px;color:var(--text3);width:36px;">'+Math.round(s.oi/1000)+'K</span>'
+                  +'</div>';
+              }).join('')}
+            </div>
+          </div>
+        </div>`;
+      });
+    } else {
+      // Fallback to old single-expiry display from top_call/put_strikes
+      const callStrikes = opt.top_call_strikes || [];
+      const putStrikes  = opt.top_put_strikes  || [];
+      const callWall = callStrikes[0]?.strike, putWall = putStrikes[0]?.strike;
       const range = callWall && putWall ? callWall - putWall : null;
-      html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-        <div style="text-align:center;padding:10px;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:4px;">CALL WALL</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#00ff88;">$${callWall||'—'}</div>
-          ${topCall?.oi?`<div style="font-size:11px;color:var(--text3);">${(topCall.oi/1000).toFixed(0)}K OI</div>`:''}
-          ${callWall&&spot?`<div style="font-size:11px;color:var(--text3);">+${fmt(callWall-spot,1)} pts away</div>`:''}
-        </div>
-        <div style="text-align:center;padding:10px;background:rgba(255,51,85,0.08);border:1px solid rgba(255,51,85,0.3);border-radius:4px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;margin-bottom:4px;">PUT WALL</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#ff3355;">$${putWall||'—'}</div>
-          ${topPut?.oi?`<div style="font-size:11px;color:var(--text3);">${(topPut.oi/1000).toFixed(0)}K OI</div>`:''}
-          ${putWall&&spot?`<div style="font-size:11px;color:var(--text3);">${fmt(putWall-spot,1)} pts away</div>`:''}
-        </div>
-      </div>`;
-      if(range) html += `<div style="text-align:center;padding:6px;background:var(--bg3);border-radius:3px;margin-bottom:10px;"><span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">PIN RANGE: </span><span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);">$${putWall} — $${callWall} (${fmt(range,0)} pts)</span></div>`;
+      if(callWall || putWall) {
+        html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+          <div style="text-align:center;padding:10px;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:4px;">CALL WALL</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#00ff88;">$${callWall||'—'}</div>
+            ${callStrikes[0]?.oi?`<div style="font-size:11px;color:var(--text3);">${(callStrikes[0].oi/1000).toFixed(0)}K OI</div>`:''}
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(255,51,85,0.08);border:1px solid rgba(255,51,85,0.3);border-radius:4px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;margin-bottom:4px;">PUT WALL</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#ff3355;">$${putWall||'—'}</div>
+            ${putStrikes[0]?.oi?`<div style="font-size:11px;color:var(--text3);">${(putStrikes[0].oi/1000).toFixed(0)}K OI</div>`:''}
+          </div>
+        </div>`;
+        if(range) html += `<div style="text-align:center;padding:6px;background:var(--bg3);border-radius:3px;margin-bottom:8px;">
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">PIN RANGE: </span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);">$${putWall} — $${callWall} (${fmt(range,0)} pts)</span></div>`;
+      }
     }
-    html += `<div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:6px;margin-top:4px;">TOP CALL STRIKES (OI)</div>`;
-    callStrikes.slice(0,5).forEach(s => {
-      const w = Math.min((s.oi/((callStrikes[0]?.oi||1))*80),80);
-      html += `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
-        <span style="font-family:'Share Tech Mono',monospace;font-size:12px;width:55px;text-align:right;color:#00ff88;">$${s.strike}</span>
-        <div style="flex:1;height:10px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-          <div style="width:${w}%;height:100%;background:rgba(0,255,136,0.6);border-radius:2px;"></div></div>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;width:50px;color:var(--text3);">${(s.oi/1000).toFixed(0)}K</span>
-      </div>`;
-    });
-    html += `<div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:6px;margin-top:8px;">TOP PUT STRIKES (OI)</div>`;
-    putStrikes.slice(0,5).forEach(s => {
-      const w = Math.min((s.oi/((putStrikes[0]?.oi||1))*80),80);
-      html += `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
-        <span style="font-family:'Share Tech Mono',monospace;font-size:12px;width:55px;text-align:right;color:#ff3355;">$${s.strike}</span>
-        <div style="flex:1;height:10px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-          <div style="width:${w}%;height:100%;background:rgba(255,51,85,0.6);border-radius:2px;"></div></div>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;width:50px;color:var(--text3);">${(s.oi/1000).toFixed(0)}K</span>
-      </div>`;
-    });
-    wallsEl.innerHTML = html || '<div class="no-data">No OI data</div>';
+    wallsEl.innerHTML = html || '<div class="no-data">No wall data — refresh GEX</div>';
   }
 
   // ── MAX PAIN EXPIRY LADDER ────────────────────────────────────────────────
