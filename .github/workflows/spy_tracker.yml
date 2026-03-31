@@ -41,11 +41,23 @@ jobs:
       - name: Generate time-of-day stats
         run: python generate_tod_stats.py
 
+      - name: Generate expiry data (all trading days)
+        run: python generate_expiry_data.py
+
+      - name: Generate intraday patterns
+        run: python generate_intraday_patterns.py
+
+      - name: Generate decline/drawdown data
+        run: python generate_decline_data.py
+
       - name: Commit updated files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git pull origin main
-          git add -f spy_data.db spy_data.json market_data.json analog_data.js tod_stats.js
-          git diff --staged --quiet && echo "No changes" || git commit -m "Auto: SPY data update $(date -u +'%Y-%m-%d')"
+          git add -f spy_data.db spy_data.json market_data.json \
+                     analog_data.js tod_stats.js \
+                     intraday_library.js expiry_data.js \
+                     intraday_patterns.js decline_data.js
+          git diff --staged --quiet && echo "No changes" || git commit -m "Auto: SPY data update $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push || echo "Nothing to push"
