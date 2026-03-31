@@ -1183,7 +1183,7 @@ function renderDesk(md,sd){
       <div style="display:flex;gap:4px;margin-top:2px;font-family:'Orbitron',monospace;font-size:6px;letter-spacing:1px;">
         <div style="flex:5;text-align:center;color:var(--text3);border-top:1px solid rgba(255,255,255,0.1);padding-top:1px;">PREV DAY</div>
         <div style="flex:3;text-align:center;color:#ffcc00;border-top:1px solid rgba(255,204,0,0.3);padding-top:1px;">PRE-MARKET</div>
-        <div style="flex:8;text-align:center;color:var(--cyan);border-top:1px solid rgba(0,204,255,0.3);padding-top:1px;">TODAY</div>
+        <div style="flex:7;text-align:center;color:var(--cyan);border-top:1px solid rgba(0,204,255,0.3);padding-top:1px;">TODAY</div>
       </div>
     </div>
 
@@ -1370,13 +1370,20 @@ function renderDeskSession(md,sd){
     if(pmm) pmm.textContent = m ? '$'+fmt(m,2) : '—';
     if(pml) pml.textContent = l ? '$'+fmt(l,2) : '—';
   };
-  fetch('/premarket').then(r=>r.ok?r.json():null).then(pm=>{
-    if(pm?.available && pm.high) {
-      setPM(pm.high, pm.mid, pm.low);
-    } else {
-      setPM(null,null,null);
-    }
-  }).catch(()=>setPM(null,null,null));
+  // Cache premarket data — only fetch once per session (or if not yet populated)
+  // Re-fetching during RTH can return stale/wrong data from Yahoo
+  if (window._pmCache?.high) {
+    setPM(window._pmCache.high, window._pmCache.mid, window._pmCache.low);
+  } else {
+    fetch('/premarket').then(r=>r.ok?r.json():null).then(pm=>{
+      if(pm?.available && pm.high) {
+        window._pmCache = { high: pm.high, mid: pm.mid, low: pm.low };
+        setPM(pm.high, pm.mid, pm.low);
+      } else {
+        setPM(null,null,null);
+      }
+    }).catch(()=>setPM(null,null,null));
+  }
 
   // OHLCV
   const ohlcvEl=$('deskOhlcv');
