@@ -1370,18 +1370,55 @@ function renderDeskSession(md,sd){
     if(pmm) pmm.textContent = m ? '$'+fmt(m,2) : '—';
     if(pml) pml.textContent = l ? '$'+fmt(l,2) : '—';
   };
-  // Cache PM data for the session — re-fetching during RTH returns stale/wrong data
-  if (window._pmCache && window._pmCache.high) {
-    setPM(window._pmCache.high, window._pmCache.mid, window._pmCache.low);
+  // PM cache — memory + localStorage keyed to today's date (ET)
+  // This survives page refreshes during RTH and avoids re-fetching when PM window is closed.
+  const _pmToday = (() => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+    } catch(e) { return new Date().toISOString().slice(0,10); }
+  })();
+  const PM_CACHE_KEY = 'spy_pm_cache_v2';
+
+  const loadPMCache = () => {
+    // 1. In-memory (fastest, set earlier in same session)
+    if (window._pmCache && window._pmCache.high && window._pmCache.date === _pmToday) {
+      return window._pmCache;
+    }
+    // 2. localStorage (survives page refresh)
+    try {
+      const stored = JSON.parse(localStorage.getItem(PM_CACHE_KEY) || 'null');
+      if (stored && stored.date === _pmToday && stored.high) {
+        window._pmCache = stored;
+        return stored;
+      }
+    } catch(e) {}
+    return null;
+  };
+
+  const savePMCache = (pm) => {
+    const entry = { date: _pmToday, high: pm.high, mid: pm.mid, low: pm.low };
+    window._pmCache = entry;
+    try { localStorage.setItem(PM_CACHE_KEY, JSON.stringify(entry)); } catch(e) {}
+  };
+
+  const cached = loadPMCache();
+  if (cached) {
+    setPM(cached.high, cached.mid, cached.low);
   } else {
-    fetch('/premarket').then(r=>r.ok?r.json():null).then(pm=>{
-      if(pm?.available && pm.high) {
-        window._pmCache = { high: pm.high, mid: pm.mid, low: pm.low };
+    fetch('/premarket?t=' + Date.now()).then(r=>r.ok?r.json():null).then(pm=>{
+      if (pm?.available && pm.high) {
+        savePMCache(pm);
         setPM(pm.high, pm.mid, pm.low);
       } else {
-        setPM(null, null, null);
+        // Not available yet (pre-4am ET) or PM window closed with no data
+        // Do NOT clear — keep any existing display from earlier in session
+        const still = loadPMCache();
+        if (still) setPM(still.high, still.mid, still.low);
       }
-    }).catch(()=>setPM(null, null, null));
+    }).catch(() => {
+      const still = loadPMCache();
+      if (still) setPM(still.high, still.mid, still.low);
+    });
   }
 
   // OHLCV
