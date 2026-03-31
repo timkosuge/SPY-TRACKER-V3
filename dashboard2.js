@@ -873,9 +873,11 @@ function renderWEM(md){
       {l:'AVG RANGE ±',   v:'$'+fmt(stats.avg_range/2,2)},
       {l:'% INSIDE',      v:fmt(stats.pct_inside,1)+'%'},
       {l:'% OUTSIDE',     v:fmt(stats.pct_outside,1)+'%'},
-      {l:'HIGH BREACH %', v:fmt(stats.pct_high_breach,1)+'%'},
-      {l:'LOW BREACH %',  v:fmt(stats.pct_low_breach,1)+'%'},
-    ].map(({l,v})=>`<div class="wem-stat"><div class="ws-lbl">${l}</div><div class="ws-val">${v}</div></div>`).join('');
+      {l:'HIGH BREACH %', v:fmt(stats.pct_high_breach,1)+'%', sub: stats.avg_high_breach_amt != null ? 'avg +$'+fmt(stats.avg_high_breach_amt,2) : null},
+      {l:'LOW BREACH %',  v:fmt(stats.pct_low_breach,1)+'%',  sub: stats.avg_low_breach_amt  != null ? 'avg $'+fmt(stats.avg_low_breach_amt,2)  : null},
+      {l:'AVG UP BREACH',   v: stats.avg_high_breach_amt != null ? '+$'+fmt(stats.avg_high_breach_amt,2) : '—', c:'#00ff88'},
+      {l:'AVG DOWN BREACH', v: stats.avg_low_breach_amt  != null ? '$'+fmt(stats.avg_low_breach_amt,2)   : '—', c:'#ff3355'},
+    ].map(({l,v,sub,c})=>`<div class="wem-stat"><div class="ws-lbl">${l}</div><div class="ws-val"${c?` style="color:${c}"`:''}}>${v}</div>${sub?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>`:''}</div>`).join('');
   }
 
   if(stats.breach_by_day){
