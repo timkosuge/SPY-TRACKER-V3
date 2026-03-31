@@ -490,10 +490,51 @@
   +'</div>'
 +'</div>'
 
+
+// ── Time of Day Stats ──────────────────────────────────────────────────────
++(typeof TOD_STATS !== 'undefined' ? `
+<div class="stat-box" style="padding:14px;margin-bottom:12px;">
+  <div class="es-section" style="margin-bottom:6px;">
+    ⬡ TIME OF DAY — WHEN DOES SPY SET ITS HIGH AND LOW?
+  </div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:12px;font-family:'Share Tech Mono',monospace;">
+    <span id="todDays"></span>&nbsp;·&nbsp;<span id="todRange"></span>
+    &nbsp;·&nbsp;Based on 1-min intraday bars (CT time)
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+    <div>
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#00ff88;margin-bottom:8px;">
+        🟢 HIGH OF DAY (HOD) — WHEN IS IT SET?
+      </div>
+      <div id="todHodChart"></div>
+    </div>
+    <div>
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#ff3355;margin-bottom:8px;">
+        🔴 LOW OF DAY (LOD) — WHEN IS IT SET?
+      </div>
+      <div id="todLodChart"></div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:14px;" id="todSequencePanel"></div>
+
+  <div>
+    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text2);margin-bottom:8px;">
+      BY DAY OF WEEK
+    </div>
+    <div id="todDowPanel"></div>
+  </div>
+</div>
+` : '<div style="padding:14px;color:var(--text3);font-size:12px;font-family:Share Tech Mono,monospace;">TIME OF DAY data not loaded — run generate_tod_stats.py to generate tod_stats.js</div>')
+
 +'</div>';
 
     const dot=document.getElementById('intradayRefreshDot');
     if(dot){dot.style.background='var(--green)';setTimeout(()=>{if(dot)dot.style.background='var(--text3)';},800);}
+
+    // Render TOD stats after innerHTML is set (elements now exist in DOM)
+    if(typeof renderTODStats==='function') try { renderTODStats(); } catch(e) {}
   }
 
   window._intradaySetLookback=function(val){_lookback=val;renderIntraday();};
