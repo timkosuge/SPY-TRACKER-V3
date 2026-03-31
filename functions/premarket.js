@@ -82,17 +82,23 @@ export async function onRequest(context) {
     }
 
     // Strict filter: only bars inside [p1, p2] with valid OHLC
-    // This is the critical step — Yahoo bleeds RTH bars in with includePrePost
+    // Also filter out single-print / no-volume bars which can have extreme outlier prices
+    const prevClose = result.meta?.previousClose || result.meta?.chartPreviousClose || null;
+    const sanityMin = prevClose ? prevClose * 0.97 : 0;   // must be within 3% of prev close
+    const sanityMax = prevClose ? prevClose * 1.03 : Infinity;
     const bars = timestamps.map((t, i) => ({
       t, open: opens[i], high: highs[i], low: lows[i], close: closes[i], vol: vols[i]
     })).filter(b =>
       b.t >= p1 &&
-      b.t <  p2 &&          // strict < not <= so the 9:30 open bar never bleeds in
+      b.t <  p2 &&          // strict < so the 9:30 open bar never bleeds in
       b.high  != null &&
       b.low   != null &&
       b.close != null &&
       b.high  > 0 &&
-      b.low   > 0
+      b.low   > 0 &&
+      (b.vol == null || b.vol >= 5) &&  // filter single-print no-volume bars
+      b.low   >= sanityMin &&            // sanity: within 3% of prev close
+      b.high  <= sanityMax
     );
 
     if (!bars.length) {
@@ -110,8 +116,7 @@ export async function onRequest(context) {
     const pmLast  = bars[bars.length - 1].close;
     const pmVol   = bars.reduce((a, b) => a + (b.vol || 0), 0);
 
-    // Previous close from meta
-    const prevClose = result.meta?.previousClose || result.meta?.chartPreviousClose || null;
+    // Previous close already extracted above for sanity filtering
     const change    = prevClose ? pmLast - prevClose : null;
     const changePct = prevClose && change != null ? (change / prevClose) * 100 : null;
 
