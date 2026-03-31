@@ -8,7 +8,6 @@ const $=id=>document.getElementById(id);
 // Group tab mapping
 const GROUP_TABS = {
   derivatives: ['options','gex','wem','volatility'],
-  macro:       ['bonds','breadth','sentiment'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
 const TAB_TO_GROUP = {};
@@ -53,7 +52,6 @@ function _switchPanelOnly(id) {
   // Tab-specific renders
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
-  if(id==='macro' && window._M) window._M.init();
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
   if(id==='declines') { try { renderDeclines(); } catch(e){ console.warn('declines:',e); } }
@@ -89,6 +87,7 @@ function switchTab(id){
   const p=$('panel-'+id); if(p)p.classList.add('active');
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
+  if(id==='macro' && window._M) window._M.init();
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
