@@ -407,9 +407,9 @@
   <div class="tab active" onclick="switchTab('hub')">MARKET HUB</div>
   <div class="tab" onclick="switchTab('desk')">TRADING DESK</div>
   <div class="tab" onclick="switchTab('intraday')">INTRADAY</div>
-  <div class="tab" onclick="switchTab('overview')">MARKET OVERVIEW</div>
+  <div class="tab group-tab" onclick="switchGroupTab('overview','overview')">MARKET OVERVIEW ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('derivatives','options')">DERIVATIVES ▾</div>
-  <div class="tab group-tab" onclick="switchGroupTab('macro','bonds')">MACRO ▾</div>
+  <div class="tab" onclick="switchTab('macro')">MACRO</div>
   <div class="tab group-tab" onclick="switchGroupTab('history','pricehistory')">HISTORY ▾</div>
   <div class="tab" onclick="switchTab('media')">▶ MEDIA</div>
   <div class="tab" onclick="switchTab('journal')">⬡ JOURNAL</div>
@@ -424,9 +424,10 @@
     <div class="subtab" onclick="switchGroupSub('wem',this)">EXPECTED MOVE</div>
     <div class="subtab" onclick="switchGroupSub('volatility',this)">VOLATILITY</div>
   </div>
-  <!-- Macro subtabs -->
-  <div class="subtab-group" id="subtabs-macro" style="display:none;">
-    <div class="subtab active" onclick="switchGroupSub('bonds',this)">⬡ BONDS</div>
+  <!-- Overview subtabs (overview gets bonds/breadth/sentiment) -->
+  <div class="subtab-group" id="subtabs-overview" style="display:none;">
+    <div class="subtab active" onclick="switchGroupSub('overview',this)">OVERVIEW</div>
+    <div class="subtab" onclick="switchGroupSub('bonds',this)">⬡ BONDS</div>
     <div class="subtab" onclick="switchGroupSub('breadth',this)">BREADTH</div>
     <div class="subtab" onclick="switchGroupSub('sentiment',this)">SENTIMENT</div>
   </div>
@@ -642,6 +643,14 @@
       <div id="volRangeHistory"></div>
     </div>
   </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     MACRO
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-macro">
+  <div id="macroContent"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
