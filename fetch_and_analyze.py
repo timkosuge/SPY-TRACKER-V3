@@ -1280,50 +1280,133 @@ def compute_session_stats(conn, target_date):
 
 
 def export_intraday_json(conn):
-    """Export intraday_session_stats as intraday_data.js for the frontend."""
+    """Export session stats derived from intraday_bars to intraday_library.js for the frontend."""
+    from collections import defaultdict
     c = conn.cursor()
-    rows = c.execute("""
-        SELECT date, gap_pct, gap_type, or_high, or_low, or_range,
-               initial_move_dir, initial_move_pct,
-               gap_filled, gap_fill_time,
-               or_break_dir, or_break_time, or_break_pct,
-               best_5m_time, best_5m_pct, worst_5m_time, worst_5m_pct,
-               power_hour_dir, power_hour_pct, lunch_range_pct,
-               open_price, close_price, prev_close, day_range_pct
-        FROM intraday_session_stats ORDER BY date DESC
-    """).fetchall()
 
-    if not rows:
-        print("  intraday_data.js: no session stats yet")
+    dates = [r[0] for r in c.execute(
+        'SELECT DISTINCT date FROM intraday_bars ORDER BY date DESC'
+    ).fetchall()]
+
+    if not dates:
+        print("  intraday_library.js: no intraday_bars data yet")
         return
 
-    cols = ["date","gap_pct","gap_type","or_high","or_low","or_range",
-            "initial_move_dir","initial_move_pct",
-            "gap_filled","gap_fill_time",
-            "or_break_dir","or_break_time","or_break_pct",
-            "best_5m_time","best_5m_pct","worst_5m_time","worst_5m_pct",
-            "power_hour_dir","power_hour_pct","lunch_range_pct",
-            "open_price","close_price","prev_close","day_range_pct"]
+    # Build prev_close lookup from daily_ohlcv
+    daily = {}
+    for r in c.execute('SELECT date, open, high, low, close FROM daily_ohlcv').fetchall():
+        daily[r[0]] = {'open': r[1], 'high': r[2], 'low': r[3], 'close': r[4]}
 
-    records = [dict(zip(cols, r)) for r in rows]
-
-    # Also attach the 1m bars for the most recent day (for live chart use)
-    if records:
-        recent_date = records[0]["date"]
-        bars_1m = c.execute(
-            "SELECT time, open, high, low, close, volume FROM intraday_1m WHERE date=? ORDER BY time",
-            (recent_date,)
+    records = []
+    for i, date in enumerate(dates):
+        bars = c.execute(
+            'SELECT timestamp, open, high, low, close, volume FROM intraday_bars WHERE date=? ORDER BY timestamp',
+            (date,)
         ).fetchall()
-        records[0]["bars_1m"] = [
-            {"t": b[0], "o": b[1], "h": b[2], "l": b[3], "c": b[4], "v": b[5]}
-            for b in bars_1m
-        ]
+        if not bars:
+            continue
+        session = [(t, o, h, l, cl, v) for t, o, h, l, cl, v in bars if '09:30' <= t <= '15:59']
+        if not session:
+            continue
 
-    with open("intraday_library.js", "w") as f:
-        f.write("const INTRADAY_SESSION_STATS = ")
+        open_price  = session[0][1]
+        close_price = session[-1][4]
+        day_high    = max(b[2] for b in session)
+        day_low     = min(b[3] for b in session)
+        day_range_pct = round((day_high - day_low) / open_price * 100, 3) if open_price else None
+
+        prev_date  = dates[i + 1] if i + 1 < len(dates) else None
+        prev_close = daily.get(prev_date, {}).get('close') if prev_date else None
+        gap_pct    = round((open_price - prev_close) / prev_close * 100, 3) if prev_close else None
+        if gap_pct is None:       gap_type = None
+        elif gap_pct > 0.25:      gap_type = 'GAP_UP'
+        elif gap_pct < -0.25:     gap_type = 'GAP_DOWN'
+        else:                     gap_type = 'FLAT'
+
+        or_bars  = [(t, o, h, l, cl, v) for t, o, h, l, cl, v in session if t <= '09:59']
+        or_high  = max(b[2] for b in or_bars) if or_bars else None
+        or_low   = min(b[3] for b in or_bars) if or_bars else None
+        or_range = round((or_high - or_low) / or_low * 100, 3) if or_high and or_low else None
+
+        post_or = [(t, o, h, l, cl, v) for t, o, h, l, cl, v in session if t >= '10:00']
+        or_break_dir = None; or_break_time = None
+        if or_high and or_low and post_or:
+            for t, o, h, l, cl, v in post_or:
+                if cl > or_high:   or_break_dir = 'UP';   or_break_time = t; break
+                elif cl < or_low:  or_break_dir = 'DOWN'; or_break_time = t; break
+
+        gap_filled = None; gap_fill_time = None
+        if gap_type == 'GAP_UP' and prev_close:
+            for t, o, h, l, cl, v in session:
+                if l <= prev_close: gap_filled = 1; gap_fill_time = t; break
+            if gap_filled is None: gap_filled = 0
+        elif gap_type == 'GAP_DOWN' and prev_close:
+            for t, o, h, l, cl, v in session:
+                if h >= prev_close: gap_filled = 1; gap_fill_time = t; break
+            if gap_filled is None: gap_filled = 0
+
+        init_bars = [(t, o, h, l, cl, v) for t, o, h, l, cl, v in session if t <= '09:44']
+        init_move_dir = None; init_move_pct = None
+        if init_bars:
+            init_close    = init_bars[-1][4]
+            init_move_pct = round((init_close - open_price) / open_price * 100, 3) if open_price else None
+            init_move_dir = 'UP' if (init_move_pct or 0) > 0 else 'DOWN'
+
+        buckets = defaultdict(list)
+        for t, o, h, l, cl, v in session:
+            hh, mm = int(t[:2]), int(t[3:])
+            buckets[f'{hh:02d}:{(mm // 5) * 5:02d}'].append(cl)
+        best_5m_time = None; best_5m_pct = None; worst_5m_time = None; worst_5m_pct = None
+        best_p = None; worst_p = None
+        for bt, closes in buckets.items():
+            if len(closes) < 2: continue
+            pct = (closes[-1] - closes[0]) / closes[0] * 100 if closes[0] else 0
+            if best_p is None or pct > best_p:  best_p  = pct; best_5m_time  = bt; best_5m_pct  = round(pct, 3)
+            if worst_p is None or pct < worst_p: worst_p = pct; worst_5m_time = bt; worst_5m_pct = round(pct, 3)
+
+        ph_bars = [(t, o, h, l, cl, v) for t, o, h, l, cl, v in session if '15:00' <= t <= '15:59']
+        power_hour_dir = None; power_hour_pct = None
+        if ph_bars:
+            ph_open = ph_bars[0][1]; ph_close = ph_bars[-1][4]
+            power_hour_pct = round((ph_close - ph_open) / ph_open * 100, 3) if ph_open else None
+            power_hour_dir = 'UP' if (power_hour_pct or 0) >= 0 else 'DOWN'
+
+        lunch_bars = [(t, o, h, l, cl, v) for t, o, h, l, cl, v in session if '11:30' <= t <= '12:59']
+        lunch_range_pct = None
+        if lunch_bars:
+            lh = max(b[2] for b in lunch_bars); ll = min(b[3] for b in lunch_bars)
+            lunch_range_pct = round((lh - ll) / ll * 100, 3) if ll else None
+
+        rec = {
+            'date': date, 'gap_pct': gap_pct, 'gap_type': gap_type,
+            'or_high':  round(or_high,  2) if or_high  else None,
+            'or_low':   round(or_low,   2) if or_low   else None,
+            'or_range': or_range,
+            'initial_move_dir': init_move_dir, 'initial_move_pct': init_move_pct,
+            'gap_filled': gap_filled, 'gap_fill_time': gap_fill_time,
+            'or_break_dir': or_break_dir, 'or_break_time': or_break_time, 'or_break_pct': None,
+            'best_5m_time': best_5m_time, 'best_5m_pct': best_5m_pct,
+            'worst_5m_time': worst_5m_time, 'worst_5m_pct': worst_5m_pct,
+            'power_hour_dir': power_hour_dir, 'power_hour_pct': power_hour_pct,
+            'lunch_range_pct': lunch_range_pct,
+            'open_price':  round(open_price,  2) if open_price  else None,
+            'close_price': round(close_price, 2) if close_price else None,
+            'prev_close':  round(prev_close,  2) if prev_close  else None,
+            'day_range_pct': day_range_pct,
+        }
+        # Attach bars for the most recent session (for live chart use)
+        if i == 0:
+            rec['bars_1m'] = [
+                {'t': t, 'o': o, 'h': h, 'l': l, 'c': cl, 'v': v}
+                for t, o, h, l, cl, v in session
+            ]
+        records.append(rec)
+
+    with open('intraday_library.js', 'w') as f:
+        f.write('const INTRADAY_SESSION_STATS = ')
         json.dump(records, f)
-        f.write(";\n")
-    print(f"  intraday_library.js: {len(records)} sessions exported")
+        f.write(';\n')
+    print(f'  intraday_library.js: {len(records)} sessions exported')
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
