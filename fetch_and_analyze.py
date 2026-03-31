@@ -1319,11 +1319,11 @@ def export_intraday_json(conn):
             for b in bars_1m
         ]
 
-    with open("intraday_data.js", "w") as f:
+    with open("intraday_library.js", "w") as f:
         f.write("const INTRADAY_SESSION_STATS = ")
         json.dump(records, f)
         f.write(";\n")
-    print(f"  intraday_data.js: {len(records)} sessions exported")
+    print(f"  intraday_library.js: {len(records)} sessions exported")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
