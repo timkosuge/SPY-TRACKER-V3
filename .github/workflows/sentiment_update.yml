@@ -1,0 +1,43 @@
+name: Sentiment Data Update
+
+on:
+  schedule:
+    # AAII releases Thursday after market close (~6 PM ET = 22:00 UTC)
+    # COT releases Friday at 3:30 PM ET (19:30 UTC)
+    # Run Friday at 8 PM ET (00:00 UTC Saturday) to catch both releases
+    - cron: '0 0 * * 6'
+    # Also run Monday morning to ensure fresh data for the week
+    - cron: '0 12 * * 1'
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  fetch-sentiment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch AAII + COT data
+        run: python fetch_sentiment.py
+
+      - name: Commit sentiment_data.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main
+          git add -f sentiment_data.json
+          git diff --staged --quiet && echo "No changes to sentiment data" || git commit -m "Auto: sentiment data update $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push || echo "Nothing to push"
