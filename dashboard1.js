@@ -1261,12 +1261,12 @@ function renderDesk(md,sd){
         <div style="font-family:'Orbitron',monospace;font-size:9px;color:${pcr>1?'#ff3355':pcr<0.7?'#00ff88':'#ffcc00'};">${pcr>1?'BEARISH':pcr<0.7?'BULLISH':'NEUTRAL'}</div>
       </div>
       <div class="panel" style="text-align:center;border-top:3px solid ${gexColor};cursor:pointer;" onclick="switchTab('gex')" title="Full GEX on GEX tab">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${gexColor};margin-bottom:4px;">GEX</div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:${gexColor};margin-bottom:4px;">GEX</div>
         ${gexFlip?`
-        <div style="font-family:'Orbitron',monospace;font-size:8px;padding:2px 6px;border-radius:2px;margin:2px auto;display:inline-block;color:${gexAbove?'#00ff88':'#ff3355'};background:${gexAbove?'rgba(0,255,136,0.12)':'rgba(255,51,85,0.12)'};">${gexAbove?'▲ ABOVE FLIP':'▼ BELOW FLIP'}</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:bold;color:${gexColor};margin-top:4px;">$${fmt(gexFlip,2)}</div>
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-top:1px;">${gex.net_gex?(gex.net_gex/1e9).toFixed(1)+'B net':''}</div>
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-top:2px;">tap for full GEX ↗</div>
+        <div style="font-family:'Orbitron',monospace;font-size:10px;padding:3px 8px;border-radius:2px;margin:2px auto;display:inline-block;color:${gexAbove?'#00ff88':'#ff3355'};background:${gexAbove?'rgba(0,255,136,0.12)':'rgba(255,51,85,0.12)'};">${gexAbove?'▲ ABOVE FLIP':'▼ BELOW FLIP'}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${gexColor};margin-top:6px;">$${fmt(gexFlip,2)}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-top:2px;">${gex.net_gex?(gex.net_gex/1e9).toFixed(1)+'B net':''}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-top:3px;">tap for full GEX ↗</div>
         `:`<div style="font-size:10px;color:var(--text3);margin-top:12px;">Loading...</div>`}
       </div>
       <!-- MAX PAIN: nearest big, all expiries listed below -->
@@ -1434,14 +1434,11 @@ function renderDeskSession(md,sd){
   })();
 
   const loadPMCache = () => {
-    // Only trust localStorage cache if PM session is definitively closed.
-    // During pre-market, skip the cache so we always get a fresh fetch.
-    if (!_pmSessionClosed) return null;
-    // 1. In-memory (fastest)
+    // 1. In-memory (fastest) — always check first
     if (window._pmCache && window._pmCache.high && window._pmCache.date === _pmToday) {
       return window._pmCache;
     }
-    // 2. localStorage (survives page refresh)
+    // 2. localStorage — valid for today's date regardless of session state
     try {
       const stored = JSON.parse(localStorage.getItem(PM_CACHE_KEY) || 'null');
       if (stored && stored.date === _pmToday && stored.high) {
@@ -1453,14 +1450,12 @@ function renderDeskSession(md,sd){
   };
 
   const savePMCache = (pm) => {
-    // Always update in-memory so the display stays current this session.
-    // Only persist to localStorage once PM session is closed — during pre-market
-    // we don't lock the values to disk until the session is complete.
+    // Always update in-memory and localStorage so the panel survives page refreshes
+    // during market hours. We no longer gate localStorage on _pmSessionClosed — once
+    // we have valid PM data for today, we keep it all day.
     const entry = { date: _pmToday, high: pm.high, mid: pm.mid, low: pm.low };
     window._pmCache = entry;
-    if (_pmSessionClosed) {
-      try { localStorage.setItem(PM_CACHE_KEY, JSON.stringify(entry)); } catch(e) {}
-    }
+    try { localStorage.setItem(PM_CACHE_KEY, JSON.stringify(entry)); } catch(e) {}
   };
 
   const cached = loadPMCache();
