@@ -1504,6 +1504,129 @@ def get_trading_days_to_process(conn):
 
 
 
+
+def export_gap_stats(conn):
+    """Compute gap stats from PH of prev day + FH of next day. Writes gap_stats.js."""
+    import json, re, statistics
+    from collections import defaultdict
+    from datetime import datetime, timedelta
+
+    c=conn.cursor()
+    try:
+        with open('intraday_library.js') as f: raw=f.read()
+        match=re.search(r'const INTRADAY_SESSION_STATS = (\[.*?\]);',raw,re.DOTALL)
+        if not match: print("  gap_stats.js: library not ready"); return
+        sessions={d['date']: d for d in json.loads(match.group(1))}
+    except Exception as e: print(f"  gap_stats.js: {e}"); return
+
+    c.execute("SELECT date,timestamp,open,high,low,close,volume FROM intraday_bars WHERE timestamp>='09:30' AND timestamp<'16:00' ORDER BY date,timestamp")
+    day_bars=defaultdict(list)
+    for row in c.fetchall(): day_bars[row[0]].append(row[1:])
+    dates=sorted(set(sessions.keys())&set(day_bars.keys()))
+
+    def wstats(bars,ts0,ts1):
+        w=[b for b in bars if ts0<=b[0]<ts1]
+        if not w: return None
+        o=w[0][1];cl=w[-1][4];hi=max(b[2] for b in w);lo=min(b[3] for b in w)
+        vol=sum(b[5] for b in w);move=(cl-o)/o*100;rng=(hi-lo)/o*100
+        br=[(b[2]-b[3])/b[1]*100 for b in w if b[1]>0]
+        avg_br=statistics.mean(br) if br else 0
+        n3=max(1,len(w)//3)
+        va=(sum(b[5] for b in w[-n3:])/sum(b[5] for b in w[:n3])) if sum(b[5] for b in w[:n3])>0 else 1
+        dirs=[1 if b[4]>b[1] else -1 if b[4]<b[1] else 0 for b in w]
+        mr=cr=1
+        for i in range(1,len(dirs)):
+            if dirs[i]==dirs[i-1] and dirs[i]!=0: cr+=1; mr=max(mr,cr)
+            else: cr=1
+        lm=(w[-1][4]-w[-15][1])/w[-15][1]*100 if len(w)>=15 else (cl-o)/o*100
+        return {'move':round(move,4),'range':round(rng,4),'vol':round(vol,0),
+                'avg_bar_range':round(avg_br,4),'vol_accel':round(va,3),
+                'max_run':mr,'last_move':round(lm,4),'bars':len(w)}
+
+    pairs=[]
+    for i in range(1,len(dates)):
+        prev=dates[i-1];curr=dates[i]
+        s=sessions.get(curr);sp=sessions.get(prev)
+        if not s or not sp: continue
+        ph=wstats(day_bars[prev],'14:00','15:00')
+        fh=wstats(day_bars[curr],'09:30','10:30')
+        if not ph or not fh: continue
+        cb=day_bars[curr]
+        pairs.append({'prev_date':prev,'curr_date':curr,
+            'gap_pct':s.get('gap_pct',0),'gap_type':s.get('gap_type','FLAT'),
+            'gap_filled':s.get('gap_filled',0),'or_range':s.get('or_range',0),
+            'or_break_dir':s.get('or_break_dir'),
+            'curr_day_move':(cb[-1][4]-cb[0][1])/cb[0][1]*100,
+            'curr_day_range':s.get('day_range_pct',0),
+            'ph':ph,'fh':fh,'dow':datetime.strptime(curr,'%Y-%m-%d').weekday()})
+
+    today=datetime.utcnow().date()
+    cutoff_12m=(today-timedelta(days=365)).strftime('%Y-%m-%d')
+    year_str=str(today.year)
+    DOW=['Mon','Tue','Wed','Thu','Fri']
+
+    def avg(lst): return round(statistics.mean(lst),4) if lst else 0
+    def pct(lst,fn): return round(sum(1 for p in lst if fn(p))/len(lst)*100) if lst else 0
+
+    def stats(sub):
+        if not sub: return {}
+        n=len(sub); gaps=[p for p in sub if p['gap_type'] in ('GAP_UP','GAP_DOWN')]
+        ph_bins=[]
+        for lo,hi,lbl in [(-99,-0.4,'Strong Dn'),(-0.4,-0.2,'Mild Dn'),(-0.2,0,'Flat Dn'),(0,0.2,'Flat Up'),(0.2,0.4,'Mild Up'),(0.4,99,'Strong Up')]:
+            g=[p for p in sub if lo<p['ph']['move']<=hi]
+            if not g: continue
+            gu=sum(1 for p in g if p['gap_type']=='GAP_UP'); gd=sum(1 for p in g if p['gap_type']=='GAP_DOWN')
+            gn=sum(1 for p in g if p['gap_type'] in ('GAP_UP','GAP_DOWN'))
+            fill=sum(1 for p in g if p['gap_filled'] and p['gap_type'] in ('GAP_UP','GAP_DOWN'))
+            ph_bins.append({'label':lbl,'n':len(g),'avg_gap':avg([p['gap_pct'] for p in g]),
+                'gap_up_pct':round(gu/len(g)*100),'gap_dn_pct':round(gd/len(g)*100),
+                'avg_ph_move':avg([p['ph']['move'] for p in g]),'avg_ph_range':avg([p['ph']['range'] for p in g]),
+                'avg_fh_range':avg([p['fh']['range'] for p in g]),'fill_rate':round(fill/gn*100) if gn else 0})
+        gbd={}
+        for gt in ['GAP_UP','FLAT','GAP_DOWN']:
+            g=[p for p in sub if p['gap_type']==gt]
+            if not g: continue
+            gbd[gt]={'n':len(g),'avg_gap_pct':avg([p['gap_pct'] for p in g]),
+                'avg_ph_move':avg([p['ph']['move'] for p in g]),'avg_ph_range':avg([p['ph']['range'] for p in g]),
+                'avg_ph_vol_accel':avg([p['ph']['vol_accel'] for p in g]),'avg_ph_last_move':avg([p['ph']['last_move'] for p in g]),
+                'avg_fh_move':avg([p['fh']['move'] for p in g]),'avg_fh_range':avg([p['fh']['range'] for p in g]),
+                'avg_fh_vol_accel':avg([p['fh']['vol_accel'] for p in g]),
+                'fh_up_pct':pct(g,lambda p:(p['fh']['move']>0)),
+                'fill_rate':round(sum(1 for p in g if p['gap_filled'])/len(g)*100) if gt!='FLAT' else 0,
+                'avg_day_move':avg([p['curr_day_move'] for p in g]),'avg_day_range':avg([p['curr_day_range'] for p in g]),
+                'fh_predicts_day':pct(g,lambda p:(p['fh']['move']>0)==(p['curr_day_move']>0))}
+        mg=[p for p in gaps if (p['ph']['move']>0)==(p['gap_type']=='GAP_UP')]
+        rg=[p for p in gaps if (p['ph']['move']>0)!=(p['gap_type']=='GAP_UP')]
+        ls=[p for p in sub if p['ph']['last_move']>0.1]; lf=[p for p in sub if p['ph']['last_move']<-0.1]
+        ph_rng=sorted(p['ph']['range'] for p in sub); med_r=ph_rng[len(ph_rng)//2] if ph_rng else 0
+        wp=[p for p in sub if p['ph']['range']>med_r]; tp=[p for p in sub if p['ph']['range']<=med_r]
+        dbd={DOW[d]:{'n':sum(1 for p in sub if p['dow']==d),
+            'avg_gap':avg([p['gap_pct'] for p in sub if p['dow']==d]),
+            'gap_up_pct':pct([p for p in sub if p['dow']==d],lambda p:p['gap_type']=='GAP_UP'),
+            'gap_dn_pct':pct([p for p in sub if p['dow']==d],lambda p:p['gap_type']=='GAP_DOWN'),
+            'avg_ph_move':avg([p['ph']['move'] for p in sub if p['dow']==d])} for d in range(5)}
+        return {'n':n,'avg_gap':avg([p['gap_pct'] for p in sub]),
+            'avg_ph_move':avg([p['ph']['move'] for p in sub]),'avg_ph_range':avg([p['ph']['range'] for p in sub]),
+            'avg_fh_range':avg([p['fh']['range'] for p in sub]),'ph_bins':ph_bins,'gap_breakdown':gbd,
+            'signals':{'momentum_fill':round(sum(1 for p in mg if p['gap_filled'])/len(mg)*100) if mg else 0,
+                'momentum_n':len(mg),'reversal_fill':round(sum(1 for p in rg if p['gap_filled'])/len(rg)*100) if rg else 0,
+                'reversal_n':len(rg),'late_surge_gap_up':pct(ls,lambda p:p['gap_type']=='GAP_UP') if ls else 0,
+                'late_surge_n':len(ls),'late_fade_gap_dn':pct(lf,lambda p:p['gap_type']=='GAP_DOWN') if lf else 0,
+                'late_fade_n':len(lf),'wide_ph_fh_range':avg([p['fh']['range'] for p in wp]),
+                'tight_ph_fh_range':avg([p['fh']['range'] for p in tp])},'dow_breakdown':dbd}
+
+    d12m={p['curr_date'] for p in pairs if p['curr_date']>=cutoff_12m}
+    dyr={p['curr_date'] for p in pairs if p['curr_date'].startswith(year_str)}
+    out={'all':stats(pairs),'12m':stats([p for p in pairs if p['curr_date'] in d12m]),
+         'year':stats([p for p in pairs if p['curr_date'] in dyr])}
+    for d in range(5):
+        out[f'all_{DOW[d]}']=stats([p for p in pairs if p['dow']==d])
+        out[f'12m_{DOW[d]}']=stats([p for p in pairs if p['curr_date'] in d12m and p['dow']==d])
+        out[f'year_{DOW[d]}']=stats([p for p in pairs if p['curr_date'] in dyr and p['dow']==d])
+    js="const GAP_STATS = "+json.dumps(out,separators=(',',':'))+";\n"
+    with open('gap_stats.js','w') as f: f.write(js)
+    print(f"  gap_stats.js: {len(pairs)} pairs, {len(out)} filter combos")
+
 def export_window_stats(conn):
     """
     Compute stats for the two key intraday windows:
@@ -2091,6 +2214,7 @@ def main():
             export_intraday_vol_profile(conn)
             export_intraday_vol_stats(conn)
             export_window_stats(conn)
+            export_gap_stats(conn)
 
             # Update GitHub Actions commit list
             print("  Intraday accumulation complete")
