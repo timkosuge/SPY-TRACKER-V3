@@ -5834,7 +5834,7 @@ function renderIntradayVolProfile() {
         <div style="text-align:right;font-size:10px;color:var(--text3);">
           <div>${profile.length} buckets · ~${nSessions} sessions</div>
           <div style="margin-top:2px;">5-min avg volume · Central Time</div>
-          <div style="margin-top:2px;">bars = % of daily total · top 10% trimmed</div>
+          <div style="margin-top:2px;">bars = % of mid-session vol · top 10% trimmed · open/close 15min excluded</div>
         </div>
       </div>
 
@@ -5857,7 +5857,7 @@ function renderIntradayVolProfile() {
         <span style="display:inline-block;width:10px;height:10px;background:#ffcc00;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Elevated &nbsp;
         <span style="display:inline-block;width:10px;height:10px;background:#00ccff;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Normal &nbsp;
         <span style="display:inline-block;width:10px;height:10px;background:#005577;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Light &nbsp;
-        <span style="color:var(--text3);margin-left:8px;">Note: 15:55 CT spike = market-on-close orders (real MOC print)</span>
+        <span style="color:var(--text3);margin-left:8px;">First &amp; last 15 min excluded · 8:45–14:45 CT</span>
       </div>
     </div>`;
 }
