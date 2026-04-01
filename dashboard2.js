@@ -918,8 +918,11 @@ function renderWEM(md){
   const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
   const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
 
+  // Only include weeks that have fully ended — exclude the current open week even if
+  // week_close is populated (happens when Friday's close is used as the WEM anchor)
+  const _todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
   const histWeeks = wems
-    .filter(w => w.week_close != null && w.wem_low && w.wem_high && w.wem_mid)
+    .filter(w => w.week_close != null && w.wem_low && w.wem_high && w.wem_mid && w.week_end < _todayStr)
     .slice().reverse(); // oldest first
   const total = histWeeks.length;
   const aboveCount  = histWeeks.filter(w => w.week_close > w.wem_high).length;
