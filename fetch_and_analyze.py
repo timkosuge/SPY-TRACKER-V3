@@ -1014,6 +1014,43 @@ def export_market_data(conn, options_data=None):
                 quotes[sym] = {"price":None,"change":None,"pct_change":None}
         output["quotes"] = quotes
         print(f"  Quotes: {len([q for q in quotes.values() if q['price']])} loaded")
+
+        # ── SPY price sanity check ────────────────────────────────────────────
+        # On weekends and after-hours, yfinance.fast_info.last_price returns the
+        # previous session close — which is ALSO the WEM mid anchor, making
+        # z-score = 0 and the bell/thermometer show neutral forever.
+        # Fix: use the most recent actual close from daily_ohlcv as the canonical
+        # SPY price in market_data.json whenever the market is not currently open.
+        try:
+            now_ct  = datetime.now(CT)
+            ct_dow  = now_ct.weekday()   # 0=Mon … 6=Sun
+            ct_mins = now_ct.hour * 60 + now_ct.minute
+            # Market hours CT: 8:30–15:00
+            market_open_ct  = 8 * 60 + 30
+            market_close_ct = 15 * 60
+            market_is_open  = (ct_dow < 5) and (market_open_ct <= ct_mins < market_close_ct)
+
+            if not market_is_open:
+                c_spy = conn.cursor()
+                db_row = c_spy.execute(
+                    "SELECT date, close, open, high, low, volume FROM daily_ohlcv "
+                    "ORDER BY date DESC LIMIT 1"
+                ).fetchone()
+                if db_row:
+                    db_date, db_close, db_open, db_high, db_low, db_vol = db_row
+                    spy_q = output["quotes"].get("SPY", {})
+                    spy_q["price"]        = round(db_close, 2)
+                    spy_q["open"]         = spy_q.get("open")   or (round(db_open,  2) if db_open  else None)
+                    spy_q["high"]         = spy_q.get("high")   or (round(db_high,  2) if db_high  else None)
+                    spy_q["low"]          = spy_q.get("low")    or (round(db_low,   2) if db_low   else None)
+                    spy_q["volume"]       = spy_q.get("volume") or db_vol
+                    spy_q["price_date"]   = db_date
+                    spy_q["market_closed"] = True
+                    output["quotes"]["SPY"] = spy_q
+                    print(f"  SPY price patched from DB: ${db_close} as of {db_date} (market closed)")
+        except Exception as ep:
+            print(f"  SPY price patch error: {ep}")
+
     except Exception as e:
         print(f"  Quotes error: {e}")
         output["quotes"] = {}
