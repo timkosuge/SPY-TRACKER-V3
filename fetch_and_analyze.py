@@ -1501,6 +1501,89 @@ def get_trading_days_to_process(conn):
 
 
 
+
+def export_intraday_vol_profile(conn):
+    """
+    Compute 5-min volume profile from intraday_bars — absolute avg shares + % of daily total.
+    Writes intraday_vol_profile.js. Runs automatically with the pipeline.
+    """
+    import json
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+
+    c = conn.cursor()
+    c.execute("""
+        SELECT date, timestamp, volume
+        FROM intraday_bars
+        WHERE timestamp >= '09:30' AND timestamp < '16:00'
+        ORDER BY date, timestamp
+    """)
+    rows = c.fetchall()
+    if not rows:
+        print("  intraday_vol_profile.js: no data")
+        return
+
+    c.execute("SELECT DISTINCT date FROM intraday_bars ORDER BY date")
+    all_dates = [r[0] for r in c.fetchall()]
+    date_dow = {d: datetime.strptime(d, '%Y-%m-%d').weekday() for d in all_dates}
+
+    today = datetime.utcnow().date()
+    cutoff_12m = (today - timedelta(days=365)).strftime('%Y-%m-%d')
+    year_str = str(today.year)
+    dates_12m  = {d for d in all_dates if d >= cutoff_12m}
+    dates_year = {d for d in all_dates if d.startswith(year_str)}
+
+    buckets_by_date = defaultdict(lambda: defaultdict(float))
+    daily_total = defaultdict(float)
+    for date, ts, vol in rows:
+        h_int, m_int = int(ts[:2]), int(ts[3:])
+        bucket_m = (m_int // 5) * 5
+        bucket_ts = f"{h_int:02d}:{bucket_m:02d}"
+        buckets_by_date[bucket_ts][date] += vol
+        daily_total[date] += vol
+
+    DOW_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+
+    def compute_profile(filter_dates=None, filter_dow=None):
+        result = []
+        for ts in sorted(buckets_by_date.keys()):
+            by_date = buckets_by_date[ts]
+            raw_vols, pct_vols = [], []
+            for date, vol in by_date.items():
+                if filter_dates is not None and date not in filter_dates: continue
+                if filter_dow is not None and date_dow.get(date) != filter_dow: continue
+                raw_vols.append(vol)
+                dt = daily_total[date]
+                if dt > 0: pct_vols.append(vol / dt * 100)
+            if not raw_vols: continue
+            raw_s = sorted(raw_vols); n = len(raw_s)
+            raw_t = raw_s[:max(1, int(n * 0.90))]
+            pct_s = sorted(pct_vols)
+            pct_t = pct_s[:max(1, int(len(pct_s) * 0.90))]
+            result.append({
+                'ts': ts,
+                'avg': round(sum(raw_t) / len(raw_t), 0),
+                'pct': round(sum(pct_t) / len(pct_t), 3),
+                'n': n,
+            })
+        return result
+
+    output = {
+        'all':  compute_profile(),
+        '12m':  compute_profile(filter_dates=dates_12m),
+        'year': compute_profile(filter_dates=dates_year),
+    }
+    for dow_idx, dow_name in enumerate(DOW_NAMES):
+        output[f'all_{dow_name}']  = compute_profile(filter_dow=dow_idx)
+        output[f'12m_{dow_name}']  = compute_profile(filter_dates=dates_12m,  filter_dow=dow_idx)
+        output[f'year_{dow_name}'] = compute_profile(filter_dates=dates_year, filter_dow=dow_idx)
+
+    js = f"const INTRADAY_VOL_PROFILE = {json.dumps(output, separators=(',', ':'))};
+"
+    with open('intraday_vol_profile.js', 'w') as f:
+        f.write(js)
+    print(f"  intraday_vol_profile.js: {len(all_dates)} sessions, {len(output['all'])} buckets")
+
 def export_session_vol_profile(conn):
     """
     Compute 5-min session volatility profile from intraday_bars and write
@@ -1770,6 +1853,7 @@ def main():
             # Export intraday JS
             export_intraday_json(conn)
             export_session_vol_profile(conn)
+            export_intraday_vol_profile(conn)
 
             # Update GitHub Actions commit list
             print("  Intraday accumulation complete")
