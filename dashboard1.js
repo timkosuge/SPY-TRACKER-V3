@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
-  desk:        ['desk','live-chart','intraday','intraday-volume','intraday-windows','gap-stats','session-vol'],
+  desk:        ['desk','live-chart','intraday','intraday-volume','intraday-windows','gap-stats','session-vol','time-of-day'],
   derivatives: ['options','gex','wem','volatility'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
@@ -71,6 +71,7 @@ function _switchPanelOnly(id) {
   if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }
   if(id==='gap-stats') { setTimeout(renderGapStats, 50); }
   if(id==='session-vol') { setTimeout(renderSessionVolStats, 50); }
+  if(id==='time-of-day') { setTimeout(renderTimeOfDay, 50); }
 }
 
 function switchTab(id){
@@ -6638,6 +6639,458 @@ function renderGapStats() {
     ${section('⬡ POWER HOUR MOVE → NEXT DAY GAP PREDICTION','#ffcc00', phBinExplain + phBinHtml)}
     ${section('⬡ KEY SIGNALS — LATE PH MOMENTUM, FILL RATES, RANGE EXPANSION','#8855ff', signalExplain + signalHtml)}
     ${section('⬡ GAP PATTERNS BY DAY OF WEEK','#ff8800', dowExplain + dowHtml)}
+  </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TIME OF DAY — full intraday timing analysis tab
+// ─────────────────────────────────────────────────────────────────────────────
+let _todLookback = 'all';
+let _todDow      = 'all';
+window._todSetLb  = v => { _todLookback = v; renderTimeOfDay(); };
+window._todSetDow = v => { _todDow = v;      renderTimeOfDay(); };
+
+function renderTimeOfDay() {
+  const el = document.getElementById('todStatsContent');
+  if (!el) return;
+  if (typeof TOD_STATS === 'undefined' || typeof INTRADAY_SESSION_STATS === 'undefined') {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);">Time of day data not loaded.</div>';
+    return;
+  }
+
+  const T   = TOD_STATS;
+  const ALL = INTRADAY_SESSION_STATS;
+  const curYear = new Date().getFullYear();
+
+  // ── Filter sessions ────────────────────────────────────────────────────────
+  const DOW_MAP = { Mon:1, Tue:2, Wed:3, Thu:4, Fri:5 };
+  function sessionDow(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00Z');
+    return d.getDay(); // 0=Sun..6=Sat
+  }
+  function filterSessions(sessions) {
+    return sessions.filter(s => {
+      if (!s.date) return false;
+      if (_todLookback === 'year' && !s.date.startsWith(String(curYear))) return false;
+      if (_todLookback === '12m') {
+        const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear() - 1);
+        if (new Date(s.date) < cutoff) return false;
+      }
+      if (_todDow !== 'all') {
+        const dow = sessionDow(s.date);
+        if (dow !== DOW_MAP[_todDow]) return false;
+      }
+      return true;
+    });
+  }
+
+  const sessions = filterSessions(ALL);
+  const n = sessions.length;
+
+  // ── TOD_STATS bucket filtering (same logic as intraday_data.js) ────────────
+  const DOW_IDX = { Mon:0, Tue:1, Wed:2, Thu:3, Fri:4 };
+  const bucketLabels = T.buckets;
+  const BUCKET_COLORS = ['#ff8800','#ffcc00','#00ff88','#00ccff','#8855ff','#00ccff','#ffcc00','#ff5500'];
+
+  let yearScale = 1.0;
+  if (_todLookback === 'year') {
+    const allN  = ALL.length;
+    const yearN = ALL.filter(s => s.date && s.date.startsWith(String(curYear))).length;
+    yearScale   = allN > 0 ? yearN / allN : 1;
+  }
+
+  function todBuckets(byDow) {
+    let counts;
+    if (_todDow === 'all') {
+      counts = new Array(8).fill(0);
+      byDow.forEach(row => row.counts.forEach((c,i) => { counts[i] += c; }));
+    } else {
+      const idx = DOW_IDX[_todDow];
+      counts = idx !== undefined ? [...(byDow[idx]?.counts || new Array(8).fill(0))] : new Array(8).fill(0);
+    }
+    if (_todLookback === 'year' && yearScale < 1) counts = counts.map(c => Math.round(c * yearScale));
+    const total = counts.reduce((s,c)=>s+c,0) || 1;
+    return bucketLabels.map((label,i) => ({ label, count:counts[i], pct:counts[i]/total*100 }));
+  }
+
+  const hodBuckets = todBuckets(T.hod.by_dow);
+  const lodBuckets = todBuckets(T.lod.by_dow);
+
+  // ── Shared helpers ─────────────────────────────────────────────────────────
+  const fbtn = (lbl, active, fn) =>
+    `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
+
+  const lbBtns = ['all','12m','year'].map(v =>
+    fbtn(v==='all'?'ALL HISTORY':v==='12m'?'12 MONTHS':String(curYear)+' YTD', _todLookback===v, `_todSetLb('${v}')`)
+  ).join(' ');
+  const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(d =>
+    fbtn(d==='all'?'ALL DAYS':d.toUpperCase(), _todDow===d, `_todSetDow('${d}')`)
+  ).join(' ');
+
+  const section = (title, color, body) =>
+    `<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;padding:16px;margin-bottom:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};margin-bottom:12px;">${title}</div>
+      ${body}
+    </div>`;
+
+  const explain = t =>
+    `<div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:14px;">${t}</div>`;
+
+  const statCard = (label, value, color, note) =>
+    `<div style="background:var(--bg3);border-radius:4px;padding:12px;text-align:center;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;">${label}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${color};">${value}</div>
+      ${note?`<div style="font-size:9px;color:var(--text3);margin-top:3px;">${note}</div>`:''}
+    </div>`;
+
+  // ── PANEL 1: HOD/LOD bucket bar charts ────────────────────────────────────
+  function bucketBar(buckets, color) {
+    const maxP = Math.max(...buckets.map(b=>b.pct), 1);
+    const top  = buckets.reduce((a,b)=>b.pct>a.pct?b:a);
+    return buckets.map((b,i) => {
+      const w   = Math.round(b.pct / maxP * 100);
+      const isT = b.label === top.label;
+      const c   = BUCKET_COLORS[i];
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:2px 4px;${isT?'background:rgba(255,255,255,0.03);border-radius:3px;':''}">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isT?c:'var(--text3)'};width:82px;flex-shrink:0;white-space:nowrap;">${b.label}${isT?' ★':''}</div>
+        <div style="flex:1;height:20px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+          <div style="width:${w}%;height:100%;background:${c};opacity:${isT?0.9:0.55};border-radius:2px;"></div>
+        </div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${isT?c:'var(--text2)'};width:40px;text-align:right;font-weight:${isT?'bold':'normal'};">${b.pct.toFixed(1)}%</div>
+        <div style="font-size:10px;color:var(--text3);width:30px;text-align:right;">${b.count}</div>
+      </div>`;
+    }).join('') +
+    `<div style="font-size:10px;color:var(--text3);margin-top:6px;padding:0 4px;">★ Most common: <span style="color:${BUCKET_COLORS[buckets.indexOf(top)]};">${top.label}</span> (${top.pct.toFixed(1)}% of ${_todLookback==='year'?String(curYear)+' YTD':_todLookback==='12m'?'last 12mo':'all'} sessions)</div>`;
+  }
+
+  const hodTop = hodBuckets.reduce((a,b)=>b.pct>a.pct?b:a);
+  const lodTop = lodBuckets.reduce((a,b)=>b.pct>a.pct?b:a);
+  const seqHodFirst = T.sequence.hod_before_lod?.pct ?? 0;
+  const seqLodFirst = T.sequence.hod_after_lod?.pct  ?? 0;
+
+  const panel1Body = explain(`Each bar shows what percentage of sessions had their High of Day (or Low of Day) set during that time window.
+    For example, if the <strong>8:30–9:00</strong> bar shows 22%, it means the session's absolute high (or low) was printed in the first 30 minutes on 22% of all days.
+    <br><br>This tells you <em>when to pay attention</em>: if the HOD is most likely to be set in the first 30 minutes or in the close window, you know the morning open and the power hour are the two highest-risk/highest-opportunity windows.
+    The mid-day buckets (10:30–2:00) are where extremes are set least often — that's the "grind" period with the lowest edge.
+    <br><br>Data: ${n > 0 ? n : T.days} sessions · ${T.date_range.start} → ${T.date_range.end} · 1-min bars · Central Time`) +
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ff88;margin-bottom:10px;letter-spacing:1px;">▲ HIGH OF DAY — WHEN IS IT SET?</div>
+        ${bucketBar(hodBuckets,'#00ff88')}
+      </div>
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#ff3355;margin-bottom:10px;letter-spacing:1px;">▼ LOW OF DAY — WHEN IS IT SET?</div>
+        ${bucketBar(lodBuckets,'#ff3355')}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px;">
+      ${statCard('AVG HOD TIME', T.hod.avg_time+' CT', '#00ff88', 'Average time HOD is set')}
+      ${statCard('AVG LOD TIME', T.lod.avg_time+' CT', '#ff3355', 'Average time LOD is set')}
+      ${statCard('HOD BEFORE LOD', seqHodFirst.toFixed(0)+'%', '#ffcc00', 'HOD prints first then LOD')}
+      ${statCard('LOD BEFORE HOD', seqLodFirst.toFixed(0)+'%', '#00ccff', 'LOD prints first then HOD')}
+    </div>`;
+
+  // ── PANEL 2: HOD/LOD heatmap by DOW ──────────────────────────────────────
+  const dowNames = ['Mon','Tue','Wed','Thu','Fri'];
+  const hodHeatRows = T.hod.by_dow.map((hd,i) => {
+    const maxP = Math.max(...hd.pcts);
+    const cells = hd.pcts.map((p,j) => {
+      const alpha = maxP > 0 ? Math.round((p/maxP)*180) : 0;
+      const hex   = alpha.toString(16).padStart(2,'0');
+      return `<td style="padding:5px 4px;text-align:center;background:#00ff88${hex};border-radius:2px;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${p===maxP?'#000':'var(--text2)'};">${p.toFixed(0)}%</div>
+        <div style="font-size:8px;color:${p===maxP?'#000':'var(--text3)'};">${hd.counts[j]}</div>
+      </td>`;
+    }).join('');
+    const total = hd.counts.reduce((a,b)=>a+b,0);
+    return `<tr>
+      <td style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);padding:5px 8px;white-space:nowrap;">${hd.dow}</td>
+      ${cells}
+      <td style="font-size:9px;color:var(--text3);padding:5px 6px;text-align:right;">${total}d</td>
+    </tr>`;
+  }).join('');
+
+  const lodHeatRows = T.lod.by_dow.map((ld,i) => {
+    const maxP = Math.max(...ld.pcts);
+    const cells = ld.pcts.map((p,j) => {
+      const alpha = maxP > 0 ? Math.round((p/maxP)*180) : 0;
+      const hex   = alpha.toString(16).padStart(2,'0');
+      return `<td style="padding:5px 4px;text-align:center;background:#ff3355${hex};border-radius:2px;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${p===maxP?'#fff':'var(--text2)'};">${p.toFixed(0)}%</div>
+        <div style="font-size:8px;color:${p===maxP?'#fff':'var(--text3)'};">${ld.counts[j]}</div>
+      </td>`;
+    }).join('');
+    const total = ld.counts.reduce((a,b)=>a+b,0);
+    return `<tr>
+      <td style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);padding:5px 8px;white-space:nowrap;">${ld.dow}</td>
+      ${cells}
+      <td style="font-size:9px;color:var(--text3);padding:5px 6px;text-align:right;">${total}d</td>
+    </tr>`;
+  }).join('');
+
+  const heatHeaders = bucketLabels.map(l =>
+    `<th style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);padding:4px 4px;text-align:center;white-space:nowrap;">${l}</th>`
+  ).join('');
+
+  const panel2Body = explain(`These heatmaps show the same HOD/LOD timing data broken down by <strong>day of week</strong>.
+    Each cell shows what percentage of sessions on that day had their high (or low) set during that time bucket.
+    Darker color = more common. Numbers show percentage on top and raw session count below.
+    <br><br>Day-of-week patterns are real and persistent. For example, <strong>Friday</strong> tends to see the HOD set later in the day more often — possibly because of end-of-week position squaring in the close.
+    <strong>Wednesday</strong> has outsized open-hour HOD frequency on some lookbacks due to Fed days.
+    Reading across a row tells you: on this day of the week, when should I be watching for the day's extreme?`) +
+    `<div style="overflow-x:auto;margin-bottom:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:6px;">▲ HIGH OF DAY BY DOW</div>
+      <table style="width:100%;border-collapse:separate;border-spacing:2px;">
+        <thead><tr><th style="padding:4px 8px;text-align:left;"></th>${heatHeaders}<th></th></tr></thead>
+        <tbody>${hodHeatRows}</tbody>
+      </table>
+    </div>
+    <div style="overflow-x:auto;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;margin-bottom:6px;">▼ LOW OF DAY BY DOW</div>
+      <table style="width:100%;border-collapse:separate;border-spacing:2px;">
+        <thead><tr><th style="padding:4px 8px;text-align:left;"></th>${heatHeaders}<th></th></tr></thead>
+        <tbody>${lodHeatRows}</tbody>
+      </table>
+    </div>`;
+
+  // ── PANEL 3: Best/worst 5-min bar timing (from INTRADAY_SESSION_STATS) ─────
+  function timeToMins(t) {
+    if (!t) return null;
+    const [h,m] = t.split(':').map(Number);
+    return h*60+m;
+  }
+  function minsToLabel(m) {
+    // Map minute to bucket label
+    if (m < 9*60)   return '8:30-9:00';
+    if (m < 9*60+30) return '9:00-9:30';
+    if (m < 10*60+30) return '9:30-10:30';
+    if (m < 12*60)   return '10:30-12:00';
+    if (m < 13*60)   return '12:00-1:00';
+    if (m < 14*60)   return '1:00-2:00';
+    if (m < 14*60+30) return '2:00-2:30';
+    return '2:30-3:00';
+  }
+
+  // Count best/worst 5m times into buckets
+  const best5mCounts  = Object.fromEntries(bucketLabels.map(l=>[l,0]));
+  const worst5mCounts = Object.fromEntries(bucketLabels.map(l=>[l,0]));
+  let best5mTotal = 0, worst5mTotal = 0;
+
+  sessions.forEach(s => {
+    if (s.best_5m_time) {
+      const bucket = minsToLabel(timeToMins(s.best_5m_time));
+      if (best5mCounts[bucket] !== undefined) { best5mCounts[bucket]++; best5mTotal++; }
+    }
+    if (s.worst_5m_time) {
+      const bucket = minsToLabel(timeToMins(s.worst_5m_time));
+      if (worst5mCounts[bucket] !== undefined) { worst5mCounts[bucket]++; worst5mTotal++; }
+    }
+  });
+
+  function miniBarChart(countsObj, total, color) {
+    const maxC = Math.max(...Object.values(countsObj), 1);
+    return bucketLabels.map((l,i) => {
+      const c   = countsObj[l] || 0;
+      const pct = total > 0 ? (c/total*100) : 0;
+      const w   = Math.round(c/maxC*100);
+      const col = BUCKET_COLORS[i];
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;padding:1px 4px;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text3);width:82px;flex-shrink:0;white-space:nowrap;">${l}</div>
+        <div style="flex:1;height:18px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+          <div style="width:${w}%;height:100%;background:${col};opacity:0.7;border-radius:2px;"></div>
+        </div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);width:40px;text-align:right;">${pct.toFixed(1)}%</div>
+        <div style="font-size:10px;color:var(--text3);width:24px;text-align:right;">${c}</div>
+      </div>`;
+    }).join('');
+  }
+
+  const panel3Body = explain(`Every session has a single best 5-minute bar (the biggest up move in any 5-min window) and a worst 5-minute bar (the biggest down move).
+    These charts show which time bucket those bars fell into most often across your filtered sessions.
+    <br><br><strong>Best 5-min bar</strong> timing tells you when the strongest single-burst momentum tends to occur — useful for knowing when to have positions on for potential explosive moves.
+    <strong>Worst 5-min bar</strong> timing shows when the sharpest drops happen — useful for understanding stop-risk timing.
+    Note that "best" and "worst" are measured by percent move within that 5-minute candle, not by direction relative to the day.
+    <br><br>Based on ${n} sessions with the current filter (${_todLookback==='all'?'all history':_todLookback==='12m'?'12 months':curYear+' YTD'}${_todDow!=='all'?' · '+_todDow:''}). Source: 1-min bars aggregated to 5-min.`) +
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ff88;margin-bottom:10px;letter-spacing:1px;">▲ BEST 5-MIN BAR — WHEN DOES IT OCCUR?</div>
+        ${miniBarChart(best5mCounts, best5mTotal, '#00ff88')}
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;">${best5mTotal} sessions with data</div>
+      </div>
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#ff3355;margin-bottom:10px;letter-spacing:1px;">▼ WORST 5-MIN BAR — WHEN DOES IT OCCUR?</div>
+        ${miniBarChart(worst5mCounts, worst5mTotal, '#ff3355')}
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;">${worst5mTotal} sessions with data</div>
+      </div>
+    </div>`;
+
+  // ── PANEL 4: OR break timing + Gap fill timing ────────────────────────────
+  const orBreakCounts = Object.fromEntries(bucketLabels.map(l=>[l,0]));
+  const gapFillCounts = Object.fromEntries(bucketLabels.map(l=>[l,0]));
+  let orBreakTotal = 0, gapFillTotal = 0, noBreak = 0, noFill = 0;
+
+  sessions.forEach(s => {
+    if (s.or_break_time) {
+      const b = minsToLabel(timeToMins(s.or_break_time));
+      if (orBreakCounts[b] !== undefined) { orBreakCounts[b]++; orBreakTotal++; }
+    } else { noBreak++; }
+    if (s.gap_filled && s.gap_fill_time) {
+      const b = minsToLabel(timeToMins(s.gap_fill_time));
+      if (gapFillCounts[b] !== undefined) { gapFillCounts[b]++; gapFillTotal++; }
+    } else if (s.gap_type !== 'FLAT') { noFill++; }
+  });
+
+  const orBreakPct = n > 0 ? ((orBreakTotal/(orBreakTotal+noBreak))*100).toFixed(0) : '—';
+  const gapFillableSessions = sessions.filter(s=>s.gap_type!=='FLAT');
+  const gapFillPct = gapFillableSessions.length > 0 ?
+    ((gapFillableSessions.filter(s=>s.gap_filled).length / gapFillableSessions.length)*100).toFixed(0) : '—';
+
+  const panel4Body = explain(`<strong>Opening Range (OR) break timing:</strong> The Opening Range is defined as the high and low of the first 30 minutes (8:30–9:00 CT).
+    An OR break occurs when price moves decisively above or below that initial range.
+    This chart shows which time bucket the OR break happened in most often. Early breaks (still in the open window) suggest strong directional conviction.
+    Late breaks (2:00pm+ CT) suggest the market spent the day consolidating before making its move.
+    <br><br><strong>Gap fill timing:</strong> On days when SPY opens with a gap (up or down), this shows when the gap fill occurred — i.e. when price returned to touch the prior close.
+    Early gap fills leave the rest of the day open for a new trend. Late gap fills often come with the power hour.
+    Days where no fill occurs by close are counted separately.
+    <br><br>Based on ${n} sessions. OR break rate: ${orBreakPct}% of sessions broke the OR. Gap fill rate: ${gapFillPct}% of gapping sessions filled.`) +
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;">
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#ffcc00;margin-bottom:10px;letter-spacing:1px;">⬡ OPENING RANGE BREAK — WHEN?</div>
+        ${miniBarChart(orBreakCounts, orBreakTotal, '#ffcc00')}
+        <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text3);">
+          <span>${orBreakTotal} sessions broke OR (${orBreakPct}%)</span>
+          <span>${noBreak} sessions no break</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#8855ff;margin-bottom:10px;letter-spacing:1px;">⬡ GAP FILL — WHEN DOES IT HAPPEN?</div>
+        ${miniBarChart(gapFillCounts, gapFillTotal, '#8855ff')}
+        <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text3);">
+          <span>${gapFillTotal} fills (${gapFillPct}% of gaps)</span>
+          <span>${gapFillableSessions.length-gapFillTotal} unfilled</span>
+        </div>
+      </div>
+    </div>`;
+
+  // ── PANEL 5: Intraday range stats by session phase ─────────────────────────
+  // Compute average range metrics per bucket using sessions data
+  const orRanges = sessions.filter(s=>s.or_range!=null).map(s=>s.or_range);
+  const dayRanges= sessions.filter(s=>s.day_range_pct!=null).map(s=>s.day_range_pct);
+  const lunchRanges = sessions.filter(s=>s.lunch_range_pct!=null).map(s=>s.lunch_range_pct);
+  const phRanges = sessions.filter(s=>s.power_hour_pct!=null).map(s=>s.power_hour_pct);
+
+  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+  const med = arr => { if(!arr.length) return null; const s=[...arr].sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; };
+  const f2  = v => v!=null ? v.toFixed(2)+'%' : '—';
+  const f3  = v => v!=null ? v.toFixed(3) : '—';
+
+  const phUpDays = sessions.filter(s=>s.power_hour_dir==='UP').length;
+  const phDnDays = sessions.filter(s=>s.power_hour_dir==='DOWN').length;
+  const phDirTotal = phUpDays + phDnDays;
+
+  const panel5Body = explain(`These statistics describe the typical <strong>size</strong> of moves in different phases of the session, measured across your filtered sessions.
+    <strong>Opening Range (OR) range</strong> is the percent spread from OR low to OR high — how wide the first 30 minutes were.
+    <strong>Day range</strong> is the full session high-to-low spread as a percent of price.
+    <strong>Lunch range</strong> is the range from 12:00–1:00pm CT — the quietest mid-day window.
+    <strong>Power hour range</strong> covers 2:30–3:30pm CT and shows how active the late-day window is.
+    <br><br>The ratio of OR range to day range tells you how much of the day's total move was "used up" in the first 30 minutes.
+    A high ratio means the open set the tone early and the rest of the day was quieter. A low ratio means the day's real range built throughout the session.`) +
+    `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+      ${statCard('OR RANGE AVG', f2(avg(orRanges)), '#ffcc00', `${orRanges.length} sessions`)}
+      ${statCard('OR RANGE MED', f2(med(orRanges)), '#ffcc00', 'median')}
+      ${statCard('DAY RANGE AVG', f2(avg(dayRanges)), '#00ccff', `${dayRanges.length} sessions`)}
+      ${statCard('DAY RANGE MED', f2(med(dayRanges)), '#00ccff', 'median')}
+      ${statCard('LUNCH RANGE AVG', f2(avg(lunchRanges)), '#8855ff', `${lunchRanges.length} sessions`)}
+      ${statCard('PH RANGE AVG', f2(avg(phRanges)), '#ff8800', `${phRanges.length} sessions`)}
+      ${statCard('PH UP DAYS', phDirTotal>0?(phUpDays/phDirTotal*100).toFixed(0)+'%':'—', '#00ff88', `${phUpDays} of ${phDirTotal}`)}
+      ${statCard('PH DOWN DAYS', phDirTotal>0?(phDnDays/phDirTotal*100).toFixed(0)+'%':'—', '#ff3355', `${phDnDays} of ${phDirTotal}`)}
+    </div>
+    <div style="background:var(--bg3);border-radius:4px;padding:12px;font-size:11px;color:var(--text2);line-height:1.7;">
+      <strong style="color:var(--cyan);">OR-to-Day Ratio:</strong>
+      ${avg(orRanges)!=null && avg(dayRanges)!=null ?
+        `The average OR range is <strong style="color:#ffcc00;">${f2(avg(orRanges))}</strong> and the average day range is <strong style="color:#00ccff;">${f2(avg(dayRanges))}</strong>.
+        That means the first 30 minutes accounts for roughly <strong style="color:#ffcc00;">${(avg(orRanges)/avg(dayRanges)*100).toFixed(0)}%</strong> of the typical day's total range.
+        ${avg(orRanges)/avg(dayRanges) > 0.5 ?
+          'The open is doing most of the work — the market tends to find its range early.' :
+          'The day builds its range over time — the open is just the starting point.'}` :
+        'Insufficient data for this filter.'}
+    </div>`;
+
+  // ── PANEL 6: Sequence and flow summary ────────────────────────────────────
+  // Gap up vs gap down HOD/LOD timing tendency from session data
+  const gapUpSessions  = sessions.filter(s=>s.gap_type==='GAP_UP');
+  const gapDnSessions  = sessions.filter(s=>s.gap_type==='GAP_DOWN');
+  const flatSessions   = sessions.filter(s=>s.gap_type==='FLAT');
+
+  function sessionAvgOR(arr) { return avg(arr.filter(s=>s.or_range!=null).map(s=>s.or_range)); }
+  function sessionAvgRange(arr) { return avg(arr.filter(s=>s.day_range_pct!=null).map(s=>s.day_range_pct)); }
+  function sessionPHUp(arr) { const t=arr.filter(s=>s.power_hour_dir); return t.length?arr.filter(s=>s.power_hour_dir==='UP').length/t.length*100:null; }
+
+  const gapRows = [
+    ['GAP UP ▲', gapUpSessions, '#00ff88'],
+    ['FLAT OPEN', flatSessions, '#ffcc00'],
+    ['GAP DOWN ▼', gapDnSessions, '#ff3355'],
+  ].map(([label, arr, c]) => {
+    if (!arr.length) return '';
+    const orA  = sessionAvgOR(arr);
+    const dRA  = sessionAvgRange(arr);
+    const phU  = sessionPHUp(arr);
+    const fillN = arr.filter(s=>s.gap_filled).length;
+    const gappingArr = arr.filter(s=>s.gap_type!=='FLAT');
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="font-family:'Orbitron',monospace;font-size:9px;color:${c};padding:7px 8px;white-space:nowrap;">${label}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);padding:7px 8px;text-align:center;">${arr.length}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#ffcc00;padding:7px 8px;text-align:right;">${orA!=null?f2(orA):'—'}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#00ccff;padding:7px 8px;text-align:right;">${dRA!=null?f2(dRA):'—'}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${phU!=null&&phU>55?'#00ff88':phU!=null&&phU<45?'#ff3355':'#ffcc00'};padding:7px 8px;text-align:right;">${phU!=null?phU.toFixed(0)+'%':'—'}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${label==='FLAT OPEN'?'var(--text3)':(fillN/Math.max(arr.length,1)*100)>45?'#00ff88':'var(--text2)'};padding:7px 8px;text-align:right;">${label==='FLAT OPEN'?'—':(fillN+' / '+arr.length+' ('+((fillN/arr.length)*100).toFixed(0)+'%)')}</td>
+    </tr>`;
+  }).join('');
+
+  const panel6Body = explain(`This table cross-references gap type with the intraday metrics above, letting you see how the session's timing and range characteristics differ based on how SPY opened.
+    <strong>Gap Up days</strong> tend to have a specific OR width, day range, and power hour direction distribution.
+    <strong>Gap Down days</strong> often have wider ORs and wider day ranges due to higher early volatility.
+    <strong>Flat opens</strong> are the most "random" days — no directional bias is established at the open, so the session has to build its range from scratch.
+    <br><br>The Power Hour Up% column shows how often the PH (2:30–3:30 CT) closed higher than it opened, by gap type — a useful edge for afternoon positioning.
+    Gap Fill % shows how often each gap type was filled (only applicable for non-flat opens).`) +
+    `<div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          ${['GAP TYPE','SESSIONS','OR RANGE','DAY RANGE','PH UP%','GAP FILL'].map(h=>
+            `<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:5px 8px;text-align:${h==='GAP TYPE'?'left':'right'};">${h}</th>`
+          ).join('')}
+        </tr></thead>
+        <tbody>${gapRows}</tbody>
+      </table>
+    </div>`;
+
+  // ── Assemble ──────────────────────────────────────────────────────────────
+  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ TIME OF DAY — INTRADAY TIMING ANALYSIS</div>
+        <div style="margin-bottom:6px;">
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">LOOKBACK</div>
+          <div style="display:flex;gap:5px;">${lbBtns}</div>
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DAY OF WEEK</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">${dowBtns}</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);text-align:right;line-height:1.7;">
+        <div>${n} sessions in filter · ${T.days} total available</div>
+        <div>${T.date_range.start} → ${T.date_range.end}</div>
+        <div>1-min intraday bars · Central Time</div>
+      </div>
+    </div>
+    ${n < 5 ? `<div style="padding:20px;text-align:center;color:#ff8800;font-family:'Share Tech Mono',monospace;font-size:12px;">⚠ Only ${n} sessions match this filter — results may not be statistically meaningful.</div>` : ''}
+    ${section('⬡ WHEN IS THE HIGH AND LOW OF DAY SET?','var(--cyan)', panel1Body)}
+    ${section('⬡ HOD / LOD TIMING HEATMAP BY DAY OF WEEK','#00ccff', panel2Body)}
+    ${section('⬡ BEST AND WORST 5-MINUTE BAR — WHEN DO THEY OCCUR?','#00ff88', panel3Body)}
+    ${section('⬡ OPENING RANGE BREAK AND GAP FILL TIMING','#ffcc00', panel4Body)}
+    ${section('⬡ SESSION PHASE RANGE STATISTICS','#8855ff', panel5Body)}
+    ${section('⬡ INTRADAY METRICS BY GAP TYPE','#ff8800', panel6Body)}
   </div>`;
 }
 
