@@ -6603,7 +6603,7 @@ function renderGapStats() {
 }
 
 // ═══════════════════════════════════════════════════════
-// LIVE SPY CHART — 1-min intraday candlestick
+// SPY CHART
 // ═══════════════════════════════════════════════════════
 let _liveChartInterval = null;
 
