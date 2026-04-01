@@ -1512,10 +1512,12 @@ def export_intraday_vol_profile(conn):
     from collections import defaultdict
 
     c = conn.cursor()
+    # Exclude first 15 min (09:30-09:44) and last 15 min (15:45-15:59)
+    # Open/close always dominate — filtering gives useful intraday structure
     c.execute("""
         SELECT date, timestamp, volume
         FROM intraday_bars
-        WHERE timestamp >= '09:30' AND timestamp < '16:00'
+        WHERE timestamp >= '09:45' AND timestamp < '15:45'
         ORDER BY date, timestamp
     """)
     rows = c.fetchall()
