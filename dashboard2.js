@@ -1276,6 +1276,36 @@ function loadIntradayCache() {
   } catch(e) {}
   return null;
 }
+
+// ── Closing snapshot cache ─────────────────────────────────────────────────────
+// Written once per trading day at/after 4 PM ET. Persists across midnight and
+// through the next pre-market so both panels never go blank overnight/weekend.
+// Keyed to the trading date from the data itself, not the wall-clock date.
+const CLOSING_CACHE_KEY = 'spy_closing_snapshot_v1';
+function saveClosingSnapshot(data) {
+  try {
+    const tradingDate = data.asOf
+      ? data.asOf.slice(0, 10)
+      : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+    localStorage.setItem(CLOSING_CACHE_KEY, JSON.stringify({ tradingDate, data }));
+  } catch(e) {}
+}
+function loadClosingSnapshot() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(CLOSING_CACHE_KEY) || 'null');
+    if (cached && cached.data) return { ...cached.data, _tradingDate: cached.tradingDate, _fromClosing: true };
+  } catch(e) {}
+  return null;
+}
+function maybeWriteClosingSnapshot(data) {
+  if (!data || !data.available) return;
+  try {
+    const etNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const isWeekend = etNow.getDay() === 0 || etNow.getDay() === 6;
+    const etMins = etNow.getHours() * 60 + etNow.getMinutes();
+    if (!isWeekend && etMins >= 16 * 60) saveClosingSnapshot(data);
+  } catch(e) {}
+}
 const chatHistory = [];
 
 function toggleChat() {
@@ -3459,6 +3489,7 @@ async function refreshLiveData() {
     if (spyOHLC?.available) {
       _spyIntraday = spyOHLC;
       saveIntradayCache(spyOHLC);
+      maybeWriteClosingSnapshot(spyOHLC);
       _md.quotes = _md.quotes || {};
       _md.quotes['SPY'] = _md.quotes['SPY'] || {};
       // Override all SPY fields with live intraday data
@@ -3574,7 +3605,7 @@ async function loadData(){
     }
 
     _md=md; _sd=sd;
-    if (spyOHLC?.available) { _spyIntraday = spyOHLC; saveIntradayCache(spyOHLC); } // store live intraday for desk volume box
+    if (spyOHLC?.available) { _spyIntraday = spyOHLC; saveIntradayCache(spyOHLC); maybeWriteClosingSnapshot(spyOHLC); } // store live intraday for desk volume box
     const safeRender = (fn, ...args) => { try { fn(...args); } catch(e) { console.error(fn.name, e); } };
     safeRender(renderHub, md, sd);
     safeRender(renderDesk, md, sd);
