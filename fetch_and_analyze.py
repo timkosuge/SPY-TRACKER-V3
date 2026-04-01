@@ -1503,6 +1503,107 @@ def get_trading_days_to_process(conn):
 
 
 
+
+def export_window_stats(conn):
+    """
+    Compute stats for the two key intraday windows:
+    W1: 9:45-11am CT (London close window)
+    W2: 12:45-2pm CT (pre-power-hour setup)
+    Writes window_stats.js. Auto-runs with pipeline.
+    """
+    import json, re, statistics
+    from collections import defaultdict
+
+    c = conn.cursor()
+    try:
+        with open('intraday_library.js') as f:
+            raw = f.read()
+        match = re.search(r'const INTRADAY_SESSION_STATS = (\[.*?\]);', raw, re.DOTALL)
+        if not match:
+            print("  window_stats.js: intraday_library.js not ready"); return
+        sessions = {d['date']: d for d in json.loads(match.group(1))}
+    except Exception as e:
+        print(f"  window_stats.js: {e}"); return
+
+    WIN1_START, WIN1_END = '10:45', '12:00'
+    WIN2_START, WIN2_END = '13:45', '15:00'
+
+    c.execute("""SELECT date, timestamp, open, high, low, close, volume FROM intraday_bars
+                 WHERE timestamp >= '09:30' AND timestamp < '16:00' ORDER BY date, timestamp""")
+    day_bars = defaultdict(list)
+    for row in c.fetchall(): day_bars[row[0]].append(row[1:])
+    all_dates = sorted(set(sessions.keys()) & set(day_bars.keys()))
+
+    def wstats(bars, ts0, ts1):
+        w = [(ts,o,h,l,cl,v) for ts,o,h,l,cl,v in bars if ts0 <= ts < ts1]
+        if not w: return None
+        o = w[0][1]; cl = w[-1][4]; hi = max(b[2] for b in w); lo = min(b[3] for b in w)
+        move = (cl-o)/o*100; rng = (hi-lo)/o*100
+        mx_up = (hi-o)/o*100; mx_dn = (o-lo)/o*100
+        dom = 'up' if mx_up > mx_dn else 'down'
+        rev = (dom=='up' and move<0) or (dom=='down' and move>0)
+        return {'move_pct':move,'range_pct':rng,'max_up':mx_up,'max_down':mx_dn,'reversal':rev}
+
+    results = []
+    for date in all_dates:
+        bars = day_bars[date]; s = sessions.get(date,{})
+        w1=wstats(bars,WIN1_START,WIN1_END); w2=wstats(bars,WIN2_START,WIN2_END)
+        if not w1 or not w2: continue
+        pw1=wstats(bars,'12:00','13:45'); pw2=wstats(bars,'15:00','15:45')
+        day_move=(bars[-1][4]-bars[0][1])/bars[0][1]*100
+        results.append({'date':date,'day_move':day_move,'w1':w1,'w2':w2,'post_w1':pw1,'post_w2':pw2,
+                         'or_break_dir':s.get('or_break_dir'),'or_range':s.get('or_range',0),'gap_type':s.get('gap_type')})
+
+    n = len(results)
+    bins=[(-99,-0.6),(-0.6,-0.4),(-0.4,-0.2),(-0.2,0),(0,0.2),(0.2,0.4),(0.4,0.6),(0.6,99)]
+    bin_labels=['<-0.6%','-0.4 to -0.6','-0.2 to -0.4','-0.2 to 0','0 to +0.2','+0.2 to +0.4','+0.4 to +0.6','>+0.6%']
+
+    type_a=[r for r in results if r['or_break_dir']=='UP' and r['w1']['move_pct']<-0.15]
+    type_b=[r for r in results if r['or_break_dir']=='DOWN' and r['w1']['move_pct']>0.15]
+    w2_trap_up=[r for r in results if r['w2']['move_pct']>0.2 and r['post_w2'] and r['post_w2']['move_pct']<-0.1]
+    w2_trap_dn=[r for r in results if r['w2']['move_pct']<-0.2 and r['post_w2'] and r['post_w2']['move_pct']>0.1]
+    same=[r for r in results if (r['w1']['move_pct']>0)==(r['w2']['move_pct']>0)]
+    opp=[r for r in results if (r['w1']['move_pct']>0)!=(r['w2']['move_pct']>0)]
+
+    def avg(lst): return round(statistics.mean(lst),3) if lst else 0
+    def pct(lst): return round(len(lst)/n*100,1)
+
+    w1_bins=[]; w2_bins=[]
+    for (lo,hi),lbl in zip(bins,bin_labels):
+        g1=[r for r in results if lo<r['w1']['move_pct']<=hi]
+        if g1:
+            dc=sum(1 for r in g1 if (r['w1']['move_pct']>0)==(r['day_move']>0))
+            pc=sum(1 for r in g1 if r['post_w1'] and (r['w1']['move_pct']>0)==(r['post_w1']['move_pct']>0))
+            w1_bins.append({'label':lbl,'n':len(g1),'day_follow':round(dc/len(g1)*100),'post_follow':round(pc/len(g1)*100),'avg_move':avg([r['w1']['move_pct'] for r in g1])})
+        g2=[r for r in results if lo<r['w2']['move_pct']<=hi and r['post_w2']]
+        if g2:
+            phc=sum(1 for r in g2 if (r['w2']['move_pct']>0)==(r['post_w2']['move_pct']>0))
+            dc2=sum(1 for r in g2 if (r['w2']['move_pct']>0)==(r['day_move']>0))
+            w2_bins.append({'label':lbl,'n':len(g2),'ph_follow':round(phc/len(g2)*100),'day_follow':round(dc2/len(g2)*100),'avg_ph':avg([r['post_w2']['move_pct'] for r in g2]),'avg_move':avg([r['w2']['move_pct'] for r in g2])})
+
+    output={
+        'meta':{'n_sessions':n,'date_range':f"{results[0]['date']} to {results[-1]['date']}"},
+        'w1':{'avg_move':avg([r['w1']['move_pct'] for r in results]),'avg_range':avg([r['w1']['range_pct'] for r in results]),
+              'pct_up':round(sum(1 for r in results if r['w1']['move_pct']>0)/n*100,1),
+              'pct_reversal':round(sum(1 for r in results if r['w1']['reversal'])/n*100,1),
+              'day_follow':round(sum(1 for r in results if (r['w1']['move_pct']>0)==(r['day_move']>0))/n*100,1),
+              'or_up_fade_n':len(type_a),'or_up_fade_follow':round(sum(1 for r in type_a if r['day_move']*r['w1']['move_pct']>0)/max(len(type_a),1)*100,1),
+              'or_dn_rally_n':len(type_b),'or_dn_rally_follow':round(sum(1 for r in type_b if r['day_move']*r['w1']['move_pct']>0)/max(len(type_b),1)*100,1),
+              'move_bins':w1_bins},
+        'w2':{'avg_move':avg([r['w2']['move_pct'] for r in results]),'avg_range':avg([r['w2']['range_pct'] for r in results]),
+              'pct_up':round(sum(1 for r in results if r['w2']['move_pct']>0)/n*100,1),
+              'pct_reversal':round(sum(1 for r in results if r['w2']['reversal'])/n*100,1),
+              'day_follow':round(sum(1 for r in results if (r['w2']['move_pct']>0)==(r['day_move']>0))/n*100,1),
+              'trap_up_n':len(w2_trap_up),'trap_up_avg_ph':avg([r['post_w2']['move_pct'] for r in w2_trap_up]),
+              'trap_dn_n':len(w2_trap_dn),'trap_dn_avg_ph':avg([r['post_w2']['move_pct'] for r in w2_trap_dn]),
+              'move_bins':w2_bins},
+        'relationship':{'same_dir_n':len(same),'same_dir_avg_day':avg([r['day_move'] for r in same]),
+                         'opp_dir_n':len(opp),'opp_dir_avg_day':avg([r['day_move'] for r in opp])},
+    }
+    js = "const WINDOW_STATS = " + json.dumps(output, separators=(',',':')) + ";\n"
+    with open('window_stats.js','w') as f: f.write(js)
+    print(f"  window_stats.js: {n} sessions")
+
 def export_intraday_vol_stats(conn):
     """
     Compute volume correlation stats: quintile analysis, cumulative curve,
@@ -1989,6 +2090,7 @@ def main():
             export_session_vol_profile(conn)
             export_intraday_vol_profile(conn)
             export_intraday_vol_stats(conn)
+            export_window_stats(conn)
 
             # Update GitHub Actions commit list
             print("  Intraday accumulation complete")
