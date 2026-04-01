@@ -67,7 +67,7 @@ function _switchPanelOnly(id) {
   if(id==='sentiment' && _md) { try { renderSentiment(_md); } catch(e){} }
   if(id==='live-chart') { setTimeout(renderLiveChart, 50); }
   if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
-  if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); renderWindowStats(); }, 50); }
+  if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); }, 50); }
   if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }
   if(id==='gap-stats') { setTimeout(renderGapStats, 50); }
 }
@@ -5994,24 +5994,58 @@ function renderIntradayVolStats() {
   if (!statsDiv) return;
 
   statsDiv.innerHTML =
-    section('⬡ VOLUME QUINTILE ANALYSIS',
-      `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">${quintileCards}</div>
-       <div style="font-size:10px;color:var(--text3);margin-top:8px;">Very High vol days have 3× the average range vs Very Low days. Gap fill rate peaks on highest volume days (47%).</div>`) +
+    section('⬡ HOW MUCH VOLUME CHANGES EVERYTHING',
+      `<div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
+        Not all trading days are equal — days with much heavier volume than usual behave very differently 
+        from quiet low-volume days. This section sorts every historical session into five buckets 
+        by total volume (Very Low through Very High) and shows how each group of days tends to behave.
+        The key insight: <strong style="color:#ff8800;">high-volume days have much wider ranges</strong> and higher gap fill rates. 
+        Low-volume days are tighter and more directionless.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">${quintileCards}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6;">
+        <strong>Avg range</strong> = how wide the day was from high to low, as a percent of price. 
+        <strong>Gap fill rate</strong> = how often SPY went back to fill its opening gap on days in this volume bucket. 
+        <strong>Power hour</strong> = how often the last hour moved up vs down on these days.
+      </div>`) +
 
-    section('⬡ HOD TIMING BY VOLUME LEVEL (CT)',
-      `<div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Which CT hour the day's High is set — darker = more frequent. High-vol days: HOD tends to print early (8am CT open). Low-vol days: HOD often drifts to afternoon.</div>
+    section('⬡ WHEN DOES THE DAY\'S HIGH PRINT? (BY VOLUME LEVEL)',
+      `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+        This heatmap shows which hour of the day the session high was made, broken out by how heavy 
+        volume was that day. Each cell shows what percent of days in that volume bucket made their high 
+        during that hour. Darker green = more common. 
+        <strong style="color:#00ff88;">On high-volume days, the high tends to print early</strong> — often right at the open (8am CT) or within the first hour, 
+        reflecting aggressive directional moves. On low-volume days, the high drifts later into the afternoon.
+      </div>
        ${hodLodGrid('hod')}`) +
 
-    section('⬡ LOD TIMING BY VOLUME LEVEL (CT)',
-      `<div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Which CT hour the day's Low is set. LOD at open (8am CT) is most common across all volume levels — the opening gap exhaustion.</div>
+    section('⬡ WHEN DOES THE DAY\'S LOW PRINT? (BY VOLUME LEVEL)',
+      `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+        Same as above but tracking the session low. The red cells show where the low was made most often.
+        The open (8am CT) is the most common low time across all volume levels — the opening drive often 
+        makes the day's extreme quickly on gap-down opens. High-volume days show a stronger tendency to 
+        make the low at the open, consistent with panic-driven gap-down sessions.
+      </div>
        ${hodLodGrid('lod')}`) +
 
-    section('⬡ CUMULATIVE VOLUME CURVE',
-      `<div style="font-size:10px;color:var(--text3);margin-bottom:10px;">Avg % of daily volume completed by each 5-min bucket. Yellow marker = 50% done. On a typical day, half of all volume is traded by ${midTs ? etToCT(midTs)+' CT' : '—'}.</div>
+    section('⬡ HOW VOLUME BUILDS THROUGH THE DAY',
+      `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+        This chart shows the average cumulative percent of the day's total volume that has traded 
+        by each 5-minute bar. Think of it as: "by 10am CT, roughly X% of the whole day's volume has 
+        already happened." The yellow marker shows the point where <strong>50% of volume is done</strong> on a typical day.
+        Volume is front-loaded — the open and the first hour account for a disproportionate share 
+        of activity, with a second burst in the final 30–60 minutes (power hour). The middle of the 
+        day (11am–1pm CT) is the quietest period.
+      </div>
        <div style="display:flex;align-items:flex-end;gap:1px;padding:18px 0 4px;">${curveBars}</div>`) +
 
-    section('⬡ VOLUME BY GAP TYPE',
-      `<div style="font-size:10px;color:var(--text3);margin-bottom:10px;">Gap Down days see significantly higher volume — fear + forced selling. Flat open days are the lightest. Correlates with the 0.66 vol/range correlation.</div>
+    section('⬡ HOW MUCH VOLUME TRADES BY GAP TYPE',
+      `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+        Days that open with a gap down see significantly more total volume than flat-open or gap-up days. 
+        This reflects the mechanics of fear: gap-down opens force more selling, trigger stop-losses, 
+        and attract bargain hunters, all of which adds volume. Flat opens are the quietest days. 
+        This pattern is consistent with the correlation between higher volume and wider ranges.
+      </div>
        ${gapBars}`);
 }
 
@@ -6019,7 +6053,7 @@ function renderIntradayVolStats() {
 // WINDOW STATS — London Close & Pre-Power-Hour windows
 // ─────────────────────────────────────────────────────────────────────────────
 function renderWindowStats() {
-  const el = document.getElementById('intradayVolStats');
+  const el = document.getElementById('intradayWindowsContent');
   if (!el) return;
   if (typeof WINDOW_STATS === 'undefined') {
     el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);">Window stats not loaded.</div>';
@@ -6221,7 +6255,13 @@ function renderWindowStats() {
 
   // ── Assemble ───────────────────────────────────────────────────────────────
   el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
-    <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">⬡ KEY INTRADAY WINDOWS — PATTERN ANALYSIS</div>
+    <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;">⬡ KEY INTRADAY WINDOWS</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
+      Two recurring intraday time windows tend to produce predictable directional moves in SPY — 
+      the <strong style="color:var(--cyan);">London Close window</strong> (9:45–11:00am CT) when European markets are closing and institutional flows can shift,
+      and the <strong style="color:#ff8800;">Pre-Power Hour window</strong> (12:45–2:00pm CT) just before the final push into the close.
+      This page shows how reliably each window predicts where SPY finishes the day.
+    </div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
       <div>
         <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">LOOKBACK</div>
@@ -6231,31 +6271,79 @@ function renderWindowStats() {
       </div>
       <div style="font-size:10px;color:var(--text3);text-align:right;">
         <div>${D.n} sessions · ${D.date_range}</div>
-        <div style="margin-top:2px;">W1: 9:45–11:00 CT · W2: 12:45–14:00 CT</div>
+        <div style="margin-top:2px;">W1: 9:45–11:00am CT &nbsp;·&nbsp; W2: 12:45–2:00pm CT</div>
       </div>
     </div>
 
-    ${section('⬡ WINDOW 1 · 9:45–11:00 CT — LONDON CLOSE WINDOW', 'var(--cyan)',
+    ${section('⬡ WINDOW 1 · 9:45–11:00am CT — LONDON CLOSE', 'var(--cyan)',
+      `<div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
+        This window captures the hour and fifteen minutes after 9:45am CT when London closes. 
+        European institutions are finishing their trading day, often producing a burst of volume
+        and a clear directional move in SPY. If this window closes higher than it opened, that 
+        is called a <em>continuation</em>. If it reversed — meaning it made a big move one way and then 
+        came back — that is a <em>reversal</em>. 
+        <strong style="color:var(--cyan);">Day follow</strong> tells you: when this window went up, how often did SPY close the full day higher?
+      </div>` +
       summaryCards(D.w1, 'W1', 'var(--cyan)') +
+      `<div style="font-size:12px;color:var(--text2);margin:14px 0 10px;line-height:1.7;">
+        The breakdown below slices the same data by gap type (how SPY opened that morning vs yesterday's close)
+        and by which direction the day was trending when W1 started. This helps you understand whether
+        the window behaves differently on gap-up days vs gap-down days, or when the market is already up 
+        vs already down on the day.
+      </div>` +
       contextGrid(D.w1.context, 'W1') +
-      `<div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;margin-top:10px;">W1 MOVE SIZE → DAY &amp; MIDDAY FOLLOW-THROUGH</div>
-       <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">Larger moves (&gt;0.4%) show strongest day-follow. Small moves are closer to noise.</div>` +
+      `<div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;margin-top:14px;">W1 MOVE SIZE → DAY &amp; MIDDAY FOLLOW-THROUGH</div>
+       <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+         How big the window's move was changes how reliable the follow-through is. 
+         A move under 0.1% is basically noise — the day can go either way. 
+         Moves above 0.4% show the strongest tendency to continue in the same direction through the close.
+         <em>Day follow %</em> = percent of sessions where SPY closed in the same direction the window moved.
+         <em>Midday follow %</em> = same check but only through midday, before W2 starts.
+       </div>` +
       moveBinsTable(D.w1.move_bins, 'MIDDAY')
     )}
 
-    ${section('⬡ WINDOW 2 · 12:45–14:00 CT — PRE-POWER HOUR SETUP', '#ff8800',
+    ${section('⬡ WINDOW 2 · 12:45–2:00pm CT — PRE-POWER HOUR SETUP', '#ff8800',
+      `<div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
+        This window runs from 12:45pm to 2:00pm CT, the hour before the power hour (2:00–3:00pm CT) 
+        kicks in. It is essentially the setup window — the direction SPY is trending here often 
+        carries into the final hour. A strong trending move in W2 can signal whether institutional 
+        players are positioning long or short into the close.
+        <strong style="color:#ff8800;">Day follow</strong> here means: when W2 closed higher, how often did SPY finish the full day higher?
+      </div>` +
       summaryCards(D.w2, 'W2', '#ff8800') +
+      `<div style="font-size:12px;color:var(--text2);margin:14px 0 10px;line-height:1.7;">
+        Same context breakdown as W1 — by gap type and by whether the market was already up or down 
+        when W2 started. W2 context matters more than W1 because by 12:45pm there is less session left
+        for the pattern to fail, making the signal more concentrated.
+      </div>` +
       contextGrid(D.w2.context, 'W2') +
-      `<div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;margin-top:10px;">W2 MOVE SIZE → DAY &amp; POWER HOUR FOLLOW-THROUGH</div>
-       <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">Small W2 moves often trap late entrants heading into power hour. Large moves have mixed continuation.</div>` +
+      `<div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;margin-top:14px;">W2 MOVE SIZE → DAY &amp; POWER HOUR FOLLOW-THROUGH</div>
+       <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+         Small W2 moves (under 0.1%) are often traps — the market looks like it is going one way and 
+         then power hour yanks it back. Larger W2 moves are more trustworthy but still mixed because
+         the power hour has a strong tendency to produce its own momentum regardless of what happened before.
+         <em>Power Hr follow %</em> = percent of sessions where power hour continued in the W2 direction.
+       </div>` +
       moveBinsTable(D.w2.move_bins, 'POWER HR')
     )}
 
-    ${section('⬡ W1 vs W2 ALIGNMENT', '#8855ff', relHtml)}
+    ${section('⬡ W1 vs W2 ALIGNMENT — DO BOTH WINDOWS AGREE?', '#8855ff',
+      `<div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
+        The most useful single signal from these windows is whether they agree with each other.
+        When W1 and W2 both move in the same direction — both up, or both down — that is a 
+        stronger directional read on the day than either window alone. When they point opposite 
+        directions, the day is more likely to chop or be indecisive.
+      </div>` +
+      relHtml
+    )}
 
-    <div style="font-size:10px;color:var(--text3);padding:8px 0;">
-      Based on ${D.n} sessions (${D.date_range}) · All times Central · 
-      Day follow = window move direction matches close direction · Reversal = window closed opposite to its dominant intra-window extreme
+    <div style="font-size:10px;color:var(--text3);padding:10px 0;line-height:1.6;">
+      <strong>How to read these stats:</strong>&nbsp; 
+      <em>Day follow %</em> — of all sessions in this filter, what percent did the full day close in the same direction as the window moved. 
+      &nbsp;·&nbsp; <em>Reversal rate</em> — how often the window made a big move and then reversed before it closed. 
+      &nbsp;·&nbsp; <em>Avg move</em> — average size of the window's net move (open-to-close within the window). 
+      &nbsp;·&nbsp; All times are Central. Based on ${D.n} sessions (${D.date_range}).
     </div>
   </div>`;
 }
