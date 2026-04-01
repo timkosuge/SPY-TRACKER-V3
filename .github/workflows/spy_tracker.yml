@@ -50,6 +50,9 @@ jobs:
       - name: Generate decline/drawdown data
         run: python generate_decline_data.py
 
+      - name: Generate relief rally data
+        run: python generate_relief_data.py
+
       - name: Commit updated files
         run: |
           git config user.name "github-actions[bot]"
@@ -58,6 +61,6 @@ jobs:
           git add -f spy_data.db spy_data.json market_data.json \
                      analog_data.js tod_stats.js \
                      intraday_library.js expiry_data.js \
-                     intraday_patterns.js decline_data.js
+                     intraday_patterns.js decline_data.js relief_data.js
           git diff --staged --quiet && echo "No changes" || git commit -m "Auto: SPY data update $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push || echo "Nothing to push"
