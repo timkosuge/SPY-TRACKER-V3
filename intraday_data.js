@@ -822,6 +822,12 @@
     if(name==='intraday') setTimeout(renderIntraday,50);
   };
 
+  const _origGroupSub=window.switchGroupSub;
+  window.switchGroupSub=function(name,el){
+    if(typeof _origGroupSub==='function') _origGroupSub(name,el);
+    if(name==='intraday') setTimeout(renderIntraday,50);
+  };
+
   document.addEventListener('DOMContentLoaded',function(){
     const panel=document.getElementById('panel-intraday');
     if(panel&&panel.classList.contains('active')) renderIntraday();
