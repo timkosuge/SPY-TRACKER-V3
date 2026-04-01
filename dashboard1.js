@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
-  desk:        ['desk','live-chart','intraday','intraday-volume','intraday-windows','gap-stats'],
+  desk:        ['desk','live-chart','intraday','intraday-volume','intraday-windows','gap-stats','session-vol'],
   derivatives: ['options','gex','wem','volatility'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
@@ -70,6 +70,7 @@ function _switchPanelOnly(id) {
   if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); }, 50); }
   if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }
   if(id==='gap-stats') { setTimeout(renderGapStats, 50); }
+  if(id==='session-vol') { setTimeout(renderSessionVolStats, 50); }
 }
 
 function switchTab(id){
@@ -6576,6 +6577,42 @@ function renderGapStats() {
       <tbody>${dowRows}</tbody>
     </table>`;
 
+  const gsExplain = text =>
+    `<div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:12px;">${text}</div>`;
+
+  const overviewExplain = gsExplain(`These four summary numbers describe the overall character of the ${D.n} session pairs in the selected filter.
+    <strong>Avg next gap</strong> is how much SPY gapped up or down at the open the following morning, as a percent of the prior close — positive means gap up on average.
+    <strong>Avg PH move</strong> is the net move of the previous day's Power Hour (1:00–2:00pm CT) — the full hour from open to close.
+    <strong>Avg PH range</strong> is the total high-to-low swing within that same Power Hour window, expressed as a percent.
+    These three numbers together tell you: on typical days in this filter, how much does the PH move, and what gap does the next morning produce?`);
+
+  const gapTypeExplain = gsExplain(`This section breaks all sessions into three gap types based on how SPY opened relative to the prior close.
+    A <strong>Gap Up</strong> means SPY opened higher than the prior close. A <strong>Gap Down</strong> means it opened lower. <strong>Flat</strong> means the gap was under 0.10%.
+    For each gap type you can see: how the Power Hour (previous day) behaved before this gap occurred, and how the First Hour (8:30–9:30am CT next day) played out after the gap.
+    <strong>Gap fill rate</strong> is the percentage of days where SPY came back and touched the prior close price at some point during the next session.
+    <strong>FH predicts day</strong> is how often the direction of the First Hour matched the direction of the full day's close — a measure of first-hour momentum reliability.
+    Sample sizes: ${D.gap_breakdown?.GAP_UP?.n||'?'} gap-up days, ${D.gap_breakdown?.FLAT?.n||'?'} flat opens, ${D.gap_breakdown?.GAP_DOWN?.n||'?'} gap-down days across ${D.n} total sessions.`);
+
+  const phBinExplain = gsExplain(`This table groups sessions by how large the previous day's Power Hour move was, then shows what kind of gap followed the next morning.
+    <strong>AVG GAP</strong> is the average percent gap that appeared at the open the day after a PH move of that magnitude.
+    <strong>GAP UP% / GAP DN%</strong> shows how often the next morning gapped in each direction — the bars make it easy to see the skew.
+    <strong>FILL RATE</strong> is how often the next day eventually filled the gap. <strong>NEXT FH RNG</strong> is how wide the First Hour was.
+    The key insight: <em>strong PH moves in either direction tend to produce larger gaps the next morning</em>, and large gaps produce wider first hours regardless of direction.
+    This can be used to set expectations for next morning's opening range and gap fill probability before the market opens.`);
+
+  const signalExplain = gsExplain(`These four panels extract the clearest directional signals from the Power Hour → gap relationship.
+    <strong>Late PH momentum</strong> (top left): when the last 15 minutes of the Power Hour surge strongly, the next open leans gap-up. When those 15 minutes fade, it's the single strongest predictor of a gap-down open.
+    <strong>Gap fill: momentum vs reversal</strong> (top right): if the Power Hour moved in the same direction as the gap (momentum), the gap fills less often — the move is sustained. If the PH opposed the gap direction, the gap fills more readily — the market is mean-reverting.
+    <strong>PH range → next morning volatility</strong> (bottom left): a wide, volatile Power Hour reliably produces a wider First Hour the next morning. Use this to calibrate how much range to expect at the open.
+    <strong>Key edge summary</strong> (bottom right): the most actionable signals distilled into bullet points. All percentages are based on ${D.n} session pairs.`);
+
+  const dowExplain = gsExplain(`This breaks gap characteristics down by which day of the week the gap occurred on.
+    The note below each stat line uses actual data from this filter — gap-up frequency, gap-down frequency, average gap size, and average prior PH move by day.
+    Day-of-week effects in gaps are real and persistent: <strong>Monday</strong> gaps tend to be larger because two days of news accumulate over the weekend.
+    <strong>Friday</strong> gaps are often smaller because traders are reluctant to hold large positions over the weekend.
+    Use these as a prior when evaluating a gap — a large gap on Monday is more normal than the same gap on a Wednesday.
+    All stats based on ${D.n} total sessions; individual day counts shown in the N column.`);
+
   el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
       <div>
@@ -6589,21 +6626,352 @@ function renderGapStats() {
           <div style="display:flex;gap:5px;flex-wrap:wrap;">${dowBtns}</div>
         </div>
       </div>
-      <div style="font-size:10px;color:var(--text3);text-align:right;">
+      <div style="font-size:10px;color:var(--text3);text-align:right;line-height:1.6;">
         <div>${D.n} session pairs · 1-min bars</div>
-        <div style="margin-top:2px;">PH: 1:00–2:00pm CT (prev day) · FH: 8:30–9:30am CT (next day)</div>
+        <div>PH: 1:00–2:00pm CT (prev day) · FH: 8:30–9:30am CT (next day)</div>
+        <div style="margin-top:2px;color:var(--text3);">Gap = (next open − prev close) / prev close × 100</div>
+        <div>Gap fill = SPY returned to touch prev close during next session</div>
       </div>
     </div>
-    ${overviewHtml}
-    ${section('⬡ OVERVIEW BY GAP TYPE — PH CHARACTERISTICS + FIRST HOUR BEHAVIOR','var(--cyan)',`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">${gapCards}</div>`)}
-    ${section('⬡ POWER HOUR MOVE → NEXT DAY GAP PREDICTION','#ffcc00',phBinHtml)}
-    ${section('⬡ KEY SIGNALS — LATE PH MOMENTUM, FILL RATES, RANGE EXPANSION','#8855ff',signalHtml)}
-    ${section('⬡ GAP PATTERNS BY DAY OF WEEK','#00ccff',dowHtml)}
+    ${section('⬡ SESSION SUMMARY','var(--cyan)', overviewExplain + overviewHtml)}
+    ${section('⬡ BREAKDOWN BY GAP TYPE — PH CHARACTERISTICS + FIRST HOUR BEHAVIOR','#00ccff', gapTypeExplain + `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">${gapCards}</div>`)}
+    ${section('⬡ POWER HOUR MOVE → NEXT DAY GAP PREDICTION','#ffcc00', phBinExplain + phBinHtml)}
+    ${section('⬡ KEY SIGNALS — LATE PH MOMENTUM, FILL RATES, RANGE EXPANSION','#8855ff', signalExplain + signalHtml)}
+    ${section('⬡ GAP PATTERNS BY DAY OF WEEK','#ff8800', dowExplain + dowHtml)}
+  </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSION VOLATILITY STATS — full analysis tab
+// ─────────────────────────────────────────────────────────────────────────────
+let _svStLookback = 'all';
+let _svStDow      = 'all';
+window._svStSetLb  = v => { _svStLookback = v; renderSessionVolStats(); };
+window._svStSetDow = v => { _svStDow = v;      renderSessionVolStats(); };
+
+function renderSessionVolStats() {
+  const el = document.getElementById('sessionVolContent');
+  if (!el) return;
+  if (typeof SESSION_VOL_PROFILE === 'undefined') {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);">Session vol profile data not loaded.</div>';
+    return;
+  }
+
+  const curYear = new Date().getFullYear();
+  const fbtn = (lbl, active, fn) =>
+    `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
+
+  const lbBtns = ['all','12m','year'].map(v =>
+    fbtn(v==='all'?'ALL HISTORY':v==='12m'?'12 MONTHS':String(curYear)+' YTD', _svStLookback===v, `_svStSetLb('${v}')`)
+  ).join(' ');
+  const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(d =>
+    fbtn(d==='all'?'ALL DAYS':d.toUpperCase(), _svStDow===d, `_svStSetDow('${d}')`)
+  ).join(' ');
+
+  const key = _svStDow === 'all' ? _svStLookback : `${_svStLookback}_${_svStDow}`;
+  const profile = SESSION_VOL_PROFILE[key];
+
+  if (!profile || !profile.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);">Not enough data for this filter.</div>';
+    return;
+  }
+
+  // ET→CT conversion
+  function etToCT(ts) {
+    const [h, m] = ts.split(':').map(Number);
+    let ch = h - 1; if (ch < 0) ch += 24;
+    return `${ch}:${String(m).padStart(2,'0')}`;
+  }
+  function tsToMins(ts) { const [h,m]=ts.split(':').map(Number); return h*60+m; }
+
+  const nowCT   = new Date(new Date().toLocaleString('en-US',{timeZone:'America/Chicago'}));
+  const nowMins = nowCT.getHours()*60+nowCT.getMinutes();
+
+  const avgs   = profile.map(b=>b.avg);
+  const maxAvg = Math.max(...avgs);
+  const minAvg = Math.min(...avgs);
+  const sorted = [...profile].sort((a,b)=>b.avg-a.avg);
+  const nSessions = profile[0]?.n ? Math.round(profile[0].n / 5) : '?';
+  const openBar = profile[0];
+  const openCT  = etToCT(openBar.ts);
+
+  function volColor(v) {
+    const pct = (v - minAvg) / (maxAvg - minAvg || 1);
+    if (pct > 0.75) return '#ff3355';
+    if (pct > 0.50) return '#ff8800';
+    if (pct > 0.25) return '#ffcc00';
+    return '#00cc88';
+  }
+
+  const section = (title, color, body) =>
+    `<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;padding:16px;margin-bottom:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};margin-bottom:12px;">${title}</div>
+      ${body}
+    </div>`;
+
+  const explain = text =>
+    `<div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:14px;">${text}</div>`;
+
+  // ── PANEL 1: Main bar chart ───────────────────────────────────────────────
+  const bars1 = profile.map(b => {
+    const ctTs  = etToCT(b.ts);
+    const bMins = tsToMins(ctTs);
+    const isNow = nowMins >= bMins && nowMins < bMins + 5;
+    const barH  = Math.round((b.avg / maxAvg) * 100);
+    const c     = isNow ? 'var(--cyan)' : volColor(b.avg);
+    const isHour = b.ts.endsWith(':00');
+    const label  = isHour ? ctTs.replace(':00','')+(parseInt(ctTs)>=12?'pm':'am') : '';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;position:relative;" title="${ctTs} CT · $${b.avg.toFixed(4)} avg range${isNow?' · NOW':''}">
+      ${isNow?`<div style="position:absolute;top:-14px;font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);">NOW</div>`:''}
+      <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:80px;background:var(--bg3);border-radius:2px 2px 0 0;overflow:hidden;${isNow?'border:1px solid var(--cyan);':''}">
+        <div style="width:100%;background:${c};opacity:${isNow?1:0.8};height:${barH}%;border-radius:2px 2px 0 0;"></div>
+      </div>
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:${isHour?(isNow?'var(--cyan)':'var(--text2)'):'transparent'};white-space:nowrap;">${label||'·'}</div>
+    </div>`;
+  }).join('');
+
+  const top3  = sorted.slice(0,3).map(b=>`<span style="color:#ff3355;">${etToCT(b.ts)} CT</span> <span style="color:var(--text3);font-size:10px;">($${b.avg.toFixed(3)})</span>`).join(' · ');
+  const bot3  = sorted.slice(-3).map(b=>`<span style="color:#00cc88;">${etToCT(b.ts)} CT</span> <span style="color:var(--text3);font-size:10px;">($${b.avg.toFixed(3)})</span>`).join(' · ');
+  const openPremium = openBar.avg;
+  const midBars = profile.filter(b=>{ const m=tsToMins(etToCT(b.ts)); return m>=660&&m<780; }); // 11am–1pm CT
+  const midAvg  = midBars.length ? midBars.reduce((a,b)=>a+b.avg,0)/midBars.length : 0;
+  const openMult = midAvg>0 ? (openPremium/midAvg).toFixed(1) : '—';
+
+  const summaryCards = [
+    ['SESSIONS',     `~${nSessions}`,            'var(--cyan)',  'Total historical sessions used (all days × 5-min buckets, top 10% trimmed per bucket)'],
+    ['OPEN PREMIUM', `${openMult}×`,             '#ff8800',     'How many times more volatile the open (8:30 CT) is vs the quietest mid-day period (11am–1pm CT)'],
+    ['PEAK WINDOW',  etToCT(sorted[0].ts)+' CT', '#ff3355',     'The single 5-min window with the highest average dollar range across all historical sessions'],
+    ['QUIETEST',     etToCT(sorted[sorted.length-1].ts)+' CT', '#00cc88', 'The calmest 5-min window of the session on average'],
+    ['DATA RANGE',   `${_svStLookback==='all'?'All history':_svStLookback==='12m'?'12 months':curYear+' YTD'}${_svStDow!=='all'?' · '+_svStDow:''}`, 'var(--text2)', 'Current filter selection'],
+  ].map(([l,v,c,tip])=>`<div style="background:var(--bg3);border-radius:4px;padding:12px;text-align:center;" title="${tip}">
+    <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;">${l}</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${c};">${v}</div>
+  </div>`).join('');
+
+  const panel1 = explain(`Each bar is one 5-minute window of the trading session, running from 8:30 CT (open) to 4:00 CT (close).
+    The height represents the <strong>average dollar range</strong> SPY moved within that 5-minute window, measured across approximately <strong>${nSessions} historical sessions</strong>.
+    The range for each bar is the session high minus the session low within that 5-minute candle, then averaged across all matching days.
+    The top 10% most extreme bars are trimmed to reduce the effect of outlier days (e.g. flash crashes, circuit breakers).
+    Color scale: <span style="color:#ff3355;">red = high vol</span>, <span style="color:#ff8800;">orange = elevated</span>, <span style="color:#ffcc00;">yellow = normal</span>, <span style="color:#00cc88;">green = quiet</span>.
+    <br><br>The open spike at 8:30 CT is structural — the market is absorbing overnight news, gap reactions, and pre-market orders all at once.
+    The close spike (3:50–4:00 CT) reflects end-of-day position squaring and index rebalancing.
+    The mid-day trough (roughly 11am–1pm CT) is the quietest period of most sessions.`) +
+    `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px;">${summaryCards}</div>
+    <div style="display:flex;align-items:flex-end;gap:1px;padding:18px 0 4px;overflow:hidden;margin-bottom:8px;">${bars1}</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;padding:8px;background:var(--bg3);border-radius:4px;margin-bottom:8px;">
+      <div style="font-size:10px;">MOST VOLATILE: ${top3}</div>
+      <div style="font-size:10px;">LEAST VOLATILE: ${bot3}</div>
+    </div>
+    <div style="font-size:10px;color:var(--text3);">
+      <span style="display:inline-block;width:10px;height:10px;background:#ff3355;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>High vol &nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#ff8800;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Elevated &nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#ffcc00;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Normal &nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#00cc88;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Quiet
+    </div>`;
+
+  // ── PANEL 2: DOW overlay — all 5 days on one chart ────────────────────────
+  const DAYS = ['Mon','Tue','Wed','Thu','Fri'];
+  const DAY_COLORS = { Mon:'#00ccff', Tue:'#00ff88', Wed:'#ffcc00', Thu:'#ff8800', Fri:'#ff3355' };
+  const dayProfiles = {};
+  DAYS.forEach(d => {
+    const k = _svStLookback === 'all' ? `all_${d}` : `${_svStLookback}_${d}`;
+    dayProfiles[d] = SESSION_VOL_PROFILE[k] || [];
+  });
+  const allDayAvgs = DAYS.flatMap(d => dayProfiles[d].map(b=>b.avg));
+  const dayMax = Math.max(...allDayAvgs, 0.01);
+
+  const chartH2 = 90, chartW2_pct = 100;
+  // Build SVG line chart for day comparison
+  const svgLines = DAYS.map(d => {
+    const dp = dayProfiles[d];
+    if (!dp.length) return '';
+    const pts = dp.map((b, i) => {
+      const x = (i / (dp.length - 1)) * 100;
+      const y = chartH2 - (b.avg / dayMax) * (chartH2 - 4) - 2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const nD = dp[0]?.n ? Math.round(dp[0].n/5) : '?';
+    return `<polyline points="${pts}" fill="none" stroke="${DAY_COLORS[d]}" stroke-width="1.5" stroke-linejoin="round" opacity="0.85" style="cursor:default;" title="${d} · ~${nD} sessions"/>`;
+  }).join('');
+
+  // Hour labels for x axis (approximate positions)
+  const hourLabels = profile.filter(b=>b.ts.endsWith(':00')).map((b,i,arr) => {
+    const idx = profile.findIndex(p=>p.ts===b.ts);
+    const x   = (idx/(profile.length-1))*100;
+    const lbl = etToCT(b.ts).replace(':00','')+(parseInt(etToCT(b.ts))>=12?'pm':'am');
+    return `<text x="${x.toFixed(1)}%" y="100%" font-size="8" fill="#404060" text-anchor="middle" font-family="Share Tech Mono,monospace">${lbl}</text>`;
+  }).join('');
+
+  const dowNotes = DAYS.map(d => {
+    const dp  = dayProfiles[d];
+    if (!dp.length) return '';
+    const nD  = dp[0]?.n ? Math.round(dp[0].n/5) : '?';
+    const avg = dp.reduce((a,b)=>a+b.avg,0)/dp.length;
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:10px;">
+      <div style="width:18px;height:3px;background:${DAY_COLORS[d]};border-radius:2px;"></div>
+      <span style="color:${DAY_COLORS[d]};font-family:'Orbitron',monospace;font-size:8px;">${d.toUpperCase()}</span>
+      <span style="color:var(--text3);">avg $${avg.toFixed(3)} · ~${nD} sessions</span>
+    </div>`;
+  }).join('');
+
+  const panel2 = explain(`This chart overlays all five days of the week on the same axis so you can see how each day's <strong>intraday volatility profile differs by time of day</strong>.
+    Each line is the average 5-min range for sessions on that day of the week, using the same lookback filter selected above.
+    <br><br>Key things to notice: <strong>Friday afternoons</strong> often have elevated volatility as traders close positions before the weekend.
+    <strong>Wednesday middays</strong> can be spiky around Fed meeting releases. <strong>Monday openings</strong> tend to be quieter than the rest of the week.
+    The shape of the curve is consistent across days — open spike, mid-day trough, close surge — but the magnitude differs.
+    A day-of-week with a persistently higher line is structurally more volatile throughout the session.`) +
+    `<svg viewBox="0 0 100 ${chartH2+16}" style="width:100%;height:${chartH2+20}px;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      ${svgLines}
+      ${hourLabels}
+    </svg>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">${dowNotes}</div>`;
+
+  // ── PANEL 3: Volatility decay curve ──────────────────────────────────────
+  const decayCurve = profile.map((b,i) => {
+    const pctOfOpen = openBar.avg > 0 ? (b.avg / openBar.avg * 100) : 0;
+    const ctTs = etToCT(b.ts);
+    const isHour = b.ts.endsWith(':00');
+    const label  = isHour ? ctTs.replace(':00','')+(parseInt(ctTs)>=12?'pm':'am') : '';
+    const barH   = Math.min(100, Math.round(pctOfOpen));
+    const c      = pctOfOpen > 85 ? '#ff3355' : pctOfOpen > 60 ? '#ff8800' : pctOfOpen > 40 ? '#ffcc00' : '#00cc88';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;" title="${ctTs} CT · ${pctOfOpen.toFixed(0)}% of open vol">
+      <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:70px;background:var(--bg3);border-radius:2px 2px 0 0;overflow:hidden;">
+        <div style="width:100%;background:${c};opacity:0.8;height:${barH}%;"></div>
+      </div>
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:${isHour?'var(--text2)':'transparent'};white-space:nowrap;">${label||'·'}</div>
+    </div>`;
+  }).join('');
+
+  // Find 50% decay point
+  const halfOpenIdx = profile.findIndex(b => b.avg <= openBar.avg * 0.5);
+  const halfOpenTs  = halfOpenIdx >= 0 ? etToCT(profile[halfOpenIdx].ts)+' CT' : '—';
+
+  const panel3 = explain(`This shows how fast opening volatility decays through the session. Each bar represents that 5-minute window's average range <strong>as a percentage of the opening bar's range</strong>.
+    The opening bar (8:30 CT) is always 100%. Everything else is relative to it.
+    <br><br>This is useful for understanding <strong>how long the "open premium" lasts</strong> — the window of above-average activity following the market open.
+    Based on the current data, vol drops to ~50% of its open value around <strong>${halfOpenTs}</strong>.
+    After that, the session settles into its mid-day baseline. The close surge (3:50–4:00 CT) is visible as a secondary bump.
+    If you trade the open, this curve tells you how long you have before conditions normalize.`) +
+    `<div style="display:flex;align-items:flex-end;gap:1px;padding:18px 0 4px;overflow:hidden;">${decayCurve}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:6px;">100% = opening bar range ($${openBar.avg.toFixed(3)}) · vol reaches 50% of open around ${halfOpenTs}</div>`;
+
+  // ── PANEL 4: Lookback comparison ──────────────────────────────────────────
+  const lbKeys = ['all','12m','year'];
+  const lbLabels = { all:'ALL HISTORY', '12m':'12 MONTHS', year:String(curYear)+' YTD' };
+  const lbColors = { all:'#8888ff', '12m':'#00ccff', year:'#ff8800' };
+  const lbProfiles = {};
+  lbKeys.forEach(k => {
+    const pk = _svStDow === 'all' ? k : `${k}_${_svStDow}`;
+    lbProfiles[k] = SESSION_VOL_PROFILE[pk] || [];
+  });
+  const lbMax = Math.max(...lbKeys.flatMap(k => lbProfiles[k].map(b=>b.avg)), 0.01);
+
+  const lbSvgLines = lbKeys.map(k => {
+    const dp = lbProfiles[k];
+    if (!dp.length) return '';
+    const pts = dp.map((b,i) => {
+      const x = (i/(dp.length-1))*100;
+      const y = 88 - (b.avg/lbMax)*84;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${lbColors[k]}" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>`;
+  }).join('');
+
+  const lbNotes = lbKeys.map(k => {
+    const dp = lbProfiles[k];
+    if (!dp.length) return '';
+    const avg = dp.length ? dp.reduce((a,b)=>a+b.avg,0)/dp.length : 0;
+    const nD  = dp[0]?.n ? Math.round(dp[0].n/5) : '?';
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:10px;">
+      <div style="width:18px;height:3px;background:${lbColors[k]};border-radius:2px;"></div>
+      <span style="color:${lbColors[k]};font-family:'Orbitron',monospace;font-size:8px;">${lbLabels[k]}</span>
+      <span style="color:var(--text3);">avg $${avg.toFixed(3)} · ~${nD} sessions</span>
+    </div>`;
+  }).join('');
+
+  const panel4 = explain(`This overlays three lookback periods on the same chart to show whether <strong>recent market conditions are more or less volatile than the historical norm</strong>.
+    If the ${curYear} YTD line sits consistently above the All History line, it means this year's intraday moves have been structurally larger — the market is in a higher-volatility regime.
+    If YTD is below, conditions have been unusually calm.
+    <br><br>This matters for trade sizing and stop placement: if you calibrate stops based on long-term averages during a high-vol regime, you'll get stopped out too often.
+    Conversely, stops sized for a high-vol period will be too wide during quiet stretches.
+    The gap between ${curYear} (orange) and All History (purple) is the "regime premium" — how much more (or less) volatile today's market is vs history.`) +
+    `<svg viewBox="0 0 100 100" style="width:100%;height:110px;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      ${lbSvgLines}
+      ${hourLabels}
+    </svg>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">${lbNotes}</div>`;
+
+  // ── PANEL 5: Summary stats table ──────────────────────────────────────────
+  // Compute time blocks
+  const blocks = [
+    { label:'OPEN AUCTION',    ct:'8:30–9:00',  from:'09:30', to:'10:00' },
+    { label:'FIRST HOUR',      ct:'8:30–9:30',  from:'09:30', to:'10:30' },
+    { label:'MID-MORNING',     ct:'9:30–11:00', from:'10:30', to:'12:00' },
+    { label:'LUNCH / DEAD ZONE',ct:'11:00–1:00',from:'12:00', to:'14:00' },
+    { label:'AFTERNOON',       ct:'1:00–2:30',  from:'14:00', to:'15:30' },
+    { label:'POWER HOUR',      ct:'2:30–3:30',  from:'15:30', to:'16:30' },
+    { label:'CLOSE AUCTION',   ct:'3:30–4:00',  from:'16:30', to:'17:00' },
+  ].map(blk => {
+    const bars = profile.filter(b => b.ts >= blk.from && b.ts < blk.to);
+    if (!bars.length) return null;
+    const avg  = bars.reduce((a,b)=>a+b.avg,0)/bars.length;
+    const pctOfPeak = maxAvg > 0 ? avg/maxAvg*100 : 0;
+    const relBar = Math.round(pctOfPeak);
+    const c = pctOfPeak>75?'#ff3355':pctOfPeak>50?'#ff8800':pctOfPeak>30?'#ffcc00':'#00cc88';
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);padding:6px 8px;white-space:nowrap;">${blk.label}</td>
+      <td style="font-size:10px;color:var(--text3);padding:6px 8px;white-space:nowrap;">${blk.ct} CT</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${c};padding:6px 8px;text-align:right;">$${avg.toFixed(3)}</td>
+      <td style="padding:6px 10px;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <div style="width:${relBar}px;max-width:120px;height:8px;background:${c};border-radius:2px;opacity:0.8;"></div>
+          <span style="font-size:10px;color:var(--text3);">${relBar}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).filter(Boolean).join('');
+
+  const panel5 = explain(`This table aggregates the 5-minute bars into meaningful session blocks and shows the average range per bar within each block, expressed in dollars.
+    The bar chart shows each block's volatility as a percentage of the peak period (the most volatile block = 100%).
+    <br><br><strong>How to use this:</strong> If you're trading the open auction, expect moves of roughly $${(profile.slice(0,6).reduce((a,b)=>a+b.avg,0)/6).toFixed(2)} per 5-minute bar on average.
+    During the lunch dead zone, expect about $${midAvg.toFixed(3)} per bar — much tighter, choppy, less directional.
+    Power hour and close can re-accelerate significantly. Position sizing and stop width should reflect which block you're trading in.`) +
+    `<table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        ${['BLOCK','TIME (CT)','AVG 5-MIN RANGE','REL TO PEAK'].map(h=>`<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:4px 8px;text-align:${h==='BLOCK'||h==='TIME (CT)'?'left':'right'};">${h}</th>`).join('')}
+      </thead>
+      <tbody>${blocks}</tbody>
+    </table>`;
+
+  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ SESSION VOLATILITY — INTRADAY ANALYSIS</div>
+        <div style="margin-bottom:6px;">
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">LOOKBACK</div>
+          <div style="display:flex;gap:5px;">${lbBtns}</div>
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DAY OF WEEK</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">${dowBtns}</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);text-align:right;line-height:1.6;">
+        <div>~${nSessions} sessions · 5-min bars · 1-min source data</div>
+        <div>avg range = mean(high−low) per bar · top 10% trimmed</div>
+        <div>All times Central. ET source timestamps converted.</div>
+      </div>
+    </div>
+    ${section('⬡ 5-MIN VOLATILITY PROFILE — AVERAGE RANGE BY TIME OF DAY','var(--cyan)',panel1)}
+    ${section('⬡ DAY-OF-WEEK COMPARISON — VOLATILITY SHAPE BY DAY','#00ccff',panel2)}
+    ${section('⬡ VOLATILITY DECAY CURVE — % OF OPEN RANGE BY TIME','#ff8800',panel3)}
+    ${section('⬡ REGIME COMPARISON — IS TODAY MORE VOLATILE THAN HISTORY?','#8855ff',panel4)}
+    ${section('⬡ SESSION BLOCK SUMMARY — AVERAGE VOLATILITY BY PHASE','#00cc88',panel5)}
   </div>`;
 }
 
 // ═══════════════════════════════════════════════════════
-// SPY CHART
+// LIVE SPY CHART — 1-min intraday candlestick
 // ═══════════════════════════════════════════════════════
 let _liveChartInterval = null;
 
@@ -6614,7 +6982,7 @@ async function renderLiveChart() {
   el.innerHTML = `
     <div id="lcWrap" style="padding:14px 16px;max-width:1400px;margin:0 auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);">⬡ SPY </div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);">⬡ SPY — 1-MIN INTRADAY CHART</div>
         <div style="display:flex;align-items:center;gap:10px;">
           <div id="lcStatus" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">Fetching data…</div>
           <div id="lcPrice" style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:var(--text1);">—</div>
