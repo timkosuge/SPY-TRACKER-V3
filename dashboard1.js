@@ -1404,8 +1404,16 @@ function renderDeskSession(md,sd){
     } catch(e) { return new Date().toISOString().slice(0,10); }
   })();
   const PM_CACHE_KEY = 'spy_pm_cache_v2';
-  // PM session is final once we're at or past 9:30 ET (reuses isPremarket computed above)
-  const _pmSessionClosed = !isPremarket;
+  // PM session is final once we're at or past 9:30 ET — compute locally (isPremarket is in renderHub scope)
+  const _pmSessionClosed = (() => {
+    try {
+      const etNowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const etMinsLocal = etNowLocal.getHours() * 60 + etNowLocal.getMinutes();
+      const isWeekendLocal = etNowLocal.getDay() === 0 || etNowLocal.getDay() === 6;
+      const isPremarketLocal = !isWeekendLocal && etMinsLocal >= 4*60 && etMinsLocal < 9*60+30;
+      return !isPremarketLocal;
+    } catch(e) { return true; }
+  })();
 
   const loadPMCache = () => {
     // Only trust localStorage cache if PM session is definitively closed.
