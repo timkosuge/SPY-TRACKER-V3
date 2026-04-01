@@ -7,7 +7,6 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
-  desk:        ['desk','intraday'],
   derivatives: ['options','gex','wem','volatility'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
@@ -60,7 +59,6 @@ function _switchPanelOnly(id) {
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
-  if(id==='intraday') { if(typeof renderIntraday==='function' && window._md && window._sd) { try { renderIntraday(window._md, window._sd); } catch(e){ console.warn('intraday:',e); } } }
   if(id==='edgestats') { if(typeof renderEdgeStats==='function') renderEdgeStats(); }
   if(id==='breadth' && _md && _sd) { try { renderBreadth(_md,_sd); } catch(e){} }
   if(id==='volatility' && _md) { try { renderVolatility(_md); } catch(e){} }
@@ -81,7 +79,7 @@ function switchTab(id){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
   // Find and activate the correct top-level tab button
-  const topTabs = ['hub','desk','overview','derivatives','history','media','journal'];
+  const topTabs = ['hub','desk','intraday','overview','derivatives','history','media','journal'];
   const btnIdx = topTabs.indexOf(id);
   const allTabs = document.querySelectorAll('.tab');
   if(btnIdx>=0 && allTabs[btnIdx]) allTabs[btnIdx].classList.add('active');
@@ -1474,17 +1472,8 @@ function renderDeskSession(md,sd){
     const dvEl=$('deskDVwap'), dvDiff=$('deskDVwapDiff');
     const wvEl=$('deskWVwap'), wvDiff=$('deskWVwapDiff');
 
-    // Daily VWAP — live intraday first, then intraday cache, then closing snapshot
-    let _dvLv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
-    if (!_dvLv?.vwap && typeof loadIntradayCache === 'function') {
-      const _ic = loadIntradayCache();
-      if (_ic?.vwap) _dvLv = _ic;
-    }
-    if (!_dvLv?.vwap && typeof loadClosingSnapshot === 'function') {
-      const _cs = loadClosingSnapshot();
-      if (_cs?.vwap) _dvLv = _cs;
-    }
-    const lv = _dvLv;
+    // Daily VWAP — from cached _spyIntraday if available
+    const lv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
     const dv = lv?.vwap || null;
     if (dvEl) dvEl.textContent = dv ? '$'+fmt(dv,2) : '—';
     if (dvDiff && dv && cur) {
@@ -1551,26 +1540,13 @@ function renderDeskSession(md,sd){
       const cached = loadIntradayCache();
       if (cached?.volume) lv = { ...cached, _fromCache: true };
     }
-    // Third fallback: closing snapshot — persists overnight and through weekend
-    if (!lv?.available && !lv?._fromCache && typeof loadClosingSnapshot === 'function') {
-      const snap = loadClosingSnapshot();
-      if (snap?.volume) lv = snap;
-    }
     const day0 = sd?.[0]||{}, va = day0.volume_analysis||{};
-    const isLive = lv?.available || lv?._fromCache || lv?._fromClosing;
+    const isLive = lv?.available || lv?._fromCache;
     const last30 = (sd||[]).slice(0,30).filter(d=>d.volume>0);
     const avg30 = last30.length ? Math.round(last30.reduce((a,d)=>a+d.volume,0)/last30.length) : 85000000;
-    // Determine if market is currently open (ET 9:30–16:00 weekdays)
-    const _volMarketOpen = (() => {
-      try {
-        const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-        const d = et.getDay(), m = et.getHours()*60+et.getMinutes();
-        return d>0 && d<6 && m>=570 && m<960;
-      } catch(e) { return false; }
-    })();
 
     if(!isLive) {
-      // Pre-market with no data at all: show prior session stats from sd
+      // Pre-market or no data: show yesterday + pace context
       const vol = day0.volume || 0;
       const volPct = vol&&avg30 ? vol/avg30*100 : 0;
       const vc = volPct>130?'#ff8800':volPct>100?'#00ff88':'#ffcc00';
@@ -1593,38 +1569,22 @@ function renderDeskSession(md,sd){
         ].map(i=>fmtRow(i.l,i.v)).join('')}
         <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:8px;text-align:center;">LIVE DATA AT MARKET OPEN</div>`;
     } else {
-      // LIVE or frozen final — full intraday breakdown
+      // LIVE — full intraday breakdown
       const vol = lv.volume||0;
       const volPct = vol&&avg30 ? vol/avg30*100 : 0;
       const vc = volPct>130?'#ff8800':volPct>100?'#00ff88':volPct>70?'#ffcc00':'var(--text3)';
       const buckets = lv.buckets||[];
       const maxBkt = Math.max(...buckets.map(b=>b.volume),1);
-      // Only highlight active bucket when market is open
+      // Current CT time for highlighting active bucket
       const nowCT = new Date(new Date().toLocaleString('en-US', {timeZone:'America/Chicago'}));
-      const nowMins = _volMarketOpen ? nowCT.getHours()*60+nowCT.getMinutes() : -1;
+      const nowMins = nowCT.getHours()*60+nowCT.getMinutes();
 
-      // Pace projection only makes sense during live session
-      const paceSection = _volMarketOpen && !lv._fromClosing ? (() => {
-        const elapsed = Math.max(lv.bars||1, 1);
-        const totalMins = 6.5*60;
-        const paceTotal = Math.round(vol / elapsed * totalMins);
-        const pacePct = paceTotal/avg30*100;
-        const paceColor = pacePct>130?'#ff8800':pacePct>100?'#00ff88':'#ffcc00';
-        return `<div style="text-align:right;">
-            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">PACE →</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${paceColor};">${fmtK(paceTotal)}</div>
-            <div style="font-size:9px;color:${paceColor};">${fmt(pacePct,0)}% proj</div>
-          </div>`;
-      })() : '';
-
-      // Status label
-      const isFinal = lv._fromClosing || lv._fromCache;
-      const statusLabel = lv._fromClosing
-        ? `◎ FINAL · ${lv._tradingDate||''} · ${lv.bars} bars`
-        : lv._fromCache
-          ? `◎ FINAL · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC`
-          : `● LIVE · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC`;
-      const statusColor = isFinal ? 'var(--text3)' : 'var(--cyan)';
+      // Pace projection: extrapolate total from current pace
+      const elapsed = Math.max(lv.bars||1, 1);
+      const totalMins = 6.5*60; // full session
+      const paceTotal = Math.round(vol / elapsed * totalMins);
+      const pacePct = paceTotal/avg30*100;
+      const paceColor = pacePct>130?'#ff8800':pacePct>100?'#00ff88':'#ffcc00';
 
       volSumEl.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
@@ -1632,7 +1592,11 @@ function renderDeskSession(md,sd){
             <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${vc};">${fmtK(vol)}</div>
             <div style="font-size:10px;color:${vc};">${fmt(volPct,1)}% of 30d avg</div>
           </div>
-          ${paceSection}
+          <div style="text-align:right;">
+            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">PACE →</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${paceColor};">${fmtK(paceTotal)}</div>
+            <div style="font-size:9px;color:${paceColor};">${fmt(pacePct,0)}% proj</div>
+          </div>
         </div>
         <div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:10px;">
           <div style="width:${Math.min(volPct,100).toFixed(1)}%;height:100%;background:${vc};border-radius:3px;transition:width 1s;"></div>
@@ -1668,8 +1632,8 @@ function renderDeskSession(md,sd){
           {l:'HVN Price', v:lv.hvn_price ? '$'+fmt(lv.hvn_price,2)+'  '+fmtK(lv.hvn_volume||0) : '—'},
         ].map(i=>fmtRow(i.l,i.v)).join('')}
 
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:${statusColor};margin-top:6px;text-align:right;">
-          ${statusLabel}
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-top:6px;text-align:right;">
+          ${lv._fromCache ? '◎ FINAL' : '● LIVE'} · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC
         </div>`;
     }
   }
@@ -1928,12 +1892,7 @@ function renderDeskSessionVol() {
     const cached = loadIntradayCache();
     if (cached?.buckets?.length) lv = { ...cached, _fromCache: true };
   }
-  // Third fallback: closing snapshot — persists overnight and through weekend
-  if (!lv?.available && !lv?._fromCache && typeof loadClosingSnapshot === 'function') {
-    const snap = loadClosingSnapshot();
-    if (snap?.buckets?.length) lv = snap;
-  }
-  const isLive = lv?.available || lv?._fromCache || lv?._fromClosing;
+  const isLive = lv?.available || lv?._fromCache;
 
   if (!isLive || !lv.buckets || !lv.buckets.length) {
     el.innerHTML = `
@@ -1946,28 +1905,21 @@ function renderDeskSessionVol() {
     return;
   }
 
-  // Determine if market is currently open — only highlight active bucket when live
-  const _svMarketOpen = (() => {
-    try {
-      const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-      const d = et.getDay(), m = et.getHours()*60+et.getMinutes();
-      return d>0 && d<6 && m>=570 && m<960;
-    } catch(e) { return false; }
-  })();
-
   const sessionRange = lv.high && lv.low ? lv.high - lv.low : null;
   const maxRange = Math.max(...lv.buckets.map(b => b.range || 0), 0.01);
 
-  // Only compute active-bucket time when market is open
+  // CT time for highlighting active bucket
   const nowCT = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Chicago'}));
-  const nowMins = _svMarketOpen ? nowCT.getHours() * 60 + nowCT.getMinutes() : -1;
+  const nowMins = nowCT.getHours() * 60 + nowCT.getMinutes();
 
+  // Color by range size relative to session max
   const rangeColor = r => {
     if (!r || !maxRange) return 'var(--text3)';
     const pct = r / maxRange;
     return pct > 0.7 ? '#ff3355' : pct > 0.4 ? '#ff8800' : pct > 0.2 ? '#ffcc00' : '#00ff88';
   };
 
+  // Parse bucket label to get start/end mins (labels like "9:30-10:30")
   const parseBucketMins = label => {
     const parts = label.split('-');
     const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+(m||0); };
@@ -1989,16 +1941,9 @@ function renderDeskSessionVol() {
     </div>`;
   }).join('');
 
+  // Highest-range bucket
   const maxBucket = lv.buckets.reduce((best, b) => (b.range || 0) > (best.range || 0) ? b : best, lv.buckets[0]);
   const quietBucket = lv.buckets.filter(b => b.range > 0).reduce((best, b) => (b.range || 99) < (best.range || 99) ? b : best, lv.buckets[0]);
-
-  const isFinal = lv._fromClosing || lv._fromCache;
-  const statusLabel = lv._fromClosing
-    ? `◎ FINAL · ${lv._tradingDate||''} · ${lv.bars} bars`
-    : lv._fromCache
-      ? `◎ FINAL · ${lv.bars} bars`
-      : `● LIVE · ${lv.bars} bars`;
-  const statusColor = isFinal ? 'var(--text3)' : 'var(--cyan)';
 
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
@@ -2019,8 +1964,8 @@ function renderDeskSessionVol() {
     <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-top:6px;">
       QUIET: ${quietBucket.label} · $${(quietBucket.range||0).toFixed(2)}
     </div>
-    <div style="font-family:'Orbitron',monospace;font-size:7px;color:${statusColor};margin-top:3px;text-align:right;">
-      ${statusLabel}
+    <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-top:3px;text-align:right;">
+      ● LIVE · ${lv.bars} bars
     </div>`;
 }
 
@@ -2631,6 +2576,144 @@ function renderOptions(md){
   // Expiry behavior
   try { renderExpiryBehavior(md); } catch(e) { console.warn('expiry:', e); }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSION VOLATILITY PROFILE — 5-min historical chart with lookback + DOW toggles
+// ─────────────────────────────────────────────────────────────────────────────
+let _svpLookback = 'all';
+let _svpDow      = 'all';
+
+window._svpSetLookback = function(val) { _svpLookback = val; renderSessionVolProfile(); };
+window._svpSetDow      = function(val) { _svpDow = val;      renderSessionVolProfile(); };
+
+function renderSessionVolProfile() {
+  const el = $('volSessionProfile');
+  if (!el) return;
+
+  if (typeof SESSION_VOL_PROFILE === 'undefined') {
+    el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text3);">Session vol profile data not loaded.</div>';
+    return;
+  }
+
+  // Build key for data lookup
+  const key = _svpDow === 'all'
+    ? _svpLookback
+    : `${_svpLookback}_${_svpDow}`;
+  const profile = SESSION_VOL_PROFILE[key];
+
+  if (!profile || !profile.length) {
+    el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text3);">Not enough data for this filter combination.</div>';
+    return;
+  }
+
+  // Convert ET timestamps to CT (subtract 1 hour)
+  function etToCT(ts) {
+    const [h, m] = ts.split(':').map(Number);
+    let ch = h - 1;
+    if (ch < 0) ch += 24;
+    return `${ch}:${String(m).padStart(2, '0')}`;
+  }
+
+  // Get current CT time for "now" highlight
+  const nowCT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+  const nowMins = nowCT.getHours() * 60 + nowCT.getMinutes();
+
+  function tsToMins(ts) {
+    const [h, m] = ts.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  const maxAvg = Math.max(...profile.map(b => b.avg));
+  const minAvg = Math.min(...profile.map(b => b.avg));
+  const median = [...profile].sort((a,b)=>a.avg-b.avg)[Math.floor(profile.length/2)].avg;
+
+  // Color: heatmap from green (low vol) → yellow → orange → red (high vol)
+  function volColor(v) {
+    const pct = (v - minAvg) / (maxAvg - minAvg);
+    if (pct > 0.75) return '#ff3355';
+    if (pct > 0.50) return '#ff8800';
+    if (pct > 0.25) return '#ffcc00';
+    return '#00cc88';
+  }
+
+  const fbtn = (lbl, active, fn) =>
+    `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
+
+  const lbBtns = [
+    fbtn('ALL HISTORY', _svpLookback==='all',  "_svpSetLookback('all')"),
+    fbtn('12 MONTHS',   _svpLookback==='12m',  "_svpSetLookback('12m')"),
+    fbtn('2026',        _svpLookback==='2026', "_svpSetLookback('2026')"),
+  ].join(' ');
+
+  const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(d =>
+    fbtn(d === 'all' ? 'ALL DAYS' : d.toUpperCase(), _svpDow === d, `_svpSetDow('${d}')`)
+  ).join(' ');
+
+  // Session count label
+  const nSessions = profile[0]?.n ? Math.round(profile[0].n / 5) : '?'; // /5 because 5 bars per bucket
+
+  const bars = profile.map(b => {
+    const ctTs = etToCT(b.ts);
+    const bMins = tsToMins(ctTs);
+    const isNow = nowMins >= bMins && nowMins < bMins + 5;
+    const barH = Math.round((b.avg / maxAvg) * 100);
+    const c = isNow ? 'var(--cyan)' : volColor(b.avg);
+    const isHour = b.ts.endsWith(':00');
+    // Show CT label only on the hour
+    const label = isHour ? ctTs.replace(':00','') + (parseInt(ctTs) >= 12 ? 'pm' : 'am') : '';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;position:relative;"
+               title="${ctTs} CT · $${b.avg.toFixed(4)} avg range · ${isNow ? 'NOW' : ''}">
+      ${isNow ? `<div style="position:absolute;top:-14px;font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);">NOW</div>` : ''}
+      <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:80px;background:var(--bg3);border-radius:2px 2px 0 0;overflow:hidden;${isNow?'border:1px solid var(--cyan);':''}">
+        <div style="width:100%;background:${c};opacity:${isNow?1:0.75};height:${barH}%;border-radius:2px 2px 0 0;transition:height 0.3s;"></div>
+      </div>
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:${isHour?(isNow?'var(--cyan)':'var(--text2)'):'transparent'};white-space:nowrap;">${label||'·'}</div>
+    </div>`;
+  }).join('');
+
+  // Top/bottom 5 slots
+  const sorted = [...profile].sort((a,b) => b.avg - a.avg);
+  const top3 = sorted.slice(0,3).map(b => `${etToCT(b.ts)} CT ($${b.avg.toFixed(3)})`).join(' · ');
+  const bot3 = sorted.slice(-3).map(b => `${etToCT(b.ts)} CT ($${b.avg.toFixed(3)})`).join(' · ');
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:5px;">LOOKBACK</div>
+        <div style="display:flex;gap:5px;">${lbBtns}</div>
+      </div>
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:5px;">DAY OF WEEK</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">${dowBtns}</div>
+      </div>
+      <div style="text-align:right;font-size:10px;color:var(--text3);">
+        <div>${profile.length} buckets · ~${nSessions} sessions</div>
+        <div style="margin-top:2px;">avg 5-min range · Central Time · top 10% trimmed</div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:flex-end;gap:1px;padding:18px 0 4px;overflow:hidden;margin-bottom:6px;">
+      ${bars}
+    </div>
+
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding:8px;background:var(--bg3);border-radius:4px;">
+      <div style="font-size:10px;">
+        <span style="color:var(--text3);">HIGHEST VOL: </span>
+        <span style="color:#ff3355;font-family:'Share Tech Mono',monospace;">${top3}</span>
+      </div>
+      <div style="font-size:10px;">
+        <span style="color:var(--text3);">LOWEST VOL: </span>
+        <span style="color:#00cc88;font-family:'Share Tech Mono',monospace;">${bot3}</span>
+      </div>
+    </div>
+    <div style="margin-top:6px;font-size:10px;color:var(--text3);">
+      <span style="display:inline-block;width:10px;height:10px;background:#ff3355;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>High vol &nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#ff8800;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Elevated &nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#ffcc00;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Normal &nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#00cc88;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Quiet
+    </div>`;
+}
+
 function renderVolatility(md){
   const q=md.quotes||{};
   const vs=q['^VIX'], v3=q['^VIX3M'], v6=q['^VIX6M'];
@@ -2889,48 +2972,9 @@ function renderVolatility(md){
       <span>${s.t}</span>
     </div>`).join(''):`<div style="padding:12px;font-size:13px;color:var(--text2);">No unusual volatility signals. Market vol conditions appear normal.</div>`;
 
-  // ── ROW 4A: Session Vol Profile (hourly) ──────────────────────────────────
+  // ── ROW 4A: Session Vol Profile (5-min, historical) ─────────────────────
   const profEl=$('volSessionProfile');
-  if(profEl){
-    // Historical avg bar range by hour from intraday data — hardcoded from DB analysis
-    // (computed: avg 1-min bar H-L by hour across all history)
-    const hourlyAvg=[
-      {h:'08',lbl:'8am',avg:0.410,note:'Pre-open + open print'},
-      {h:'09',lbl:'9am',avg:0.383,note:'First 30min + cash open'},
-      {h:'10',lbl:'10am',avg:0.323,note:'Morning continuation'},
-      {h:'11',lbl:'11am',avg:0.286,note:'Midmorning lull'},
-      {h:'12',lbl:'12pm',avg:0.271,note:'Lunch hour — low vol'},
-      {h:'13',lbl:'1pm', avg:0.260,note:'Early afternoon'},
-      {h:'14',lbl:'2pm', avg:0.283,note:'FOMC/news window'},
-      {h:'15',lbl:'3pm', avg:0.278,note:'Power hour + close'},
-    ];
-    const maxAvg=Math.max(...hourlyAvg.map(h=>h.avg));
-
-    // Get current CT hour to highlight
-    const nowCT=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Chicago'}));
-    const curHour=nowCT.getHours().toString().padStart(2,'0');
-
-    profEl.innerHTML=`
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Avg 1-min bar range by hour · all history · Central Time</div>
-      <div style="display:flex;flex-direction:column;gap:5px;">
-        ${hourlyAvg.map(h=>{
-          const w=(h.avg/maxAvg*100).toFixed(1);
-          const isCur=h.h===curHour;
-          const c=isCur?'var(--cyan)':h.avg>0.37?'#ff8800':h.avg>0.30?'#ffcc00':'#00ccff';
-          return `<div style="display:flex;align-items:center;gap:8px;${isCur?'background:rgba(0,204,255,0.06);border-radius:3px;padding:2px 4px;':''}">
-            <span style="font-family:'Orbitron',monospace;font-size:9px;color:${isCur?'var(--cyan)':'var(--text3)'};width:32px;">${h.lbl}</span>
-            <div style="flex:1;height:14px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-              <div style="width:${w}%;height:100%;background:${c};opacity:0.75;border-radius:2px;"></div>
-            </div>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${c};width:40px;text-align:right;">$${h.avg.toFixed(3)}</span>
-            <span style="font-size:10px;color:${isCur?'var(--cyan)':'var(--text3)'};width:140px;">${h.note}${isCur?' ← NOW':''}</span>
-          </div>`;
-        }).join('')}
-      </div>
-      <div style="margin-top:10px;padding:8px;background:var(--bg3);border-radius:4px;font-size:12px;color:var(--text2);line-height:1.5;">
-        💡 <strong style="color:var(--text);">Day trading edge:</strong> Highest vol = open (8-9am CT) and close (3pm). Lunch (12-1pm) = tightest spreads, smallest bars. Best R:R setups typically 8:30–10am and 2:30–4pm.
-      </div>`;
-  }
+  if(profEl) renderSessionVolProfile();
 
   // ── ROW 4B: Range History Chart ───────────────────────────────────────────
   const histEl=$('volRangeHistory');
@@ -4663,7 +4707,7 @@ function renderIntradayPattern(md, sd) {
       </div>
       <div>
         <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:8px;">${total} SESSIONS — ${gapType.replace('_',' ')} + FIRST 30MIN ${f30dir}</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
           ${[
             ['FOLLOW-THRU', followThruRate.toFixed(0)+'%', followColor, 'Direction continued all day'],
             ['AVG DAY RANGE', '$'+fmt(avgRange,2), 'var(--cyan)', 'Typical H-L range'],
@@ -4838,15 +4882,15 @@ function renderExpiryBehavior(md) {
 
   // ── UI builders ────────────────────────────────────────────────────────────
   function statCard(label, value, color, sub) {
-    return `<div style="background:var(--bg3);border-top:2px solid ${color};border-radius:3px;padding:10px 8px;text-align:center;">
-      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:5px;">${label}</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${color};">${value}</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:3px;">${sub}</div>
+    return `<div style="background:var(--bg3);border-top:2px solid ${color};border-radius:3px;padding:8px;text-align:center;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:3px;">${label}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${color};">${value}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>
     </div>`;
   }
 
   function insightBar(color, text) {
-    return `<div style="display:flex;gap:8px;padding:8px 12px;border-left:3px solid ${color};background:${color}11;border-radius:0 3px 3px 0;font-size:13px;color:var(--text2);line-height:1.6;">${text}</div>`;
+    return `<div style="display:flex;gap:8px;padding:6px 10px;border-left:3px solid ${color};background:${color}11;border-radius:0 3px 3px 0;font-size:12px;color:var(--text2);line-height:1.5;">${text}</div>`;
   }
 
   function renderDayPanel(stats, label, color, showTodayContext) {
@@ -4901,33 +4945,33 @@ function renderExpiryBehavior(md) {
     if (!stats) return '';
     const wr = stats.pctUp;
     const wrClr = clr(wr);
-    const retColor = stats.avgRet >= 0 ? '#00ff88' : '#ff3355';
-    const barW = Math.min(Math.round(Math.abs(stats.avgRet) / 0.5 * 60), 60);
+    const barW = Math.min(Math.round(Math.abs(stats.avgRet) / 0.5 * 80), 80);
     const barColor = stats.avgRet >= 0 ? '#00ff8880' : '#ff335580';
-    return `<div style="display:grid;grid-template-columns:52px 1fr 100px 100px 80px 80px 50px;gap:8px;align-items:center;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,0.05);">
-      <div style="font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:${color};">${name}</div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <div style="width:${barW}px;height:10px;background:${barColor};border-radius:2px;flex-shrink:0;min-width:4px;"></div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${retColor};">${fmtPct(stats.avgRet,2)}</div>
+    return `<div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)22;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:${color};">${name}</div>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <div style="width:${barW}px;height:8px;background:${barColor};border-radius:2px;flex-shrink:0;"></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${stats.avgRet>=0?'#00ff88':'#ff3355'};">${fmtPct(stats.avgRet,2)}</div>
+      </div>
+      <div></div>
+      <div style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${wrClr};">${wr.toFixed(0)}%</div>
+        <div style="font-size:9px;color:var(--text3);">win rate</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${wrClr};">${wr.toFixed(0)}%</div>
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:2px;">WIN RATE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);">$${fmt2(stats.avgRange)}</div>
+        <div style="font-size:9px;color:var(--text3);">avg range</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:var(--cyan);">$${fmt2(stats.avgRange)}</div>
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:2px;">AVG RANGE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#00ff88;">${stats.bigUp.toFixed(0)}%</div>
+        <div style="font-size:9px;color:var(--text3);">big up</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#00ff88;">${stats.bigUp.toFixed(0)}%</div>
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:2px;">BIG UP</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3355;">${stats.bigDn.toFixed(0)}%</div>
+        <div style="font-size:9px;color:var(--text3);">big dn</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#ff3355;">${stats.bigDn.toFixed(0)}%</div>
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:2px;">BIG DN</div>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">n=${stats.n}</div>
+        <div style="font-size:9px;color:var(--text3);">n=${stats.n}</div>
       </div>
     </div>`;
   }
@@ -4951,14 +4995,15 @@ function renderExpiryBehavior(md) {
       </div>
 
       <!-- Header row -->
-      <div style="display:grid;grid-template-columns:52px 1fr 100px 100px 80px 80px 50px;gap:8px;padding:6px 6px;border-bottom:1px solid var(--border);margin-bottom:4px;background:var(--bg2);border-radius:3px 3px 0 0;">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">DAY</div>
-        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">AVG RETURN</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">WIN RATE</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">AVG RANGE</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">BIG UP</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">BIG DN</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">N</div>
+      <div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)33;margin-bottom:2px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">DAY</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RETURN</div>
+        <div></div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">WIN RATE</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RANGE</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG UP</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG DN</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">N</div>
       </div>
       ${days.map(({name, stats}) => renderWeekRow(name, stats, color)).join('')}
       ${weeklySummaryNote ? `<div style="font-size:10px;color:var(--text3);margin-top:4px;">${weeklySummaryNote}</div>` : ''}
@@ -4967,9 +5012,9 @@ function renderExpiryBehavior(md) {
 
   // ── Section divider ────────────────────────────────────────────────────────
   function sectionHeader(title, n, color, icon) {
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid ${color}44;">
-      <div style="font-family:'Orbitron',monospace;font-size:13px;color:${color};letter-spacing:2px;">${icon} ${title}</div>
-      <div style="font-size:11px;color:var(--text3);">${n} sessions</div>
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid ${color}33;">
+      <div style="font-family:'Orbitron',monospace;font-size:11px;color:${color};letter-spacing:1px;">${icon} ${title}</div>
+      <div style="font-size:10px;color:var(--text3);">${n} sessions</div>
     </div>`;
   }
 
