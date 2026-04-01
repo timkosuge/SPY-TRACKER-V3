@@ -6018,152 +6018,244 @@ function renderIntradayVolStats() {
 // ─────────────────────────────────────────────────────────────────────────────
 function renderWindowStats() {
   const el = document.getElementById('intradayVolStats');
-  if (!el || typeof WINDOW_STATS === 'undefined') return;
-  const W = WINDOW_STATS;
-  const pct = v => v.toFixed(1) + '%';
-  const fmt3 = v => (v >= 0 ? '+' : '') + v.toFixed(3) + '%';
+  if (!el) return;
+  if (typeof WINDOW_STATS === 'undefined') {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);">Window stats not loaded.</div>';
+    return;
+  }
 
-  const section = (title, color, content) => `
-    <div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;padding:14px;margin-bottom:12px;">
+  // ── State ──────────────────────────────────────────────────────────────────
+  if (!window._wsState) window._wsState = { lb: 'all', dow: 'all' };
+  const St = window._wsState;
+  window._wsSetLb  = v => { St.lb  = v; renderWindowStats(); };
+  window._wsSetDow = v => { St.dow = v; renderWindowStats(); };
+
+  const fkey = St.dow === 'all' ? St.lb : `${St.lb}_${St.dow}`;
+  const D = WINDOW_STATS[fkey];
+  const meta = WINDOW_STATS.meta;
+
+  const pct  = v => v == null ? '—' : v.toFixed(1) + '%';
+  const move = v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(3) + '%';
+  const followColor = v => v >= 70 ? '#00ff88' : v >= 55 ? '#88cc44' : v >= 45 ? '#ffcc00' : '#ff8800';
+  const moveColor   = v => v == null ? 'var(--text2)' : v > 0.2 ? '#00ff88' : v < -0.2 ? '#ff3355' : v > 0 ? '#88cc44' : '#ff8855';
+  const curYear = new Date().getFullYear();
+  const fbtn = (lbl, active, fn) =>
+    `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
+
+  const lbBtns  = ['all','12m','ytd'].map(v => fbtn(v==='all'?'ALL HISTORY':v==='12m'?'12 MONTHS':String(curYear)+' YTD', St.lb===v, `_wsSetLb('${v}')`)).join(' ');
+  const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(v => fbtn(v==='all'?'ALL':v.toUpperCase(), St.dow===v, `_wsSetDow('${v}')`)).join(' ');
+
+  if (!D || !D.n) {
+    el.innerHTML = `<div style="padding:14px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">${lbBtns}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">${dowBtns}</div>
+      <div style="color:var(--text3);padding:20px 0;">Not enough data for this filter.</div>
+    </div>`;
+    return;
+  }
+
+  const section = (title, color, html) =>
+    `<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;padding:14px;margin-bottom:12px;">
       <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};margin-bottom:12px;">${title}</div>
-      ${content}
+      ${html}
     </div>`;
 
-  const statRow = (label, value, sub, color) => `
-    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-      <span style="font-size:11px;color:var(--text3);">${label}</span>
-      <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${color||'var(--text2)'};">${value}${sub?` <span style="font-size:10px;color:var(--text3);">${sub}</span>`:''}
-      </span>
+  const statRow = (lbl, val, color) =>
+    `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <span style="font-size:11px;color:var(--text3);">${lbl}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${color||'var(--text2)'};">${val}</span>
     </div>`;
 
-  // Move bin table
-  const binTable = (bins, cols, title) => {
-    if (!bins || !bins.length) return '';
-    const headers = cols.map(c => `<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:4px 8px;text-align:right;">${c.label}</th>`).join('');
-    const rows = bins.map(b => {
-      const moveColor = b.avg_move > 0.3 ? '#00ff88' : b.avg_move < -0.3 ? '#ff3355' : b.avg_move > 0 ? '#88cc44' : '#ff8855';
-      const cells = cols.map(c => {
-        const v = b[c.key];
-        const cellColor = c.color ? c.color(v, b) : 'var(--text2)';
-        return `<td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${cellColor};padding:4px 8px;text-align:right;">${c.fmt ? c.fmt(v) : v}</td>`;
+  // ── Summary cards for a window ─────────────────────────────────────────────
+  const summaryCards = (ws, label, accentColor) => {
+    const s = ws.summary;
+    const p = ws.patterns;
+    return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
+      ${[
+        ['SESSIONS', s.n, 'var(--cyan)'],
+        ['DAY FOLLOW', pct(s.day_follow_pct), followColor(s.day_follow_pct)],
+        ['REVERSAL RATE', pct(s.reversal_pct), s.reversal_pct>25?'#ff8800':'var(--text2)'],
+        ['AVG MOVE', move(s.avg_move), moveColor(s.avg_move)],
+      ].map(([l,v,c]) => `<div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">${l}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${c};">${v}</div>
+      </div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div style="background:rgba(255,51,85,0.07);border:1px solid rgba(255,51,85,0.25);border-radius:3px;padding:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff8800;margin-bottom:6px;">↩ REVERSAL DAYS</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#ff8800;">${p.reversal.n} <span style="font-size:11px;color:var(--text3);">${pct(p.reversal.pct)}</span></div>
+        ${statRow('Day follows reversal', pct(p.reversal.day_follow_pct), followColor(p.reversal.day_follow_pct))}
+        ${statRow('Post-window follows', pct(p.reversal.post_follow_pct), followColor(p.reversal.post_follow_pct||0))}
+        ${statRow('Avg reversal move', move(p.reversal.avg_move), moveColor(p.reversal.avg_move))}
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;">Window made its extreme then closed in opposite direction. ${p.reversal.day_follow_pct >= 60 ? 'Day tends to follow the reversal.' : 'Day direction mixed after reversal.'}</div>
+      </div>
+      <div style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:3px;padding:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:6px;">→ CONTINUATION DAYS</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#00ff88;">${p.continuation.n} <span style="font-size:11px;color:var(--text3);">${pct(p.continuation.pct)}</span></div>
+        ${statRow('Day follows cont.', pct(p.continuation.day_follow_pct), followColor(p.continuation.day_follow_pct))}
+        ${statRow('Post-window follows', pct(p.continuation.post_follow_pct), followColor(p.continuation.post_follow_pct||0))}
+        ${statRow('Avg continuation move', move(p.continuation.avg_move), moveColor(p.continuation.avg_move))}
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;">Window closed in same direction as its dominant move. ${p.continuation.day_follow_pct >= 60 ? 'Strong day-follow when window trends.' : 'Day follow mixed on continuation.'}</div>
+      </div>
+    </div>`;
+  };
+
+  // ── Context breakdown (gap + entry direction) ──────────────────────────────
+  const contextGrid = (ctx, label) => {
+    const GAP_LABELS  = { GAP_UP: '▲ GAP UP', FLAT: '— FLAT', GAP_DOWN: '▼ GAP DOWN' };
+    const GAP_COLORS  = { GAP_UP: '#00ff88', FLAT: '#ffcc00', GAP_DOWN: '#ff3355' };
+    const DIR_LABELS  = { UP: '↑ UP on day', FLAT: '→ FLAT', DOWN: '↓ DOWN on day' };
+    const DIR_COLORS  = { UP: '#00ff88', FLAT: '#ffcc00', DOWN: '#ff3355' };
+
+    // By gap type
+    const byGap = Object.entries(ctx.by_gap).map(([g, c]) => {
+      if (!c) return '';
+      return `<div style="background:var(--bg3);border-top:2px solid ${GAP_COLORS[g]};border-radius:3px;padding:8px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:${GAP_COLORS[g]};margin-bottom:4px;">${GAP_LABELS[g]}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);margin-bottom:4px;">${c.n} sessions</div>
+        ${statRow('Day follow', pct(c.day_follow_pct), followColor(c.day_follow_pct))}
+        ${statRow('Reversal rate', pct(c.reversal_pct), c.reversal_pct>25?'#ff8800':'var(--text2)')  }
+        ${statRow('Avg window move', move(c.avg_move), moveColor(c.avg_move))}
+        ${statRow('Post-window follow', pct(c.post_follow_pct), followColor(c.post_follow_pct||0))}
+      </div>`;
+    }).join('');
+
+    // By day direction at entry
+    const byEntry = Object.entries(ctx.by_entry_dir).map(([d, c]) => {
+      if (!c) return '';
+      return `<div style="background:var(--bg3);border-top:2px solid ${DIR_COLORS[d]};border-radius:3px;padding:8px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:${DIR_COLORS[d]};margin-bottom:4px;">${DIR_LABELS[d]}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);margin-bottom:4px;">${c.n} sessions</div>
+        ${statRow('Day follow', pct(c.day_follow_pct), followColor(c.day_follow_pct))}
+        ${statRow('Reversal rate', pct(c.reversal_pct), c.reversal_pct>25?'#ff8800':'var(--text2)')  }
+        ${statRow('Avg window move', move(c.avg_move), moveColor(c.avg_move))}
+        ${statRow('Post-window follow', pct(c.post_follow_pct), followColor(c.post_follow_pct||0))}
+      </div>`;
+    }).join('');
+
+    // Cross table: gap × entry direction
+    const gaps  = ['GAP_UP','FLAT','GAP_DOWN'];
+    const dirs  = ['UP','FLAT','DOWN'];
+    const crossHeader = `<tr>
+      <th style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);padding:4px 6px;text-align:left;">GAP → ENTRY</th>
+      ${dirs.map(d=>`<th style="font-family:'Orbitron',monospace;font-size:7px;color:${DIR_COLORS[d]};padding:4px 8px;text-align:center;">${DIR_LABELS[d]}</th>`).join('')}
+    </tr>`;
+    const crossRows = gaps.map(g => {
+      const cells = dirs.map(di => {
+        const c = ctx.cross_gap_entry[g]?.[di];
+        if (!c || c.n < 3) return `<td style="text-align:center;color:var(--text3);font-size:10px;padding:4px 6px;">—</td>`;
+        const fc = followColor(c.day_follow_pct);
+        return `<td style="text-align:center;padding:4px 6px;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${fc};">${pct(c.day_follow_pct)}</div>
+          <div style="font-size:9px;color:var(--text3);">${c.n}d · ${move(c.avg_move)}</div>
+        </td>`;
       }).join('');
-      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
-        <td style="font-size:10px;color:${moveColor};padding:4px 6px;white-space:nowrap;">${b.label}</td>
-        <td style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);padding:4px 8px;text-align:center;">${b.n}</td>
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+        <td style="font-family:'Orbitron',monospace;font-size:8px;color:${GAP_COLORS[g]};padding:4px 6px;white-space:nowrap;">${GAP_LABELS[g]}</td>
         ${cells}
       </tr>`;
     }).join('');
-    return `<table style="width:100%;border-collapse:collapse;margin-top:8px;">
+
+    return `<div style="margin-bottom:10px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">BY GAP TYPE</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">${byGap}</div>
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">BY DAY DIRECTION AT WINDOW ENTRY</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">${byEntry}</div>
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">DAY-FOLLOW % — GAP × ENTRY DIRECTION CROSS TABLE</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">Day-follow % for each combination. Shows how gap context and entry direction interact.</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>${crossHeader}</thead>
+        <tbody>${crossRows}</tbody>
+      </table>
+    </div>`;
+  };
+
+  // ── Move bins table ────────────────────────────────────────────────────────
+  const moveBinsTable = (bins, postLabel) => {
+    if (!bins || !bins.length) return '';
+    const rows = bins.map(b => {
+      const mc = moveColor(b.avg_move);
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+        <td style="font-size:10px;color:${mc};padding:4px 6px;white-space:nowrap;">${b.label}</td>
+        <td style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);padding:4px 8px;text-align:center;">${b.n}</td>
+        <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${mc};padding:4px 8px;text-align:right;">${move(b.avg_move)}</td>
+        <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${followColor(b.day_follow_pct)};padding:4px 8px;text-align:right;">${pct(b.day_follow_pct)}</td>
+        <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${followColor(b.post_follow_pct||0)};padding:4px 8px;text-align:right;">${pct(b.post_follow_pct)}</td>
+        <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${moveColor(b.post_avg_move)};padding:4px 8px;text-align:right;">${move(b.post_avg_move)}</td>
+        <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${b.reversal_pct>30?'#ff8800':'var(--text3)'};padding:4px 8px;text-align:right;">${pct(b.reversal_pct)}</td>
+      </tr>`;
+    }).join('');
+    return `<table style="width:100%;border-collapse:collapse;">
       <thead><tr>
-        <th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:4px 6px;text-align:left;">W MOVE</th>
-        <th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:4px 8px;text-align:center;">N</th>
-        ${headers}
+        ${['WINDOW MOVE','N','AVG MOVE','DAY FOLLOW',postLabel+' FOLLOW',postLabel+' AVG','REVERSAL %'].map(h=>
+          `<th style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);padding:3px 8px;text-align:${h==='WINDOW MOVE'?'left':'right'};">${h}</th>`
+        ).join('')}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
   };
 
-  const followColor = v => v >= 70 ? '#00ff88' : v >= 55 ? '#88cc44' : v >= 45 ? '#ffcc00' : '#ff8800';
-  const pctFmt = v => v + '%';
+  // ── W1+W2 Relationship ─────────────────────────────────────────────────────
+  const rel = D.relationship;
+  const relHtml = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div style="background:var(--bg3);border-radius:3px;padding:12px;text-align:center;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:6px;">W1 &amp; W2 SAME DIRECTION</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:#00ff88;">${rel.same_dir_n}</div>
+      <div style="font-size:10px;color:var(--text3);">${pct(rel.same_dir_pct)} of sessions</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:14px;margin-top:6px;color:${moveColor(rel.same_dir_avg_day)};">${move(rel.same_dir_avg_day)} avg day</div>
+      ${statRow('Day follows W1 direction', pct(rel.same_dir_day_follow), followColor(rel.same_dir_day_follow||0))}
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;">Both windows trending the same way — strongest directional signal.</div>
+    </div>
+    <div style="background:var(--bg3);border-radius:3px;padding:12px;text-align:center;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff8800;margin-bottom:6px;">W1 &amp; W2 OPPOSITE DIRECTION</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:#ff8800;">${rel.opp_dir_n}</div>
+      <div style="font-size:10px;color:var(--text3);">${pct(rel.opp_dir_pct)} of sessions</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:14px;margin-top:6px;color:${moveColor(rel.opp_dir_avg_day)};">${move(rel.opp_dir_avg_day)} avg day</div>
+      ${statRow('Day follows W1 direction', pct(rel.opp_dir_day_follow), followColor(rel.opp_dir_day_follow||0))}
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;">Opposing windows = indecision day. Day direction is nearly a coin flip.</div>
+    </div>
+  </div>`;
 
-  // ── W1 panel ──
-  const w1 = W.w1;
-  const w1Content =
-    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+  // ── Assemble ───────────────────────────────────────────────────────────────
+  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+    <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">⬡ KEY INTRADAY WINDOWS — PATTERN ANALYSIS</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
       <div>
-        ${statRow('Avg range', pct(w1.avg_range), null, '#ffcc00')}
-        ${statRow('Sessions up', pct(w1.pct_up), null, '#00ff88')}
-        ${statRow('Internal reversals', pct(w1.pct_reversal), null, '#ff8800')}
-        ${statRow('W1 predicts day direction', pct(w1.day_follow), null, followColor(w1.day_follow))}
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">LOOKBACK</div>
+        <div style="display:flex;gap:5px;margin-bottom:8px;">${lbBtns}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DAY OF WEEK</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">${dowBtns}</div>
       </div>
-      <div>
-        <div style="background:var(--bg3);border-radius:4px;padding:10px;margin-bottom:8px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff8800;margin-bottom:6px;">OR UP → W1 FADES</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#ff3355;">${w1.or_up_fade_n} <span style="font-size:12px;color:var(--text3);">sessions</span></div>
-          <div style="font-size:10px;color:var(--text3);">Day follows W1 fade: <span style="color:${followColor(w1.or_up_fade_follow)};">${pct(w1.or_up_fade_follow)}</span></div>
-          <div style="font-size:10px;color:var(--text3);margin-top:4px;">London close often reverses the US morning trend. Watch for OR break high → fade into 11am CT.</div>
-        </div>
-        <div style="background:var(--bg3);border-radius:4px;padding:10px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:6px;">OR DOWN → W1 RALLIES</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#00ff88;">${w1.or_dn_rally_n} <span style="font-size:12px;color:var(--text3);">sessions</span></div>
-          <div style="font-size:10px;color:var(--text3);">Day follows W1 rally: <span style="color:${followColor(w1.or_dn_rally_follow)};">${pct(w1.or_dn_rally_follow)}</span></div>
-        </div>
+      <div style="font-size:10px;color:var(--text3);text-align:right;">
+        <div>${D.n} sessions · ${D.date_range}</div>
+        <div style="margin-top:2px;">W1: 9:45–11:00 CT · W2: 12:45–14:00 CT</div>
       </div>
     </div>
-    <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:6px;">W1 MOVE → DAY CONTINUATION RATE</div>
-    <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">Larger W1 moves (>0.4%) have 74–100% day follow-through. Small W1 moves are noise.</div>
-    ${binTable(w1.move_bins, [
-      {label:'DAY FOLLOWS', key:'day_follow', fmt: pctFmt, color: v => followColor(v)},
-      {label:'POST-W1 FOLLOWS', key:'post_follow', fmt: pctFmt, color: v => followColor(v)},
-    ])}`;
 
-  // ── W2 panel ──
-  const w2 = W.w2;
-  const trapTotal = w2.trap_up_n + w2.trap_dn_n;
-  const w2Content =
-    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-      <div>
-        ${statRow('Avg range', pct(w2.avg_range), null, '#ffcc00')}
-        ${statRow('Sessions up', pct(w2.pct_up), null, '#00ff88')}
-        ${statRow('Internal reversals', pct(w2.pct_reversal), null, '#ff8800')}
-        ${statRow('W2 predicts day direction', pct(w2.day_follow), null, followColor(w2.day_follow))}
-      </div>
-      <div>
-        <div style="background:rgba(255,136,0,0.08);border:1px solid #ff880044;border-radius:4px;padding:10px;margin-bottom:8px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff8800;margin-bottom:6px;">⚠ TRAP PATTERNS</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <div style="text-align:center;">
-              <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:#ff3355;">${w2.trap_up_n}</div>
-              <div style="font-size:9px;color:var(--text3);">W2 rally → PH fade</div>
-              <div style="font-size:10px;color:#ff3355;">${w2.trap_up_avg_ph > 0 ? '+' : ''}${w2.trap_up_avg_ph.toFixed(3)}% avg PH</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:#00ff88;">${w2.trap_dn_n}</div>
-              <div style="font-size:9px;color:var(--text3);">W2 selloff → PH bounce</div>
-              <div style="font-size:10px;color:#00ff88;">${w2.trap_dn_avg_ph > 0 ? '+' : ''}${w2.trap_dn_avg_ph.toFixed(3)}% avg PH</div>
-            </div>
-          </div>
-          <div style="font-size:10px;color:var(--text3);margin-top:8px;">When W2 makes a big move (>0.2%) it often traps late entrants heading into power hour. Small W2 moves are more likely to continue.</div>
-        </div>
-      </div>
+    ${section('⬡ WINDOW 1 · 9:45–11:00 CT — LONDON CLOSE WINDOW', 'var(--cyan)',
+      summaryCards(D.w1, 'W1', 'var(--cyan)') +
+      contextGrid(D.w1.context, 'W1') +
+      `<div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;margin-top:10px;">W1 MOVE SIZE → DAY &amp; MIDDAY FOLLOW-THROUGH</div>
+       <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">Larger moves (&gt;0.4%) show strongest day-follow. Small moves are closer to noise.</div>` +
+      moveBinsTable(D.w1.move_bins, 'MIDDAY')
+    )}
+
+    ${section('⬡ WINDOW 2 · 12:45–14:00 CT — PRE-POWER HOUR SETUP', '#ff8800',
+      summaryCards(D.w2, 'W2', '#ff8800') +
+      contextGrid(D.w2.context, 'W2') +
+      `<div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;margin-top:10px;">W2 MOVE SIZE → DAY &amp; POWER HOUR FOLLOW-THROUGH</div>
+       <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">Small W2 moves often trap late entrants heading into power hour. Large moves have mixed continuation.</div>` +
+      moveBinsTable(D.w2.move_bins, 'POWER HR')
+    )}
+
+    ${section('⬡ W1 vs W2 ALIGNMENT', '#8855ff', relHtml)}
+
+    <div style="font-size:10px;color:var(--text3);padding:8px 0;">
+      Based on ${D.n} sessions (${D.date_range}) · All times Central · 
+      Day follow = window move direction matches close direction · Reversal = window closed opposite to its dominant intra-window extreme
     </div>
-    <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:6px;">W2 MOVE → POWER HOUR CONTINUATION</div>
-    <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">Small W2 moves (0 to +0.2%) continue into power hour only 32% of the time — lean against them. Larger moves show mixed results.</div>
-    ${binTable(w2.move_bins, [
-      {label:'PH FOLLOWS', key:'ph_follow', fmt: pctFmt, color: v => v >= 60 ? '#00ff88' : v >= 45 ? '#ffcc00' : '#ff3355'},
-      {label:'AVG PH MOVE', key:'avg_ph', fmt: v => (v>=0?'+':'')+v.toFixed(3)+'%', color: v => v > 0 ? '#00ff88' : '#ff3355'},
-      {label:'DAY FOLLOWS', key:'day_follow', fmt: pctFmt, color: v => followColor(v)},
-    ])}`;
-
-  // ── Relationship panel ──
-  const rel = W.relationship;
-  const relContent =
-    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <div style="background:var(--bg3);border-radius:4px;padding:12px;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:6px;">W1 &amp; W2 SAME DIRECTION</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:#00ff88;">${rel.same_dir_n}</div>
-        <div style="font-size:10px;color:var(--text3);">${(rel.same_dir_n/W.meta.n_sessions*100).toFixed(0)}% of sessions</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:14px;margin-top:6px;color:${rel.same_dir_avg_day>=0?'#00ff88':'#ff3355'};">${rel.same_dir_avg_day>=0?'+':''}${rel.same_dir_avg_day.toFixed(3)}% avg day</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:4px;">When both windows trend the same way, the day tends to follow.</div>
-      </div>
-      <div style="background:var(--bg3);border-radius:4px;padding:12px;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff8800;margin-bottom:6px;">W1 &amp; W2 OPPOSITE DIRECTION</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:#ff8800;">${rel.opp_dir_n}</div>
-        <div style="font-size:10px;color:var(--text3);">${(rel.opp_dir_n/W.meta.n_sessions*100).toFixed(0)}% of sessions</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:14px;margin-top:6px;color:${rel.opp_dir_avg_day>=0?'#00ff88':'#ff3355'};">${rel.opp_dir_avg_day>=0?'+':''}${rel.opp_dir_avg_day.toFixed(3)}% avg day</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:4px;">Opposing windows = indecision day. Nearly coin-flip on direction.</div>
-      </div>
-    </div>`;
-
-  el.innerHTML =
-    `<div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:16px;padding-top:4px;">⬡ KEY INTRADAY WINDOWS — PATTERN ANALYSIS</div>` +
-    section('WINDOW 1 · 9:45–11:00 AM CT — LONDON CLOSE WINDOW', '#00ccff', w1Content) +
-    section('WINDOW 2 · 12:45–2:00 PM CT — PRE-POWER HOUR SETUP', '#ff8800', w2Content) +
-    section('WINDOW RELATIONSHIP · W1 vs W2 ALIGNMENT', '#8855ff', relContent) +
-    `<div style="font-size:10px;color:var(--text3);padding:8px 0;">
-      Based on ${W.meta.n_sessions} sessions (${W.meta.date_range}) · All times Central · 
-      W1 66% day-follow rate vs W2 64% — both windows carry real predictive signal on larger moves.
-    </div>`;
+  </div>`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6341,8 +6433,8 @@ function renderGapStats() {
       </div>
       <div style="background:var(--bg3);border-radius:4px;padding:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:8px;">PH RANGE → NEXT MORNING VOLATILITY</div>
-        ${stat('Wide PH → next FH range', pct(sig.wide_ph_avg_fh_range), '#ff8800')}
-        ${stat('Tight PH → next FH range', pct(sig.tight_ph_avg_fh_range), '#00ccff')}
+        ${stat('Wide PH → next FH range', pct(sig.wide_ph_fh_range), '#ff8800')}
+        ${stat('Tight PH → next FH range', pct(sig.tight_ph_fh_range), '#00ccff')}
         <div style="font-size:10px;color:var(--text3);margin-top:8px;">A volatile power hour reliably predicts a wider opening range next morning. Use for sizing the first hour trade.</div>
       </div>
       <div style="background:var(--bg3);border-radius:4px;padding:12px;">
