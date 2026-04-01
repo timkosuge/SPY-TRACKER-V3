@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
-  desk:        ['desk','intraday'],
+  desk:        ['desk','intraday','intraday-volume'],
   derivatives: ['options','gex','wem','volatility'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
@@ -66,6 +66,7 @@ function _switchPanelOnly(id) {
   if(id==='bonds' && _md) { try { renderBonds(_md); } catch(e){} }
   if(id==='sentiment' && _md) { try { renderSentiment(_md); } catch(e){} }
   if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
+  if(id==='intraday-volume') { setTimeout(renderIntradayVolProfile, 50); }
 }
 
 function switchTab(id){
@@ -5718,4 +5719,145 @@ function renderDeclines() {
     const s = document.getElementById(id), d = document.getElementById('es-' + id);
     if(s && d) d.textContent = s.textContent;
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTRADAY VOLUME PROFILE — 5-min historical chart with lookback + DOW toggles
+// ─────────────────────────────────────────────────────────────────────────────
+let _ivpLookback = 'all';
+let _ivpDow      = 'all';
+
+window._ivpSetLookback = function(val) { _ivpLookback = val; renderIntradayVolProfile(); };
+window._ivpSetDow      = function(val) { _ivpDow = val;      renderIntradayVolProfile(); };
+
+function renderIntradayVolProfile() {
+  const el = document.getElementById('intradayVolContent');
+  if (!el) return;
+
+  if (typeof INTRADAY_VOL_PROFILE === 'undefined') {
+    el.innerHTML = '<div style="padding:40px;text-align:center;font-size:12px;color:var(--text3);">Intraday volume profile data not loaded.</div>';
+    return;
+  }
+
+  const key = _ivpDow === 'all' ? _ivpLookback : `${_ivpLookback}_${_ivpDow}`;
+  const profile = INTRADAY_VOL_PROFILE[key];
+
+  if (!profile || !profile.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;font-size:12px;color:var(--text3);">Not enough data for this filter combination.</div>';
+    return;
+  }
+
+  // ET → CT (subtract 1 hour)
+  function etToCT(ts) {
+    const [h, m] = ts.split(':').map(Number);
+    let ch = h - 1; if (ch < 0) ch += 24;
+    return `${ch}:${String(m).padStart(2,'0')}`;
+  }
+  function fmtVol(v) {
+    if (v >= 1e6) return (v/1e6).toFixed(2)+'M';
+    if (v >= 1e3) return (v/1e3).toFixed(0)+'K';
+    return v.toFixed(0);
+  }
+
+  // Current CT time for "now" highlight
+  const nowCT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+  const nowMins = nowCT.getHours() * 60 + nowCT.getMinutes();
+  function tsToMins(ts) { const [h,m]=ts.split(':').map(Number); return h*60+m; }
+
+  // Use pct (% of daily) for bar sizing — keeps MOC spike in proportion
+  const maxPct = Math.max(...profile.map(b => b.pct));
+  const minPct = Math.min(...profile.map(b => b.pct));
+
+  // Color: blue → cyan → yellow → orange for low→high volume
+  function volColor(pct) {
+    const t = (pct - minPct) / (maxPct - minPct);
+    if (t > 0.80) return '#ff8800';
+    if (t > 0.55) return '#ffcc00';
+    if (t > 0.30) return '#00ccff';
+    return '#005577';
+  }
+
+  const fbtn = (lbl, active, fn) =>
+    `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
+
+  const curYear = new Date().getFullYear();
+  const lbBtns = [
+    fbtn('ALL HISTORY', _ivpLookback==='all',  "_ivpSetLookback('all')"),
+    fbtn('12 MONTHS',   _ivpLookback==='12m',  "_ivpSetLookback('12m')"),
+    fbtn(String(curYear), _ivpLookback==='year', "_ivpSetLookback('year')"),
+  ].join(' ');
+
+  const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(d =>
+    fbtn(d==='all'?'ALL DAYS':d.toUpperCase(), _ivpDow===d, `_ivpSetDow('${d}')`)
+  ).join(' ');
+
+  const nSessions = profile[0]?.n ? Math.round(profile[0].n / 5) : '?';
+
+  // Find top 3 high/low volume slots
+  const sorted = [...profile].sort((a,b) => b.pct - a.pct);
+  const top3 = sorted.slice(0,3).map(b=>`${etToCT(b.ts)} CT (${b.pct.toFixed(2)}%)`).join(' · ');
+  const bot3 = sorted.slice(-3).map(b=>`${etToCT(b.ts)} CT (${b.pct.toFixed(2)}%)`).join(' · ');
+
+  const bars = profile.map(b => {
+    const ctTs = etToCT(b.ts);
+    const bMins = tsToMins(ctTs);
+    const isNow = nowMins >= bMins && nowMins < bMins + 5;
+    const barH = Math.round((b.pct / maxPct) * 100);
+    const c = isNow ? 'var(--cyan)' : volColor(b.pct);
+    const isHour = b.ts.endsWith(':00');
+    const h = parseInt(ctTs.split(':')[0]);
+    const label = isHour ? (h > 12 ? (h-12)+'pm' : h+'am') : '';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;position:relative;"
+               title="${ctTs} CT · ${b.pct.toFixed(2)}% of daily vol · avg ${fmtVol(b.avg)} shares${isNow?' · NOW':''}">
+      ${isNow ? `<div style="position:absolute;top:-14px;font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);">NOW</div>` : ''}
+      <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:120px;background:var(--bg3);border-radius:2px 2px 0 0;overflow:hidden;${isNow?'border:1px solid var(--cyan);':''}">
+        <div style="width:100%;background:${c};opacity:${isNow?1:0.8};height:${barH}%;border-radius:2px 2px 0 0;"></div>
+      </div>
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:${isHour?(isNow?'var(--cyan)':'var(--text2)'):'transparent'};white-space:nowrap;">${label||'·'}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="padding:14px 16px;max-width:1200px;margin:0 auto;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ INTRADAY VOLUME PROFILE</div>
+          <div style="margin-bottom:6px;">
+            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">LOOKBACK</div>
+            <div style="display:flex;gap:5px;">${lbBtns}</div>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DAY OF WEEK</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">${dowBtns}</div>
+          </div>
+        </div>
+        <div style="text-align:right;font-size:10px;color:var(--text3);">
+          <div>${profile.length} buckets · ~${nSessions} sessions</div>
+          <div style="margin-top:2px;">5-min avg volume · Central Time</div>
+          <div style="margin-top:2px;">bars = % of daily total · top 10% trimmed</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:flex-end;gap:1px;padding:18px 0 4px;overflow:hidden;margin-bottom:6px;">
+        ${bars}
+      </div>
+
+      <div style="display:flex;gap:16px;flex-wrap:wrap;padding:8px;background:var(--bg3);border-radius:4px;margin-top:4px;">
+        <div style="font-size:10px;">
+          <span style="color:var(--text3);">HIGHEST VOL: </span>
+          <span style="color:#ff8800;font-family:'Share Tech Mono',monospace;">${top3}</span>
+        </div>
+        <div style="font-size:10px;">
+          <span style="color:var(--text3);">LOWEST VOL: </span>
+          <span style="color:#005577;font-family:'Share Tech Mono',monospace;">${bot3}</span>
+        </div>
+      </div>
+      <div style="margin-top:6px;font-size:10px;color:var(--text3);">
+        <span style="display:inline-block;width:10px;height:10px;background:#ff8800;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Heaviest &nbsp;
+        <span style="display:inline-block;width:10px;height:10px;background:#ffcc00;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Elevated &nbsp;
+        <span style="display:inline-block;width:10px;height:10px;background:#00ccff;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Normal &nbsp;
+        <span style="display:inline-block;width:10px;height:10px;background:#005577;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Light &nbsp;
+        <span style="color:var(--text3);margin-left:8px;">Note: 15:55 CT spike = market-on-close orders (real MOC print)</span>
+      </div>
+    </div>`;
 }
