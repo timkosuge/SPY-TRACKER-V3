@@ -50,6 +50,9 @@ jobs:
       - name: Generate decline/drawdown data
         run: python generate_decline_data.py
 
+      - name: Generate window pattern stats
+        run: python generate_window_stats.py
+
       - name: Generate relief rally data
         run: python generate_relief_data.py
 
@@ -62,7 +65,6 @@ jobs:
                      analog_data.js tod_stats.js \
                      intraday_library.js expiry_data.js \
                      intraday_patterns.js decline_data.js relief_data.js \
-                     window_stats.js gap_stats.js \
-                     session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js
+                     window_stats.js gap_stats.js
           git diff --staged --quiet && echo "No changes" || git commit -m "Auto: SPY data update $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push || echo "Nothing to push"
