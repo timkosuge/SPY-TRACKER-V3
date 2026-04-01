@@ -535,8 +535,7 @@
 
 <div class="tabs">
   <div class="tab active" onclick="switchTab('hub')">MARKET HUB</div>
-  <div class="tab" onclick="switchTab('desk')">TRADING DESK</div>
-  <div class="tab" onclick="switchTab('intraday')">INTRADAY</div>
+  <div class="tab group-tab" onclick="switchGroupTab('desk','desk')">TRADING DESK ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('overview','overview')">MARKET OVERVIEW ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('derivatives','options')">DERIVATIVES ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('history','pricehistory')">HISTORY ▾</div>
@@ -546,6 +545,11 @@
 
 <!-- Subtab bar — shown below main tabs when a group is active -->
 <div class="subtab-bar" id="subtabBar" style="display:none;">
+  <!-- Desk subtabs -->
+  <div class="subtab-group" id="subtabs-desk">
+    <div class="subtab active" onclick="switchGroupSub('desk',this)">TRADING DESK</div>
+    <div class="subtab" onclick="switchGroupSub('intraday',this)">INTRADAY</div>
+  </div>
   <!-- Derivatives subtabs -->
   <div class="subtab-group" id="subtabs-derivatives">
     <div class="subtab active" onclick="switchGroupSub('options',this)">OPTIONS</div>
