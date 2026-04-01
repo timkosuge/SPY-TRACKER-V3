@@ -2639,10 +2639,12 @@ function renderSessionVolProfile() {
   const fbtn = (lbl, active, fn) =>
     `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
 
+  // 'year' key = current calendar year (computed by Python pipeline automatically)
+  const curYear = new Date().getFullYear();
   const lbBtns = [
     fbtn('ALL HISTORY', _svpLookback==='all',  "_svpSetLookback('all')"),
     fbtn('12 MONTHS',   _svpLookback==='12m',  "_svpSetLookback('12m')"),
-    fbtn('2026',        _svpLookback==='2026', "_svpSetLookback('2026')"),
+    fbtn(String(curYear), _svpLookback==='year', "_svpSetLookback('year')"),
   ].join(' ');
 
   const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(d =>
