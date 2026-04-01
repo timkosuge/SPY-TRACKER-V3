@@ -6523,7 +6523,6 @@ async function renderLiveChart() {
   const el = document.getElementById('liveChartContent');
   if (!el) return;
 
-  // Scaffold UI immediately
   el.innerHTML = `
     <div id="lcWrap" style="padding:14px 16px;max-width:1400px;margin:0 auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
@@ -6539,25 +6538,41 @@ async function renderLiveChart() {
           <button id="lcTypeLine" onclick="window._lcSetType('line')" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;">LINE</button>
         </div>
       </div>
-      <div class="panel" style="padding:10px;position:relative;">
+      <div class="panel" style="padding:10px;position:relative;overflow:hidden;">
         <canvas id="lcCanvas" style="width:100%;display:block;"></canvas>
-        <div id="lcTooltip" style="display:none;position:absolute;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:11px;pointer-events:none;z-index:10;"></div>
+        <div id="lcTooltip" style="display:none;position:absolute;background:var(--bg2);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:11px;pointer-events:none;z-index:10;white-space:nowrap;"></div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px;" id="lcStats"></div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:10px;" id="lcStats"></div>
     </div>`;
 
   let _chartType = 'candle';
+  let _lastBars  = null;
+  let _lastDaily = null; // cached sd for closed-market redraw
+
   window._lcSetType = function(t) {
     _chartType = t;
     document.getElementById('lcTypeCand').style.background = t==='candle' ? 'var(--cyan)' : 'transparent';
-    document.getElementById('lcTypeCand').style.color = t==='candle' ? '#000' : 'var(--text2)';
-    document.getElementById('lcTypeLine').style.background = t==='line' ? 'var(--cyan)' : 'transparent';
-    document.getElementById('lcTypeLine').style.color = t==='line' ? '#000' : 'var(--text2)';
-    if (_lastBars) drawChart(_lastBars, _chartType);
+    document.getElementById('lcTypeCand').style.color      = t==='candle' ? '#000' : 'var(--text2)';
+    document.getElementById('lcTypeLine').style.background = t==='line'   ? 'var(--cyan)' : 'transparent';
+    document.getElementById('lcTypeLine').style.color      = t==='line'   ? '#000' : 'var(--text2)';
+    if (_lastBars)  drawLiveChart(_lastBars, _chartType);
+    else if (_lastDaily) drawDailyChart(_lastDaily, _chartType);
   };
 
-  let _lastBars = null;
+  // ── shared canvas helpers ──────────────────────────────────────────────────
+  function drawWatermark(ctx, W, H) {
+    ctx.save();
+    ctx.translate(W/2, H/2);
+    ctx.rotate(-Math.PI / 8);
+    ctx.font = 'bold 64px "Orbitron", monospace';
+    ctx.fillStyle = 'rgba(0,204,255,0.04)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SPY // TRACKER', 0, 0);
+    ctx.restore();
+  }
 
+  // ── CLOSED-MARKET: 20-day OHLC candle chart + volume bars + overlays ──────
   async function fetchAndDraw() {
     try {
       const r = await fetch('/spyintraday?t=' + Date.now());
@@ -6567,129 +6582,65 @@ async function renderLiveChart() {
       const statusEl = document.getElementById('lcStatus');
       const priceEl  = document.getElementById('lcPrice');
       const changeEl = document.getElementById('lcChange');
+
       if (!d?.available || !d.rawBars?.length) {
-        // Market closed — show last session summary from _sd
-        const sd = (typeof _sd !== 'undefined') ? _sd : [];
-        const last = sd[0] || {};
-        const prev = sd[1] || {};
-        const spyQ = (typeof _md !== 'undefined') ? (_md?.quotes?.['SPY'] || {}) : {};
-        const price = spyQ.price || last.close || 0;
-        const chg   = spyQ.change || (last.close && prev.close ? last.close - prev.close : null);
+        // ── MARKET CLOSED ─────────────────────────────────────────────────────
+        const sd  = (typeof _sd !== 'undefined') ? _sd : [];
+        const md2 = (typeof _md !== 'undefined') ? _md : {};
+        const spyQ = md2?.quotes?.['SPY'] || {};
+        const last = sd[0] || {}, prev = sd[1] || {};
+
+        const price  = spyQ.price   || last.close  || 0;
+        const chg    = spyQ.change  || (last.close && prev.close ? last.close - prev.close : null);
         const chgPct = spyQ.pct_change || (chg && prev.close ? chg/prev.close*100 : null);
-        const up = (chg ?? 0) >= 0;
-        const col = up ? 'var(--green)' : 'var(--red)';
+        const up     = (chg ?? 0) >= 0;
+        const col    = up ? 'var(--green)' : 'var(--red)';
 
         if (priceEl && price) { priceEl.textContent = '$' + price.toFixed(2); priceEl.style.color = col; }
-        if (changeEl && chg != null) { changeEl.textContent = (up?'+':'') + chg.toFixed(2) + (chgPct != null ? ' (' + (up?'+':'') + chgPct.toFixed(2) + '%)' : ''); changeEl.style.color = col; }
-        if (statusEl) { statusEl.textContent = '◉ MARKET CLOSED · last: ' + (last.date || '—'); statusEl.style.color = 'var(--text3)'; }
+        if (changeEl && chg != null) {
+          changeEl.textContent = (up?'+':'') + chg.toFixed(2) + (chgPct != null ? ' (' + (up?'+':'') + chgPct.toFixed(2) + '%)' : '');
+          changeEl.style.color = col;
+        }
+        if (statusEl) { statusEl.textContent = '◉ MARKET CLOSED · last session: ' + (last.date || '—'); statusEl.style.color = 'var(--text3)'; }
 
-        // Render closed-market panel
+        // Stat cards — last session OHLC
         const statsEl = document.getElementById('lcStats');
         if (statsEl && last.open) {
-          const fmt2 = v => v != null ? '$' + v.toFixed(2) : '—';
-          const m = last.measurements || {};
-          const oc = m.oc_pts ?? m.open_to_close;
+          const f2 = v => v != null ? '$' + v.toFixed(2) : '—';
+          const m  = last.measurements || {};
+          const oc  = m.oc_pts  ?? m.open_to_close;
           const rng = m.range_pts ?? m.day_range;
-          [
-            { label:'PREV OPEN',   val: fmt2(last.open),   color:'var(--text1)' },
-            { label:'PREV HIGH',   val: fmt2(last.high),   color:'var(--green)' },
-            { label:'PREV LOW',    val: fmt2(last.low),    color:'var(--red)'   },
-            { label:'PREV CLOSE',  val: fmt2(last.close),  color: (last.close??0)>=(last.open??0)?'var(--green)':'var(--red)' },
-            { label:'O→C',         val: oc != null ? (oc>=0?'+':'') + oc.toFixed(2) : '—', color: (oc??0)>=0?'var(--green)':'var(--red)' },
-            { label:'DAY RANGE',   val: rng != null ? '$' + rng.toFixed(2) : '—', color:'var(--cyan)' },
-            { label:'VOLUME',      val: last.volume ? (last.volume/1e6).toFixed(1)+'M' : '—', color:'var(--text2)' },
-          ].map(c => `<div class="panel" style="padding:10px;text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">${c.label}</div><div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${c.color};">${c.val}</div></div>`);
+          const vol30 = sd.slice(0,30).filter(r=>r.volume>0);
+          const avg30 = vol30.length ? Math.round(vol30.reduce((a,r)=>a+r.volume,0)/vol30.length) : 0;
+          const vPct  = last.volume && avg30 ? last.volume/avg30*100 : null;
           statsEl.innerHTML = [
-            { label:'PREV OPEN',   val: fmt2(last.open),   color:'var(--text1)' },
-            { label:'PREV HIGH',   val: fmt2(last.high),   color:'var(--green)' },
-            { label:'PREV LOW',    val: fmt2(last.low),    color:'var(--red)'   },
-            { label:'PREV CLOSE',  val: fmt2(last.close),  color: (last.close??0)>=(last.open??0)?'var(--green)':'var(--red)' },
-            { label:'O→C',         val: oc != null ? (oc>=0?'+':'') + oc.toFixed(2) : '—', color: (oc??0)>=0?'var(--green)':'var(--red)' },
-            { label:'DAY RANGE',   val: rng != null ? '$' + rng.toFixed(2) : '—', color:'var(--cyan)' },
-            { label:'VOLUME',      val: last.volume ? (last.volume/1e6).toFixed(1)+'M' : '—', color:'var(--text2)' },
-          ].map(c => `<div class="panel" style="padding:10px;text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">${c.label}</div><div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${c.color};">${c.val}</div></div>`).join('');
+            { l:'PREV OPEN',  v:f2(last.open),  c:'var(--text1)' },
+            { l:'PREV HIGH',  v:f2(last.high),  c:'var(--green)' },
+            { l:'PREV LOW',   v:f2(last.low),   c:'var(--red)'   },
+            { l:'PREV CLOSE', v:f2(last.close), c:(last.close??0)>=(last.open??0)?'var(--green)':'var(--red)' },
+            { l:'O→C',        v:oc!=null?(oc>=0?'+':'')+oc.toFixed(2):'—', c:(oc??0)>=0?'var(--green)':'var(--red)' },
+            { l:'DAY RANGE',  v:rng!=null?'$'+rng.toFixed(2):'—', c:'var(--cyan)' },
+            { l:'VOLUME',     v:last.volume?(last.volume/1e6).toFixed(1)+'M'+(vPct?' ('+vPct.toFixed(0)+'%)':''):'—', c:'var(--text2)' },
+          ].map(c=>`<div class="panel" style="padding:10px;text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">${c.l}</div><div style="font-family:'Share Tech Mono',monospace;font-size:14px;font-weight:bold;color:${c.c};">${c.v}</div></div>`).join('');
         }
 
-        // Draw a 20-day daily close chart on the canvas
-        const canvas = document.getElementById('lcCanvas');
-        if (canvas && sd.length > 1) {
-          const recent = sd.slice(0, 20).reverse().filter(d2 => d2.close);
-          if (recent.length > 1) {
-            const wrap = canvas.parentElement;
-            const W = Math.max(wrap ? wrap.clientWidth - 20 : 600, 300);
-            const H = 280;
-            canvas.width = W; canvas.height = H;
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, W, H);
-            const pad = { l:54, r:16, t:24, b:36 };
-            const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
-            const closes = recent.map(d2 => d2.close);
-            const minC = Math.min(...closes) * 0.9985;
-            const maxC = Math.max(...closes) * 1.0015;
-            const rng2 = maxC - minC || 1;
-            const px = i => pad.l + (i / (recent.length - 1)) * cw;
-            const py = v => pad.t + ch - ((v - minC) / rng2) * ch;
-            const lineColor = closes[closes.length-1] >= closes[0] ? '#00ff88' : '#ff3355';
-
-            // Grid
-            for (let g = 0; g <= 4; g++) {
-              const gv = minC + (rng2 / 4) * g;
-              const gy = py(gv);
-              ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
-              ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(W - pad.r, gy); ctx.stroke();
-              ctx.fillStyle = '#505070'; ctx.font = '9px "Share Tech Mono",monospace'; ctx.textAlign = 'right';
-              ctx.fillText(gv.toFixed(0), pad.l - 4, gy + 3);
-            }
-
-            // Area
-            const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
-            grad.addColorStop(0, lineColor + '40'); grad.addColorStop(1, lineColor + '04');
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.moveTo(px(0), py(closes[0]));
-            closes.forEach((c2, i) => ctx.lineTo(px(i), py(c2)));
-            ctx.lineTo(px(closes.length - 1), pad.t + ch);
-            ctx.lineTo(px(0), pad.t + ch);
-            ctx.closePath(); ctx.fill();
-
-            // Line
-            ctx.strokeStyle = lineColor; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
-            ctx.beginPath();
-            closes.forEach((c2, i) => i === 0 ? ctx.moveTo(px(i), py(c2)) : ctx.lineTo(px(i), py(c2)));
-            ctx.stroke();
-
-            // Last close dot
-            const lx = px(closes.length - 1), ly = py(closes[closes.length - 1]);
-            ctx.fillStyle = lineColor; ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI * 2); ctx.fill();
-
-            // Date labels every 5
-            ctx.fillStyle = '#404060'; ctx.font = '9px "Share Tech Mono",monospace'; ctx.textAlign = 'center';
-            recent.forEach((d2, i) => {
-              if (i % 5 !== 0 && i !== recent.length - 1) return;
-              ctx.fillText(d2.date.slice(5), px(i), pad.t + ch + 14);
-            });
-
-            // Header label
-            ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '9px "Orbitron",monospace'; ctx.textAlign = 'left';
-            ctx.fillText('LAST 20 SESSIONS — DAILY CLOSE', pad.l, pad.t - 6);
-          }
-        }
+        // Draw daily OHLC chart
+        _lastBars  = null;
+        _lastDaily = sd;
+        drawDailyChart(sd, _chartType);
         return;
       }
 
-      _lastBars = d.rawBars;
-      const last = d.rawBars[d.rawBars.length - 1];
-      const chg  = d.changePct;
-      const up   = (chg ?? 0) >= 0;
+      // ── MARKET OPEN / LIVE ────────────────────────────────────────────────
+      _lastBars  = d.rawBars;
+      _lastDaily = null;
 
-      if (priceEl)  priceEl.textContent  = '$' + d.close.toFixed(2);
-      if (priceEl)  priceEl.style.color  = up ? 'var(--green)' : 'var(--red)';
-      if (changeEl) changeEl.textContent = (chg != null ? (up?'+':'') + chg.toFixed(2)+'%' : '—');
-      if (changeEl) changeEl.style.color = up ? 'var(--green)' : 'var(--red)';
-      if (statusEl) statusEl.textContent = '● LIVE · ' + d.bars + ' bars · as of ' + new Date(d.asOf).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'}) + ' CT';
-      if (statusEl) statusEl.style.color = 'var(--green)';
+      const chg = d.changePct, up = (chg ?? 0) >= 0;
+      if (priceEl)  { priceEl.textContent = '$' + d.close.toFixed(2); priceEl.style.color = up ? 'var(--green)' : 'var(--red)'; }
+      if (changeEl) { changeEl.textContent = chg != null ? (up?'+':'')+chg.toFixed(2)+'%' : '—'; changeEl.style.color = up ? 'var(--green)' : 'var(--red)'; }
+      if (statusEl) { statusEl.textContent = '● LIVE · ' + d.bars + ' bars · ' + new Date(d.asOf).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CT'; statusEl.style.color = 'var(--green)'; }
 
-      drawChart(d.rawBars, _chartType);
+      drawLiveChart(d.rawBars, _chartType);
       renderLcStats(d);
 
     } catch(e) {
@@ -6701,173 +6652,399 @@ async function renderLiveChart() {
   function renderLcStats(d) {
     const el = document.getElementById('lcStats');
     if (!el) return;
-    const fmt = (v, dec=2) => v != null ? v.toFixed(dec) : '—';
-    const cards = [
-      { label:'OPEN',    val: d.open  != null ? '$'+fmt(d.open)  : '—', color:'var(--text1)' },
-      { label:'HIGH',    val: d.high  != null ? '$'+fmt(d.high)  : '—', color:'var(--green)' },
-      { label:'LOW',     val: d.low   != null ? '$'+fmt(d.low)   : '—', color:'var(--red)'   },
-      { label:'CLOSE',   val: d.close != null ? '$'+fmt(d.close) : '—', color: (d.close??0)>=(d.open??0) ? 'var(--green)' : 'var(--red)' },
-      { label:'VOLUME',  val: d.volume != null ? (d.volume/1e6).toFixed(1)+'M' : '—', color:'var(--cyan)' },
-    ];
-    el.innerHTML = cards.map(c => `
-      <div class="panel" style="padding:10px;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">${c.label}</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${c.color};">${c.val}</div>
-      </div>`).join('');
+    const f2 = v => v != null ? v.toFixed(2) : '—';
+    const sd2 = (typeof _sd !== 'undefined') ? _sd : [];
+    const vol30 = sd2.slice(0,30).filter(r=>r.volume>0);
+    const avg30 = vol30.length ? Math.round(vol30.reduce((a,r)=>a+r.volume,0)/vol30.length) : 0;
+    const vPct  = d.volume && avg30 ? d.volume/avg30*100 : null;
+    el.innerHTML = [
+      { l:'OPEN',   v:d.open  !=null?'$'+f2(d.open):'—',  c:'var(--text1)' },
+      { l:'HIGH',   v:d.high  !=null?'$'+f2(d.high):'—',  c:'var(--green)' },
+      { l:'LOW',    v:d.low   !=null?'$'+f2(d.low) :'—',  c:'var(--red)'   },
+      { l:'LAST',   v:d.close !=null?'$'+f2(d.close):'—', c:(d.close??0)>=(d.open??0)?'var(--green)':'var(--red)' },
+      { l:'VWAP',   v:d.vwap  !=null?'$'+f2(d.vwap) :'—', c:'#ff66cc' },
+      { l:'VOLUME', v:d.volume!=null?(d.volume/1e6).toFixed(1)+'M':'—', c:'var(--cyan)' },
+      { l:'VS AVG', v:vPct!=null?(vPct>=0?'':'')+vPct.toFixed(0)+'%':'—', c:vPct&&vPct>130?'#ff8800':vPct&&vPct>100?'var(--green)':'var(--text2)' },
+    ].map(c=>`<div class="panel" style="padding:10px;text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">${c.l}</div><div style="font-family:'Share Tech Mono',monospace;font-size:14px;font-weight:bold;color:${c.c};">${c.v}</div></div>`).join('');
   }
 
-  function drawChart(bars, type) {
+  // ── DAILY CHART (closed market) ────────────────────────────────────────────
+  function drawDailyChart(sd, type) {
     const canvas = document.getElementById('lcCanvas');
-    if (!canvas) return;
+    if (!canvas || !sd || sd.length < 2) return;
+    const recent = sd.slice(0, 30).reverse().filter(d => d.open && d.high && d.low && d.close);
+    if (recent.length < 2) return;
 
-    // Size canvas to container
     const wrap = canvas.parentElement;
-    const W = wrap.clientWidth - 20;
-    const H = Math.max(340, Math.round(W * 0.32));
-    canvas.width  = W;
-    canvas.height = H;
+    const W = Math.max(wrap ? wrap.clientWidth - 20 : 700, 400);
+    const VOL_H = 52; // volume strip height
+    const H = Math.max(380, Math.round(W * 0.34)) + VOL_H;
+    canvas.width = W; canvas.height = H;
     canvas.style.height = H + 'px';
 
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    // Get CSS variables
-    const style    = getComputedStyle(document.documentElement);
-    const cGreen   = style.getPropertyValue('--green').trim()   || '#00ff88';
-    const cRed     = style.getPropertyValue('--red').trim()     || '#ff4455';
-    const cCyan    = style.getPropertyValue('--cyan').trim()    || '#00ccff';
-    const cText2   = style.getPropertyValue('--text2').trim()   || '#8899aa';
-    const cText3   = style.getPropertyValue('--text3').trim()   || '#445566';
-    const cBorder  = style.getPropertyValue('--border').trim()  || '#223344';
+    // Watermark
+    drawWatermark(ctx, W, H - VOL_H);
 
-    const PAD = { top: 20, right: 60, bottom: 40, left: 12 };
-    const chartW = W - PAD.left - PAD.right;
-    const chartH = H - PAD.top  - PAD.bottom;
+    const pad = { l:58, r:18, t:28, b:24 };
+    const chartH = H - VOL_H - pad.t - pad.b;
+    const chartW = W - pad.l - pad.r;
+    const n = recent.length;
 
-    const prices = bars.flatMap(b => [b.h, b.l]);
-    const minP = Math.min(...prices);
-    const maxP = Math.max(...prices);
-    const range = maxP - minP || 1;
-    const padP  = range * 0.05;
-    const lo = minP - padP;
-    const hi = maxP + padP;
+    // Price range — include overlays in range calculation
+    const md2 = (typeof _md !== 'undefined') ? _md : {};
+    const wems = md2.weekly_em || [];
+    const wem  = wems.find(w=>!w.week_close) || wems[0];
+    const SPY_ATH = 697.84;
 
-    const toY = p => PAD.top + chartH - ((p - lo) / (hi - lo)) * chartH;
-    const toX = i => PAD.left + (i / (bars.length - 1 || 1)) * chartW;
+    const allPrices = recent.flatMap(d => [d.high, d.low]);
+    if (wem?.wem_high) allPrices.push(wem.wem_high);
+    if (wem?.wem_low)  allPrices.push(wem.wem_low);
+    const minP = Math.min(...allPrices) * 0.9985;
+    const maxP = Math.max(...allPrices, SPY_ATH <= Math.max(...allPrices)*1.01 ? SPY_ATH : 0) * 1.0015;
+    const rng  = maxP - minP || 1;
 
-    // Grid lines + price labels
-    ctx.strokeStyle = cBorder;
-    ctx.lineWidth   = 0.5;
-    ctx.setLineDash([3, 4]);
-    const gridSteps = 6;
-    for (let g = 0; g <= gridSteps; g++) {
-      const p = lo + (hi - lo) * (g / gridSteps);
-      const y = toY(p);
-      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + chartW, y); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle   = cText2;
-      ctx.font        = '10px Share Tech Mono, monospace';
-      ctx.textAlign   = 'left';
-      ctx.fillText('$' + p.toFixed(2), PAD.left + chartW + 4, y + 4);
-      ctx.setLineDash([3, 4]);
+    const px = i  => pad.l + (i + 0.5) * (chartW / n);
+    const py = v  => pad.t + chartH - ((v - minP) / rng) * chartH;
+
+    // ── Grid ─────────────────────────────────────────────────────────────────
+    const gridCount = 6;
+    for (let g = 0; g <= gridCount; g++) {
+      const gv = minP + (rng / gridCount) * g;
+      const gy = py(gv);
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + chartW, gy); ctx.stroke();
+      ctx.fillStyle = '#505070'; ctx.font = '9px "Share Tech Mono",monospace'; ctx.textAlign = 'right';
+      ctx.fillText(gv.toFixed(0), pad.l - 4, gy + 3);
     }
-    ctx.setLineDash([]);
 
-    // Time labels on x axis (every ~30 bars)
-    const labelEvery = Math.max(1, Math.floor(bars.length / 10));
-    ctx.fillStyle  = cText3;
-    ctx.font       = '9px Share Tech Mono, monospace';
-    ctx.textAlign  = 'center';
-    bars.forEach((b, i) => {
-      if (i % labelEvery !== 0 && i !== bars.length - 1) return;
-      const x = toX(i);
-      const t = new Date(b.t * 1000);
-      const label = t.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago', hour12:false });
-      ctx.fillText(label, x, H - 6);
-    });
+    // ── Key level overlays ────────────────────────────────────────────────────
+    const drawLevel = (price, color, label, dash=[4,3]) => {
+      if (!price || price < minP || price > maxP) return;
+      const y = py(price);
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash(dash);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + chartW, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color; ctx.font = 'bold 8px "Orbitron",monospace'; ctx.textAlign = 'right';
+      ctx.fillText(label, pad.l + chartW - 2, y - 3);
+    };
 
-    // Prev close line if available (use first bar open as proxy)
-    const prevOpen = bars[0].o;
-    ctx.strokeStyle = cText3;
-    ctx.lineWidth   = 0.8;
-    ctx.setLineDash([4, 4]);
-    const openY = toY(prevOpen);
-    ctx.beginPath(); ctx.moveTo(PAD.left, openY); ctx.lineTo(PAD.left + chartW, openY); ctx.stroke();
-    ctx.setLineDash([]);
+    // WEM high/low
+    if (wem?.wem_high) drawLevel(wem.wem_high, 'rgba(0,255,136,0.45)', 'WEM HI');
+    if (wem?.wem_low)  drawLevel(wem.wem_low,  'rgba(255,51,85,0.45)',  'WEM LO');
+    if (wem?.wem_mid)  drawLevel(wem.wem_mid,  'rgba(255,204,0,0.25)',  'WEM MID', [2,4]);
+
+    // Prev week close
+    const dow = new Date().getDay();
+    const daysFromMon = dow===0?6:dow-1;
+    const monDate = new Date(); monDate.setDate(monDate.getDate()-daysFromMon);
+    const monStr  = monDate.toISOString().slice(0,10);
+    const prevWeekRows = (typeof _sd !== 'undefined') ? _sd.filter(r=>r.date<monStr) : [];
+    const pwClose = prevWeekRows[0]?.close;
+    if (pwClose) drawLevel(pwClose, 'rgba(136,85,255,0.55)', 'PW CLOSE');
+
+    // ATH
+    if (SPY_ATH <= maxP && SPY_ATH >= minP) drawLevel(SPY_ATH, 'rgba(255,136,0,0.4)', 'ATH');
+
+    // ── Gap markers ───────────────────────────────────────────────────────────
+    for (let i = 1; i < recent.length; i++) {
+      const gap = recent[i].open - recent[i-1].close;
+      if (Math.abs(gap) < 0.30) continue;
+      const x   = px(i);
+      const col = gap > 0 ? 'rgba(0,255,136,0.5)' : 'rgba(255,51,85,0.5)';
+      // Shaded vertical strip for the gap zone
+      const y1  = py(recent[i-1].close);
+      const y2  = py(recent[i].open);
+      const barW = chartW / n;
+      ctx.fillStyle = gap > 0 ? 'rgba(0,255,136,0.07)' : 'rgba(255,51,85,0.07)';
+      ctx.fillRect(x - barW * 0.5, Math.min(y1,y2), barW, Math.abs(y2-y1));
+      // Small triangle at the gap
+      const triY = gap > 0 ? Math.min(y1,y2) - 6 : Math.max(y1,y2) + 6;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      if (gap > 0) { ctx.moveTo(x, triY-5); ctx.lineTo(x-4, triY+1); ctx.lineTo(x+4, triY+1); }
+      else         { ctx.moveTo(x, triY+5); ctx.lineTo(x-4, triY-1); ctx.lineTo(x+4, triY-1); }
+      ctx.closePath(); ctx.fill();
+    }
+
+    // ── Candles / Line ────────────────────────────────────────────────────────
+    const bW = Math.max(2, Math.floor(chartW / n * 0.6));
 
     if (type === 'line') {
-      // Line chart — close prices
-      ctx.strokeStyle = cCyan;
-      ctx.lineWidth   = 1.5;
-      ctx.beginPath();
-      bars.forEach((b, i) => {
-        const x = toX(i), y = toY(b.c);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-
-      // Fill under line
-      const lastX = toX(bars.length - 1);
-      const baseY = PAD.top + chartH;
-      ctx.lineTo(lastX, baseY);
-      ctx.lineTo(PAD.left, baseY);
-      ctx.closePath();
-      const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + chartH);
-      grad.addColorStop(0, cCyan + '33');
-      grad.addColorStop(1, cCyan + '00');
+      // Line + area
+      const closes = recent.map(d => d.close);
+      const lineCol = closes[closes.length-1] >= closes[0] ? '#00ff88' : '#ff3355';
+      const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + chartH);
+      grad.addColorStop(0, lineCol + '30'); grad.addColorStop(1, lineCol + '03');
       ctx.fillStyle = grad;
-      ctx.fill();
-
+      ctx.beginPath();
+      ctx.moveTo(px(0), py(closes[0]));
+      closes.forEach((c, i) => ctx.lineTo(px(i), py(c)));
+      ctx.lineTo(px(n-1), pad.t + chartH); ctx.lineTo(px(0), pad.t + chartH);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = lineCol; ctx.lineWidth = 1.8; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      closes.forEach((c, i) => i===0 ? ctx.moveTo(px(i), py(c)) : ctx.lineTo(px(i), py(c)));
+      ctx.stroke();
     } else {
-      // Candlestick chart
-      const candleW = Math.max(1, Math.floor(chartW / bars.length) - 1);
-      bars.forEach((b, i) => {
-        const x   = toX(i);
-        const up  = b.c >= b.o;
-        const col = up ? cGreen : cRed;
-        const oY  = toY(b.o);
-        const cY  = toY(b.c);
-        const hY  = toY(b.h);
-        const lY  = toY(b.l);
-
+      // OHLC candles
+      recent.forEach((d, i) => {
+        const x   = px(i);
+        const up  = d.close >= d.open;
+        const col = up ? '#00ff88' : '#ff3355';
+        const oY  = py(d.open), cY = py(d.close), hY = py(d.high), lY = py(d.low);
         // Wick
-        ctx.strokeStyle = col;
-        ctx.lineWidth   = 1;
-        ctx.beginPath();
-        ctx.moveTo(x, hY);
-        ctx.lineTo(x, lY);
-        ctx.stroke();
-
+        ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(x, hY); ctx.lineTo(x, lY); ctx.stroke();
         // Body
-        const bodyTop = Math.min(oY, cY);
-        const bodyH   = Math.max(1, Math.abs(cY - oY));
-        ctx.fillStyle = col;
-        ctx.fillRect(x - candleW/2, bodyTop, candleW, bodyH);
+        const bTop = Math.min(oY, cY), bH = Math.max(1, Math.abs(cY - oY));
+        ctx.fillStyle = up ? col + 'cc' : col + 'cc';
+        ctx.fillRect(x - bW/2, bTop, bW, bH);
+        // Outline on doji
+        if (bH <= 2) { ctx.strokeStyle = col; ctx.strokeRect(x - bW/2, bTop, bW, bH); }
       });
     }
 
-    // Tooltip on mousemove
+    // ── Smart annotations: top 3 biggest moves ────────────────────────────────
+    const moves = recent.map((d, i) => {
+      const m = d.measurements || {};
+      const oc = m.oc_pts ?? m.open_to_close ?? (d.close - d.open);
+      return { i, d, oc };
+    }).filter(x => x.oc != null);
+    const sorted = [...moves].sort((a,b) => Math.abs(b.oc) - Math.abs(a.oc));
+    const top3   = sorted.slice(0, 3);
+
+    top3.forEach(({i, d, oc}) => {
+      const x    = px(i);
+      const up   = oc >= 0;
+      const col  = up ? 'rgba(0,255,136,0.9)' : 'rgba(255,51,85,0.9)';
+      const bgC  = up ? 'rgba(0,255,136,0.12)' : 'rgba(255,51,85,0.12)';
+      const pct  = d.open ? (oc/d.open*100) : 0;
+      const label = (up?'+':'') + pct.toFixed(2) + '%';
+
+      // Dot on the candle tip
+      const dotY = up ? py(d.high) - 8 : py(d.low) + 8;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(x, dotY, 3.5, 0, Math.PI*2); ctx.fill();
+
+      // Connecting line to label box
+      const boxY = up ? pad.t + 8 : pad.t + chartH - 28;
+      ctx.strokeStyle = col; ctx.lineWidth = 0.8; ctx.setLineDash([2,3]);
+      ctx.beginPath(); ctx.moveTo(x, dotY + (up?4:-4)); ctx.lineTo(x, boxY + (up?0:20)); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Label box
+      const tw = ctx.measureText(label).width + 12;
+      const bx = Math.max(pad.l + 2, Math.min(x - tw/2, pad.l + chartW - tw - 2));
+      ctx.fillStyle = bgC;
+      ctx.strokeStyle = col; ctx.lineWidth = 1;
+      const br = 3;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(bx, boxY, tw, 18, br) : ctx.rect(bx, boxY, tw, 18);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = col; ctx.font = 'bold 9px "Share Tech Mono",monospace'; ctx.textAlign = 'center';
+      ctx.fillText(label, bx + tw/2, boxY + 12);
+    });
+
+    // ── Volume bars (bottom strip) ────────────────────────────────────────────
+    const volY0 = pad.t + chartH + pad.b;
+    const vols  = recent.map(d => d.volume || 0);
+    const maxV  = Math.max(...vols, 1);
+    const avg30vols = vols.slice().sort((a,b)=>a-b);
+    const medV  = avg30vols[Math.floor(avg30vols.length/2)] || maxV;
+
+    recent.forEach((d, i) => {
+      const x   = px(i);
+      const vh  = Math.round((d.volume / maxV) * (VOL_H - 6));
+      const up  = d.close >= d.open;
+      const col = d.volume > medV * 1.4 ? (up ? '#00ff88' : '#ff3355') : (up ? '#00ff8855' : '#ff335555');
+      ctx.fillStyle = col;
+      ctx.fillRect(x - bW/2, volY0 + (VOL_H - 6 - vh), bW, vh);
+    });
+
+    // Vol axis label
+    ctx.fillStyle = '#404060'; ctx.font = '8px "Orbitron",monospace'; ctx.textAlign = 'left';
+    ctx.fillText('VOL', pad.l - 32, volY0 + VOL_H/2 + 3);
+
+    // ── X-axis date labels ────────────────────────────────────────────────────
+    const step = Math.max(1, Math.floor(n / 8));
+    ctx.fillStyle = '#404060'; ctx.font = '9px "Share Tech Mono",monospace'; ctx.textAlign = 'center';
+    recent.forEach((d, i) => {
+      if (i % step !== 0 && i !== n-1) return;
+      ctx.fillText(d.date.slice(5), px(i), volY0 + VOL_H - 2);
+    });
+
+    // ── Chart header ──────────────────────────────────────────────────────────
+    ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.font = '9px "Orbitron",monospace'; ctx.textAlign = 'left';
+    ctx.fillText('LAST ' + n + ' SESSIONS — DAILY OHLC · MARKET CLOSED', pad.l, pad.t - 10);
+
+    // Tooltip for daily chart
     canvas.onmousemove = function(e) {
       const rect = canvas.getBoundingClientRect();
       const mx   = (e.clientX - rect.left) * (W / rect.width);
-      const idx  = Math.round(((mx - PAD.left) / chartW) * (bars.length - 1));
-      const b    = bars[Math.max(0, Math.min(bars.length - 1, idx))];
+      const idx  = Math.max(0, Math.min(n-1, Math.floor((mx - pad.l) / (chartW / n))));
+      const d    = recent[idx];
+      if (!d) return;
+      const tip = document.getElementById('lcTooltip');
+      if (!tip) return;
+      const up  = d.close >= d.open;
+      const col = up ? '#00ff88' : '#ff3355';
+      const m   = d.measurements || {};
+      const oc  = m.oc_pts ?? m.open_to_close;
+      const rng2= m.range_pts ?? m.day_range;
+      tip.style.display = 'block'; tip.style.color = col;
+      tip.innerHTML = `<div style="color:var(--text2);margin-bottom:4px;font-weight:bold;">${d.date}</div>O <b>$${(d.open||0).toFixed(2)}</b> &nbsp; H <b>$${(d.high||0).toFixed(2)}</b> &nbsp; L <b>$${(d.low||0).toFixed(2)}</b> &nbsp; C <b>$${(d.close||0).toFixed(2)}</b><br>O→C <b style="color:${col}">${oc!=null?(oc>=0?'+':'')+oc.toFixed(2):''}</b> &nbsp; Range <b>$${rng2!=null?rng2.toFixed(2):'—'}</b> &nbsp; Vol <b>${d.volume?(d.volume/1e6).toFixed(1)+'M':'—'}</b>`;
+      tip.style.left = (mx + 14 > W - 320 ? mx - 330 : mx + 14) + 'px';
+      tip.style.top  = '10px';
+    };
+    canvas.onmouseleave = () => { const t=document.getElementById('lcTooltip'); if(t) t.style.display='none'; };
+  }
+
+  // ── LIVE INTRADAY CHART ────────────────────────────────────────────────────
+  function drawLiveChart(bars, type) {
+    const canvas = document.getElementById('lcCanvas');
+    if (!canvas) return;
+
+    const wrap = canvas.parentElement;
+    const VOL_H = 48;
+    const W = Math.max(wrap ? wrap.clientWidth - 20 : 700, 400);
+    const H = Math.max(340, Math.round(W * 0.32)) + VOL_H;
+    canvas.width = W; canvas.height = H; canvas.style.height = H + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    drawWatermark(ctx, W, H - VOL_H);
+
+    const style  = getComputedStyle(document.documentElement);
+    const cGreen = style.getPropertyValue('--green').trim() || '#00ff88';
+    const cRed   = style.getPropertyValue('--red').trim()   || '#ff4455';
+    const cCyan  = style.getPropertyValue('--cyan').trim()  || '#00ccff';
+
+    const pad   = { t:22, r:62, b:24, l:12 };
+    const chartW = W - pad.l - pad.r;
+    const chartH = H - VOL_H - pad.t - pad.b;
+
+    const prices = bars.flatMap(b => [b.h, b.l]);
+    const minP   = Math.min(...prices), maxP = Math.max(...prices);
+    const rng    = (maxP - minP) || 1, padP = rng * 0.06;
+    const lo = minP - padP, hi = maxP + padP;
+
+    const toY = p => pad.t + chartH - ((p - lo) / (hi - lo)) * chartH;
+    const toX = i => pad.l + (i / Math.max(bars.length - 1, 1)) * chartW;
+
+    // Grid
+    for (let g = 0; g <= 6; g++) {
+      const p = lo + (hi - lo) * g / 6, y = toY(p);
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 0.5; ctx.setLineDash([3,4]);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + chartW, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#505070'; ctx.font = '10px "Share Tech Mono",monospace'; ctx.textAlign = 'left';
+      ctx.fillText('$' + p.toFixed(2), pad.l + chartW + 4, y + 4);
+    }
+
+    // Open dashed line
+    const openY = toY(bars[0].o);
+    ctx.strokeStyle = 'rgba(255,204,0,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(pad.l, openY); ctx.lineTo(pad.l + chartW, openY); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,204,0,0.5)'; ctx.font = '8px "Orbitron",monospace'; ctx.textAlign = 'left';
+    ctx.fillText('OPEN $' + bars[0].o.toFixed(2), pad.l + chartW + 4, openY + 3);
+
+    // Key level overlays (WEM)
+    const md2 = (typeof _md !== 'undefined') ? _md : {};
+    const wem  = (md2.weekly_em||[]).find(w=>!w.week_close) || (md2.weekly_em||[])[0];
+    const drawLvl = (price, color, label) => {
+      if (!price || price < lo || price > hi) return;
+      const y = toY(price);
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash([3,4]);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + chartW, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color; ctx.font = 'bold 8px "Orbitron",monospace'; ctx.textAlign = 'left';
+      ctx.fillText(label, pad.l + chartW + 4, y - 2);
+    };
+    if (wem?.wem_high) drawLvl(wem.wem_high, 'rgba(0,255,136,0.5)', 'WEM HI');
+    if (wem?.wem_low)  drawLvl(wem.wem_low,  'rgba(255,51,85,0.5)', 'WEM LO');
+
+    // VWAP line
+    const lv = (typeof _spyIntraday !== 'undefined') ? _spyIntraday : null;
+    if (lv?.vwap && lv.vwap >= lo && lv.vwap <= hi) {
+      const vy = toY(lv.vwap);
+      ctx.strokeStyle = 'rgba(255,102,204,0.6)'; ctx.lineWidth = 1; ctx.setLineDash([2,3]);
+      ctx.beginPath(); ctx.moveTo(pad.l, vy); ctx.lineTo(pad.l + chartW, vy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,102,204,0.7)'; ctx.font = 'bold 8px "Orbitron",monospace'; ctx.textAlign = 'left';
+      ctx.fillText('VWAP', pad.l + 4, vy - 3);
+    }
+
+    // Time labels
+    const step = Math.max(1, Math.floor(bars.length / 10));
+    ctx.fillStyle = '#404060'; ctx.font = '9px "Share Tech Mono",monospace'; ctx.textAlign = 'center';
+    bars.forEach((b, i) => {
+      if (i % step !== 0 && i !== bars.length - 1) return;
+      const lbl = new Date(b.t * 1000).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago',hour12:false});
+      ctx.fillText(lbl, toX(i), pad.t + chartH + pad.b - 2);
+    });
+
+    // Line or candles
+    if (type === 'line') {
+      const last = bars[bars.length-1], first = bars[0];
+      const lineCol = last.c >= first.o ? cGreen : cRed;
+      const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + chartH);
+      grad.addColorStop(0, lineCol + '30'); grad.addColorStop(1, lineCol + '03');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.moveTo(toX(0), toY(bars[0].c));
+      bars.forEach((b,i) => ctx.lineTo(toX(i), toY(b.c)));
+      ctx.lineTo(toX(bars.length-1), pad.t+chartH); ctx.lineTo(toX(0), pad.t+chartH);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = lineCol; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+      ctx.beginPath(); bars.forEach((b,i) => i===0?ctx.moveTo(toX(i),toY(b.c)):ctx.lineTo(toX(i),toY(b.c))); ctx.stroke();
+      // Last price dot
+      const lx = toX(bars.length-1), ly = toY(last.c);
+      ctx.fillStyle = lineCol; ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, Math.PI*2); ctx.fill();
+    } else {
+      const cW = Math.max(1, Math.floor(chartW / bars.length) - 1);
+      bars.forEach((b,i) => {
+        const x = toX(i), up = b.c >= b.o, col = up ? cGreen : cRed;
+        ctx.strokeStyle = col; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, toY(b.h)); ctx.lineTo(x, toY(b.l)); ctx.stroke();
+        const bTop = Math.min(toY(b.o), toY(b.c)), bH = Math.max(1, Math.abs(toY(b.c)-toY(b.o)));
+        ctx.fillStyle = col + 'cc'; ctx.fillRect(x - cW/2, bTop, cW, bH);
+      });
+    }
+
+    // Volume strip
+    const vols  = bars.map(b => b.v || 0);
+    const maxV  = Math.max(...vols, 1);
+    const medV  = [...vols].sort((a,b)=>a-b)[Math.floor(vols.length/2)] || maxV;
+    const volY0 = pad.t + chartH + pad.b;
+    bars.forEach((b, i) => {
+      const vh  = Math.round((b.v / maxV) * (VOL_H - 5));
+      const up  = b.c >= b.o;
+      const col = b.v > medV * 1.4 ? (up ? cGreen : cRed) : (up ? cGreen+'44' : cRed+'44');
+      ctx.fillStyle = col;
+      ctx.fillRect(toX(i) - Math.max(1, Math.floor(chartW/bars.length*0.5)/2), volY0 + (VOL_H - 5 - vh), Math.max(1, Math.floor(chartW/bars.length*0.5)), vh);
+    });
+
+    // Tooltip
+    canvas.onmousemove = function(e) {
+      const rect = canvas.getBoundingClientRect();
+      const mx   = (e.clientX - rect.left) * (W / rect.width);
+      const idx  = Math.round(((mx - pad.l) / chartW) * (bars.length - 1));
+      const b    = bars[Math.max(0, Math.min(bars.length-1, idx))];
       if (!b) return;
       const tip  = document.getElementById('lcTooltip');
       if (!tip) return;
       const up   = b.c >= b.o;
-      const t    = new Date(b.t * 1000).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago', hour12:false });
-      tip.style.display = 'block';
-      tip.style.color   = up ? cGreen : cRed;
-      tip.innerHTML = `<div style="color:var(--text2);margin-bottom:4px;">${t} CT</div>O <b>$${b.o.toFixed(2)}</b> &nbsp; H <b>$${b.h.toFixed(2)}</b> &nbsp; L <b>$${b.l.toFixed(2)}</b> &nbsp; C <b>$${b.c.toFixed(2)}</b> &nbsp; V <b>${(b.v/1000).toFixed(0)}K</b>`;
+      const t    = new Date(b.t*1000).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago',hour12:false});
+      tip.style.display = 'block'; tip.style.color = up ? cGreen : cRed;
+      tip.innerHTML = `<div style="color:var(--text2);margin-bottom:4px;">${t} CT</div>O <b>$${b.o.toFixed(2)}</b> &nbsp; H <b>$${b.h.toFixed(2)}</b> &nbsp; L <b>$${b.l.toFixed(2)}</b> &nbsp; C <b>$${b.c.toFixed(2)}</b> &nbsp; V <b>${((b.v||0)/1000).toFixed(0)}K</b>`;
       const tx = toX(idx);
-      tip.style.left = (tx + 12 > W - 220 ? tx - 230 : tx + 12) + 'px';
+      tip.style.left = (tx + 14 > W - 280 ? tx - 290 : tx + 14) + 'px';
       tip.style.top  = '10px';
     };
-    canvas.onmouseleave = function() {
-      const tip = document.getElementById('lcTooltip');
-      if (tip) tip.style.display = 'none';
-    };
+    canvas.onmouseleave = () => { const t=document.getElementById('lcTooltip'); if(t) t.style.display='none'; };
   }
 
   // Initial fetch
