@@ -805,6 +805,27 @@ function renderWEM(md){
   const q=md.quotes||{}, spy=q['SPY']||{};
   const cur=wems.find(w=>!w.week_close)||wems[0];
 
+  // Bootstrap frozen price on fresh page load before falling back to mid.
+  // spyintraday returns available:true after close with the real closing price,
+  // so md.quotes.SPY.price should already be set — but if not (e.g. Yahoo down),
+  // check the intraday and closing snapshot caches so we never show z=0 / mid.
+  if (!_wemFrozenPrice || _wemFrozenPrice <= 0) {
+    if (spy.price && spy.price > 0) {
+      _wemFrozenPrice = spy.price;
+    } else {
+      try {
+        const _ic = typeof loadIntradayCache === 'function' ? loadIntradayCache() : null;
+        if (_ic && _ic.close > 0) _wemFrozenPrice = _ic.close;
+      } catch(e) {}
+      if (!_wemFrozenPrice) {
+        try {
+          const _cs = typeof loadClosingSnapshot === 'function' ? loadClosingSnapshot() : null;
+          if (_cs && _cs.close > 0) _wemFrozenPrice = _cs.close;
+        } catch(e) {}
+      }
+    }
+  }
+
   if(cur){
     const lo=cur.wem_low, hi=cur.wem_high, mid=cur.wem_mid;
     if(spy.price && spy.price > 0) _wemFrozenPrice = spy.price;
