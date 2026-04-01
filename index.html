@@ -550,6 +550,7 @@
     <div class="subtab active" onclick="switchGroupSub('desk',this)">TRADING DESK</div>
     <div class="subtab" onclick="switchGroupSub('intraday',this)">INTRADAY</div>
     <div class="subtab" onclick="switchGroupSub('intraday-volume',this)">INTRADAY VOLUME</div>
+    <div class="subtab" onclick="switchGroupSub('gap-stats',this)">GAP STATS</div>
   </div>
   <!-- Derivatives subtabs -->
   <div class="subtab-group" id="subtabs-derivatives">
@@ -666,6 +667,13 @@
 <div class="tab-panel" id="panel-intraday-volume">
   <div id="intradayVolContent"><div class="no-data">Loading Intraday Volume...</div></div>
   <div id="intradayVolStats" style="padding:0 16px 16px;max-width:1200px;margin:0 auto;"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     GAP STATS
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-gap-stats">
+  <div id="gapStatsContent"><div class="no-data">Loading Gap Stats...</div></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -1936,7 +1944,7 @@
 <!-- FLOATING CHAT -->
 
 
-<script src="session_vol_profile.js"></script><script src="intraday_vol_profile.js"></script><script src="intraday_vol_stats.js"></script><script src="window_stats.js"></script><script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script>
+<script src="session_vol_profile.js"></script><script src="intraday_vol_profile.js"></script><script src="intraday_vol_stats.js"></script><script src="window_stats.js"></script><script src="gap_stats.js"></script><script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script>
 <script src="dashboard1.js"></script><script src="dashboard2.js"></script><script src="intraday_data.js"></script><script src="journal_trades.js"></script>
 
 <!-- ============================================================
