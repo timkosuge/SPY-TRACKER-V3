@@ -1,6 +1,6 @@
 // Cloudflare Pages Function — /weekopen
 // Returns SPY's Monday open price (first trading day of current week)
-// Uses server-side Yahoo Finance chart API with crumb+cookie auth
+// Uses Yahoo Finance v8 chart API (no crumb/cookie needed for this endpoint)
 
 export async function onRequestGet(context) {
   const headers = {
@@ -43,25 +43,11 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ error: 'Market not open yet', available: false }), { headers });
     }
 
-    // Fetch crumb + cookie (required for Yahoo v8)
-    const consentResp = await fetch('https://fc.yahoo.com', {
-      headers: { 'User-Agent': UA }, redirect: 'follow'
-    });
-    const cookieHeader = consentResp.headers.get('set-cookie') || '';
-    const cookieVal = cookieHeader.split(',').map(s => s.trim()).find(s => s.startsWith('A3=')) || '';
-    const cookie = cookieVal ? cookieVal.split(';')[0] : '';
-
-    const crumbResp = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
-      headers: { 'User-Agent': UA, 'Accept': '*/*', ...(cookie ? { Cookie: cookie } : {}) }
-    });
-    const crumb = crumbResp.ok ? (await crumbResp.text()).trim() : null;
-
-    // Fetch daily bars for this week
-    let yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=${p1}&period2=${p2}`;
-    if (crumb) yUrl += `&crumb=${encodeURIComponent(crumb)}`;
+    // Fetch daily bars for this week — no crumb/cookie needed for v8 chart endpoint
+    const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=${p1}&period2=${p2}`;
 
     const resp = await fetch(yUrl, {
-      headers: { 'User-Agent': UA, 'Accept': 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
+      headers: { 'User-Agent': UA, 'Accept': 'application/json' }
     });
 
     if (!resp.ok) throw new Error(`Yahoo ${resp.status}`);
