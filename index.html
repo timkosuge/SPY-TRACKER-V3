@@ -184,8 +184,9 @@
   .fg-number{font-family:'Orbitron',monospace;font-size:36px;font-weight:900;text-align:center;}
   .fg-label{font-family:'Orbitron',monospace;font-size:12px;letter-spacing:3px;text-align:center;}
   .wem-bar-wrap{padding:4px 0;}
-  .wem-track{position:relative;height:28px;background:linear-gradient(90deg,rgba(255,51,85,0.15),rgba(255,204,0,0.1),rgba(0,255,136,0.15));border:1px solid var(--border2);border-radius:3px;margin:8px 0;}
-  .wem-needle{position:absolute;top:-4px;width:3px;height:36px;background:var(--cyan);border-radius:2px;box-shadow:var(--glow-cyan);transform:translateX(-50%);transition:left 0.5s ease;}
+  .wem-track{position:relative;height:28px;background:linear-gradient(90deg,rgba(255,51,85,0.5),rgba(255,136,0,0.2),rgba(0,255,136,0.35),rgba(255,136,0,0.2),rgba(255,51,85,0.5));border:1px solid var(--border2);border-radius:3px;margin:8px 0;}
+  .wem-needle{position:absolute;top:0;width:2px;height:100%;background:var(--cyan);border-radius:2px;box-shadow:var(--glow-cyan);transform:translateX(-50%);transition:left 0.5s ease;}
+  .wem-needle-label{position:absolute;top:50%;transform:translate(-50%,-50%);background:var(--cyan);color:#000;font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;padding:2px 6px;border-radius:3px;white-space:nowrap;pointer-events:none;z-index:2;}
   .wem-labels{display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:10px;margin-top:4px;}
   .wem-low-lbl{color:var(--red);}
   .wem-mid-lbl{color:var(--text2);text-align:center;}
@@ -1108,7 +1109,7 @@
     <div class="panel-label" id="wemWeekLabel">⬡ CURRENT WEEK</div>
     <div class="wem-header" id="wemCurrentHeader"></div>
     <div style="margin:10px 0 8px;">
-      <div class="wem-track" style="height:60px;"><div class="wem-needle" id="wemTabNeedle" style="left:50%"></div></div>
+      <div class="wem-track" style="height:60px;"><div class="wem-needle" id="wemTabNeedle" style="left:50%"><div class="wem-needle-label" id="wemTabNeedleLabel">—</div></div></div>
       <div class="wem-labels">
         <span class="wem-low-lbl" id="wemTabLowLbl">—</span>
         <span class="wem-mid-lbl" id="wemTabMidLbl">—</span>
