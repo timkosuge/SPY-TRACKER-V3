@@ -6341,8 +6341,8 @@ function renderGapStats() {
       </div>
       <div style="background:var(--bg3);border-radius:4px;padding:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:8px;">PH RANGE → NEXT MORNING VOLATILITY</div>
-        ${stat('Wide PH → next FH range', pct(sig.wide_ph_fh_range), '#ff8800')}
-        ${stat('Tight PH → next FH range', pct(sig.tight_ph_fh_range), '#00ccff')}
+        ${stat('Wide PH → next FH range', pct(sig.wide_ph_avg_fh_range), '#ff8800')}
+        ${stat('Tight PH → next FH range', pct(sig.tight_ph_avg_fh_range), '#00ccff')}
         <div style="font-size:10px;color:var(--text3);margin-top:8px;">A volatile power hour reliably predicts a wider opening range next morning. Use for sizing the first hour trade.</div>
       </div>
       <div style="background:var(--bg3);border-radius:4px;padding:12px;">
