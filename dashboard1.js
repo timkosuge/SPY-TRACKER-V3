@@ -7,6 +7,7 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
+  desk:        ['desk','intraday'],
   derivatives: ['options','gex','wem','volatility'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
@@ -64,6 +65,7 @@ function _switchPanelOnly(id) {
   if(id==='volatility' && _md) { try { renderVolatility(_md); } catch(e){} }
   if(id==='bonds' && _md) { try { renderBonds(_md); } catch(e){} }
   if(id==='sentiment' && _md) { try { renderSentiment(_md); } catch(e){} }
+  if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
 }
 
 function switchTab(id){
@@ -79,7 +81,7 @@ function switchTab(id){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
   // Find and activate the correct top-level tab button
-  const topTabs = ['hub','desk','intraday','overview','derivatives','history','media','journal'];
+  const topTabs = ['hub','desk','overview','derivatives','history','media','journal'];
   const btnIdx = topTabs.indexOf(id);
   const allTabs = document.querySelectorAll('.tab');
   if(btnIdx>=0 && allTabs[btnIdx]) allTabs[btnIdx].classList.add('active');
