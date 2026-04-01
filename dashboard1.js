@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
-  desk:        ['desk','intraday','intraday-volume'],
+  desk:        ['desk','intraday','intraday-volume','gap-stats'],
   derivatives: ['options','gex','wem','volatility'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
@@ -67,6 +67,7 @@ function _switchPanelOnly(id) {
   if(id==='sentiment' && _md) { try { renderSentiment(_md); } catch(e){} }
   if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
   if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); renderWindowStats(); }, 50); }
+  if(id==='gap-stats') { setTimeout(renderGapStats, 50); }
 }
 
 function switchTab(id){
@@ -6163,4 +6164,258 @@ function renderWindowStats() {
       Based on ${W.meta.n_sessions} sessions (${W.meta.date_range}) · All times Central · 
       W1 66% day-follow rate vs W2 64% — both windows carry real predictive signal on larger moves.
     </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAP STATS — Power Hour (prev day) + First Hour (next day) deep dive
+// ─────────────────────────────────────────────────────────────────────────────
+let _gsLookback = 'all';
+let _gsDow      = 'all';
+
+window._gsSetLookback = function(v){ _gsLookback=v; renderGapStats(); };
+window._gsSetDow      = function(v){ _gsDow=v;      renderGapStats(); };
+
+function renderGapStats() {
+  const el = document.getElementById('gapStatsContent');
+  if (!el) return;
+  if (typeof GAP_STATS === 'undefined') {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);">Gap stats data not loaded.</div>';
+    return;
+  }
+
+  const key = _gsDow === 'all' ? _gsLookback : `${_gsLookback}_${_gsDow}`;
+  const D = GAP_STATS[key];
+  if (!D || !D.n) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);">Not enough data for this filter.</div>';
+    return;
+  }
+
+  const curYear = new Date().getFullYear();
+  const fbtn = (lbl, active, fn) =>
+    `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
+
+  const lbBtns = [
+    fbtn('ALL HISTORY',_gsLookback==='all',"_gsSetLookback('all')"),
+    fbtn('12 MONTHS',_gsLookback==='12m',"_gsSetLookback('12m')"),
+    fbtn(String(curYear),_gsLookback==='year',"_gsSetLookback('year')"),
+  ].join(' ');
+  const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(d=>
+    fbtn(d==='all'?'ALL':d.toUpperCase(),_gsDow===d,`_gsSetDow('${d}')`)
+  ).join(' ');
+
+  const section = (title, color, html) =>
+    `<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;padding:14px;margin-bottom:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};margin-bottom:12px;">${title}</div>
+      ${html}
+    </div>`;
+
+  const stat = (lbl, val, color) =>
+    `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <span style="font-size:11px;color:var(--text3);">${lbl}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${color||'var(--text2)'};">${val}</span>
+    </div>`;
+
+  const pct = v => v.toFixed(1)+'%';
+  const sgn = v => (v>=0?'+':'')+v.toFixed(3)+'%';
+  const followColor = v => v>=68?'#00ff88':v>=55?'#88cc44':v>=45?'#ffcc00':'#ff8800';
+  const gapColor = gt => gt==='GAP_UP'?'#00ff88':gt==='GAP_DOWN'?'#ff3355':'#ffcc00';
+
+  // ── SECTION 1: Overview stats row ──────────────────────────────────────────
+  const overviewHtml = `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;">
+      ${[
+        ['Sessions',D.n,'var(--cyan)'],
+        ['Avg next gap',sgn(D.avg_gap),D.avg_gap>0.05?'#00ff88':D.avg_gap<-0.05?'#ff3355':'var(--text2)'],
+        ['Avg PH move',sgn(D.avg_ph_move),D.avg_ph_move>=0?'#00ff88':'#ff3355'],
+        ['Avg PH range',pct(D.avg_ph_range),'#ffcc00'],
+      ].map(([l,v,c])=>`<div style="background:var(--bg3);border-radius:4px;padding:10px;text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">${l}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:${c};">${v}</div>
+      </div>`).join('')}
+    </div>`;
+
+  // ── SECTION 2: Gap type breakdown cards ────────────────────────────────────
+  const gb = D.gap_breakdown || {};
+  const gapCards = ['GAP_DOWN','FLAT','GAP_UP'].map(gt => {
+    const g = gb[gt]; if(!g) return '';
+    const c = gapColor(gt);
+    const label = gt==='GAP_UP'?'GAP UP ▲':gt==='GAP_DOWN'?'GAP DOWN ▼':'FLAT OPEN';
+    return `<div style="background:var(--bg2);border:1px solid ${c}33;border-top:3px solid ${c};border-radius:4px;padding:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:${c};margin-bottom:8px;">${label} <span style="color:var(--text3);font-size:8px;">(${g.n} days)</span></div>
+      ${stat('Avg gap size', sgn(g.avg_gap_pct), c)}
+      ${stat('Avg PH move (prev)', sgn(g.avg_ph_move), g.avg_ph_move>=0?'#00ff88':'#ff3355')}
+      ${stat('Avg PH last 15min', sgn(g.avg_ph_last_move), g.avg_ph_last_move>=0?'#88cc44':'#ff8855')}
+      ${stat('Avg PH vol accel', g.avg_ph_vol_accel.toFixed(2)+'×', g.avg_ph_vol_accel>1.1?'#ff8800':g.avg_ph_vol_accel<0.9?'#8888ff':'var(--text2)')}
+      ${stat('Avg PH range', pct(g.avg_ph_range), '#ffcc00')}
+      ${gt!=='FLAT'?stat('Gap fill rate', g.fill_rate+'%', followColor(g.fill_rate)):''}
+      <div style="border-top:1px solid rgba(255,255,255,0.08);margin:8px 0;padding-top:8px;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">FIRST HOUR AFTER GAP</div>
+        ${stat('FH up %', g.fh_up_pct+'%', g.fh_up_pct>=55?'#00ff88':g.fh_up_pct<=45?'#ff3355':'#ffcc00')}
+        ${stat('Avg FH move', sgn(g.avg_fh_move), g.avg_fh_move>=0?'#00ff88':'#ff3355')}
+        ${stat('Avg FH range', pct(g.avg_fh_range), '#ffcc00')}
+        ${stat('Avg FH vol accel', g.avg_fh_vol_accel.toFixed(2)+'×', g.avg_fh_vol_accel>1?'#ff8800':'#8888ff')}
+        ${stat('FH predicts day', g.fh_predicts_day+'%', followColor(g.fh_predicts_day))}
+      </div>
+      ${stat('Avg day move', sgn(g.avg_day_move), g.avg_day_move>=0?'#00ff88':'#ff3355')}
+      ${stat('Avg day range', pct(g.avg_day_range), '#ffcc00')}
+    </div>`;
+  }).join('');
+
+  // ── SECTION 3: PH move bins → gap prediction ───────────────────────────────
+  const bins = D.ph_bins || [];
+  const binRows = bins.map(b => {
+    const upBar = Math.round(b.gap_up_pct * 0.8);
+    const dnBar = Math.round(b.gap_dn_pct * 0.8);
+    const phColor = b.avg_ph_move>0.2?'#00ff88':b.avg_ph_move<-0.2?'#ff3355':'#ffcc00';
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+      <td style="font-size:10px;color:${phColor};padding:5px 8px;white-space:nowrap;">${b.label}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);padding:5px 6px;text-align:center;">${b.n}</td>
+      <td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;font-size:11px;color:${phColor};text-align:right;">${sgn(b.avg_gap)}</td>
+      <td style="padding:5px 8px;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <div style="width:${upBar}px;height:8px;background:#00ff88;border-radius:2px;opacity:0.8;"></div>
+          <span style="font-size:10px;color:#00ff88;">${b.gap_up_pct}%</span>
+        </div>
+      </td>
+      <td style="padding:5px 8px;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <div style="width:${dnBar}px;height:8px;background:#ff3355;border-radius:2px;opacity:0.8;"></div>
+          <span style="font-size:10px;color:#ff3355;">${b.gap_dn_pct}%</span>
+        </div>
+      </td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${b.fill_rate>40?'#00ff88':'var(--text3)'};padding:5px 8px;text-align:right;">${b.fill_rate}%</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#ffcc00;padding:5px 8px;text-align:right;">${pct(b.avg_fh_range)}</td>
+    </tr>`;
+  }).join('');
+
+  const phBinHtml = `
+    <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Previous day power hour move magnitude → next day gap characteristics. Strong PH moves in either direction tend to produce larger gaps.</div>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        ${['PH MOVE','N','AVG GAP','GAP UP%','GAP DN%','FILL RATE','NEXT FH RNG'].map(h=>
+          `<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:4px 8px;text-align:${h==='PH MOVE'?'left':'right'};">${h}</th>`
+        ).join('')}
+      </thead>
+      <tbody>${binRows}</tbody>
+    </table>`;
+
+  // ── SECTION 4: Key signals ─────────────────────────────────────────────────
+  const sig = D.signals || {};
+  const signalHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="background:var(--bg3);border-radius:4px;padding:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:8px;">PH LATE MOMENTUM → GAP DIRECTION</div>
+        <div style="margin-bottom:10px;">
+          <div style="font-size:10px;color:var(--text3);">PH last 15min SURGES (${sig.late_surge_n} sessions)</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <div style="flex:1;height:10px;background:var(--bg2);border-radius:3px;overflow:hidden;">
+              <div style="width:${sig.late_surge_gap_up}%;height:100%;background:#00ff88;opacity:0.8;border-radius:3px;"></div>
+            </div>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#00ff88;">${sig.late_surge_gap_up}% gap up</span>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">When PH finishes strong, the next open leans higher.</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);">PH last 15min FADES (${sig.late_fade_n} sessions)</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <div style="flex:1;height:10px;background:var(--bg2);border-radius:3px;overflow:hidden;">
+              <div style="width:${sig.late_fade_gap_dn}%;height:100%;background:#ff3355;opacity:0.8;border-radius:3px;"></div>
+            </div>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#ff3355;">${sig.late_fade_gap_dn}% gap down</span>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Late PH selling is the strongest gap-down predictor.</div>
+        </div>
+      </div>
+      <div style="background:var(--bg3);border-radius:4px;padding:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:#8855ff;margin-bottom:8px;">GAP FILL: MOMENTUM vs REVERSAL SETUP</div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:10px;color:var(--text3);">PH direction matches gap direction (${sig.momentum_n} sessions)</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:#ffcc00;margin-top:4px;">${sig.momentum_fill}% <span style="font-size:11px;color:var(--text3);">fill rate</span></div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Momentum continuation — gap fills less often.</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);">PH direction opposes gap direction (${sig.reversal_n} sessions)</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:#00ccff;margin-top:4px;">${sig.reversal_fill}% <span style="font-size:11px;color:var(--text3);">fill rate</span></div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Mean reversion setup — gap fills more readily.</div>
+        </div>
+      </div>
+      <div style="background:var(--bg3);border-radius:4px;padding:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:8px;">PH RANGE → NEXT MORNING VOLATILITY</div>
+        ${stat('Wide PH → next FH range', pct(sig.wide_ph_fh_range), '#ff8800')}
+        ${stat('Tight PH → next FH range', pct(sig.tight_ph_fh_range), '#00ccff')}
+        <div style="font-size:10px;color:var(--text3);margin-top:8px;">A volatile power hour reliably predicts a wider opening range next morning. Use for sizing the first hour trade.</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:4px;padding:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff8800;margin-bottom:8px;">KEY EDGE SUMMARY</div>
+        <div style="font-size:10px;color:var(--text3);line-height:1.7;">
+          • <span style="color:#ffcc00;">Late PH fade</span> = strongest gap-down signal<br>
+          • <span style="color:#00ff88;">Late PH surge</span> = leans gap-up next day<br>
+          • <span style="color:#00ccff;">PH opposes gap</span> = higher fill rate (mean reversion)<br>
+          • <span style="color:#ff8800;">Wide PH</span> = expect volatile first hour<br>
+          • <span style="color:#00ff88;">FH predicts day</span> 69–75% across gap types<br>
+          • <span style="color:#ff3355;">Gap Down</span> days have widest FH range (most opportunity)
+        </div>
+      </div>
+    </div>`;
+
+  // ── SECTION 5: DOW breakdown ───────────────────────────────────────────────
+  const dbd = D.dow_breakdown || {};
+  const dowRows = ['Mon','Tue','Wed','Thu','Fri'].map(d => {
+    const r = dbd[d]; if(!r||!r.n) return '';
+    const upW = r.gap_up_pct; const dnW = r.gap_dn_pct;
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);padding:5px 8px;">${d.toUpperCase()}</td>
+      <td style="font-size:10px;color:var(--text3);padding:5px 8px;text-align:center;">${r.n}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${r.avg_gap>0.05?'#00ff88':r.avg_gap<-0.05?'#ff3355':'var(--text2)'};padding:5px 8px;text-align:right;">${sgn(r.avg_gap)}</td>
+      <td style="padding:5px 10px;">
+        <div style="display:flex;align-items:center;gap:3px;">
+          <div style="width:${upW}px;height:8px;background:#00ff88;border-radius:2px;opacity:0.75;"></div>
+          <span style="font-size:10px;color:#00ff88;">${upW}%</span>
+        </div>
+      </td>
+      <td style="padding:5px 10px;">
+        <div style="display:flex;align-items:center;gap:3px;">
+          <div style="width:${dnW}px;height:8px;background:#ff3355;border-radius:2px;opacity:0.75;"></div>
+          <span style="font-size:10px;color:#ff3355;">${dnW}%</span>
+        </div>
+      </td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${r.avg_ph_move>=0?'#00ff88':'#ff3355'};padding:5px 8px;text-align:right;">${sgn(r.avg_ph_move)}</td>
+    </tr>`;
+  }).join('');
+
+  const dowHtml = `
+    <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Mon gaps up most often (43%). Fri has the most balanced gap-up/down split. Tue leans gap-down.</div>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        ${['DAY','N','AVG GAP','GAP UP%','GAP DN%','AVG PH'].map(h=>
+          `<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:4px 8px;text-align:${h==='DAY'?'left':'right'};">${h}</th>`
+        ).join('')}
+      </thead>
+      <tbody>${dowRows}</tbody>
+    </table>`;
+
+  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ GAP STATS — POWER HOUR + FIRST HOUR DEEP DIVE</div>
+        <div style="margin-bottom:6px;">
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">LOOKBACK</div>
+          <div style="display:flex;gap:5px;">${lbBtns}</div>
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DAY OF WEEK</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">${dowBtns}</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);text-align:right;">
+        <div>${D.n} session pairs · 1-min bars</div>
+        <div style="margin-top:2px;">PH: 1:00–2:00pm CT (prev day) · FH: 8:30–9:30am CT (next day)</div>
+      </div>
+    </div>
+    ${overviewHtml}
+    ${section('⬡ OVERVIEW BY GAP TYPE — PH CHARACTERISTICS + FIRST HOUR BEHAVIOR','var(--cyan)',`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">${gapCards}</div>`)}
+    ${section('⬡ POWER HOUR MOVE → NEXT DAY GAP PREDICTION','#ffcc00',phBinHtml)}
+    ${section('⬡ KEY SIGNALS — LATE PH MOMENTUM, FILL RATES, RANGE EXPANSION','#8855ff',signalHtml)}
+    ${section('⬡ GAP PATTERNS BY DAY OF WEEK','#00ccff',dowHtml)}
+  </div>`;
 }
