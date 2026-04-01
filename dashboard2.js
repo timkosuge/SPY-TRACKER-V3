@@ -2095,15 +2095,22 @@ async function generateEventImpact(md, sd) {
       return null;
     }
 
-    // Build dynamic CPI/NFP for next 4 months
+    // Build dynamic CPI/NFP — use RELEASE_DATA.upcoming if available, else algorithmic fallback
     const dynEvents = [];
-    for (let offset = 0; offset <= 4; offset++) {
-      const d = new Date(today); d.setMonth(d.getMonth() + offset);
-      const y = d.getFullYear(), m = d.getMonth();
-      const cpi = _nthWD(y, m, 3, 2);
-      const nfp = _nthWD(y, m, 5, 1);
-      if (cpi && cpi >= todayStr) dynEvents.push({ name: 'CPI', dates: [cpi] });
-      if (nfp && nfp >= todayStr) dynEvents.push({ name: 'NFP', dates: [nfp] });
+    const upcomingCpi = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.cpi) || [];
+    const upcomingNfp = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.nfp) || [];
+    if (upcomingCpi.length || upcomingNfp.length) {
+      upcomingCpi.filter(d => d >= todayStr).forEach(d => dynEvents.push({ name: 'CPI', dates: [d] }));
+      upcomingNfp.filter(d => d >= todayStr).forEach(d => dynEvents.push({ name: 'NFP', dates: [d] }));
+    } else {
+      for (let offset = 0; offset <= 4; offset++) {
+        const d = new Date(today); d.setMonth(d.getMonth() + offset);
+        const y = d.getFullYear(), m = d.getMonth();
+        const cpi = _nthWD(y, m, 3, 2);
+        const nfp = _nthWD(y, m, 5, 1);
+        if (cpi && cpi >= todayStr) dynEvents.push({ name: 'CPI', dates: [cpi] });
+        if (nfp && nfp >= todayStr) dynEvents.push({ name: 'NFP', dates: [nfp] });
+      }
     }
 
     const knownEarnings = [
@@ -2202,13 +2209,22 @@ async function renderKeyEvents() {
     const today = new Date(); today.setHours(0,0,0,0);
     const todayStr = today.toISOString().slice(0,10);
     const result = [];
-    for (let offset = 0; offset <= monthsAhead; offset++) {
-      const d = new Date(today); d.setMonth(d.getMonth() + offset);
-      const y = d.getFullYear(), m = d.getMonth();
-      const cpi = nthWeekdayDate(y, m, 3, 2); // 2nd Wednesday
-      const nfp = nthWeekdayDate(y, m, 5, 1); // 1st Friday
-      if (cpi && cpi >= todayStr) result.push({ name: 'CPI REPORT',       date: cpi, type: 'CPI', icon: '📊' });
-      if (nfp && nfp >= todayStr) result.push({ name: 'NONFARM PAYROLLS', date: nfp, type: 'NFP', icon: '💼' });
+    // Prefer RELEASE_DATA.upcoming which has actual BLS-published dates
+    const upcomingCpi = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.cpi) || [];
+    const upcomingNfp = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.nfp) || [];
+    if (upcomingCpi.length || upcomingNfp.length) {
+      upcomingCpi.filter(d => d >= todayStr).forEach(d => result.push({ name: 'CPI REPORT',       date: d, type: 'CPI', icon: '📊' }));
+      upcomingNfp.filter(d => d >= todayStr).forEach(d => result.push({ name: 'NONFARM PAYROLLS', date: d, type: 'NFP', icon: '💼' }));
+    } else {
+      // Algorithmic fallback (less accurate — CPI is not always 2nd Wednesday)
+      for (let offset = 0; offset <= monthsAhead; offset++) {
+        const d = new Date(today); d.setMonth(d.getMonth() + offset);
+        const y = d.getFullYear(), m = d.getMonth();
+        const cpi = nthWeekdayDate(y, m, 3, 2);
+        const nfp = nthWeekdayDate(y, m, 5, 1);
+        if (cpi && cpi >= todayStr) result.push({ name: 'CPI REPORT',       date: cpi, type: 'CPI', icon: '📊' });
+        if (nfp && nfp >= todayStr) result.push({ name: 'NONFARM PAYROLLS', date: nfp, type: 'NFP', icon: '💼' });
+      }
     }
     return result;
   }
