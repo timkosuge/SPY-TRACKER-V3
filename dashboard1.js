@@ -1540,13 +1540,26 @@ function renderDeskSession(md,sd){
       const cached = loadIntradayCache();
       if (cached?.volume) lv = { ...cached, _fromCache: true };
     }
+    // Third fallback: closing snapshot — persists overnight and through weekend
+    if (!lv?.available && !lv?._fromCache && typeof loadClosingSnapshot === 'function') {
+      const snap = loadClosingSnapshot();
+      if (snap?.volume) lv = snap;
+    }
     const day0 = sd?.[0]||{}, va = day0.volume_analysis||{};
-    const isLive = lv?.available || lv?._fromCache;
+    const isLive = lv?.available || lv?._fromCache || lv?._fromClosing;
     const last30 = (sd||[]).slice(0,30).filter(d=>d.volume>0);
     const avg30 = last30.length ? Math.round(last30.reduce((a,d)=>a+d.volume,0)/last30.length) : 85000000;
+    // Determine if market is currently open (ET 9:30–16:00 weekdays)
+    const _volMarketOpen = (() => {
+      try {
+        const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        const d = et.getDay(), m = et.getHours()*60+et.getMinutes();
+        return d>0 && d<6 && m>=570 && m<960;
+      } catch(e) { return false; }
+    })();
 
     if(!isLive) {
-      // Pre-market or no data: show yesterday + pace context
+      // Pre-market with no data at all: show prior session stats from sd
       const vol = day0.volume || 0;
       const volPct = vol&&avg30 ? vol/avg30*100 : 0;
       const vc = volPct>130?'#ff8800':volPct>100?'#00ff88':'#ffcc00';
@@ -1569,22 +1582,38 @@ function renderDeskSession(md,sd){
         ].map(i=>fmtRow(i.l,i.v)).join('')}
         <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:8px;text-align:center;">LIVE DATA AT MARKET OPEN</div>`;
     } else {
-      // LIVE — full intraday breakdown
+      // LIVE or frozen final — full intraday breakdown
       const vol = lv.volume||0;
       const volPct = vol&&avg30 ? vol/avg30*100 : 0;
       const vc = volPct>130?'#ff8800':volPct>100?'#00ff88':volPct>70?'#ffcc00':'var(--text3)';
       const buckets = lv.buckets||[];
       const maxBkt = Math.max(...buckets.map(b=>b.volume),1);
-      // Current CT time for highlighting active bucket
+      // Only highlight active bucket when market is open
       const nowCT = new Date(new Date().toLocaleString('en-US', {timeZone:'America/Chicago'}));
-      const nowMins = nowCT.getHours()*60+nowCT.getMinutes();
+      const nowMins = _volMarketOpen ? nowCT.getHours()*60+nowCT.getMinutes() : -1;
 
-      // Pace projection: extrapolate total from current pace
-      const elapsed = Math.max(lv.bars||1, 1);
-      const totalMins = 6.5*60; // full session
-      const paceTotal = Math.round(vol / elapsed * totalMins);
-      const pacePct = paceTotal/avg30*100;
-      const paceColor = pacePct>130?'#ff8800':pacePct>100?'#00ff88':'#ffcc00';
+      // Pace projection only makes sense during live session
+      const paceSection = _volMarketOpen && !lv._fromClosing ? (() => {
+        const elapsed = Math.max(lv.bars||1, 1);
+        const totalMins = 6.5*60;
+        const paceTotal = Math.round(vol / elapsed * totalMins);
+        const pacePct = paceTotal/avg30*100;
+        const paceColor = pacePct>130?'#ff8800':pacePct>100?'#00ff88':'#ffcc00';
+        return `<div style="text-align:right;">
+            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">PACE →</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${paceColor};">${fmtK(paceTotal)}</div>
+            <div style="font-size:9px;color:${paceColor};">${fmt(pacePct,0)}% proj</div>
+          </div>`;
+      })() : '';
+
+      // Status label
+      const isFinal = lv._fromClosing || lv._fromCache;
+      const statusLabel = lv._fromClosing
+        ? `◎ FINAL · ${lv._tradingDate||''} · ${lv.bars} bars`
+        : lv._fromCache
+          ? `◎ FINAL · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC`
+          : `● LIVE · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC`;
+      const statusColor = isFinal ? 'var(--text3)' : 'var(--cyan)';
 
       volSumEl.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
@@ -1592,11 +1621,7 @@ function renderDeskSession(md,sd){
             <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${vc};">${fmtK(vol)}</div>
             <div style="font-size:10px;color:${vc};">${fmt(volPct,1)}% of 30d avg</div>
           </div>
-          <div style="text-align:right;">
-            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">PACE →</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${paceColor};">${fmtK(paceTotal)}</div>
-            <div style="font-size:9px;color:${paceColor};">${fmt(pacePct,0)}% proj</div>
-          </div>
+          ${paceSection}
         </div>
         <div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:10px;">
           <div style="width:${Math.min(volPct,100).toFixed(1)}%;height:100%;background:${vc};border-radius:3px;transition:width 1s;"></div>
@@ -1632,8 +1657,8 @@ function renderDeskSession(md,sd){
           {l:'HVN Price', v:lv.hvn_price ? '$'+fmt(lv.hvn_price,2)+'  '+fmtK(lv.hvn_volume||0) : '—'},
         ].map(i=>fmtRow(i.l,i.v)).join('')}
 
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-top:6px;text-align:right;">
-          ${lv._fromCache ? '◎ FINAL' : '● LIVE'} · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:${statusColor};margin-top:6px;text-align:right;">
+          ${statusLabel}
         </div>`;
     }
   }
@@ -1892,7 +1917,12 @@ function renderDeskSessionVol() {
     const cached = loadIntradayCache();
     if (cached?.buckets?.length) lv = { ...cached, _fromCache: true };
   }
-  const isLive = lv?.available || lv?._fromCache;
+  // Third fallback: closing snapshot — persists overnight and through weekend
+  if (!lv?.available && !lv?._fromCache && typeof loadClosingSnapshot === 'function') {
+    const snap = loadClosingSnapshot();
+    if (snap?.buckets?.length) lv = snap;
+  }
+  const isLive = lv?.available || lv?._fromCache || lv?._fromClosing;
 
   if (!isLive || !lv.buckets || !lv.buckets.length) {
     el.innerHTML = `
@@ -1905,21 +1935,28 @@ function renderDeskSessionVol() {
     return;
   }
 
+  // Determine if market is currently open — only highlight active bucket when live
+  const _svMarketOpen = (() => {
+    try {
+      const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const d = et.getDay(), m = et.getHours()*60+et.getMinutes();
+      return d>0 && d<6 && m>=570 && m<960;
+    } catch(e) { return false; }
+  })();
+
   const sessionRange = lv.high && lv.low ? lv.high - lv.low : null;
   const maxRange = Math.max(...lv.buckets.map(b => b.range || 0), 0.01);
 
-  // CT time for highlighting active bucket
+  // Only compute active-bucket time when market is open
   const nowCT = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Chicago'}));
-  const nowMins = nowCT.getHours() * 60 + nowCT.getMinutes();
+  const nowMins = _svMarketOpen ? nowCT.getHours() * 60 + nowCT.getMinutes() : -1;
 
-  // Color by range size relative to session max
   const rangeColor = r => {
     if (!r || !maxRange) return 'var(--text3)';
     const pct = r / maxRange;
     return pct > 0.7 ? '#ff3355' : pct > 0.4 ? '#ff8800' : pct > 0.2 ? '#ffcc00' : '#00ff88';
   };
 
-  // Parse bucket label to get start/end mins (labels like "9:30-10:30")
   const parseBucketMins = label => {
     const parts = label.split('-');
     const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+(m||0); };
@@ -1941,9 +1978,16 @@ function renderDeskSessionVol() {
     </div>`;
   }).join('');
 
-  // Highest-range bucket
   const maxBucket = lv.buckets.reduce((best, b) => (b.range || 0) > (best.range || 0) ? b : best, lv.buckets[0]);
   const quietBucket = lv.buckets.filter(b => b.range > 0).reduce((best, b) => (b.range || 99) < (best.range || 99) ? b : best, lv.buckets[0]);
+
+  const isFinal = lv._fromClosing || lv._fromCache;
+  const statusLabel = lv._fromClosing
+    ? `◎ FINAL · ${lv._tradingDate||''} · ${lv.bars} bars`
+    : lv._fromCache
+      ? `◎ FINAL · ${lv.bars} bars`
+      : `● LIVE · ${lv.bars} bars`;
+  const statusColor = isFinal ? 'var(--text3)' : 'var(--cyan)';
 
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
@@ -1964,8 +2008,8 @@ function renderDeskSessionVol() {
     <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-top:6px;">
       QUIET: ${quietBucket.label} · $${(quietBucket.range||0).toFixed(2)}
     </div>
-    <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-top:3px;text-align:right;">
-      ● LIVE · ${lv.bars} bars
+    <div style="font-family:'Orbitron',monospace;font-size:7px;color:${statusColor};margin-top:3px;text-align:right;">
+      ${statusLabel}
     </div>`;
 }
 
