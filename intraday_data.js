@@ -474,6 +474,68 @@
   +'</div>'
 +'</div>'
 
+// ── Session Volatility by 5-Min Slot ──────────────────────────────────────
++(function(){
+  // Build a score map: time → { upCount, upAvg, dnCount, dnAvg }
+  const upMap = {}, dnMap = {};
+  raw.forEach(d => {
+    if (d.best_5m_time && d.best_5m_pct != null) {
+      const t = d.best_5m_time;
+      if (!upMap[t]) upMap[t] = { count: 0, sum: 0 };
+      upMap[t].count++;
+      upMap[t].sum += Math.abs(d.best_5m_pct);
+    }
+    if (d.worst_5m_time && d.worst_5m_pct != null) {
+      const t = d.worst_5m_time;
+      if (!dnMap[t]) dnMap[t] = { count: 0, sum: 0 };
+      dnMap[t].count++;
+      dnMap[t].sum += Math.abs(d.worst_5m_pct);
+    }
+  });
+
+  // Score = freq × avg magnitude; take top 5
+  const score = obj => obj.count * (obj.sum / obj.count);
+  const topUp = Object.entries(upMap).sort((a,b) => score(b[1])-score(a[1])).slice(0,5);
+  const topDn = Object.entries(dnMap).sort((a,b) => score(b[1])-score(a[1])).slice(0,5);
+  if (!topUp.length && !topDn.length) return '';
+
+  const maxUpScore = topUp.length ? score(topUp[0][1]) : 1;
+  const maxDnScore = topDn.length ? score(topDn[0][1]) : 1;
+
+  const mkRow = (t, obj, maxScore, upOrDn) => {
+    const avg = obj.sum / obj.count;
+    const s = score(obj);
+    const barW = Math.round(s / maxScore * 160);
+    const col = upOrDn === 'up' ? 'var(--green)' : 'var(--red)';
+    const sign = upOrDn === 'up' ? '+' : '-';
+    const pctDol = spy ? ' · $' + (spy * avg / 100).toFixed(2) : '';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">'
+      + '<span style="font-family:\'Share Tech Mono\',monospace;font-size:11px;color:var(--text2);width:58px;flex-shrink:0;">' + ct(t) + '</span>'
+      + '<div style="flex:1;height:10px;background:var(--bg3);border-radius:2px;overflow:hidden;">'
+      +   '<div style="width:' + barW + 'px;height:100%;background:' + col + ';border-radius:2px;opacity:0.8;"></div>'
+      + '</div>'
+      + '<span style="font-family:\'Share Tech Mono\',monospace;font-size:10px;color:' + col + ';width:52px;text-align:right;">' + sign + avg.toFixed(3) + '%</span>'
+      + '<span style="font-size:9px;color:var(--text3);width:52px;text-align:right;">' + obj.count + 'd' + pctDol + '</span>'
+      + '</div>';
+  };
+
+  const upRows = topUp.map(([t, obj]) => mkRow(t, obj, maxUpScore, 'up')).join('');
+  const dnRows = topDn.map(([t, obj]) => mkRow(t, obj, maxDnScore, 'dn')).join('');
+
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">'
+    + '<div class="stat-box" style="padding:14px;">'
+      + '<div class="es-section" style="margin-bottom:4px;">⚡ TOP 5-MIN UP SLOTS (CT)</div>'
+      + '<div style="font-size:10px;color:var(--text3);margin-bottom:10px;">Ranked by frequency × avg magnitude</div>'
+      + upRows
+    + '</div>'
+    + '<div class="stat-box" style="padding:14px;">'
+      + '<div class="es-section" style="margin-bottom:4px;">⚡ TOP 5-MIN DOWN SLOTS (CT)</div>'
+      + '<div style="font-size:10px;color:var(--text3);margin-bottom:10px;">Ranked by frequency × avg magnitude</div>'
+      + dnRows
+    + '</div>'
+    + '</div>';
+})()
+
 // ── Time of Day Stats ──────────────────────────────────────────────────────
 +(typeof TOD_STATS !== 'undefined' ? `
 <div class="stat-box" style="padding:14px;margin-bottom:12px;">
