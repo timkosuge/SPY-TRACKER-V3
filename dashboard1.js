@@ -7095,6 +7095,91 @@ function renderTimeOfDay() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Shared canvas line chart for session vol panels
+// series = [{label, color, data:[], n}], xLabels = CT timestamp strings
+// ─────────────────────────────────────────────────────────────────────────────
+function _drawSvLineChart(canvasId, series, xLabels, dataMax) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const wrap = canvas.parentElement;
+  const W = Math.max(wrap ? wrap.clientWidth - 2 : 800, 400);
+  const H = 240;
+  canvas.width  = W;
+  canvas.height = H;
+  canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = { l:52, r:16, t:16, b:32 };
+  const cW  = W - pad.l - pad.r;
+  const cH  = H - pad.t - pad.b;
+  const n   = series[0]?.data.length || 0;
+  if (!n) return;
+
+  const hi = dataMax * 1.05;
+  const toX = i => pad.l + (i / (n - 1)) * cW;
+  const toY = v => pad.t + cH - (v / hi) * cH;
+
+  // Grid
+  for (let g = 0; g <= 4; g++) {
+    const gv = (hi / 4) * g;
+    const gy = toY(gv);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + cW, gy); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#505070';
+    ctx.font = '9px "Share Tech Mono",monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('$' + gv.toFixed(3), pad.l - 4, gy + 3);
+  }
+
+  // Hour markers on x axis
+  xLabels.forEach((lbl, i) => {
+    if (!lbl.endsWith(':00')) return;
+    const x   = toX(i);
+    const ct  = lbl;
+    const h   = parseInt(ct);
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12  = h > 12 ? h - 12 : h;
+    const disp = h12 + ampm;
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1; ctx.setLineDash([2, 4]);
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + cH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#404060';
+    ctx.font = '9px "Share Tech Mono",monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(disp, x, pad.t + cH + 18);
+  });
+
+  // Lines
+  series.forEach(s => {
+    if (!s.data.length) return;
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth   = 2;
+    ctx.lineJoin    = 'round';
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    s.data.forEach((v, i) => {
+      const x = toX(i), y = toY(v);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // End-of-line dot
+    const lastX = toX(s.data.length - 1);
+    const lastY = toY(s.data[s.data.length - 1]);
+    ctx.fillStyle = s.color;
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SESSION VOLATILITY STATS — full analysis tab
 // ─────────────────────────────────────────────────────────────────────────────
 let _svStLookback = 'all';
@@ -7222,7 +7307,7 @@ function renderSessionVolStats() {
       <span style="display:inline-block;width:10px;height:10px;background:#00cc88;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Quiet
     </div>`;
 
-  // ── PANEL 2: DOW overlay — all 5 days on one chart ────────────────────────
+  // ── PANEL 2: DOW overlay — canvas line chart ────────────────────────────
   const DAYS = ['Mon','Tue','Wed','Thu','Fri'];
   const DAY_COLORS = { Mon:'#00ccff', Tue:'#00ff88', Wed:'#ffcc00', Thu:'#ff8800', Fri:'#ff3355' };
   const dayProfiles = {};
@@ -7233,37 +7318,15 @@ function renderSessionVolStats() {
   const allDayAvgs = DAYS.flatMap(d => dayProfiles[d].map(b=>b.avg));
   const dayMax = Math.max(...allDayAvgs, 0.01);
 
-  const chartH2 = 160, chartW2_pct = 100;
-  // Build SVG line chart for day comparison
-  const svgLines = DAYS.map(d => {
-    const dp = dayProfiles[d];
-    if (!dp.length) return '';
-    const pts = dp.map((b, i) => {
-      const x = (i / (dp.length - 1)) * 100;
-      const y = chartH2 - (b.avg / dayMax) * (chartH2 - 4) - 2;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-    const nD = dp[0]?.n ? Math.round(dp[0].n/5) : '?';
-    return `<polyline points="${pts}" fill="none" stroke="${DAY_COLORS[d]}" stroke-width="1.5" stroke-linejoin="round" opacity="0.85" style="cursor:default;" title="${d} · ~${nD} sessions"/>`;
-  }).join('');
-
-  // Hour labels for x axis (approximate positions)
-  const hourLabels = profile.filter(b=>b.ts.endsWith(':00')).map((b,i,arr) => {
-    const idx = profile.findIndex(p=>p.ts===b.ts);
-    const x   = (idx/(profile.length-1))*100;
-    const lbl = etToCT(b.ts).replace(':00','')+(parseInt(etToCT(b.ts))>=12?'pm':'am');
-    return `<text x="${x.toFixed(1)}%" y="100%" font-size="8" fill="#404060" text-anchor="middle" font-family="Share Tech Mono,monospace">${lbl}</text>`;
-  }).join('');
-
   const dowNotes = DAYS.map(d => {
     const dp  = dayProfiles[d];
     if (!dp.length) return '';
     const nD  = dp[0]?.n ? Math.round(dp[0].n/5) : '?';
-    const avg = dp.reduce((a,b)=>a+b.avg,0)/dp.length;
+    const avgV = dp.reduce((a,b)=>a+b.avg,0)/dp.length;
     return `<div style="display:flex;align-items:center;gap:6px;font-size:10px;">
-      <div style="width:18px;height:3px;background:${DAY_COLORS[d]};border-radius:2px;"></div>
+      <div style="width:22px;height:3px;background:${DAY_COLORS[d]};border-radius:2px;"></div>
       <span style="color:${DAY_COLORS[d]};font-family:'Orbitron',monospace;font-size:8px;">${d.toUpperCase()}</span>
-      <span style="color:var(--text3);">avg $${avg.toFixed(3)} · ~${nD} sessions</span>
+      <span style="color:var(--text3);">avg $${avgV.toFixed(3)} · ~${nD} sessions</span>
     </div>`;
   }).join('');
 
@@ -7273,11 +7336,8 @@ function renderSessionVolStats() {
     <strong>Wednesday middays</strong> can be spiky around Fed meeting releases. <strong>Monday openings</strong> tend to be quieter than the rest of the week.
     The shape of the curve is consistent across days — open spike, mid-day trough, close surge — but the magnitude differs.
     A day-of-week with a persistently higher line is structurally more volatile throughout the session.`) +
-    `<svg viewBox="0 0 100 ${chartH2+16}" style="width:100%;height:${chartH2+20}px;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-      ${svgLines}
-      ${hourLabels}
-    </svg>
-    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">${dowNotes}</div>`;
+    `<canvas id="svDowCanvas" style="width:100%;display:block;border-radius:4px;"></canvas>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;">${dowNotes}</div>`;
 
   // ── PANEL 3: Volatility decay curve ──────────────────────────────────────
   const decayCurve = profile.map((b,i) => {
@@ -7295,7 +7355,6 @@ function renderSessionVolStats() {
     </div>`;
   }).join('');
 
-  // Find 50% decay point
   const halfOpenIdx = profile.findIndex(b => b.avg <= openBar.avg * 0.5);
   const halfOpenTs  = halfOpenIdx >= 0 ? etToCT(profile[halfOpenIdx].ts)+' CT' : '—';
 
@@ -7308,7 +7367,7 @@ function renderSessionVolStats() {
     `<div style="display:flex;align-items:flex-end;gap:1px;padding:18px 0 4px;overflow:hidden;">${decayCurve}</div>
     <div style="font-size:10px;color:var(--text3);margin-top:6px;">100% = opening bar range ($${openBar.avg.toFixed(3)}) · vol reaches 50% of open around ${halfOpenTs}</div>`;
 
-  // ── PANEL 4: Lookback comparison ──────────────────────────────────────────
+  // ── PANEL 4: Lookback comparison — canvas line chart ─────────────────────
   const lbKeys = ['all','12m','year'];
   const lbLabels = { all:'ALL HISTORY', '12m':'12 MONTHS', year:String(curYear)+' YTD' };
   const lbColors = { all:'#8888ff', '12m':'#00ccff', year:'#ff8800' };
@@ -7319,26 +7378,15 @@ function renderSessionVolStats() {
   });
   const lbMax = Math.max(...lbKeys.flatMap(k => lbProfiles[k].map(b=>b.avg)), 0.01);
 
-  const lbSvgLines = lbKeys.map(k => {
-    const dp = lbProfiles[k];
-    if (!dp.length) return '';
-    const pts = dp.map((b,i) => {
-      const x = (i/(dp.length-1))*100;
-      const y = 95 - (b.avg/lbMax)*91;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-    return `<polyline points="${pts}" fill="none" stroke="${lbColors[k]}" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>`;
-  }).join('');
-
   const lbNotes = lbKeys.map(k => {
     const dp = lbProfiles[k];
     if (!dp.length) return '';
-    const avg = dp.length ? dp.reduce((a,b)=>a+b.avg,0)/dp.length : 0;
-    const nD  = dp[0]?.n ? Math.round(dp[0].n/5) : '?';
+    const avgV = dp.length ? dp.reduce((a,b)=>a+b.avg,0)/dp.length : 0;
+    const nD   = dp[0]?.n ? Math.round(dp[0].n/5) : '?';
     return `<div style="display:flex;align-items:center;gap:6px;font-size:10px;">
-      <div style="width:18px;height:3px;background:${lbColors[k]};border-radius:2px;"></div>
+      <div style="width:22px;height:3px;background:${lbColors[k]};border-radius:2px;"></div>
       <span style="color:${lbColors[k]};font-family:'Orbitron',monospace;font-size:8px;">${lbLabels[k]}</span>
-      <span style="color:var(--text3);">avg $${avg.toFixed(3)} · ~${nD} sessions</span>
+      <span style="color:var(--text3);">avg $${avgV.toFixed(3)} · ~${nD} sessions</span>
     </div>`;
   }).join('');
 
@@ -7348,11 +7396,8 @@ function renderSessionVolStats() {
     <br><br>This matters for trade sizing and stop placement: if you calibrate stops based on long-term averages during a high-vol regime, you'll get stopped out too often.
     Conversely, stops sized for a high-vol period will be too wide during quiet stretches.
     The gap between ${curYear} (orange) and All History (purple) is the "regime premium" — how much more (or less) volatile today's market is vs history.`) +
-    `<svg viewBox="0 0 100 100" style="width:100%;height:200px;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-      ${lbSvgLines}
-      ${hourLabels}
-    </svg>
-    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">${lbNotes}</div>`;
+    `<canvas id="svLbCanvas" style="width:100%;display:block;border-radius:4px;"></canvas>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;">${lbNotes}</div>`;
 
   // ── PANEL 5: Summary stats table ──────────────────────────────────────────
   // Compute time blocks
@@ -7421,6 +7466,21 @@ function renderSessionVolStats() {
     ${section('⬡ REGIME COMPARISON — IS TODAY MORE VOLATILE THAN HISTORY?','#8855ff',panel4)}
     ${section('⬡ SESSION BLOCK SUMMARY — AVERAGE VOLATILITY BY PHASE','#00cc88',panel5)}
   </div>`;
+
+  // Draw canvas charts now that DOM elements exist
+  setTimeout(() => {
+    _drawSvLineChart('svDowCanvas', DAYS.map(d => ({
+      label: d, color: DAY_COLORS[d],
+      data: dayProfiles[d].map(b=>b.avg),
+      n: dayProfiles[d][0]?.n ? Math.round(dayProfiles[d][0].n/5) : 0
+    })), profile.map(b=>etToCT(b.ts)), dayMax);
+
+    _drawSvLineChart('svLbCanvas', lbKeys.filter(k=>lbProfiles[k].length).map(k => ({
+      label: lbLabels[k], color: lbColors[k],
+      data: lbProfiles[k].map(b=>b.avg),
+      n: lbProfiles[k][0]?.n ? Math.round(lbProfiles[k][0].n/5) : 0
+    })), profile.map(b=>etToCT(b.ts)), lbMax);
+  }, 20);
 }
 
 // ═══════════════════════════════════════════════════════
