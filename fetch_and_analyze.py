@@ -1631,8 +1631,7 @@ def export_intraday_vol_stats(conn):
         else: ph_by_q[q]['none'] += 1
     output['power_hour_by_q'] = {labels[q]: ph_by_q[q] for q in range(5)}
 
-    js = f"const INTRADAY_VOL_STATS = {json.dumps(output, separators=(',', ':'))};
-"
+    js = "const INTRADAY_VOL_STATS = " + json.dumps(output, separators=(',', ':')) + ";\n"
     with open('intraday_vol_stats.js', 'w') as f:
         f.write(js)
     print(f"  intraday_vol_stats.js: {len(all_dates)} sessions, {len(q_stats)} quintiles")
@@ -1715,8 +1714,7 @@ def export_intraday_vol_profile(conn):
         output[f'12m_{dow_name}']  = compute_profile(filter_dates=dates_12m,  filter_dow=dow_idx)
         output[f'year_{dow_name}'] = compute_profile(filter_dates=dates_year, filter_dow=dow_idx)
 
-    js = f"const INTRADAY_VOL_PROFILE = {json.dumps(output, separators=(',', ':'))};
-"
+    js = "const INTRADAY_VOL_PROFILE = " + json.dumps(output, separators=(',', ':')) + ";\n"
     with open('intraday_vol_profile.js', 'w') as f:
         f.write(js)
     print(f"  intraday_vol_profile.js: {len(all_dates)} sessions, {len(output['all'])} buckets")
@@ -1801,8 +1799,7 @@ def export_session_vol_profile(conn):
         output[f'12m_{dow_name}']  = compute_profile(filter_dates=dates_12m,  filter_dow=dow_idx)
         output[f'year_{dow_name}'] = compute_profile(filter_dates=dates_year, filter_dow=dow_idx)
 
-    js = f"const SESSION_VOL_PROFILE = {json.dumps(output, separators=(',', ':'))};
-"
+    js = "const SESSION_VOL_PROFILE = " + json.dumps(output, separators=(',', ':')) + ";\n"
     with open('session_vol_profile.js', 'w') as f:
         f.write(js)
     print(f"  session_vol_profile.js: {len(all_dates)} sessions, {len(output['all'])} buckets")
