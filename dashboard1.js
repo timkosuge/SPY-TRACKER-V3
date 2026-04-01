@@ -66,7 +66,7 @@ function _switchPanelOnly(id) {
   if(id==='bonds' && _md) { try { renderBonds(_md); } catch(e){} }
   if(id==='sentiment' && _md) { try { renderSentiment(_md); } catch(e){} }
   if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
-  if(id==='intraday-volume') { setTimeout(renderIntradayVolProfile, 50); }
+  if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); }, 50); }
 }
 
 function switchTab(id){
@@ -5860,4 +5860,154 @@ function renderIntradayVolProfile() {
         <span style="color:var(--text3);margin-left:8px;">First &amp; last 15 min excluded · 8:45–14:45 CT</span>
       </div>
     </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTRADAY VOLUME STATS — correlations, quintile analysis, cumulative curve
+// ─────────────────────────────────────────────────────────────────────────────
+function renderIntradayVolStats() {
+  const el = document.getElementById('intradayVolContent');
+  if (!el) return;
+  if (typeof INTRADAY_VOL_STATS === 'undefined' || typeof INTRADAY_VOL_PROFILE === 'undefined') return;
+
+  const S = INTRADAY_VOL_STATS;
+  const qs = S.quintile_stats;
+  const fmtM = v => v >= 1000 ? (v/1000).toFixed(1)+'B' : v.toFixed(0)+'M';
+  const fmtPct = v => v.toFixed(1)+'%';
+  const hours = [8,9,10,11,12,13,14];
+  const hrLbl = h => h < 12 ? h+'am' : (h===12?'12pm':(h-12)+'pm');
+
+  // ── SECTION 1: Volume Quintile Summary Cards ──────────────────────────────
+  const quintileCards = qs.map(q => {
+    const phData = S.power_hour_by_q[q.label] || {up:0,down:0,none:0};
+    const phTotal = phData.up + phData.down + phData.none;
+    const phUpPct = phTotal ? Math.round(phData.up/phTotal*100) : 0;
+    const phDnPct = phTotal ? Math.round(phData.down/phTotal*100) : 0;
+    return `<div style="background:var(--bg2);border:1px solid var(--border);border-top:3px solid ${q.color};border-radius:4px;padding:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:${q.color};letter-spacing:1px;margin-bottom:6px;">${q.label.toUpperCase()} VOL</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);margin-bottom:8px;">${fmtM(q.vol_lo)}–${fmtM(q.vol_hi)} · ${q.n} days</div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-size:10px;color:var(--text3);">Avg range</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${q.color};">${fmtPct(q.avg_range)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-size:10px;color:var(--text3);">Median range</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">${fmtPct(q.med_range)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-size:10px;color:var(--text3);">Gap fill rate</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${q.gap_fill_pct>45?'#00ff88':q.gap_fill_pct>35?'#ffcc00':'#ff8800'};">${q.gap_fill_pct}% <span style="font-size:9px;color:var(--text3);">(${q.gap_n} gaps)</span></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="font-size:10px;color:var(--text3);">Power hour</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;">
+          <span style="color:#00ff88;">▲${phUpPct}%</span> <span style="color:#ff3355;">▼${phDnPct}%</span>
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // ── SECTION 2: HOD/LOD Timing Heatmap by Quintile ──────────────────────────
+  function hodLodGrid(which) {
+    const rows = qs.map(q => {
+      const dist = which === 'hod' ? q.hod_by_hour : q.lod_by_hour;
+      const total = Object.values(dist).reduce((a,b)=>a+b,0);
+      const cells = hours.map(h => {
+        const cnt = dist[String(h)] || 0;
+        const pct = total ? cnt/total : 0;
+        const intensity = Math.round(pct * 100);
+        const bg = which === 'hod'
+          ? `rgba(0,255,136,${(pct*2).toFixed(2)})`
+          : `rgba(255,51,85,${(pct*2).toFixed(2)})`;
+        return `<td style="text-align:center;padding:4px 2px;background:${bg};font-family:'Share Tech Mono',monospace;font-size:10px;color:${intensity>25?'#fff':'var(--text3)'};border-radius:2px;" title="${hrLbl(h)} CT: ${cnt} days (${Math.round(pct*100)}%)">${intensity>10?Math.round(pct*100)+'%':''}</td>`;
+      }).join('');
+      return `<tr>
+        <td style="font-family:'Orbitron',monospace;font-size:8px;color:${q.color};padding:4px 8px 4px 0;white-space:nowrap;">${q.label.toUpperCase()}</td>
+        ${cells}
+      </tr>`;
+    }).join('');
+    const headers = hours.map(h => `<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:2px 4px;text-align:center;">${hrLbl(h)}</th>`).join('');
+    return `<table style="width:100%;border-collapse:separate;border-spacing:2px;">
+      <thead><tr><th></th>${headers}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  // ── SECTION 3: Cumulative Volume Curve ────────────────────────────────────
+  const curve = S.cum_curve || [];
+  const midIdx = curve.findIndex(b => b.avg_cum_pct >= 50);
+  const midTs = midIdx >= 0 ? curve[midIdx].ts : null;
+  function etToCT(ts) { const [h,m]=ts.split(':').map(Number); return `${h-1}:${String(m).padStart(2,'0')}`; }
+
+  const curveMaxPct = 100;
+  const curveBars = curve.map(b => {
+    const ct = etToCT(b.ts);
+    const isHour = b.ts.endsWith(':00');
+    const isMid = midTs && b.ts === midTs;
+    const barH = Math.round(b.avg_cum_pct);
+    const c2 = b.avg_cum_pct < 25 ? '#005577' : b.avg_cum_pct < 50 ? '#0088aa' : b.avg_cum_pct < 75 ? '#ffcc00' : '#ff8800';
+    const h = parseInt(ct.split(':')[0]);
+    const label = isHour ? (h<12?h+'am':(h===12?'12pm':(h-12)+'pm')) : '';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;position:relative;"
+               title="${ct} CT · ${b.avg_cum_pct}% of daily vol done on avg">
+      ${isMid?`<div style="position:absolute;top:-14px;font-family:'Orbitron',monospace;font-size:7px;color:#ffcc00;">50%</div>`:''}
+      <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:60px;background:var(--bg3);border-radius:2px 2px 0 0;overflow:hidden;${isMid?'border:1px solid #ffcc00;':''}">
+        <div style="width:100%;background:${c2};opacity:0.8;height:${barH}%;border-radius:2px 2px 0 0;"></div>
+      </div>
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:${isHour?'var(--text2)':'transparent'};white-space:nowrap;">${label||'·'}</div>
+    </div>`;
+  }).join('');
+
+  // ── SECTION 4: Gap type vs volume ─────────────────────────────────────────
+  const gv = S.gap_vol || {};
+  const gapTypes = [
+    {k:'GAP_DOWN', lbl:'GAP DOWN', c:'#ff3355'},
+    {k:'FLAT',     lbl:'FLAT',     c:'#ffcc00'},
+    {k:'GAP_UP',   lbl:'GAP UP',   c:'#00ff88'},
+  ];
+  const maxGapVol = Math.max(...gapTypes.map(g => gv[g.k]?.avg||0));
+  const gapBars = gapTypes.map(g => {
+    const d = gv[g.k]; if (!d) return '';
+    const w = Math.round(d.avg/maxGapVol*100);
+    return `<div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <span style="font-family:'Orbitron',monospace;font-size:9px;color:${g.c};">${g.lbl}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${g.c};">${fmtM(d.avg)}M avg <span style="font-size:9px;color:var(--text3);">(${d.n} days)</span></span>
+      </div>
+      <div style="height:10px;background:var(--bg3);border-radius:3px;overflow:hidden;">
+        <div style="width:${w}%;height:100%;background:${g.c};opacity:0.7;border-radius:3px;"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const section = (title, content) => `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:14px;margin-bottom:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;">${title}</div>
+      ${content}
+    </div>`;
+
+  // Append stats below existing vol profile content
+  const statsDiv = document.getElementById('intradayVolStats');
+  if (!statsDiv) return;
+
+  statsDiv.innerHTML =
+    section('⬡ VOLUME QUINTILE ANALYSIS',
+      `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">${quintileCards}</div>
+       <div style="font-size:10px;color:var(--text3);margin-top:8px;">Very High vol days have 3× the average range vs Very Low days. Gap fill rate peaks on highest volume days (47%).</div>`) +
+
+    section('⬡ HOD TIMING BY VOLUME LEVEL (CT)',
+      `<div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Which CT hour the day's High is set — darker = more frequent. High-vol days: HOD tends to print early (8am CT open). Low-vol days: HOD often drifts to afternoon.</div>
+       ${hodLodGrid('hod')}`) +
+
+    section('⬡ LOD TIMING BY VOLUME LEVEL (CT)',
+      `<div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Which CT hour the day's Low is set. LOD at open (8am CT) is most common across all volume levels — the opening gap exhaustion.</div>
+       ${hodLodGrid('lod')}`) +
+
+    section('⬡ CUMULATIVE VOLUME CURVE',
+      `<div style="font-size:10px;color:var(--text3);margin-bottom:10px;">Avg % of daily volume completed by each 5-min bucket. Yellow marker = 50% done. On a typical day, half of all volume is traded by ${midTs ? etToCT(midTs)+' CT' : '—'}.</div>
+       <div style="display:flex;align-items:flex-end;gap:1px;padding:18px 0 4px;">${curveBars}</div>`) +
+
+    section('⬡ VOLUME BY GAP TYPE',
+      `<div style="font-size:10px;color:var(--text3);margin-bottom:10px;">Gap Down days see significantly higher volume — fear + forced selling. Flat open days are the lightest. Correlates with the 0.66 vol/range correlation.</div>
+       ${gapBars}`);
 }
