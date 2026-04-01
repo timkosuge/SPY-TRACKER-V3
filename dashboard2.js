@@ -805,31 +805,9 @@ function renderWEM(md){
   const q=md.quotes||{}, spy=q['SPY']||{};
   const cur=wems.find(w=>!w.week_close)||wems[0];
 
-  // Bootstrap frozen price on fresh page load before falling back to mid.
-  // spyintraday returns available:true after close with the real closing price,
-  // so md.quotes.SPY.price should already be set — but if not (e.g. Yahoo down),
-  // check the intraday and closing snapshot caches so we never show z=0 / mid.
-  if (!_wemFrozenPrice || _wemFrozenPrice <= 0) {
-    if (spy.price && spy.price > 0) {
-      _wemFrozenPrice = spy.price;
-    } else {
-      try {
-        const _ic = typeof loadIntradayCache === 'function' ? loadIntradayCache() : null;
-        if (_ic && _ic.close > 0) _wemFrozenPrice = _ic.close;
-      } catch(e) {}
-      if (!_wemFrozenPrice) {
-        try {
-          const _cs = typeof loadClosingSnapshot === 'function' ? loadClosingSnapshot() : null;
-          if (_cs && _cs.close > 0) _wemFrozenPrice = _cs.close;
-        } catch(e) {}
-      }
-    }
-  }
-
   if(cur){
     const lo=cur.wem_low, hi=cur.wem_high, mid=cur.wem_mid;
-    if(spy.price && spy.price > 0) _wemFrozenPrice = spy.price;
-    const price=_wemFrozenPrice||spy.price||mid||0;
+    const price=spy.price||mid||0;
     const halfRange=cur.wem_range/2;
 
     $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}`;
@@ -853,6 +831,7 @@ function renderWEM(md){
 
     const pct = hi>lo ? Math.min(Math.max((price-lo)/(hi-lo)*100,2),98) : 50;
     $('wemTabNeedle').style.left = pct+'%';
+    const nlbl = $('wemTabNeedleLabel'); if(nlbl) nlbl.textContent = '$'+fmt(price,2);
     $('wemTabLowLbl').textContent  = '$'+fmt(lo,2);
     $('wemTabMidLbl').textContent  = 'MID $'+fmt(mid,2);
     $('wemTabHighLbl').textContent = '$'+fmt(hi,2);
@@ -912,17 +891,14 @@ function renderWEM(md){
   if(!dotEl && !zEl) return;
 
   const lo  = cur.wem_low, hi = cur.wem_high, mid = cur.wem_mid;
-  const price = _wemFrozenPrice || spy.price || mid || 0;
+  const price = spy.price || mid || 0;
   const halfRange = cur.wem_range / 2;
   const z = halfRange > 0 ? (price - mid) / halfRange : 0;
   const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
   const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
 
-  // Only include weeks that have fully ended — exclude the current open week even if
-  // week_close is populated (happens when Friday's close is used as the WEM anchor)
-  const _todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
   const histWeeks = wems
-    .filter(w => w.week_close != null && w.wem_low && w.wem_high && w.wem_mid && w.week_end < _todayStr)
+    .filter(w => w.week_close != null && w.wem_low && w.wem_high && w.wem_mid)
     .slice().reverse(); // oldest first
   const total = histWeeks.length;
   const aboveCount  = histWeeks.filter(w => w.week_close > w.wem_high).length;
@@ -1276,12 +1252,6 @@ function renderVolume(sd,md){
 
 let _md = null, _sd = null, _spyIntraday = null;
 
-// ── WEM price freeze ───────────────────────────────────────────────────────────
-// Stores the last known valid SPY price for WEM bell/thermometer display.
-// Updated any time we get a real price; never reset to null/0 so the display
-// holds its position at the close and through overnight/weekend.
-let _wemFrozenPrice = null;
-
 // Cache last good intraday snapshot so volume/session panels survive pre-market & overnight
 const INTRADAY_CACHE_KEY = 'spy_intraday_cache_v1';
 function saveIntradayCache(data) {
@@ -1299,36 +1269,6 @@ function loadIntradayCache() {
     if (cached.date === ctDate && cached.data) return cached.data;
   } catch(e) {}
   return null;
-}
-
-// ── Closing snapshot cache ─────────────────────────────────────────────────────
-// Written once per trading day at/after 4 PM ET. Persists across midnight and
-// through the next pre-market so both panels never go blank overnight/weekend.
-// Keyed to the trading date from the data itself, not the wall-clock date.
-const CLOSING_CACHE_KEY = 'spy_closing_snapshot_v1';
-function saveClosingSnapshot(data) {
-  try {
-    const tradingDate = data.asOf
-      ? data.asOf.slice(0, 10)
-      : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-    localStorage.setItem(CLOSING_CACHE_KEY, JSON.stringify({ tradingDate, data }));
-  } catch(e) {}
-}
-function loadClosingSnapshot() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(CLOSING_CACHE_KEY) || 'null');
-    if (cached && cached.data) return { ...cached.data, _tradingDate: cached.tradingDate, _fromClosing: true };
-  } catch(e) {}
-  return null;
-}
-function maybeWriteClosingSnapshot(data) {
-  if (!data || !data.available) return;
-  try {
-    const etNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    const isWeekend = etNow.getDay() === 0 || etNow.getDay() === 6;
-    const etMins = etNow.getHours() * 60 + etNow.getMinutes();
-    if (!isWeekend && etMins >= 16 * 60) saveClosingSnapshot(data);
-  } catch(e) {}
 }
 const chatHistory = [];
 
@@ -2259,40 +2199,16 @@ async function renderKeyEvents() {
   }
 
   function computeCpiNfpDates(monthsAhead = 9) {
-    // Known BLS release dates — algorithm is unreliable (BLS doesn't follow nth-weekday strictly).
-    // Update this list each year from https://www.bls.gov/schedule/news_release/cpi.htm
-    const KNOWN_CPI = [
-      '2026-04-10','2026-05-13','2026-06-11','2026-07-15',
-      '2026-08-12','2026-09-10','2026-10-13','2026-11-12','2026-12-10',
-    ];
-    const KNOWN_NFP = [
-      '2026-04-03','2026-05-08','2026-06-05','2026-07-02',
-      '2026-08-07','2026-09-04','2026-10-02','2026-11-06','2026-12-04',
-    ];
-
-    // Use ET date as today to avoid UTC-offset mismatches
-    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-    const result = [];
-
-    // Add all known dates that are today or future
-    KNOWN_CPI.forEach(d => {
-      if (d >= todayStr) result.push({ name: 'CPI REPORT', date: d, type: 'CPI', icon: '📊' });
-    });
-    KNOWN_NFP.forEach(d => {
-      if (d >= todayStr) result.push({ name: 'NONFARM PAYROLLS', date: d, type: 'NFP', icon: '💼' });
-    });
-
-    // Algorithmic fallback for any months beyond the known list
-    const lastKnownCPI = KNOWN_CPI[KNOWN_CPI.length - 1];
-    const lastKnownNFP = KNOWN_NFP[KNOWN_NFP.length - 1];
     const today = new Date(); today.setHours(0,0,0,0);
+    const todayStr = today.toISOString().slice(0,10);
+    const result = [];
     for (let offset = 0; offset <= monthsAhead; offset++) {
       const d = new Date(today); d.setMonth(d.getMonth() + offset);
       const y = d.getFullYear(), m = d.getMonth();
-      const cpi = nthWeekdayDate(y, m, 3, 2);
-      const nfp = nthWeekdayDate(y, m, 5, 1);
-      if (cpi && cpi >= todayStr && cpi > lastKnownCPI) result.push({ name: 'CPI REPORT',       date: cpi, type: 'CPI', icon: '📊' });
-      if (nfp && nfp >= todayStr && nfp > lastKnownNFP) result.push({ name: 'NONFARM PAYROLLS', date: nfp, type: 'NFP', icon: '💼' });
+      const cpi = nthWeekdayDate(y, m, 3, 2); // 2nd Wednesday
+      const nfp = nthWeekdayDate(y, m, 5, 1); // 1st Friday
+      if (cpi && cpi >= todayStr) result.push({ name: 'CPI REPORT',       date: cpi, type: 'CPI', icon: '📊' });
+      if (nfp && nfp >= todayStr) result.push({ name: 'NONFARM PAYROLLS', date: nfp, type: 'NFP', icon: '💼' });
     }
     return result;
   }
@@ -3414,11 +3330,7 @@ function scheduleLiveRefresh() {
 
 // Lightweight WEM price update — runs every tick without rebuilding heavy SVG charts
 function updateWEMPrice(price) {
-  // Update frozen price whenever we get a real value; use frozen as fallback after close
-  if (price && price > 0) _wemFrozenPrice = price;
-  const effectivePrice = _wemFrozenPrice || price;
-  if (!effectivePrice || !_md) return;
-  price = effectivePrice;
+  if (!price || !_md) return;
   const wems = _md.weekly_em || [];
   const cur  = wems.find(w => !w.week_close) || wems[0];
   if (!cur) return;
@@ -3430,6 +3342,7 @@ function updateWEMPrice(price) {
   const pct = hi > lo ? Math.min(Math.max((price - lo) / (hi - lo) * 100, 2), 98) : 50;
   const needle = $('wemTabNeedle');
   if (needle) needle.style.left = pct + '%';
+  const nlbl = $('wemTabNeedleLabel'); if(nlbl) nlbl.textContent = '$'+fmt(price,2);
 
   // Position text
   const posText = $('wemTabPosText');
@@ -3537,7 +3450,6 @@ async function refreshLiveData() {
     if (spyOHLC?.available) {
       _spyIntraday = spyOHLC;
       saveIntradayCache(spyOHLC);
-      maybeWriteClosingSnapshot(spyOHLC);
       _md.quotes = _md.quotes || {};
       _md.quotes['SPY'] = _md.quotes['SPY'] || {};
       // Override all SPY fields with live intraday data
@@ -3593,8 +3505,6 @@ async function refreshLiveData() {
       _lastLiveSuccess = new Date();
       setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT (SPY only)');
     } else {
-      // Market closed / all fetches failed — hold WEM visuals at last known close price
-      if (_wemFrozenPrice) updateWEMPrice(_wemFrozenPrice);
       setLiveStatus('offline', 'fetch failed');
     }
   } catch(e) {
@@ -3653,7 +3563,7 @@ async function loadData(){
     }
 
     _md=md; _sd=sd;
-    if (spyOHLC?.available) { _spyIntraday = spyOHLC; saveIntradayCache(spyOHLC); maybeWriteClosingSnapshot(spyOHLC); } // store live intraday for desk volume box
+    if (spyOHLC?.available) { _spyIntraday = spyOHLC; saveIntradayCache(spyOHLC); } // store live intraday for desk volume box
     const safeRender = (fn, ...args) => { try { fn(...args); } catch(e) { console.error(fn.name, e); } };
     safeRender(renderHub, md, sd);
     safeRender(renderDesk, md, sd);
