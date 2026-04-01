@@ -2259,16 +2259,40 @@ async function renderKeyEvents() {
   }
 
   function computeCpiNfpDates(monthsAhead = 9) {
-    const today = new Date(); today.setHours(0,0,0,0);
-    const todayStr = today.toISOString().slice(0,10);
+    // Known BLS release dates — algorithm is unreliable (BLS doesn't follow nth-weekday strictly).
+    // Update this list each year from https://www.bls.gov/schedule/news_release/cpi.htm
+    const KNOWN_CPI = [
+      '2026-04-10','2026-05-13','2026-06-11','2026-07-15',
+      '2026-08-12','2026-09-10','2026-10-13','2026-11-12','2026-12-10',
+    ];
+    const KNOWN_NFP = [
+      '2026-04-03','2026-05-08','2026-06-05','2026-07-02',
+      '2026-08-07','2026-09-04','2026-10-02','2026-11-06','2026-12-04',
+    ];
+
+    // Use ET date as today to avoid UTC-offset mismatches
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
     const result = [];
+
+    // Add all known dates that are today or future
+    KNOWN_CPI.forEach(d => {
+      if (d >= todayStr) result.push({ name: 'CPI REPORT', date: d, type: 'CPI', icon: '📊' });
+    });
+    KNOWN_NFP.forEach(d => {
+      if (d >= todayStr) result.push({ name: 'NONFARM PAYROLLS', date: d, type: 'NFP', icon: '💼' });
+    });
+
+    // Algorithmic fallback for any months beyond the known list
+    const lastKnownCPI = KNOWN_CPI[KNOWN_CPI.length - 1];
+    const lastKnownNFP = KNOWN_NFP[KNOWN_NFP.length - 1];
+    const today = new Date(); today.setHours(0,0,0,0);
     for (let offset = 0; offset <= monthsAhead; offset++) {
       const d = new Date(today); d.setMonth(d.getMonth() + offset);
       const y = d.getFullYear(), m = d.getMonth();
-      const cpi = nthWeekdayDate(y, m, 3, 2); // 2nd Wednesday
-      const nfp = nthWeekdayDate(y, m, 5, 1); // 1st Friday
-      if (cpi && cpi >= todayStr) result.push({ name: 'CPI REPORT',       date: cpi, type: 'CPI', icon: '📊' });
-      if (nfp && nfp >= todayStr) result.push({ name: 'NONFARM PAYROLLS', date: nfp, type: 'NFP', icon: '💼' });
+      const cpi = nthWeekdayDate(y, m, 3, 2);
+      const nfp = nthWeekdayDate(y, m, 5, 1);
+      if (cpi && cpi >= todayStr && cpi > lastKnownCPI) result.push({ name: 'CPI REPORT',       date: cpi, type: 'CPI', icon: '📊' });
+      if (nfp && nfp >= todayStr && nfp > lastKnownNFP) result.push({ name: 'NONFARM PAYROLLS', date: nfp, type: 'NFP', icon: '💼' });
     }
     return result;
   }
