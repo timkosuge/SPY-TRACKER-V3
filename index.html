@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -547,7 +548,8 @@
 <div class="subtab-bar" id="subtabBar" style="display:none;">
   <!-- Desk subtabs -->
   <div class="subtab-group" id="subtabs-desk">
-    <div class="subtab active" onclick="switchGroupSub('desk',this)">TRADING DESK</div>
+    <div class="subtab active" onclick="switchGroupSub('live-chart',this)">⬡ LIVE CHART</div>
+    <div class="subtab" onclick="switchGroupSub('desk',this)">TRADING DESK</div>
     <div class="subtab" onclick="switchGroupSub('intraday',this)">INTRADAY</div>
     <div class="subtab" onclick="switchGroupSub('intraday-volume',this)">VOLUME</div>
     <div class="subtab" onclick="switchGroupSub('intraday-windows',this)">WINDOWS</div>
@@ -656,6 +658,13 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
+     LIVE CHART
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-live-chart">
+  <div id="liveChartContent"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
      INTRADAY
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-intraday">
@@ -666,7 +675,7 @@
      INTRADAY VOLUME
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-intraday-volume">
-  <div id="intradayVolContent"><div class="no-data">Loading Volume...</div></div>
+  <div id="intradayVolContent"><div class="no-data">Loading Intraday Volume...</div></div>
   <div id="intradayVolStats" style="padding:0 16px 16px;max-width:1200px;margin:0 auto;"></div>
 </div>
 
