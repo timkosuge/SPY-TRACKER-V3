@@ -338,9 +338,8 @@ export async function onRequest(context) {
           ? "Dealers slightly short gamma. Moves may extend further than normal."
           : "Dealers short gamma - they amplify moves in either direction.";
 
-    // ── Walls by expiry: today's 0DTE + each Friday ─────────────────────────
+    // ── Walls by expiry: 0DTE + key upcoming expirations ────────────────────
     const todayStr = today.toISOString().slice(0, 10);
-    const todayDow = today.getDay(); // 0=Sun, 1=Mon...5=Fri, 6=Sat
 
     // Helper: build call/put walls for a given expiry
     const buildWalls = (exp) => {
@@ -354,31 +353,94 @@ export async function onRequest(context) {
         .map(o => ({ strike: o.strike, oi: o.oi, vol: o.vol }));
       const callWall = topCalls[0]?.strike || null;
       const putWall  = topPuts[0]?.strike  || null;
-      const dte = Math.round((new Date(exp) - today) / 86400000);
+      const expClose = new Date(exp + 'T21:00:00Z');
+      const dte = Math.ceil((expClose - today) / 86400000);
       return { exp, dte, callWall, putWall, topCalls, topPuts };
     };
 
-    // Today's expiry (0DTE when market is open Mon-Fri)
+    // US market holidays - Good Friday dates (no expiry, market closed)
+    // When 3rd Friday is Good Friday, monthly opex rolls to preceding Thursday.
+    const GOOD_FRIDAYS = new Set([
+      '2025-04-18', '2026-04-03', '2027-03-26', '2028-04-14',
+      '2029-04-18', '2030-04-19', '2031-04-11', '2032-04-02',
+    ]);
+
+    // Monthly opex: 3rd Friday of month; rolls to Thursday if that Friday is Good Friday
+    const getMonthlyOpex = (year, month) => {
+      let fridayCount = 0;
+      for (let day = 1; day <= 31; day++) {
+        const d = new Date(Date.UTC(year, month, day));
+        if (d.getUTCMonth() !== month) break;
+        if (d.getUTCDay() === 5) {
+          fridayCount++;
+          if (fridayCount === 3) {
+            const dateStr = d.toISOString().slice(0, 10);
+            if (GOOD_FRIDAYS.has(dateStr)) {
+              return new Date(Date.UTC(year, month, day - 1)).toISOString().slice(0, 10);
+            }
+            return dateStr;
+          }
+        }
+      }
+      return null;
+    };
+
+    // Monthly opex dates for current + next 4 months
+    const todayUTC = new Date(todayStr + 'T12:00:00Z');
+    const monthlyOpexDates = new Set();
+    for (let i = 0; i <= 4; i++) {
+      const rawMonth = todayUTC.getUTCMonth() + i;
+      const opex = getMonthlyOpex(todayUTC.getUTCFullYear() + Math.floor(rawMonth / 12), rawMonth % 12);
+      if (opex) monthlyOpexDates.add(opex);
+    }
+
+    // Label an expiry date semantically
+    const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const labelExpiry = (exp) => {
+      const d = new Date(exp + 'T12:00:00Z');
+      const dow = d.getUTCDay();
+      if (monthlyOpexDates.has(exp)) return dow === 4 ? 'Monthly (Thu)' : 'Monthly (Fri)';
+      if (dow === 5) return 'Weekly (Fri)';
+      return DOW_NAMES[dow] + ' Expiry';
+    };
+
+    // Today's 0DTE
     const todayWalls = expiries.includes(todayStr) ? buildWalls(todayStr) : null;
 
-    // All Friday expiries in the chain
-    const fridayWalls = expiries
-      .filter(exp => {
-        const d = new Date(exp + 'T12:00:00Z');
-        return d.getDay() === 5 && exp !== todayStr;
-      })
-      .slice(0, 4)
-      .map(exp => buildWalls(exp))
-      .filter(Boolean);
+    // Upcoming expiries — skip Good Fridays, pick: nearest weekly Fri + monthlies + fill to 4
+    const upcomingAll = expiries.filter(exp => exp > todayStr && !GOOD_FRIDAYS.has(exp)).sort();
+    const cardExps = [];
+    let nearestWeeklyAdded = false;
+    const seenMonthly = new Set();
+
+    // Pass 1: nearest weekly Friday + all monthlies within 90 days
+    for (const exp of upcomingAll) {
+      const dte = Math.ceil((new Date(exp + 'T21:00:00Z') - today) / 86400000);
+      if (dte > 90) break;
+      const d = new Date(exp + 'T12:00:00Z');
+      const dow = d.getUTCDay();
+      if (monthlyOpexDates.has(exp) && !seenMonthly.has(exp)) {
+        cardExps.push(exp); seenMonthly.add(exp);
+      } else if (dow === 5 && !nearestWeeklyAdded) {
+        cardExps.push(exp); nearestWeeklyAdded = true;
+      }
+    }
+
+    // Pass 2: fill remaining slots with additional Fridays
+    for (const exp of upcomingAll) {
+      if (cardExps.length >= 4) break;
+      if (cardExps.includes(exp)) continue;
+      const d = new Date(exp + 'T12:00:00Z');
+      if (d.getUTCDay() === 5) cardExps.push(exp);
+    }
+    cardExps.sort();
 
     const wallsByExpiry = [];
     if (todayWalls) wallsByExpiry.push({ label: '0DTE (Today)', ...todayWalls });
-    fridayWalls.forEach(w => {
-      // Label by ordinal position: 1st Friday = This Week, 2nd = Next Week, 3rd/4th = Monthly
-      const fridayIndex = fridayWalls.indexOf(w);
-      const label = fridayIndex === 0 ? 'Weekly (Fri)' : fridayIndex === 1 ? 'Next Week (Fri)' : w.dte <= 42 ? 'Monthly (Fri)' : `Fri +${w.dte}d`;
-      wallsByExpiry.push({ label, ...w });
-    });
+    for (const exp of cardExps.slice(0, 4)) {
+      const w = buildWalls(exp);
+      if (w) wallsByExpiry.push({ label: labelExpiry(exp), ...w });
+    }
 
     return new Response(JSON.stringify({
       spot,
