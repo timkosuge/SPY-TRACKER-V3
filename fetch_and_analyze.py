@@ -1502,6 +1502,141 @@ def get_trading_days_to_process(conn):
 
 
 
+
+def export_intraday_vol_stats(conn):
+    """
+    Compute volume correlation stats: quintile analysis, cumulative curve,
+    HOD/LOD by volume, gap fills by volume, OR range vs volume, power hour.
+    Writes intraday_vol_stats.js. Auto-runs with pipeline.
+    """
+    import json, statistics
+    from collections import defaultdict, Counter
+    from datetime import datetime
+    import re
+
+    c = conn.cursor()
+
+    # Load session stats from intraday_library.js
+    try:
+        with open('intraday_library.js') as f:
+            raw = f.read()
+        match = re.search(r'const INTRADAY_SESSION_STATS = (\[.*?\]);', raw, re.DOTALL)
+        if not match:
+            print("  intraday_vol_stats.js: intraday_library.js not ready")
+            return
+        sessions = {d['date']: d for d in json.loads(match.group(1))}
+    except Exception as e:
+        print(f"  intraday_vol_stats.js: could not read session stats: {e}")
+        return
+
+    c.execute("SELECT date, SUM(volume) as vol FROM intraday_bars GROUP BY date")
+    daily_vol = {r[0]: r[1] for r in c.fetchall()}
+    if not daily_vol:
+        print("  intraday_vol_stats.js: no intraday_bars data")
+        return
+
+    c.execute("""
+        SELECT date, timestamp, volume, high, low
+        FROM intraday_bars
+        WHERE timestamp >= '09:30' AND timestamp < '16:00'
+        ORDER BY date, timestamp
+    """)
+    bars = c.fetchall()
+
+    all_dates = sorted(set(sessions.keys()) & set(daily_vol.keys()))
+    vols_sorted = sorted(daily_vol[d] for d in all_dates)
+    n = len(vols_sorted)
+    thresholds = [vols_sorted[int(n*p)] for p in [0.20, 0.40, 0.60, 0.80]]
+    labels = ['Very Low','Low','Medium','High','Very High']
+    colors = ['#005577','#0088aa','#ffcc00','#ff8800','#ff3355']
+
+    def quintile(vol):
+        for i,t in enumerate(thresholds):
+            if vol <= t: return i
+        return 4
+
+    # Build cumulative volume + HOD/LOD per day
+    day_cum = defaultdict(lambda: defaultdict(float))
+    day_totals = defaultdict(float)
+    day_hod = {}; day_lod = {}
+    day_maxh = defaultdict(float); day_minl = defaultdict(lambda: float('inf'))
+    day_hod_ts = {}; day_lod_ts = {}
+
+    for date, ts, vol, h, l in bars:
+        h_int, m_int = int(ts[:2]), int(ts[3:])
+        bucket_m = (m_int // 5) * 5
+        bucket_ts = f"{h_int:02d}:{bucket_m:02d}"
+        day_cum[date][bucket_ts] += vol
+        day_totals[date] += vol
+        if h > day_maxh[date]:
+            day_maxh[date] = h; day_hod_ts[date] = ts
+        if l < day_minl[date]:
+            day_minl[date] = l; day_lod_ts[date] = ts
+
+    def ct_hour(ts): return int(ts[:2]) - 1
+
+    output = {}
+
+    # Quintile stats
+    q_stats = []
+    for qi in range(5):
+        dq = [d for d in all_dates if quintile(daily_vol[d]) == qi]
+        dr = [sessions[d]['day_range_pct'] for d in dq if sessions[d].get('day_range_pct')]
+        gaps = [d for d in dq if sessions[d].get('gap_type') in ('GAP_UP','GAP_DOWN')]
+        fills = [d for d in gaps if sessions[d].get('gap_filled') == 1]
+        hod_dist = Counter(ct_hour(day_hod_ts[d]) for d in dq if d in day_hod_ts)
+        lod_dist = Counter(ct_hour(day_lod_ts[d]) for d in dq if d in day_lod_ts)
+        thr_lo = thresholds[qi-1] if qi > 0 else 0
+        thr_hi = thresholds[qi] if qi < 4 else max(daily_vol.values())
+        q_stats.append({
+            'label': labels[qi], 'color': colors[qi], 'n': len(dq),
+            'vol_lo': round(thr_lo/1e6, 1), 'vol_hi': round(thr_hi/1e6, 1),
+            'avg_range': round(statistics.mean(dr), 2) if dr else 0,
+            'med_range': round(statistics.median(dr), 2) if dr else 0,
+            'gap_fill_pct': round(len(fills)/len(gaps)*100, 0) if gaps else 0,
+            'gap_n': len(gaps),
+            'hod_by_hour': {str(h): hod_dist.get(h,0) for h in range(8,15)},
+            'lod_by_hour': {str(h): lod_dist.get(h,0) for h in range(8,15)},
+        })
+    output['quintile_stats'] = q_stats
+
+    # Cumulative volume curve
+    bucket_cum_pct = defaultdict(list)
+    for d in all_dates:
+        cum = 0; total = day_totals[d]
+        if total == 0: continue
+        for ts in sorted(day_cum[d].keys()):
+            cum += day_cum[d][ts]
+            bucket_cum_pct[ts].append(cum/total*100)
+    output['cum_curve'] = [
+        {'ts': ts, 'avg_cum_pct': round(statistics.mean(pcts), 2)}
+        for ts, pcts in sorted(bucket_cum_pct.items())
+    ]
+
+    # Gap type volume
+    gap_vol = {}
+    for gt in ('GAP_UP','FLAT','GAP_DOWN'):
+        vols_gt = [daily_vol[d]/1e6 for d in all_dates if sessions[d].get('gap_type')==gt]
+        if vols_gt:
+            gap_vol[gt] = {'avg':round(statistics.mean(vols_gt),1),'med':round(statistics.median(vols_gt),1),'n':len(vols_gt)}
+    output['gap_vol'] = gap_vol
+
+    # Power hour direction by volume quintile
+    ph_by_q = defaultdict(lambda: {'up':0,'down':0,'none':0})
+    for d in all_dates:
+        q = quintile(daily_vol[d])
+        ph = sessions[d].get('power_hour_dir')
+        if ph == 'UP': ph_by_q[q]['up'] += 1
+        elif ph == 'DOWN': ph_by_q[q]['down'] += 1
+        else: ph_by_q[q]['none'] += 1
+    output['power_hour_by_q'] = {labels[q]: ph_by_q[q] for q in range(5)}
+
+    js = f"const INTRADAY_VOL_STATS = {json.dumps(output, separators=(',', ':'))};
+"
+    with open('intraday_vol_stats.js', 'w') as f:
+        f.write(js)
+    print(f"  intraday_vol_stats.js: {len(all_dates)} sessions, {len(q_stats)} quintiles")
+
 def export_intraday_vol_profile(conn):
     """
     Compute 5-min volume profile from intraday_bars — absolute avg shares + % of daily total.
@@ -1856,6 +1991,7 @@ def main():
             export_intraday_json(conn)
             export_session_vol_profile(conn)
             export_intraday_vol_profile(conn)
+            export_intraday_vol_stats(conn)
 
             # Update GitHub Actions commit list
             print("  Intraday accumulation complete")
