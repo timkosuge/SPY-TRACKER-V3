@@ -8,7 +8,6 @@ const $=id=>document.getElementById(id);
 // Group tab mapping
 const GROUP_TABS = {
   derivatives: ['options','gex','wem','volatility'],
-  macro:       ['bonds','breadth','sentiment'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
 const TAB_TO_GROUP = {};
@@ -80,7 +79,7 @@ function switchTab(id){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
   // Find and activate the correct top-level tab button
-  const topTabs = ['hub','desk','overview','derivatives','macro','history','media','journal'];
+  const topTabs = ['hub','desk','intraday','overview','derivatives','history','media','journal'];
   const btnIdx = topTabs.indexOf(id);
   const allTabs = document.querySelectorAll('.tab');
   if(btnIdx>=0 && allTabs[btnIdx]) allTabs[btnIdx].classList.add('active');
@@ -1123,6 +1122,25 @@ function renderDesk(md,sd){
         '</div>';
       })()}
 
+      <!-- VWAP panels (populated live by renderDeskSession) -->
+      <div style="display:flex;align-items:stretch;border-left:1px solid var(--border);">
+        <div style="display:flex;flex-direction:column;justify-content:center;padding:4px 8px;border-right:1px solid var(--border);background:rgba(255,100,200,0.04);">
+          <span style="font-family:Orbitron,monospace;font-size:7px;color:#ff66cc;letter-spacing:1px;writing-mode:horizontal-tb;white-space:nowrap;">VWAP</span>
+        </div>
+        <div style="display:flex;align-items:stretch;">
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 10px;border-right:1px solid var(--border)22;min-width:80px;">
+            <span style="font-family:Orbitron,monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:1px;">D-VWAP</span>
+            <span id="deskDVwap" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">—</span>
+            <span id="deskDVwapDiff" style="font-size:10px;font-weight:bold;color:var(--text3);">—</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 10px;min-width:80px;">
+            <span style="font-family:Orbitron,monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:1px;">W-VWAP</span>
+            <span id="deskWVwap" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">—</span>
+            <span id="deskWVwapDiff" style="font-size:10px;font-weight:bold;color:var(--text3);">—</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Date -->
       <div style="display:flex;align-items:center;padding:5px 10px;margin-left:auto;flex-shrink:0;">
         <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);white-space:nowrap;">${new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
@@ -1320,6 +1338,12 @@ function renderDesk(md,sd){
       })()}
     </div>
 
+    <!-- CALL / PUT WALLS BY EXPIRY -->
+    <div class="panel" style="margin-bottom:10px;" id="deskWallsPanel">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ CALL / PUT WALLS BY EXPIRY</div>
+      <div id="deskWallsByExpiry"><div style="font-size:12px;color:var(--text3);">Loading walls...</div></div>
+    </div>
+
     <!-- SESSION + DOD + VOL + SESSION VOL + GAPS -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 2fr;gap:10px;margin-bottom:10px;">
       <div class="panel">
@@ -1370,19 +1394,120 @@ function renderDeskSession(md,sd){
     if(pmm) pmm.textContent = m ? '$'+fmt(m,2) : '—';
     if(pml) pml.textContent = l ? '$'+fmt(l,2) : '—';
   };
-  // Cache PM data for the session — re-fetching during RTH returns stale/wrong data
-  if (window._pmCache && window._pmCache.high) {
-    setPM(window._pmCache.high, window._pmCache.mid, window._pmCache.low);
+  // PM cache — memory + localStorage keyed to today's date (ET)
+  // IMPORTANT: we only hard-lock the cache once the PM window is CLOSED (>= 9:30 ET).
+  // During pre-market we always re-fetch so bad early-session ticks don't get permanently
+  // baked in as the PM Low before the session has finished.
+  const _pmToday = (() => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+    } catch(e) { return new Date().toISOString().slice(0,10); }
+  })();
+  const PM_CACHE_KEY = 'spy_pm_cache_v2';
+  // PM session is final once we're at or past 9:30 ET (reuses isPremarket computed above)
+  const _pmSessionClosed = !isPremarket;
+
+  const loadPMCache = () => {
+    // Only trust localStorage cache if PM session is definitively closed.
+    // During pre-market, skip the cache so we always get a fresh fetch.
+    if (!_pmSessionClosed) return null;
+    // 1. In-memory (fastest)
+    if (window._pmCache && window._pmCache.high && window._pmCache.date === _pmToday) {
+      return window._pmCache;
+    }
+    // 2. localStorage (survives page refresh)
+    try {
+      const stored = JSON.parse(localStorage.getItem(PM_CACHE_KEY) || 'null');
+      if (stored && stored.date === _pmToday && stored.high) {
+        window._pmCache = stored;
+        return stored;
+      }
+    } catch(e) {}
+    return null;
+  };
+
+  const savePMCache = (pm) => {
+    // Always update in-memory so the display stays current this session.
+    // Only persist to localStorage once PM session is closed — during pre-market
+    // we don't lock the values to disk until the session is complete.
+    const entry = { date: _pmToday, high: pm.high, mid: pm.mid, low: pm.low };
+    window._pmCache = entry;
+    if (_pmSessionClosed) {
+      try { localStorage.setItem(PM_CACHE_KEY, JSON.stringify(entry)); } catch(e) {}
+    }
+  };
+
+  const cached = loadPMCache();
+  if (cached) {
+    setPM(cached.high, cached.mid, cached.low);
   } else {
-    fetch('/premarket').then(r=>r.ok?r.json():null).then(pm=>{
-      if(pm?.available && pm.high) {
-        window._pmCache = { high: pm.high, mid: pm.mid, low: pm.low };
+    fetch('/premarket?t=' + Date.now()).then(r=>r.ok?r.json():null).then(pm=>{
+      if (pm?.available && pm.high) {
+        savePMCache(pm);
         setPM(pm.high, pm.mid, pm.low);
       } else {
-        setPM(null, null, null);
+        // Not available yet (pre-4am ET) or PM window closed with no data
+        // Do NOT clear — keep any existing display from earlier in session
+        const still = loadPMCache();
+        if (still) setPM(still.high, still.mid, still.low);
       }
-    }).catch(()=>setPM(null, null, null));
+    }).catch(() => {
+      const still = loadPMCache();
+      if (still) setPM(still.high, still.mid, still.low);
+    });
   }
+
+  // ── VWAP panels update ───────────────────────────────────────────────────
+  // D-VWAP: comes from /spyintraday response (server-computed, RTH bars only)
+  // W-VWAP: approximated from this week's daily bars in sd (typical price × volume, Mon–today)
+  (()=>{
+    const dvEl=$('deskDVwap'), dvDiff=$('deskDVwapDiff');
+    const wvEl=$('deskWVwap'), wvDiff=$('deskWVwapDiff');
+
+    // Daily VWAP — from cached _spyIntraday if available
+    const lv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
+    const dv = lv?.vwap || null;
+    if (dvEl) dvEl.textContent = dv ? '$'+fmt(dv,2) : '—';
+    if (dvDiff && dv && cur) {
+      const diff = cur - dv, pct = diff/dv*100;
+      dvDiff.textContent = (diff>=0?'+':'')+fmt(diff,2)+'%';
+      dvDiff.style.color = diff>=0?'#00ff88':'#ff3355';
+    } else if (dvDiff) { dvDiff.textContent='—'; dvDiff.style.color='var(--text3)'; }
+
+    // Weekly VWAP — accumulate typical price × volume from Mon–today using sd
+    if (sd && sd.length) {
+      // Find Mon of current week (ET date)
+      const etToday = new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());
+      const dow = new Date(etToday+'T12:00:00Z').getDay(); // 0=Sun,1=Mon...
+      const daysFromMon = dow===0?6:dow-1;
+      const monDate = new Date(etToday+'T12:00:00Z');
+      monDate.setUTCDate(monDate.getUTCDate()-daysFromMon);
+      const monStr = monDate.toISOString().slice(0,10);
+
+      // Grab this week's completed daily rows from sd (they have OHLCV)
+      const weekRows = sd.filter(r => r.date >= monStr && r.date <= etToday);
+      let cumTPV=0, cumVol=0;
+      for (const r of weekRows) {
+        const h=parseFloat(r.high||0), l=parseFloat(r.low||0), c=parseFloat(r.close||0), v=parseFloat(r.volume||0);
+        if(!c||!v) continue;
+        const tp=(h+l+c)/3;
+        cumTPV+=tp*v; cumVol+=v;
+      }
+      // If today is in progress (live), blend in the D-VWAP × today's volume
+      if (lv?.vwap && lv?.volume && lv.volume > 0) {
+        // Today not yet in sd — add it
+        const todayInSd = weekRows.some(r => r.date === etToday);
+        if (!todayInSd) { cumTPV += lv.vwap * lv.volume; cumVol += lv.volume; }
+      }
+      const wv = cumVol>0 ? Math.round(cumTPV/cumVol*100)/100 : null;
+      if (wvEl) wvEl.textContent = wv ? '$'+fmt(wv,2) : '—';
+      if (wvDiff && wv && cur) {
+        const diff=cur-wv, pct=diff/wv*100;
+        wvDiff.textContent=(diff>=0?'+':'')+fmt(diff,2)+'%';
+        wvDiff.style.color=diff>=0?'#00ff88':'#ff3355';
+      } else if(wvDiff) { wvDiff.textContent='—'; wvDiff.style.color='var(--text3)'; }
+    }
+  })();
 
   // OHLCV
   const ohlcvEl=$('deskOhlcv');
@@ -1400,9 +1525,15 @@ function renderDeskSession(md,sd){
   // Volume Summary — prefer live intraday data for today, fall back to sd[0] (prior completed day)
   const volSumEl=$('deskVolSummary');
   if(volSumEl){
-    const lv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
+    // Prefer live data; fall back to today's cached snapshot so panel stays current
+    // after market close and before next day's Python workflow runs
+    let lv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
+    if (!lv?.available && typeof loadIntradayCache === 'function') {
+      const cached = loadIntradayCache();
+      if (cached?.volume) lv = { ...cached, _fromCache: true };
+    }
     const day0 = sd?.[0]||{}, va = day0.volume_analysis||{};
-    const isLive = lv?.available;
+    const isLive = lv?.available || lv?._fromCache;
     const last30 = (sd||[]).slice(0,30).filter(d=>d.volume>0);
     const avg30 = last30.length ? Math.round(last30.reduce((a,d)=>a+d.volume,0)/last30.length) : 85000000;
 
@@ -1494,7 +1625,7 @@ function renderDeskSession(md,sd){
         ].map(i=>fmtRow(i.l,i.v)).join('')}
 
         <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-top:6px;text-align:right;">
-          ● LIVE · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC
+          ${lv._fromCache ? '◎ FINAL' : '● LIVE'} · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC
         </div>`;
     }
   }
@@ -1702,6 +1833,44 @@ function renderDeskSession(md,sd){
     dodEl.innerHTML='<div class="no-data">No prev day data yet</div>';
   }
 
+  // ── WALLS BY EXPIRY on desk ─────────────────────────────────────────────
+  const deskWallsEl = $('deskWallsByExpiry');
+  if (deskWallsEl) {
+    const walls = (typeof _md !== 'undefined' ? _md?.walls_by_expiry : null) || [];
+    if (!walls.length) {
+      deskWallsEl.innerHTML = '<div style="font-size:12px;color:var(--text3);">No expiry wall data — run workflow or wait for live GEX refresh.</div>';
+    } else {
+      const deskCur = (typeof _md !== 'undefined' ? _md?.quotes?.SPY?.price : null) || 0;
+      deskWallsEl.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">'
+        + walls.map(w => {
+          const cDist = w.callWall && deskCur ? w.callWall - deskCur : null;
+          const pDist = w.putWall  && deskCur ? w.putWall  - deskCur : null;
+          const isToday = w.dte === 0;
+          const borderCol = isToday ? '#ffcc00' : '#00ccff';
+          return '<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid '+borderCol+';border-radius:3px;padding:10px;">'
+            + '<div style="font-family:Orbitron,monospace;font-size:8px;color:'+borderCol+';margin-bottom:6px;letter-spacing:1px;">'
+            + w.label.toUpperCase() + (w.exp ? ' · ' + w.exp.slice(5) : '') + (w.dte != null ? ' · ' + w.dte + 'DTE' : '') + '</div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+            + '<div style="text-align:center;padding:6px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:3px;">'
+            + '<div style="font-family:Orbitron,monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">CALL WALL</div>'
+            + '<div style="font-family:Share Tech Mono,monospace;font-size:16px;font-weight:bold;color:#00ff88;">' + (w.callWall ? '$'+w.callWall : '—') + '</div>'
+            + (cDist != null ? '<div style="font-size:10px;color:#00ff88;">+' + cDist.toFixed(1) + '</div>' : '')
+            + (w.topCalls?.[0]?.oi ? '<div style="font-size:9px;color:var(--text3);">' + Math.round(w.topCalls[0].oi/1000) + 'K OI</div>' : '')
+            + '</div>'
+            + '<div style="text-align:center;padding:6px;background:rgba(255,51,85,0.06);border:1px solid rgba(255,51,85,0.2);border-radius:3px;">'
+            + '<div style="font-family:Orbitron,monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">PUT WALL</div>'
+            + '<div style="font-family:Share Tech Mono,monospace;font-size:16px;font-weight:bold;color:#ff3355;">' + (w.putWall ? '$'+w.putWall : '—') + '</div>'
+            + (pDist != null ? '<div style="font-size:10px;color:'+(pDist>=0?'#00ff88':'#ff3355')+';">' + (pDist>=0?'+':'') + pDist.toFixed(1) + '</div>' : '')
+            + (w.topPuts?.[0]?.oi ? '<div style="font-size:9px;color:var(--text3);">' + Math.round(w.topPuts[0].oi/1000) + 'K OI</div>' : '')
+            + '</div>'
+            + '</div>'
+            + (w.callWall && w.putWall ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">Range: $' + w.putWall + ' — $' + w.callWall + ' (' + (w.callWall - w.putWall).toFixed(0) + ' pts)</div>' : '')
+            + '</div>';
+        }).join('')
+        + '</div>';
+    }
+  }
+
   // ── SESSION VOLATILITY ────────────────────────────────────────────────────
   renderDeskSessionVol();
 }
@@ -1710,8 +1879,12 @@ function renderDeskSessionVol() {
   const el = $('deskSessionVol');
   if (!el) return;
 
-  const lv = (typeof _spyIntraday !== 'undefined') ? _spyIntraday : null;
-  const isLive = lv?.available;
+  let lv = (typeof _spyIntraday !== 'undefined') ? _spyIntraday : null;
+  if (!lv?.available && typeof loadIntradayCache === 'function') {
+    const cached = loadIntradayCache();
+    if (cached?.buckets?.length) lv = { ...cached, _fromCache: true };
+  }
+  const isLive = lv?.available || lv?._fromCache;
 
   if (!isLive || !lv.buckets || !lv.buckets.length) {
     el.innerHTML = `
@@ -3047,54 +3220,93 @@ function renderGEXAdditions(md) {
       </div>`;
   }
 
-  // ── CALL WALL vs PUT WALL ─────────────────────────────────────────────────
+  // ── CALL / PUT WALLS BY EXPIRY ───────────────────────────────────────────
   const wallsEl = $('gexWalls');
   if(wallsEl) {
-    const callStrikes = opt.top_call_strikes || [];
-    const putStrikes = opt.top_put_strikes || [];
-    const topCall = callStrikes[0];
-    const topPut = putStrikes[0];
+    const wallsByExp = opt.walls_by_expiry || [];
     let html = '';
-    if(topCall || topPut) {
-      const callWall = topCall?.strike, putWall = topPut?.strike;
+
+    if(wallsByExp.length) {
+      // Each expiry gets a card
+      wallsByExp.forEach(w => {
+        const isToday = w.dte === 0;
+        const borderCol = isToday ? '#ffcc00' : '#00ccff';
+        const cDist = w.callWall && spot ? w.callWall - spot : null;
+        const pDist = w.putWall  && spot ? w.putWall  - spot : null;
+        const range = w.callWall && w.putWall ? w.callWall - w.putWall : null;
+
+        html += `<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid ${borderCol};border-radius:3px;padding:10px;margin-bottom:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${borderCol};margin-bottom:8px;letter-spacing:1px;">
+            ${w.label?.toUpperCase()} ${w.exp?'· '+w.exp.slice(5):''} ${w.dte!=null?'· '+w.dte+'DTE':''}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+            <div style="text-align:center;padding:8px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.25);border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">CALL WALL</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:${isToday?'22':'18'}px;font-weight:bold;color:#00ff88;">$${w.callWall||'—'}</div>
+              ${cDist!=null?`<div style="font-size:10px;color:#00ff88;">+${fmt(cDist,1)} pts</div>`:''}
+              ${w.topCalls?.[0]?.oi?`<div style="font-size:10px;color:var(--text3);">${(w.topCalls[0].oi/1000).toFixed(0)}K OI</div>`:''}
+            </div>
+            <div style="text-align:center;padding:8px;background:rgba(255,51,85,0.06);border:1px solid rgba(255,51,85,0.25);border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">PUT WALL</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:${isToday?'22':'18'}px;font-weight:bold;color:#ff3355;">$${w.putWall||'—'}</div>
+              ${pDist!=null?`<div style="font-size:10px;color:${pDist>=0?'#00ff88':'#ff3355'};">${pDist>=0?'+':''}${fmt(pDist,1)} pts</div>`:''}
+              ${w.topPuts?.[0]?.oi?`<div style="font-size:10px;color:var(--text3);">${(w.topPuts[0].oi/1000).toFixed(0)}K OI</div>`:''}
+            </div>
+          </div>
+          ${range?`<div style="text-align:center;font-size:10px;color:var(--text3);">Range: $${w.putWall} — $${w.callWall} · ${fmt(range,0)} pts wide</div>`:''}
+          <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+            <div>
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">TOP CALLS (OI)</div>
+              ${(w.topCalls||[]).slice(0,5).map((s,i) => {
+                const bw = Math.round((s.oi/(w.topCalls[0]?.oi||1))*100);
+                return '<div style="display:flex;align-items:center;gap:4px;padding:2px 0;">'
+                  +'<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:#00ff88;width:48px;text-align:right;">$'+s.strike+'</span>'
+                  +'<div style="flex:1;height:7px;background:var(--bg2);border-radius:2px;overflow:hidden;">'
+                  +'<div style="width:'+bw+'%;height:100%;background:rgba(0,255,136,'+(i===0?'0.7':'0.4')+');border-radius:2px;"></div></div>'
+                  +'<span style="font-size:9px;color:var(--text3);width:36px;">'+Math.round(s.oi/1000)+'K</span>'
+                  +'</div>';
+              }).join('')}
+            </div>
+            <div>
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">TOP PUTS (OI)</div>
+              ${(w.topPuts||[]).slice(0,5).map((s,i) => {
+                const bw = Math.round((s.oi/(w.topPuts[0]?.oi||1))*100);
+                return '<div style="display:flex;align-items:center;gap:4px;padding:2px 0;">'
+                  +'<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:#ff3355;width:48px;text-align:right;">$'+s.strike+'</span>'
+                  +'<div style="flex:1;height:7px;background:var(--bg2);border-radius:2px;overflow:hidden;">'
+                  +'<div style="width:'+bw+'%;height:100%;background:rgba(255,51,85,'+(i===0?'0.7':'0.4')+');border-radius:2px;"></div></div>'
+                  +'<span style="font-size:9px;color:var(--text3);width:36px;">'+Math.round(s.oi/1000)+'K</span>'
+                  +'</div>';
+              }).join('')}
+            </div>
+          </div>
+        </div>`;
+      });
+    } else {
+      // Fallback to old single-expiry display from top_call/put_strikes
+      const callStrikes = opt.top_call_strikes || [];
+      const putStrikes  = opt.top_put_strikes  || [];
+      const callWall = callStrikes[0]?.strike, putWall = putStrikes[0]?.strike;
       const range = callWall && putWall ? callWall - putWall : null;
-      html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-        <div style="text-align:center;padding:10px;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:4px;">CALL WALL</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#00ff88;">$${callWall||'—'}</div>
-          ${topCall?.oi?`<div style="font-size:11px;color:var(--text3);">${(topCall.oi/1000).toFixed(0)}K OI</div>`:''}
-          ${callWall&&spot?`<div style="font-size:11px;color:var(--text3);">+${fmt(callWall-spot,1)} pts away</div>`:''}
-        </div>
-        <div style="text-align:center;padding:10px;background:rgba(255,51,85,0.08);border:1px solid rgba(255,51,85,0.3);border-radius:4px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;margin-bottom:4px;">PUT WALL</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#ff3355;">$${putWall||'—'}</div>
-          ${topPut?.oi?`<div style="font-size:11px;color:var(--text3);">${(topPut.oi/1000).toFixed(0)}K OI</div>`:''}
-          ${putWall&&spot?`<div style="font-size:11px;color:var(--text3);">${fmt(putWall-spot,1)} pts away</div>`:''}
-        </div>
-      </div>`;
-      if(range) html += `<div style="text-align:center;padding:6px;background:var(--bg3);border-radius:3px;margin-bottom:10px;"><span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">PIN RANGE: </span><span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);">$${putWall} — $${callWall} (${fmt(range,0)} pts)</span></div>`;
+      if(callWall || putWall) {
+        html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+          <div style="text-align:center;padding:10px;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:4px;">CALL WALL</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#00ff88;">$${callWall||'—'}</div>
+            ${callStrikes[0]?.oi?`<div style="font-size:11px;color:var(--text3);">${(callStrikes[0].oi/1000).toFixed(0)}K OI</div>`:''}
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(255,51,85,0.08);border:1px solid rgba(255,51,85,0.3);border-radius:4px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;margin-bottom:4px;">PUT WALL</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#ff3355;">$${putWall||'—'}</div>
+            ${putStrikes[0]?.oi?`<div style="font-size:11px;color:var(--text3);">${(putStrikes[0].oi/1000).toFixed(0)}K OI</div>`:''}
+          </div>
+        </div>`;
+        if(range) html += `<div style="text-align:center;padding:6px;background:var(--bg3);border-radius:3px;margin-bottom:8px;">
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">PIN RANGE: </span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);">$${putWall} — $${callWall} (${fmt(range,0)} pts)</span></div>`;
+      }
     }
-    html += `<div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:6px;margin-top:4px;">TOP CALL STRIKES (OI)</div>`;
-    callStrikes.slice(0,5).forEach(s => {
-      const w = Math.min((s.oi/((callStrikes[0]?.oi||1))*80),80);
-      html += `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
-        <span style="font-family:'Share Tech Mono',monospace;font-size:12px;width:55px;text-align:right;color:#00ff88;">$${s.strike}</span>
-        <div style="flex:1;height:10px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-          <div style="width:${w}%;height:100%;background:rgba(0,255,136,0.6);border-radius:2px;"></div></div>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;width:50px;color:var(--text3);">${(s.oi/1000).toFixed(0)}K</span>
-      </div>`;
-    });
-    html += `<div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:6px;margin-top:8px;">TOP PUT STRIKES (OI)</div>`;
-    putStrikes.slice(0,5).forEach(s => {
-      const w = Math.min((s.oi/((putStrikes[0]?.oi||1))*80),80);
-      html += `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
-        <span style="font-family:'Share Tech Mono',monospace;font-size:12px;width:55px;text-align:right;color:#ff3355;">$${s.strike}</span>
-        <div style="flex:1;height:10px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-          <div style="width:${w}%;height:100%;background:rgba(255,51,85,0.6);border-radius:2px;"></div></div>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;width:50px;color:var(--text3);">${(s.oi/1000).toFixed(0)}K</span>
-      </div>`;
-    });
-    wallsEl.innerHTML = html || '<div class="no-data">No OI data</div>';
+    wallsEl.innerHTML = html || '<div class="no-data">No wall data — refresh GEX</div>';
   }
 
   // ── MAX PAIN EXPIRY LADDER ────────────────────────────────────────────────
@@ -4447,6 +4659,7 @@ function renderExpiryBehavior(md) {
   const E_ALL = EXPIRY_DATA;
   const E = _expiryLookback === '2026' ? E_ALL.filter(e => e.d.startsWith('2026')) : E_ALL;
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
   const avg    = arr => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : 0;
   const med    = arr => { if (!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
   const pctFn  = (arr, fn) => arr.length ? arr.filter(fn).length / arr.length * 100 : 0;
@@ -4462,7 +4675,17 @@ function renderExpiryBehavior(md) {
   const mpDist   = nearest && cur ? nearest.max_pain - cur : null;
   const mpColor  = mpDist === null ? 'var(--text3)' : Math.abs(mpDist)<2 ? '#00ff88' : Math.abs(mpDist)<5 ? '#ffcc00' : '#ff8800';
 
-  // ── data slicers ──────────────────────────────────────────────────────────
+  // Date -> record lookup (full dataset for cross-week lookups)
+  const byDate = {};
+  E_ALL.forEach(r => { byDate[r.d] = r; });
+
+  function addDays(dateStr, n) {
+    const d = new Date(dateStr + 'T12:00:00');
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0,10);
+  }
+
+  // ── Day stats slicer ──────────────────────────────────────────────────────
   function sliceStats(rows) {
     if (!rows.length) return null;
     const pctUp    = pctFn(rows, e => e.r > 0);
@@ -4470,65 +4693,87 @@ function renderExpiryBehavior(md) {
     const medRet   = med(rows.map(e => e.r));
     const avgRange = avg(rows.map(e => e.dr));
     const avgCP    = avg(rows.map(e => e.cp));
-    const avgGap   = avg(rows.map(e => e.g));
-
-    // gap fill rates
     const gapUpRows    = rows.filter(e => e.g >  0.3 && e.gf !== null);
     const gapDnRows    = rows.filter(e => e.g < -0.3 && e.gf !== null);
     const gapUpFill    = gapUpRows.length ? pctFn(gapUpRows, e => e.gf) : null;
     const gapDnFill    = gapDnRows.length ? pctFn(gapDnRows, e => e.gf) : null;
-
-    // today's gap context
     const todayGapRows = rows.filter(e => gapType==='GAP_UP'?e.g>0.3:gapType==='GAP_DOWN'?e.g<-0.3:Math.abs(e.g)<=0.3);
     const todayGapFill = (gapType !== 'FLAT' && todayGapRows.filter(e=>e.gf!==null).length)
                          ? pctFn(todayGapRows.filter(e=>e.gf!==null), e=>e.gf) : null;
-
-    // close position buckets (morning reversal: closes in bottom 30%)
-    const closeHigh = pctFn(rows, e => e.cp > 0.7);  // closes near HOD
-    const closeLow  = pctFn(rows, e => e.cp < 0.3);  // closes near LOD
-
-    // return distribution
+    const closeHigh = pctFn(rows, e => e.cp > 0.7);
+    const closeLow  = pctFn(rows, e => e.cp < 0.3);
     const bigUp   = pctFn(rows, e => e.r >  1.0);
     const bigDn   = pctFn(rows, e => e.r < -1.0);
     const flatDay = pctFn(rows, e => Math.abs(e.r) <= 0.3);
-
-    // best/worst
-    const best  = Math.max(...rows.map(e => e.r));
-    const worst = Math.min(...rows.map(e => e.r));
-
-    return { n: rows.length, pctUp, avgRet, medRet, avgRange, avgCP, avgGap,
+    const best  = rows.length ? Math.max(...rows.map(e => e.r)) : 0;
+    const worst = rows.length ? Math.min(...rows.map(e => e.r)) : 0;
+    return { n: rows.length, pctUp, avgRet, medRet, avgRange, avgCP,
              gapUpFill, gapDnFill, todayGapFill,
              closeHigh, closeLow, bigUp, bigDn, flatDay, best, worst };
   }
 
-  // ── build panels data ──────────────────────────────────────────────────────
-  const todayDow   = dow === 0 || dow === 6 ? 1 : dow; // weekend → preview Monday
-  const isWeekend  = dow === 0 || dow === 6;
-  const isFri      = dow === 5;
-  const isMonthly  = isFri && now.getDate() >= 15 && now.getDate() <= 21;
+  // ── Week stats builder ────────────────────────────────────────────────────
+  // weeksBack: 0 = opex week itself, 1 = week before, 2 = two weeks before
+  function computeWeekStats(opexFridays, weeksBack) {
+    const dayRows = [[], [], [], [], []]; // Mon..Fri
+    const weekRets = [];
+    opexFridays.forEach(fri => {
+      // Reference Friday for this offset week
+      const refFri = addDays(fri.d, weeksBack * -7);
+      const monDate = addDays(refFri, -4);
+      const monRec  = byDate[monDate];
+      const friRec  = byDate[refFri];
+      if (monRec && friRec && monRec.o && friRec.c) {
+        weekRets.push((friRec.c - monRec.o) / monRec.o * 100);
+      }
+      [-4,-3,-2,-1,0].forEach((offset, i) => {
+        const rec = byDate[addDays(refFri, offset)];
+        if (rec) dayRows[i].push(rec);
+      });
+    });
+    const weekAvg   = avg(weekRets);
+    const weekWR    = weekRets.length ? pctFn(weekRets.map(r=>({r})), e=>e.r>0) : 0;
+    const weekN     = weekRets.length;
+    const weekBest  = weekRets.length ? Math.max(...weekRets) : 0;
+    const weekWorst = weekRets.length ? Math.min(...weekRets) : 0;
+    const days = ['Mon','Tue','Wed','Thu','Fri'].map((name, i) => ({
+      name, stats: sliceStats(dayRows[i])
+    }));
+    return { days, weekAvg, weekWR, weekN, weekBest, weekWorst };
+  }
 
-  // Today's 0DTE panel
-  const todaySame    = E.filter(e => e.dow === todayDow);
-  const todayGroup   = isMonthly ? todaySame.filter(e => e.mo)
-                     : isFri     ? todaySame.filter(e => !e.mo)
-                     : todaySame;
-  const todayStats   = sliceStats(todayGroup);
+  // ── Groupings ─────────────────────────────────────────────────────────────
+  const todayDow     = dow === 0 || dow === 6 ? 1 : dow;
+  const isWeekend    = dow === 0 || dow === 6;
+  const isFri        = dow === 5;
+  const isMonthly    = isFri && now.getDate() >= 15 && now.getDate() <= 21;
 
-  // Weekly Friday OPEX (non-monthly Fridays)
-  const weeklyGroup  = E.filter(e => e.dow === 5 && !e.mo);
-  const weeklyStats  = sliceStats(weeklyGroup);
+  const weeklyFridays  = E.filter(e => e.dow === 5 && !e.mo);
+  const monthlyFridays = E.filter(e => e.mo);
 
-  // Monthly OPEX (3rd Friday)
-  const monthlyGroup = E.filter(e => e.mo);
-  const monthlyStats = sliceStats(monthlyGroup);
+  const todaySame  = E.filter(e => e.dow === todayDow);
+  const todayGroup = isMonthly ? todaySame.filter(e => e.mo)
+                   : isFri     ? todaySame.filter(e => !e.mo)
+                   : todaySame;
+  const todayStats = sliceStats(todayGroup);
 
-  const todayLabel   = isWeekend ? 'MONDAY 0DTE (PREVIEW)'
-                     : isMonthly ? 'MONTHLY OPEX'
-                     : isFri     ? 'WEEKLY OPEX (FRI)'
-                     : `0DTE ${['','MON','TUE','WED','THU','FRI','SAT'][todayDow]}`;
-  const todayColor   = isMonthly ? '#ff8800' : isFri ? '#00ffcc' : '#ffcc00';
+  // Weekly: current opex week (T+0)
+  const weeklyDayStats = computeWeekStats(weeklyFridays, 0);
+  const weeklyStats    = sliceStats(weeklyFridays);
 
-  // ── card builder ──────────────────────────────────────────────────────────
+  // Monthly: T-2, T-1, T-0, plus Friday stats
+  const monthlyT2      = computeWeekStats(monthlyFridays, 2);
+  const monthlyT1      = computeWeekStats(monthlyFridays, 1);
+  const monthlyT0      = computeWeekStats(monthlyFridays, 0);
+  const monthlyStats   = sliceStats(monthlyFridays);
+
+  const todayLabel = isWeekend ? 'MONDAY 0DTE (PREVIEW)'
+                   : isMonthly ? 'MONTHLY OPEX'
+                   : isFri     ? 'WEEKLY OPEX (FRI)'
+                   : `0DTE ${['','MON','TUE','WED','THU','FRI','SAT'][todayDow]}`;
+  const todayColor = isMonthly ? '#ff8800' : isFri ? '#00ffcc' : '#ffcc00';
+
+  // ── UI builders ────────────────────────────────────────────────────────────
   function statCard(label, value, color, sub) {
     return `<div style="background:var(--bg3);border-top:2px solid ${color};border-radius:3px;padding:8px;text-align:center;">
       <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:3px;">${label}</div>
@@ -4541,7 +4786,7 @@ function renderExpiryBehavior(md) {
     return `<div style="display:flex;gap:8px;padding:6px 10px;border-left:3px solid ${color};background:${color}11;border-radius:0 3px 3px 0;font-size:12px;color:var(--text2);line-height:1.5;">${text}</div>`;
   }
 
-  function renderPanel(stats, label, color, showTodayContext) {
+  function renderDayPanel(stats, label, color, showTodayContext) {
     if (!stats) return `<div style="color:var(--text3);font-size:12px;padding:8px;">No data for this lookback.</div>`;
     const wr    = stats.pctUp;
     const wrClr = clr(wr);
@@ -4557,47 +4802,118 @@ function renderExpiryBehavior(md) {
       ${statCard('MED RETURN', fmtPct(stats.medRet,3), stats.medRet>=0?'#00ff88':'#ff3355', 'median (less skew)')}
       ${statCard('AVG RANGE', '$'+fmt2(stats.avgRange), 'var(--cyan)', 'H−L on expiry day')}
       ${statCard('AVG CLOSE POS', (stats.avgCP*100).toFixed(0)+'%', 'var(--text2)', '0%=LOD · 100%=HOD')}
-      ${statCard('CLOSE NEAR HOD', stats.closeHigh.toFixed(0)+'%', stats.closeHigh>50?'#00ff88':'#ff8800', 'closes top 30%')}
       ${gapFillDisplay}
+      ${statCard('CLOSE NEAR HOD', stats.closeHigh.toFixed(0)+'%', stats.closeHigh>50?'#00ff88':'#ff8800', 'closes top 30%')}
       ${statCard('BIG UP (>1%)', stats.bigUp.toFixed(0)+'%', '#00ff88', 'sessions >+1%')}
       ${statCard('BIG DN (<-1%)', stats.bigDn.toFixed(0)+'%', '#ff3355', 'sessions <-1%')}
       ${statCard('FLAT (±0.3%)', stats.flatDay.toFixed(0)+'%', '#ffcc00', 'pinned sessions')}
     `;
-
-    // Insights
     const insights = [];
     insights.push(insightBar(wrClr,
       wr > 55 ? `<b>${label}</b> closes higher ${wr.toFixed(0)}% of the time — bullish lean. Avg gain: ${fmtPct(stats.avgRet,2)}.`
       : wr < 45 ? `<b>${label}</b> has a bearish lean — only ${wr.toFixed(0)}% close up. Avg loss: ${fmtPct(stats.avgRet,2)}.`
       : `<b>${label}</b> is near coin-flip (${wr.toFixed(0)}% up). No strong directional edge.`));
-
     insights.push(insightBar('var(--cyan)',
       `Avg range $${fmt2(stats.avgRange)}. Expect most movement inside that envelope. ` +
       `${stats.closeHigh.toFixed(0)}% close near HOD vs ${stats.closeLow.toFixed(0)}% near LOD — ` +
       (stats.closeHigh > stats.closeLow ? 'buyers tend to control into close.' : 'sellers tend to control into close.')));
-
-    if (stats.flatDay > 35) insights.push(insightBar('#ffcc00',
-      `${stats.flatDay.toFixed(0)}% of sessions are flat (±0.3%). Pin risk is elevated — dealers may defend strikes near current price.`));
-
-    if (showTodayContext && stats.todayGapFill !== null) insights.push(insightBar(stats.todayGapFill>55?'#ff8800':'#00ff88',
-      `Today's ${gapType.replace('_',' ')} gap fills same day ${stats.todayGapFill.toFixed(0)}% of the time historically on ${label}.`));
-    else if (stats.gapUpFill !== null) insights.push(insightBar('#ff8800',
-      `Gap-up opens fill same day ${stats.gapUpFill.toFixed(0)}% on ${label}. Gap-down fills: ${stats.gapDnFill!==null?stats.gapDnFill.toFixed(0)+'%':'n/a'}.`));
-
+    if (showTodayContext && stats.todayGapFill !== null)
+      insights.push(insightBar(stats.todayGapFill>55?'#ff8800':'#00ff88',
+        `Today's ${gapType.replace('_',' ')} gap fills same day ${stats.todayGapFill.toFixed(0)}% of the time on ${label}.`));
+    else if (stats.gapUpFill !== null)
+      insights.push(insightBar('#ff8800',
+        `Gap-up opens fill same day ${stats.gapUpFill.toFixed(0)}% on ${label}. Gap-down fills: ${stats.gapDnFill!==null?stats.gapDnFill.toFixed(0)+'%':'n/a'}.`));
     if (label.includes('MONTHLY') || label.includes('OPEX'))
       insights.push(insightBar('#ff8800', `OPEX effect: dealers unwind hedges — expect elevated volatility and pin action near max pain. Watch for late-day mean reversion.`));
-
     insights.push(insightBar('#7878aa',
       `Range: best ${fmtPct(stats.best,2)}, worst ${fmtPct(stats.worst,2)}. Big moves (>1%) happen ${(stats.bigUp+stats.bigDn).toFixed(0)}% of sessions.`));
 
     return `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:8px;">${cards}</div>
     <div style="display:flex;flex-direction:column;gap:4px;">${insights.join('')}</div>
-    <div style="font-size:10px;color:var(--text3);margin-top:6px;">n = ${stats.n} historical sessions · ${_expiryLookback==='2026'?'2026 only':'2020–2026 (all)'}</div>`;
+    <div style="font-size:10px;color:var(--text3);margin-top:6px;">n = ${stats.n} historical sessions · ${_expiryLookback==='2026'?'2026 only':'1993–2026 (all)'}</div>`;
   }
 
-  // ── assemble output ───────────────────────────────────────────────────────
+  // ── Per-day row in the week table ─────────────────────────────────────────
+  function renderWeekRow(name, stats, color) {
+    if (!stats) return '';
+    const wr = stats.pctUp;
+    const wrClr = clr(wr);
+    const barW = Math.min(Math.round(Math.abs(stats.avgRet) / 0.5 * 80), 80);
+    const barColor = stats.avgRet >= 0 ? '#00ff8880' : '#ff335580';
+    return `<div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)22;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:${color};">${name}</div>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <div style="width:${barW}px;height:8px;background:${barColor};border-radius:2px;flex-shrink:0;"></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${stats.avgRet>=0?'#00ff88':'#ff3355'};">${fmtPct(stats.avgRet,2)}</div>
+      </div>
+      <div></div>
+      <div style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${wrClr};">${wr.toFixed(0)}%</div>
+        <div style="font-size:9px;color:var(--text3);">win rate</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);">$${fmt2(stats.avgRange)}</div>
+        <div style="font-size:9px;color:var(--text3);">avg range</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#00ff88;">${stats.bigUp.toFixed(0)}%</div>
+        <div style="font-size:9px;color:var(--text3);">big up</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3355;">${stats.bigDn.toFixed(0)}%</div>
+        <div style="font-size:9px;color:var(--text3);">big dn</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:9px;color:var(--text3);">n=${stats.n}</div>
+      </div>
+    </div>`;
+  }
+
+  function renderWeekBlock(weekStats, heading, subheading, color, weeklySummaryNote) {
+    if (!weekStats || !weekStats.days.length) return '';
+    const { days, weekAvg, weekWR, weekN, weekBest, weekWorst } = weekStats;
+    const weekColor = weekAvg >= 0 ? '#00ff88' : '#ff3355';
+
+    return `
+    <div style="margin-bottom:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:${color};letter-spacing:1px;margin-bottom:2px;">${heading}</div>
+      ${subheading ? `<div style="font-size:10px;color:var(--text3);margin-bottom:8px;">${subheading}</div>` : ''}
+
+      <!-- Week summary KPIs -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
+        ${statCard('WEEK WIN RATE', weekWR.toFixed(0)+'%', clr(weekWR), 'Mon open → Fri close')}
+        ${statCard('AVG WEEK RETURN', fmtPct(weekAvg,2), weekAvg>=0?'#00ff88':'#ff3355', 'Mon open → Fri close')}
+        ${statCard('BEST WEEK', fmtPct(weekBest,2), '#00ff88', 'of '+weekN+' periods')}
+        ${statCard('WORST WEEK', fmtPct(weekWorst,2), '#ff3355', 'of '+weekN+' periods')}
+      </div>
+
+      <!-- Header row -->
+      <div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)33;margin-bottom:2px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">DAY</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RETURN</div>
+        <div></div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">WIN RATE</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RANGE</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG UP</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG DN</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">N</div>
+      </div>
+      ${days.map(({name, stats}) => renderWeekRow(name, stats, color)).join('')}
+      ${weeklySummaryNote ? `<div style="font-size:10px;color:var(--text3);margin-top:4px;">${weeklySummaryNote}</div>` : ''}
+    </div>`;
+  }
+
+  // ── Section divider ────────────────────────────────────────────────────────
+  function sectionHeader(title, n, color, icon) {
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid ${color}33;">
+      <div style="font-family:'Orbitron',monospace;font-size:11px;color:${color};letter-spacing:1px;">${icon} ${title}</div>
+      <div style="font-size:10px;color:var(--text3);">${n} sessions</div>
+    </div>`;
+  }
+
+  // ── Max pain box ───────────────────────────────────────────────────────────
   const maxPainBox = nearest ? `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
       <div style="background:var(--bg3);border:1px solid ${mpColor}44;border-radius:4px;padding:8px 14px;text-align:center;min-width:110px;">
         <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">MAX PAIN</div>
         <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${mpColor};">$${fmt2(nearest.max_pain)}</div>
@@ -4610,50 +4926,114 @@ function renderExpiryBehavior(md) {
       </div>
     </div>` : '';
 
+  // ── ASSEMBLE ──────────────────────────────────────────────────────────────
   el.innerHTML = `
   <div style="padding:4px 0 8px;">
-    <!-- lookback + header row -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">⬡ EXPIRY BEHAVIOR ANALYSIS</div>
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">⬡ EXPIRY BEHAVIOR — HISTORICAL STATS FOR TODAY'S SESSION TYPE</div>
       <div style="display:flex;gap:5px;">
-        <button class="exp-lb-btn${_expiryLookback==='all'?' active':''}" onclick="expirySetLookback('all',this)">2020–2026</button>
+        <button class="exp-lb-btn${_expiryLookback==='all'?' active':''}" onclick="expirySetLookback('all',this)">1993–2026</button>
         <button class="exp-lb-btn${_expiryLookback==='2026'?' active':''}" onclick="expirySetLookback('2026',this)">2026 ONLY</button>
       </div>
     </div>
 
     ${maxPainBox}
 
-    <!-- Today's expiry panel -->
-    <div style="margin-bottom:12px;">
+    <!-- ══ TODAY panel ═══════════════════════════════════════════════════════ -->
+    <div style="margin-bottom:20px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <div style="font-family:'Orbitron',monospace;font-size:10px;color:${todayColor};letter-spacing:1px;">TODAY — ${todayLabel}</div>
         ${isWeekend?'<span style="font-size:10px;color:var(--text3);">(market closed — Monday preview)</span>':''}
       </div>
-      ${renderPanel(todayStats, todayLabel, todayColor, true)}
+      ${renderDayPanel(todayStats, todayLabel, todayColor, true)}
     </div>
 
-    <!-- Weekly OPEX panel — always open -->
-    <div style="margin-bottom:16px;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;color:#00ffcc;letter-spacing:1px;padding:6px 0;border-bottom:1px solid #00ffcc33;margin-bottom:8px;">
-        WEEKLY OPEX — ALL FRIDAYS (NON-MONTHLY) · ${weeklyStats?.n||0} SESSIONS
+    <!-- ══ WEEKLY OPEX ════════════════════════════════════════════════════════ -->
+    <div style="margin-bottom:24px;border-top:2px solid #00ffcc33;padding-top:16px;">
+      ${sectionHeader('WEEKLY OPEX — ALL FRIDAYS (NON-MONTHLY)', weeklyStats?.n||0, '#00ffcc', '⚡')}
+
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:14px;padding:10px;background:#00ffcc08;border-radius:4px;border-left:3px solid #00ffcc33;">
+        Weekly OPEX runs <strong style="color:#00ffcc;">Mon–Fri</strong> with pins and unwinding building throughout the week.
+        The table below shows how each day of an opex week trades historically — Mon open through Fri close.
       </div>
-      <div>
-        ${renderPanel(weeklyStats, 'WEEKLY OPEX (FRI)', '#00ffcc', false)}
+
+      <!-- Full opex week day-by-day -->
+      ${renderWeekBlock(
+        weeklyDayStats,
+        'OPEX WEEK — EACH DAY\'S STATS (ALL ${weeklyFridays.length} OPEX WEEKS)',
+        'Mon open price through Fri close price for each opex week',
+        '#00ffcc',
+        `n = ${weeklyDayStats.weekN} complete opex weeks · ${_expiryLookback==='2026'?'2026 only':'1993–2026'}`
+      )}
+
+      <!-- Friday expiry day stats -->
+      <div style="border-top:1px solid var(--border)33;padding-top:12px;margin-top:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ffcc99;letter-spacing:1px;margin-bottom:8px;">
+          FRIDAY EXPIRY DAY — THE DAY OF EXPIRATION ITSELF
+        </div>
+        ${renderDayPanel(weeklyStats, 'WEEKLY OPEX (FRI)', '#00ffcc', false)}
       </div>
     </div>
 
-    <!-- Monthly OPEX panel — always open -->
-    <div style="margin-bottom:8px;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;color:#ff8800;letter-spacing:1px;padding:6px 0;border-bottom:1px solid #ff880033;margin-bottom:8px;">
-        MONTHLY OPEX — 3RD FRIDAY · ${monthlyStats?.n||0} SESSIONS
+    <!-- ══ MONTHLY OPEX ════════════════════════════════════════════════════════ -->
+    <div style="margin-bottom:8px;border-top:2px solid #ff880033;padding-top:16px;">
+      ${sectionHeader('MONTHLY OPEX — 3RD FRIDAY', monthlyStats?.n||0, '#ff8800', '📅')}
+
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:14px;padding:10px;background:#ff880008;border-radius:4px;border-left:3px solid #ff880033;">
+        Monthly OPEX has a multi-week setup. Dealer hedging and positioning builds 2+ weeks in advance.
+        The sections below show how SPY trades in the <strong style="color:#ff8800;">2 weeks leading up to OPEX</strong>,
+        the <strong style="color:#ff8800;">opex week itself</strong>, and the <strong style="color:#ff8800;">Friday expiration day</strong>.
       </div>
-      <div>
-        ${renderPanel(monthlyStats, 'MONTHLY OPEX', '#ff8800', false)}
+
+      <!-- Timeline indicator -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:16px;">
+        ${[
+          {label:'T−2', sub:'2 WEEKS OUT', color:'#ff880044', border:'#ff880066'},
+          {label:'T−1', sub:'WEEK BEFORE', color:'#ff880066', border:'#ff880099'},
+          {label:'T', sub:'OPEX WEEK', color:'#ff8800aa', border:'#ff8800'},
+        ].map(x => `<div style="text-align:center;padding:6px;background:${x.color};border:1px solid ${x.border};border-radius:3px;">
+          <div style="font-family:'Orbitron',monospace;font-size:11px;color:#ff8800;">${x.label}</div>
+          <div style="font-size:9px;color:var(--text3);">${x.sub}</div>
+        </div>`).join('<div style="display:flex;align-items:center;justify-content:center;font-size:16px;color:#ff880066;">→</div>')}
+      </div>
+
+      <!-- T-2: Two weeks before opex -->
+      ${renderWeekBlock(
+        monthlyT2,
+        'T−2 · TWO WEEKS BEFORE MONTHLY OPEX',
+        'Historical behavior of the week 2 weeks prior to the monthly expiration Friday',
+        '#ff880088',
+        `n = ${monthlyT2.weekN} complete periods · ${_expiryLookback==='2026'?'2026 only':'1993–2026'}`
+      )}
+
+      <!-- T-1: Week before opex -->
+      ${renderWeekBlock(
+        monthlyT1,
+        'T−1 · WEEK BEFORE MONTHLY OPEX',
+        'Historical behavior of the week immediately before the monthly expiration week',
+        '#ff8800bb',
+        `n = ${monthlyT1.weekN} complete periods · ${_expiryLookback==='2026'?'2026 only':'1993–2026'}`
+      )}
+
+      <!-- T: Opex week -->
+      ${renderWeekBlock(
+        monthlyT0,
+        'T · MONTHLY OPEX WEEK (MON OPEN → FRI CLOSE)',
+        'The expiration week itself — dealer unwind, pin risk, and elevated volatility',
+        '#ff8800',
+        `n = ${monthlyT0.weekN} complete opex weeks · ${_expiryLookback==='2026'?'2026 only':'1993–2026'}`
+      )}
+
+      <!-- Friday expiry day stats -->
+      <div style="border-top:1px solid var(--border)33;padding-top:12px;margin-top:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#ff880099;letter-spacing:1px;margin-bottom:8px;">
+          MONTHLY OPEX FRIDAY — THE DAY OF EXPIRATION ITSELF
+        </div>
+        ${renderDayPanel(monthlyStats, 'MONTHLY OPEX', '#ff8800', false)}
       </div>
     </div>
   </div>`;
 
-  // inject button styles if not yet present
   if (!document.getElementById('expiry-btn-style')) {
     const s = document.createElement('style');
     s.id = 'expiry-btn-style';
@@ -4662,6 +5042,8 @@ function renderExpiryBehavior(md) {
     document.head.appendChild(s);
   }
 }
+
+
 
 // ─── MAG 7 EARNINGS SPY ANALYSIS ─────────────────────────────────────────────
 let _mag7Lookback = 'all';
