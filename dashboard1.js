@@ -1472,8 +1472,17 @@ function renderDeskSession(md,sd){
     const dvEl=$('deskDVwap'), dvDiff=$('deskDVwapDiff');
     const wvEl=$('deskWVwap'), wvDiff=$('deskWVwapDiff');
 
-    // Daily VWAP — from cached _spyIntraday if available
-    const lv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
+    // Daily VWAP — live intraday first, then intraday cache, then closing snapshot
+    let _dvLv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
+    if (!_dvLv?.vwap && typeof loadIntradayCache === 'function') {
+      const _ic = loadIntradayCache();
+      if (_ic?.vwap) _dvLv = _ic;
+    }
+    if (!_dvLv?.vwap && typeof loadClosingSnapshot === 'function') {
+      const _cs = loadClosingSnapshot();
+      if (_cs?.vwap) _dvLv = _cs;
+    }
+    const lv = _dvLv;
     const dv = lv?.vwap || null;
     if (dvEl) dvEl.textContent = dv ? '$'+fmt(dv,2) : '—';
     if (dvDiff && dv && cur) {
