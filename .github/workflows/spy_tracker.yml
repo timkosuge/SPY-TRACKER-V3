@@ -60,6 +60,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -- market_data.json spy_data.db 2>/dev/null || true
           git pull origin main
           git add -f spy_data.db spy_data.json market_data.json \
                      analog_data.js tod_stats.js \
