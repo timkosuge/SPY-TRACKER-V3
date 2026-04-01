@@ -98,6 +98,8 @@ export async function onRequest(context) {
     ];
 
     const bvols = Object.fromEntries(BUCKET_DEFS.map(b => [b.key, 0]));
+    // Track OHLC per bucket for session volatility panel
+    const bOHLC = Object.fromEntries(BUCKET_DEFS.map(b => [b.key, { high: null, low: null, open: null, close: null, bars: 0 }]));
     const priceVol = {};
     let peakBar = null;
 
@@ -108,7 +110,17 @@ export async function onRequest(context) {
       if (mins < 8*60+30 || mins >= 15*60) continue;
       const vol = bar.vol || 0;
       for (const bd of BUCKET_DEFS) {
-        if (mins >= bd.start && mins < bd.end) { bvols[bd.key] += vol; break; }
+        if (mins >= bd.start && mins < bd.end) {
+          bvols[bd.key] += vol;
+          const o = bOHLC[bd.key];
+          const h = bar.high ?? bar.close, l = bar.low ?? bar.close, c = bar.close;
+          if (o.open === null) o.open = bar.open ?? c;
+          if (o.high === null || h > o.high) o.high = h;
+          if (o.low  === null || l < o.low)  o.low  = l;
+          o.close = c;
+          o.bars++;
+          break;
+        }
       }
       const pk = Math.round((bar.close ?? bar.open) * 10) / 10;
       priceVol[pk] = (priceVol[pk] || 0) + vol;
@@ -120,17 +132,36 @@ export async function onRequest(context) {
     }
 
     const total = sessionVol || 1;
-    const buckets = BUCKET_DEFS.map(bd => ({
-      key:    bd.key,
-      label:  bd.label,
-      volume: Math.round(bvols[bd.key]),
-      pct:    Math.round(bvols[bd.key] / total * 1000) / 10,
-    }));
+    const buckets = BUCKET_DEFS.map(bd => {
+      const o = bOHLC[bd.key];
+      const range = (o.high !== null && o.low !== null) ? Math.round((o.high - o.low) * 100) / 100 : null;
+      return {
+        key:    bd.key,
+        label:  bd.label,
+        volume: Math.round(bvols[bd.key]),
+        pct:    Math.round(bvols[bd.key] / total * 1000) / 10,
+        high:   o.high   !== null ? Math.round(o.high  * 100) / 100 : null,
+        low:    o.low    !== null ? Math.round(o.low   * 100) / 100 : null,
+        open:   o.open   !== null ? Math.round(o.open  * 100) / 100 : null,
+        close:  o.close  !== null ? Math.round(o.close * 100) / 100 : null,
+        range,
+      };
+    });
 
     const open_1h    = bvols['vol_830_900'] + bvols['vol_900_930'];
     const close_1h   = bvols['vol_1400_1430'] + bvols['vol_1430_1500'];
     const open_1h_pct  = Math.round(open_1h  / total * 1000) / 10;
     const close_1h_pct = Math.round(close_1h / total * 1000) / 10;
+
+    // VWAP — cumulative typical price × volume for all RTH bars
+    let cumTPV = 0, cumVol = 0;
+    for (const bar of bars) {
+      const tp = ((bar.high ?? bar.close) + (bar.low ?? bar.close) + bar.close) / 3;
+      const v  = bar.vol || 0;
+      cumTPV += tp * v;
+      cumVol += v;
+    }
+    const vwap = cumVol > 0 ? Math.round(cumTPV / cumVol * 100) / 100 : null;
 
     // HVN — price level with most volume concentration
     let hvnPrice = null, hvnVolume = 0;
@@ -138,45 +169,9 @@ export async function onRequest(context) {
       if (vol > hvnVolume) { hvnVolume = vol; hvnPrice = parseFloat(price); }
     }
 
-    // ── Week open: Monday's regular session open ────────────────────────────
-    // Fetch a 5-day daily chart to get Monday's open regardless of current day
-    let weekOpen = null;
-    try {
-      const ctOffsetHrs = (() => {
-        const s = new Intl.DateTimeFormat('en-US', {
-          timeZone: 'America/Chicago', hour: 'numeric', hour12: false, timeZoneName: 'shortOffset'
-        }).format(now);
-        const m = s.match(/GMT([+-]\d+)/);
-        return m ? parseInt(m[1]) : -5;
-      })();
-      // Monday of current week in CT
-      const ctNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-      const dow = ctNow.getDay(); // 0=Sun,1=Mon..
-      const daysFromMon = dow === 0 ? 6 : dow - 1;
-      const monCT = new Date(ctNow);
-      monCT.setDate(ctNow.getDate() - daysFromMon);
-      monCT.setHours(9, 35, 0, 0); // after open
-      // p1 = Monday 9:30am CT in UTC
-      const monOpenUTC = new Date(monCT.getTime() - ctOffsetHrs * 3600000);
-      const p1w = Math.floor(monOpenUTC.getTime() / 1000);
-      const p2w = Math.floor(now.getTime() / 1000);
-
-      if (p2w > p1w) {
-        const wUrl = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&period1=${p1w}&period2=${p2w}`;
-        const wResp = await fetch(wUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible)', 'Accept': 'application/json' } });
-        if (wResp.ok) {
-          const wData = await wResp.json();
-          const wResult = wData?.chart?.result?.[0];
-          const wOpens = wResult?.indicators?.quote?.[0]?.open || [];
-          if (wOpens.length && wOpens[0] != null) {
-            weekOpen = Math.round(wOpens[0] * 100) / 100;
-          }
-        }
-      }
-    } catch(e) { /* week_open unavailable */ }
-
     return new Response(JSON.stringify({
       available:    true,
+      vwap,
       open:         Math.round(sessionOpen  * 100) / 100,
       high:         Math.round(sessionHigh  * 100) / 100,
       low:          Math.round(sessionLow   * 100) / 100,
@@ -197,7 +192,6 @@ export async function onRequest(context) {
       hvn_price:    hvnPrice,
       hvn_volume:   Math.round(hvnVolume),
       buckets,
-      week_open: weekOpen,
     }), { headers });
 
   } catch (e) {
