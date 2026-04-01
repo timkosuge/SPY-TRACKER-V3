@@ -6614,7 +6614,7 @@ async function renderLiveChart() {
   el.innerHTML = `
     <div id="lcWrap" style="padding:14px 16px;max-width:1400px;margin:0 auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);">⬡ SPY — 1-MIN INTRADAY CHART</div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);">⬡ SPY </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <div id="lcStatus" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">Fetching data…</div>
           <div id="lcPrice" style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:var(--text1);">—</div>
