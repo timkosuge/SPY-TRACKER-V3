@@ -4661,7 +4661,7 @@ function renderIntradayPattern(md, sd) {
       </div>
       <div>
         <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:8px;">${total} SESSIONS — ${gapType.replace('_',' ')} + FIRST 30MIN ${f30dir}</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
           ${[
             ['FOLLOW-THRU', followThruRate.toFixed(0)+'%', followColor, 'Direction continued all day'],
             ['AVG DAY RANGE', '$'+fmt(avgRange,2), 'var(--cyan)', 'Typical H-L range'],
@@ -4836,15 +4836,15 @@ function renderExpiryBehavior(md) {
 
   // ── UI builders ────────────────────────────────────────────────────────────
   function statCard(label, value, color, sub) {
-    return `<div style="background:var(--bg3);border-top:2px solid ${color};border-radius:3px;padding:8px;text-align:center;">
-      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:3px;">${label}</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${color};">${value}</div>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>
+    return `<div style="background:var(--bg3);border-top:2px solid ${color};border-radius:3px;padding:10px 8px;text-align:center;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:5px;">${label}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${color};">${value}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px;">${sub}</div>
     </div>`;
   }
 
   function insightBar(color, text) {
-    return `<div style="display:flex;gap:8px;padding:6px 10px;border-left:3px solid ${color};background:${color}11;border-radius:0 3px 3px 0;font-size:12px;color:var(--text2);line-height:1.5;">${text}</div>`;
+    return `<div style="display:flex;gap:8px;padding:8px 12px;border-left:3px solid ${color};background:${color}11;border-radius:0 3px 3px 0;font-size:13px;color:var(--text2);line-height:1.6;">${text}</div>`;
   }
 
   function renderDayPanel(stats, label, color, showTodayContext) {
@@ -4899,33 +4899,33 @@ function renderExpiryBehavior(md) {
     if (!stats) return '';
     const wr = stats.pctUp;
     const wrClr = clr(wr);
-    const barW = Math.min(Math.round(Math.abs(stats.avgRet) / 0.5 * 80), 80);
+    const retColor = stats.avgRet >= 0 ? '#00ff88' : '#ff3355';
+    const barW = Math.min(Math.round(Math.abs(stats.avgRet) / 0.5 * 60), 60);
     const barColor = stats.avgRet >= 0 ? '#00ff8880' : '#ff335580';
-    return `<div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)22;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;color:${color};">${name}</div>
-      <div style="display:flex;align-items:center;gap:4px;">
-        <div style="width:${barW}px;height:8px;background:${barColor};border-radius:2px;flex-shrink:0;"></div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${stats.avgRet>=0?'#00ff88':'#ff3355'};">${fmtPct(stats.avgRet,2)}</div>
-      </div>
-      <div></div>
-      <div style="text-align:center;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${wrClr};">${wr.toFixed(0)}%</div>
-        <div style="font-size:9px;color:var(--text3);">win rate</div>
+    return `<div style="display:grid;grid-template-columns:52px 1fr 100px 100px 80px 80px 50px;gap:8px;align-items:center;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div style="font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:${color};">${name}</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div style="width:${barW}px;height:10px;background:${barColor};border-radius:2px;flex-shrink:0;min-width:4px;"></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${retColor};">${fmtPct(stats.avgRet,2)}</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);">$${fmt2(stats.avgRange)}</div>
-        <div style="font-size:9px;color:var(--text3);">avg range</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${wrClr};">${wr.toFixed(0)}%</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:2px;">WIN RATE</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#00ff88;">${stats.bigUp.toFixed(0)}%</div>
-        <div style="font-size:9px;color:var(--text3);">big up</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:var(--cyan);">$${fmt2(stats.avgRange)}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:2px;">AVG RANGE</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3355;">${stats.bigDn.toFixed(0)}%</div>
-        <div style="font-size:9px;color:var(--text3);">big dn</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#00ff88;">${stats.bigUp.toFixed(0)}%</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:2px;">BIG UP</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-size:9px;color:var(--text3);">n=${stats.n}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#ff3355;">${stats.bigDn.toFixed(0)}%</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:2px;">BIG DN</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">n=${stats.n}</div>
       </div>
     </div>`;
   }
@@ -4949,15 +4949,14 @@ function renderExpiryBehavior(md) {
       </div>
 
       <!-- Header row -->
-      <div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)33;margin-bottom:2px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">DAY</div>
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RETURN</div>
-        <div></div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">WIN RATE</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RANGE</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG UP</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG DN</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">N</div>
+      <div style="display:grid;grid-template-columns:52px 1fr 100px 100px 80px 80px 50px;gap:8px;padding:6px 6px;border-bottom:1px solid var(--border);margin-bottom:4px;background:var(--bg2);border-radius:3px 3px 0 0;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">DAY</div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">AVG RETURN</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">WIN RATE</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">AVG RANGE</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">BIG UP</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">BIG DN</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">N</div>
       </div>
       ${days.map(({name, stats}) => renderWeekRow(name, stats, color)).join('')}
       ${weeklySummaryNote ? `<div style="font-size:10px;color:var(--text3);margin-top:4px;">${weeklySummaryNote}</div>` : ''}
@@ -4966,9 +4965,9 @@ function renderExpiryBehavior(md) {
 
   // ── Section divider ────────────────────────────────────────────────────────
   function sectionHeader(title, n, color, icon) {
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid ${color}33;">
-      <div style="font-family:'Orbitron',monospace;font-size:11px;color:${color};letter-spacing:1px;">${icon} ${title}</div>
-      <div style="font-size:10px;color:var(--text3);">${n} sessions</div>
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid ${color}44;">
+      <div style="font-family:'Orbitron',monospace;font-size:13px;color:${color};letter-spacing:2px;">${icon} ${title}</div>
+      <div style="font-size:11px;color:var(--text3);">${n} sessions</div>
     </div>`;
   }
 
