@@ -6568,7 +6568,112 @@ async function renderLiveChart() {
       const priceEl  = document.getElementById('lcPrice');
       const changeEl = document.getElementById('lcChange');
       if (!d?.available || !d.rawBars?.length) {
-        if (statusEl) statusEl.textContent = d?.error || 'Market closed / no data';
+        // Market closed — show last session summary from _sd
+        const sd = (typeof _sd !== 'undefined') ? _sd : [];
+        const last = sd[0] || {};
+        const prev = sd[1] || {};
+        const spyQ = (typeof _md !== 'undefined') ? (_md?.quotes?.['SPY'] || {}) : {};
+        const price = spyQ.price || last.close || 0;
+        const chg   = spyQ.change || (last.close && prev.close ? last.close - prev.close : null);
+        const chgPct = spyQ.pct_change || (chg && prev.close ? chg/prev.close*100 : null);
+        const up = (chg ?? 0) >= 0;
+        const col = up ? 'var(--green)' : 'var(--red)';
+
+        if (priceEl && price) { priceEl.textContent = '$' + price.toFixed(2); priceEl.style.color = col; }
+        if (changeEl && chg != null) { changeEl.textContent = (up?'+':'') + chg.toFixed(2) + (chgPct != null ? ' (' + (up?'+':'') + chgPct.toFixed(2) + '%)' : ''); changeEl.style.color = col; }
+        if (statusEl) { statusEl.textContent = '◉ MARKET CLOSED · last: ' + (last.date || '—'); statusEl.style.color = 'var(--text3)'; }
+
+        // Render closed-market panel
+        const statsEl = document.getElementById('lcStats');
+        if (statsEl && last.open) {
+          const fmt2 = v => v != null ? '$' + v.toFixed(2) : '—';
+          const m = last.measurements || {};
+          const oc = m.oc_pts ?? m.open_to_close;
+          const rng = m.range_pts ?? m.day_range;
+          [
+            { label:'PREV OPEN',   val: fmt2(last.open),   color:'var(--text1)' },
+            { label:'PREV HIGH',   val: fmt2(last.high),   color:'var(--green)' },
+            { label:'PREV LOW',    val: fmt2(last.low),    color:'var(--red)'   },
+            { label:'PREV CLOSE',  val: fmt2(last.close),  color: (last.close??0)>=(last.open??0)?'var(--green)':'var(--red)' },
+            { label:'O→C',         val: oc != null ? (oc>=0?'+':'') + oc.toFixed(2) : '—', color: (oc??0)>=0?'var(--green)':'var(--red)' },
+            { label:'DAY RANGE',   val: rng != null ? '$' + rng.toFixed(2) : '—', color:'var(--cyan)' },
+            { label:'VOLUME',      val: last.volume ? (last.volume/1e6).toFixed(1)+'M' : '—', color:'var(--text2)' },
+          ].map(c => `<div class="panel" style="padding:10px;text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">${c.label}</div><div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${c.color};">${c.val}</div></div>`);
+          statsEl.innerHTML = [
+            { label:'PREV OPEN',   val: fmt2(last.open),   color:'var(--text1)' },
+            { label:'PREV HIGH',   val: fmt2(last.high),   color:'var(--green)' },
+            { label:'PREV LOW',    val: fmt2(last.low),    color:'var(--red)'   },
+            { label:'PREV CLOSE',  val: fmt2(last.close),  color: (last.close??0)>=(last.open??0)?'var(--green)':'var(--red)' },
+            { label:'O→C',         val: oc != null ? (oc>=0?'+':'') + oc.toFixed(2) : '—', color: (oc??0)>=0?'var(--green)':'var(--red)' },
+            { label:'DAY RANGE',   val: rng != null ? '$' + rng.toFixed(2) : '—', color:'var(--cyan)' },
+            { label:'VOLUME',      val: last.volume ? (last.volume/1e6).toFixed(1)+'M' : '—', color:'var(--text2)' },
+          ].map(c => `<div class="panel" style="padding:10px;text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">${c.label}</div><div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${c.color};">${c.val}</div></div>`).join('');
+        }
+
+        // Draw a 20-day daily close chart on the canvas
+        const canvas = document.getElementById('lcCanvas');
+        if (canvas && sd.length > 1) {
+          const recent = sd.slice(0, 20).reverse().filter(d2 => d2.close);
+          if (recent.length > 1) {
+            const wrap = canvas.parentElement;
+            const W = Math.max(wrap ? wrap.clientWidth - 20 : 600, 300);
+            const H = 280;
+            canvas.width = W; canvas.height = H;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, W, H);
+            const pad = { l:54, r:16, t:24, b:36 };
+            const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+            const closes = recent.map(d2 => d2.close);
+            const minC = Math.min(...closes) * 0.9985;
+            const maxC = Math.max(...closes) * 1.0015;
+            const rng2 = maxC - minC || 1;
+            const px = i => pad.l + (i / (recent.length - 1)) * cw;
+            const py = v => pad.t + ch - ((v - minC) / rng2) * ch;
+            const lineColor = closes[closes.length-1] >= closes[0] ? '#00ff88' : '#ff3355';
+
+            // Grid
+            for (let g = 0; g <= 4; g++) {
+              const gv = minC + (rng2 / 4) * g;
+              const gy = py(gv);
+              ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+              ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(W - pad.r, gy); ctx.stroke();
+              ctx.fillStyle = '#505070'; ctx.font = '9px "Share Tech Mono",monospace'; ctx.textAlign = 'right';
+              ctx.fillText(gv.toFixed(0), pad.l - 4, gy + 3);
+            }
+
+            // Area
+            const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
+            grad.addColorStop(0, lineColor + '40'); grad.addColorStop(1, lineColor + '04');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(px(0), py(closes[0]));
+            closes.forEach((c2, i) => ctx.lineTo(px(i), py(c2)));
+            ctx.lineTo(px(closes.length - 1), pad.t + ch);
+            ctx.lineTo(px(0), pad.t + ch);
+            ctx.closePath(); ctx.fill();
+
+            // Line
+            ctx.strokeStyle = lineColor; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+            ctx.beginPath();
+            closes.forEach((c2, i) => i === 0 ? ctx.moveTo(px(i), py(c2)) : ctx.lineTo(px(i), py(c2)));
+            ctx.stroke();
+
+            // Last close dot
+            const lx = px(closes.length - 1), ly = py(closes[closes.length - 1]);
+            ctx.fillStyle = lineColor; ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI * 2); ctx.fill();
+
+            // Date labels every 5
+            ctx.fillStyle = '#404060'; ctx.font = '9px "Share Tech Mono",monospace'; ctx.textAlign = 'center';
+            recent.forEach((d2, i) => {
+              if (i % 5 !== 0 && i !== recent.length - 1) return;
+              ctx.fillText(d2.date.slice(5), px(i), pad.t + ch + 14);
+            });
+
+            // Header label
+            ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '9px "Orbitron",monospace'; ctx.textAlign = 'left';
+            ctx.fillText('LAST 20 SESSIONS — DAILY CLOSE', pad.l, pad.t - 6);
+          }
+        }
         return;
       }
 
