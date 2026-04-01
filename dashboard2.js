@@ -807,7 +807,8 @@ function renderWEM(md){
 
   if(cur){
     const lo=cur.wem_low, hi=cur.wem_high, mid=cur.wem_mid;
-    const price=spy.price||mid||0;
+    if(spy.price && spy.price > 0) _wemFrozenPrice = spy.price;
+    const price=_wemFrozenPrice||spy.price||mid||0;
     const halfRange=cur.wem_range/2;
 
     $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}`;
@@ -890,7 +891,7 @@ function renderWEM(md){
   if(!dotEl && !zEl) return;
 
   const lo  = cur.wem_low, hi = cur.wem_high, mid = cur.wem_mid;
-  const price = spy.price || mid || 0;
+  const price = _wemFrozenPrice || spy.price || mid || 0;
   const halfRange = cur.wem_range / 2;
   const z = halfRange > 0 ? (price - mid) / halfRange : 0;
   const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
@@ -1250,6 +1251,12 @@ function renderVolume(sd,md){
 // ─────────────────────────────────────────────
 
 let _md = null, _sd = null, _spyIntraday = null;
+
+// ── WEM price freeze ───────────────────────────────────────────────────────────
+// Stores the last known valid SPY price for WEM bell/thermometer display.
+// Updated any time we get a real price; never reset to null/0 so the display
+// holds its position at the close and through overnight/weekend.
+let _wemFrozenPrice = null;
 
 // Cache last good intraday snapshot so volume/session panels survive pre-market & overnight
 const INTRADAY_CACHE_KEY = 'spy_intraday_cache_v1';
@@ -3329,7 +3336,11 @@ function scheduleLiveRefresh() {
 
 // Lightweight WEM price update — runs every tick without rebuilding heavy SVG charts
 function updateWEMPrice(price) {
-  if (!price || !_md) return;
+  // Update frozen price whenever we get a real value; use frozen as fallback after close
+  if (price && price > 0) _wemFrozenPrice = price;
+  const effectivePrice = _wemFrozenPrice || price;
+  if (!effectivePrice || !_md) return;
+  price = effectivePrice;
   const wems = _md.weekly_em || [];
   const cur  = wems.find(w => !w.week_close) || wems[0];
   if (!cur) return;
@@ -3503,6 +3514,8 @@ async function refreshLiveData() {
       _lastLiveSuccess = new Date();
       setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT (SPY only)');
     } else {
+      // Market closed / all fetches failed — hold WEM visuals at last known close price
+      if (_wemFrozenPrice) updateWEMPrice(_wemFrozenPrice);
       setLiveStatus('offline', 'fetch failed');
     }
   } catch(e) {
