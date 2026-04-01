@@ -6780,7 +6780,7 @@ function renderSessionVolStats() {
   const allDayAvgs = DAYS.flatMap(d => dayProfiles[d].map(b=>b.avg));
   const dayMax = Math.max(...allDayAvgs, 0.01);
 
-  const chartH2 = 90, chartW2_pct = 100;
+  const chartH2 = 160, chartW2_pct = 100;
   // Build SVG line chart for day comparison
   const svgLines = DAYS.map(d => {
     const dp = dayProfiles[d];
@@ -6871,7 +6871,7 @@ function renderSessionVolStats() {
     if (!dp.length) return '';
     const pts = dp.map((b,i) => {
       const x = (i/(dp.length-1))*100;
-      const y = 88 - (b.avg/lbMax)*84;
+      const y = 95 - (b.avg/lbMax)*91;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
     return `<polyline points="${pts}" fill="none" stroke="${lbColors[k]}" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>`;
@@ -6895,7 +6895,7 @@ function renderSessionVolStats() {
     <br><br>This matters for trade sizing and stop placement: if you calibrate stops based on long-term averages during a high-vol regime, you'll get stopped out too often.
     Conversely, stops sized for a high-vol period will be too wide during quiet stretches.
     The gap between ${curYear} (orange) and All History (purple) is the "regime premium" — how much more (or less) volatile today's market is vs history.`) +
-    `<svg viewBox="0 0 100 100" style="width:100%;height:110px;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    `<svg viewBox="0 0 100 100" style="width:100%;height:200px;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
       ${lbSvgLines}
       ${hourLabels}
     </svg>
