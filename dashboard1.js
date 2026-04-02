@@ -1547,8 +1547,12 @@ function renderDeskSession(md,sd){
   const cached = loadPMCache();
   if (cached) {
     setPM(cached.high, cached.mid, cached.low);
-  } else {
+  } else if (!window._pmFetchInFlight) {
+    // Guard: only one fetch in flight at a time — renderDeskSession runs on every
+    // refresh tick so without this we’d fire a new /premarket request every 15s
+    window._pmFetchInFlight = true;
     fetch('/premarket?t=' + Date.now()).then(r=>r.ok?r.json():null).then(pm=>{
+      window._pmFetchInFlight = false;
       if (pm?.available && pm.high) {
         savePMCache(pm);
         setPM(pm.high, pm.mid, pm.low);
@@ -1559,6 +1563,7 @@ function renderDeskSession(md,sd){
         if (still) setPM(still.high, still.mid, still.low);
       }
     }).catch(() => {
+      window._pmFetchInFlight = false;
       const still = loadPMCache();
       if (still) setPM(still.high, still.mid, still.low);
     });
