@@ -1605,6 +1605,24 @@ def export_gap_stats(conn):
             'gap_up_pct':pct([p for p in sub if p['dow']==d],lambda p:p['gap_type']=='GAP_UP'),
             'gap_dn_pct':pct([p for p in sub if p['dow']==d],lambda p:p['gap_type']=='GAP_DOWN'),
             'avg_ph_move':avg([p['ph']['move'] for p in sub if p['dow']==d])} for d in range(5)}
+        def big_gap_stats(threshold):
+            up=[p for p in sub if p['gap_pct']>=threshold]
+            dn=[p for p in sub if p['gap_pct']<=-threshold]
+            all_big=up+dn
+            def gs(g):
+                if not g: return {'n':0}
+                return {'n':len(g),
+                    'fill_rate':round(sum(1 for p in g if p['gap_filled'])/len(g)*100),
+                    'avg_gap_pct':avg([p['gap_pct'] for p in g]),
+                    'avg_fh_range':avg([p['fh']['range'] for p in g]),
+                    'avg_fh_move':avg([p['fh']['move'] for p in g]),
+                    'fh_up_pct':pct(g,lambda p:p['fh']['move']>0),
+                    'avg_day_move':avg([p['curr_day_move'] for p in g]),
+                    'avg_day_range':avg([p['curr_day_range'] for p in g]),
+                    'fh_predicts_day':pct(g,lambda p:(p['fh']['move']>0)==(p['curr_day_move']>0))}
+            return {'up':gs(up),'down':gs(dn),'total_n':len(all_big),
+                    'pct_of_sessions':round(len(all_big)/n*100,1) if n else 0}
+        big_gaps={'1pct':big_gap_stats(1.0),'1pt5pct':big_gap_stats(1.5),'2pct':big_gap_stats(2.0)}
         return {'n':n,'avg_gap':avg([p['gap_pct'] for p in sub]),
             'avg_ph_move':avg([p['ph']['move'] for p in sub]),'avg_ph_range':avg([p['ph']['range'] for p in sub]),
             'avg_fh_range':avg([p['fh']['range'] for p in sub]),'ph_bins':ph_bins,'gap_breakdown':gbd,
@@ -1613,7 +1631,7 @@ def export_gap_stats(conn):
                 'reversal_n':len(rg),'late_surge_gap_up':pct(ls,lambda p:p['gap_type']=='GAP_UP') if ls else 0,
                 'late_surge_n':len(ls),'late_fade_gap_dn':pct(lf,lambda p:p['gap_type']=='GAP_DOWN') if lf else 0,
                 'late_fade_n':len(lf),'wide_ph_fh_range':avg([p['fh']['range'] for p in wp]),
-                'tight_ph_fh_range':avg([p['fh']['range'] for p in tp])},'dow_breakdown':dbd}
+                'tight_ph_fh_range':avg([p['fh']['range'] for p in tp])},'dow_breakdown':dbd,'big_gaps':big_gaps}
 
     d12m={p['curr_date'] for p in pairs if p['curr_date']>=cutoff_12m}
     dyr={p['curr_date'] for p in pairs if p['curr_date'].startswith(year_str)}
