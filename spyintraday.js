@@ -177,12 +177,12 @@ export async function onRequest(context) {
       asOf,
       vwap,
       rawBars:      bars.map(b => ({
-        t:     b.t,
-        open:  b.open  != null ? Math.round(b.open  * 100) / 100 : null,
-        high:  b.high  != null ? Math.round(b.high  * 100) / 100 : null,
-        low:   b.low   != null ? Math.round(b.low   * 100) / 100 : null,
-        close: b.close != null ? Math.round(b.close * 100) / 100 : null,
-        vol:   b.vol   || 0,
+        t: b.t,
+        o: b.open  != null ? Math.round(b.open  * 100) / 100 : null,
+        h: b.high  != null ? Math.round(b.high  * 100) / 100 : null,
+        l: b.low   != null ? Math.round(b.low   * 100) / 100 : null,
+        c: b.close != null ? Math.round(b.close * 100) / 100 : null,
+        v: b.vol   || 0,
       })),
       // Intraday volume breakdown (CT time buckets)
       open_1h:      Math.round(open_1h),
