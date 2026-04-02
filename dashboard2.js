@@ -3473,17 +3473,11 @@ function updateWEMPrice(price) {
       </div>`;
   }
 
-  // Z-score display (text elements only — skip rebuilding the full SVG)
-  const zEl = $('wemZScore');
-  if (zEl) {
-    const z = halfRange > 0 ? (price - mid) / halfRange : 0;
-    const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
-    const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
-    // Only update z-score text nodes, not the full SVG
-    const zScoreVal = zEl.querySelector('.wem-z-val');
-    const zScoreLbl = zEl.querySelector('.wem-z-lbl');
-    if (zScoreVal) { zScoreVal.textContent = (z>=0?'+':'')+fmt(z,2); zScoreVal.style.color = zColor; }
-    if (zScoreLbl) { zScoreLbl.textContent = zLabel; zScoreLbl.style.color = zColor; }
+  // Z-score thermometer + bell curve — re-render fully if WEM tab is visible
+  const wemPanel = $('panel-wem');
+  if (wemPanel && wemPanel.classList.contains('active') && _md) {
+    try { renderWEM(_md); } catch(e) {}
+    return; // renderWEM already updated needle/header/posText above
   }
 }
 
