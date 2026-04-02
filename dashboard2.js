@@ -3403,7 +3403,7 @@ async function refreshLiveData() {
       updateWEMPrice(merged.quotes?.['SPY']?.price);
       renderOverview(merged);
       loadFuturesChart();
-      if(_narratorRunning) _narratorComment();
+
       renderVolatility(merged);
       renderBreadth(merged, _sd);
       renderSentiment(merged);
