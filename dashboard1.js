@@ -69,7 +69,7 @@ function _switchPanelOnly(id) {
   if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
   if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); }, 50); }
   if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }
-  if(id==='gap-stats') { setTimeout(renderGapStats, 50); }
+  if(id==='gap-stats') { setTimeout(renderGapStats, 50); setTimeout(renderGapOHLCSections, 80); }
   if(id==='session-vol') { setTimeout(renderSessionVolStats, 50); }
   if(id==='time-of-day') { setTimeout(renderTimeOfDay, 50); }
 }
@@ -6446,6 +6446,15 @@ function renderWindowStats() {
 let _gsLookback = 'all';
 let _gsDow      = 'all';
 
+function renderGapOHLCSections() {
+  // Render the OHLC-derived gap analysis sections that now live in panel-gap-stats
+  // Reuses _phAllData (set by renderPriceHistory) and the rendering code in dashboard2
+  if (typeof _phAllData !== 'undefined' && _phAllData && _phAllData.length > 1) {
+    // Trigger the gap OHLC sections by calling the shared gap renderer
+    _renderGapOHLCBlocks(_phAllData);
+  }
+}
+
 window._gsSetLookback = function(v){ _gsLookback=v; renderGapStats(); };
 window._gsSetDow      = function(v){ _gsDow=v;      renderGapStats(); };
 
@@ -6719,6 +6728,53 @@ function renderGapStats() {
     Use these as a prior when evaluating a gap — a large gap on Monday is more normal than the same gap on a Wednesday.
     All stats based on ${D.n} total sessions; individual day counts shown in the N column.`);
 
+  // ── SECTION 6: Big Gap stats ──────────────────────────────────────────────
+  const bg = D.big_gaps || {};
+  const bgStat = (lbl, val, color) =>
+    `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <span style="font-size:11px;color:var(--text3);">${lbl}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${color||'var(--text2)'};">${val}</span>
+    </div>`;
+  const bgCard = (label, threshKey, color) => {
+    const t = bg[threshKey]; if (!t || !t.total_n) return `<div style="background:var(--bg2);border:1px solid var(--border);border-top:3px solid ${color};border-radius:4px;padding:12px;"><div style="font-family:'Orbitron',monospace;font-size:9px;color:${color};margin-bottom:8px;">${label}</div><div style="color:var(--text3);font-size:11px;">No big gaps in this filter</div></div>`;
+    const u = t.up || {}; const d = t.down || {};
+    return `<div style="background:var(--bg2);border:1px solid var(--border);border-top:3px solid ${color};border-radius:4px;padding:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:${color};margin-bottom:8px;">${label} <span style="color:var(--text3);font-size:8px;">(${t.total_n} days · ${t.pct_of_sessions}% of sessions)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:#00ff88;margin-bottom:6px;">GAP UP ▲ (${u.n||0} days)</div>
+          ${u.n ? bgStat('Avg gap', '+'+((u.avg_gap_pct||0).toFixed(2))+'%', '#00ff88') : '<div style="font-size:10px;color:var(--text3);">No data</div>'}
+          ${u.n ? bgStat('Fill rate', (u.fill_rate||0)+'%', u.fill_rate>=50?'#ff8800':'#00ccff') : ''}
+          ${u.n ? bgStat('Avg FH range', (u.avg_fh_range||0).toFixed(2)+'%', '#ffcc00') : ''}
+          ${u.n ? bgStat('FH up %', (u.fh_up_pct||0)+'%', u.fh_up_pct>=55?'#00ff88':u.fh_up_pct<=45?'#ff3355':'#ffcc00') : ''}
+          ${u.n ? bgStat('Avg FH move', ((u.avg_fh_move||0)>=0?'+':'')+((u.avg_fh_move||0).toFixed(3))+'%', (u.avg_fh_move||0)>=0?'#00ff88':'#ff3355') : ''}
+          ${u.n ? bgStat('Avg day range', (u.avg_day_range||0).toFixed(2)+'%', '#ffcc00') : ''}
+          ${u.n ? bgStat('FH predicts day', (u.fh_predicts_day||0)+'%', u.fh_predicts_day>=65?'#00ff88':'var(--text2)') : ''}
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:#ff3355;margin-bottom:6px;">GAP DOWN ▼ (${d.n||0} days)</div>
+          ${d.n ? bgStat('Avg gap', ((d.avg_gap_pct||0).toFixed(2))+'%', '#ff3355') : '<div style="font-size:10px;color:var(--text3);">No data</div>'}
+          ${d.n ? bgStat('Fill rate', (d.fill_rate||0)+'%', d.fill_rate>=50?'#ff8800':'#00ccff') : ''}
+          ${d.n ? bgStat('Avg FH range', (d.avg_fh_range||0).toFixed(2)+'%', '#ffcc00') : ''}
+          ${d.n ? bgStat('FH up %', (d.fh_up_pct||0)+'%', d.fh_up_pct>=55?'#00ff88':d.fh_up_pct<=45?'#ff3355':'#ffcc00') : ''}
+          ${d.n ? bgStat('Avg FH move', ((d.avg_fh_move||0)>=0?'+':'')+((d.avg_fh_move||0).toFixed(3))+'%', (d.avg_fh_move||0)>=0?'#00ff88':'#ff3355') : ''}
+          ${d.n ? bgStat('Avg day range', (d.avg_day_range||0).toFixed(2)+'%', '#ffcc00') : ''}
+          ${d.n ? bgStat('FH predicts day', (d.fh_predicts_day||0)+'%', d.fh_predicts_day>=65?'#00ff88':'var(--text2)') : ''}
+        </div>
+      </div>
+    </div>`;
+  };
+  const bigGapHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+      ${bgCard('≥ 1.0% GAP','1pct','#ff8800')}
+      ${bgCard('≥ 1.5% GAP','1pt5pct','#ff5500')}
+      ${bgCard('≥ 2.0% GAP','2pct','#ff3355')}
+    </div>`;
+  const bigGapExplain = gsExplain(`This section isolates the biggest gap days — sessions where SPY opened 1%, 1.5%, or 2%+ away from the prior close in either direction.
+    For each threshold, stats are split by gap-up vs gap-down. <strong>Fill rate</strong> shows how often the gap was fully closed by day's end.
+    <strong>FH up %</strong> is how often the First Hour moved higher after the gap. <strong>FH predicts day</strong> is how often first-hour direction matched the full day direction.
+    Big gaps tend to produce wider first hours and higher day ranges. Gap-downs historically have higher fill rates than gap-ups on large moves.`);
+
   el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
       <div>
@@ -6744,6 +6800,7 @@ function renderGapStats() {
     ${section('⬡ POWER HOUR MOVE → NEXT DAY GAP PREDICTION','#ffcc00', phBinExplain + phBinHtml)}
     ${section('⬡ KEY SIGNALS — LATE PH MOMENTUM, FILL RATES, RANGE EXPANSION','#8855ff', signalExplain + signalHtml)}
     ${section('⬡ GAP PATTERNS BY DAY OF WEEK','#ff8800', dowExplain + dowHtml)}
+    ${section('⬡ BIG GAP BEHAVIOR — 1%, 1.5%, 2% THRESHOLDS','#ff3355', bigGapExplain + bigGapHtml)}
   </div>`;
 }
 
