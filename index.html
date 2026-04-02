@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -548,14 +549,14 @@
 <div class="subtab-bar" id="subtabBar" style="display:none;">
   <!-- Desk subtabs -->
   <div class="subtab-group" id="subtabs-desk">
-    <div class="subtab active" onclick="switchGroupSub('live-chart',this)">⬡ LIVE CHART</div>
-    <div class="subtab" onclick="switchGroupSub('desk',this)">TRADING DESK</div>
-    <div class="subtab" onclick="switchGroupSub('intraday',this)">INTRADAY</div>
-    <div class="subtab" onclick="switchGroupSub('intraday-volume',this)">VOLUME</div>
-    <div class="subtab" onclick="switchGroupSub('intraday-windows',this)">WINDOWS</div>
+    <div class="subtab active" onclick="switchGroupSub('live-chart',this)">CHART</div>
+    <div class="subtab" onclick="switchGroupSub('desk',this)">DASHBOARD</div>
     <div class="subtab" onclick="switchGroupSub('gap-stats',this)">GAPS</div>
-    <div class="subtab" onclick="switchGroupSub('session-vol',this)">SESSION VOL</div>
-    <div class="subtab" onclick="switchGroupSub('time-of-day',this)">TIME OF DAY</div>
+    <div class="subtab" onclick="switchGroupSub('intraday',this)">OPENING RANGE</div>
+    <div class="subtab" onclick="switchGroupSub('time-of-day',this)">TIMING</div>
+    <div class="subtab" onclick="switchGroupSub('intraday-windows',this)">WINDOWS</div>
+    <div class="subtab" onclick="switchGroupSub('intraday-volume',this)">VOLUME</div>
+    <div class="subtab" onclick="switchGroupSub('session-vol',this)">VOLATILITY</div>
   </div>
   <!-- Derivatives subtabs -->
   <div class="subtab-group" id="subtabs-derivatives">
@@ -1158,6 +1159,13 @@
      EXPECTED MOVE
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-wem">
+  <!-- Mode toggle -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+    <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);">WEM MODE</div>
+    <button id="wemModeDyn" onclick="window._wemSetMode('dynamic')" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 12px;border-radius:2px;border:1px solid var(--cyan);background:var(--cyan);color:#000;cursor:pointer;letter-spacing:1px;">DYNAMIC</button>
+    <button id="wemModeStatic" onclick="window._wemSetMode('static')" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 12px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;letter-spacing:1px;">STATIC</button>
+    <div id="wemModeDesc" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);margin-left:8px;">Range shrinks as DTE decays · updates daily</div>
+  </div>
   <!-- Current week panel with bar + 3 EM boxes below -->
   <div class="panel" style="margin-bottom:10px;">
     <div class="panel-label" id="wemWeekLabel">⬡ CURRENT WEEK</div>
@@ -1170,6 +1178,7 @@
         <span class="wem-high-lbl" id="wemTabHighLbl">—</span>
       </div>
       <div class="wem-pos-text" id="wemTabPosText">—</div>
+      <div id="wemCompareRow"></div>
     </div>
     <!-- 3 EM boxes -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px;" id="emBoxRow"></div>
@@ -1189,7 +1198,7 @@
     </div>
     <!-- Right: Thermometer + bell curve -->
     <div class="panel">
-      <div class="panel-label">⬡ WEM POSITION — Z-SCORE</div>
+      <div class="panel-label" id="wemZScoreLabel">⬡ WEM POSITION — Z-SCORE</div>
       <div id="wemZScore"></div>
     </div>
   </div>
