@@ -247,178 +247,8 @@ function phRenderFiltered(sd) {
 
   // Weekly gap stats — pulled from _md if available
 
-  const gapStatCardsEl = $('gapStatCards');
-  const gapSizeChartEl = $('gapSizeChart');
-  const gapByDayEl     = $('gapByDayChart');
-  const gapTimingEl    = $('gapCloseTimingChart');
-  const gapTableEl     = $('gapHistBody');
-
-  if(gapStatCardsEl && sd.length > 1) {
-    // Build gap dataset from OHLC
-    const gaps = [];
-    for(let i=0; i<sd.length-1; i++){
-      const today2=sd[i], prev2=sd[i+1];
-      if(!today2.open||!prev2.close||!today2.high||!today2.low||!today2.close) continue;
-      const gapAmt = today2.open - prev2.close;
-      if(Math.abs(gapAmt) < 0.05) continue; // filter micro gaps
-      const gapPct = (gapAmt/prev2.close)*100;
-      const dir = gapAmt > 0 ? 'UP' : 'DOWN';
-      // Gap filled same day?
-      // Gap up filled if price traded back down to prev close (low <= prevClose)
-      // Gap down filled if price traded back up to prev close (high >= prevClose)
-      const filledSameDay = dir==='UP'
-        ? today2.low  <= prev2.close
-        : today2.high >= prev2.close;
-      // Day of week
-      const d2 = new Date(today2.date+'T12:00:00');
-      const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d2.getDay()];
-      gaps.push({
-        date: today2.date, dow,
-        prevClose: prev2.close,
-        open: today2.open,
-        high: today2.high,
-        low: today2.low,
-        close: today2.close,
-        gapAmt, gapPct, dir, filledSameDay
-      });
-    }
-
-    const gapsUp   = gaps.filter(g=>g.dir==='UP');
-    const gapsDn   = gaps.filter(g=>g.dir==='DOWN');
-    const fillUp   = gapsUp.filter(g=>g.filledSameDay);
-    const fillDn   = gapsDn.filter(g=>g.filledSameDay);
-    const avgGapUp = gapsUp.length ? gapsUp.reduce((a,g)=>a+g.gapAmt,0)/gapsUp.length : 0;
-    const avgGapDn = gapsDn.length ? gapsDn.reduce((a,g)=>a+g.gapAmt,0)/gapsDn.length : 0;
-    const avgGapUpPct = gapsUp.length ? gapsUp.reduce((a,g)=>a+g.gapPct,0)/gapsUp.length : 0;
-    const avgGapDnPct = gapsDn.length ? gapsDn.reduce((a,g)=>a+g.gapPct,0)/gapsDn.length : 0;
-    const largestUp = gapsUp.length ? Math.max(...gapsUp.map(g=>g.gapAmt)) : 0;
-    const largestDn = gapsDn.length ? Math.min(...gapsDn.map(g=>g.gapAmt)) : 0;
-
-    // Stat cards
-    gapStatCardsEl.innerHTML = [
-      {l:'TOTAL GAPS',       v:gaps.length,                  sub:`${sd.length} days analyzed`,    c:'var(--cyan)'},
-      {l:'GAP UPS',          v:gapsUp.length,                sub:fmt(gapsUp.length/gaps.length*100,1)+'% of gaps',  c:'#00ff88'},
-      {l:'GAP DOWNS',        v:gapsDn.length,                sub:fmt(gapsDn.length/gaps.length*100,1)+'% of gaps',  c:'#ff3355'},
-      {l:'UP FILL RATE',     v:fmt(fillUp.length/Math.max(gapsUp.length,1)*100,1)+'%', sub:`${fillUp.length} of ${gapsUp.length} filled same day`, c:'#00ff88'},
-      {l:'DOWN FILL RATE',   v:fmt(fillDn.length/Math.max(gapsDn.length,1)*100,1)+'%', sub:`${fillDn.length} of ${gapsDn.length} filled same day`, c:'#ff3355'},
-      {l:'OVERALL FILL RATE',v:fmt((fillUp.length+fillDn.length)/Math.max(gaps.length,1)*100,1)+'%', sub:`${fillUp.length+fillDn.length} total filled`,  c:'#ffcc00'},
-    ].map(({l,v,sub,c})=>`<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid ${c};border-radius:3px;padding:10px;text-align:center;">
-      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">${l}</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${c};">${v}</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:3px;">${sub}</div>
-    </div>`).join('');
-
-    // Gap size distribution chart
-    if(gapSizeChartEl) {
-      const bins = [
-        {label:'0-0.25%', min:0,    max:0.25},
-        {label:'0.25-0.5%', min:0.25, max:0.5},
-        {label:'0.5-1%', min:0.5,  max:1.0},
-        {label:'1-1.5%', min:1.0,  max:1.5},
-        {label:'1.5-2%', min:1.5,  max:2.0},
-        {label:'>2%',    min:2.0,  max:999},
-      ];
-      const countUp = bins.map(b=>gapsUp.filter(g=>Math.abs(g.gapPct)>=b.min&&Math.abs(g.gapPct)<b.max).length);
-      const countDn = bins.map(b=>gapsDn.filter(g=>Math.abs(g.gapPct)>=b.min&&Math.abs(g.gapPct)<b.max).length);
-      const maxCount = Math.max(...countUp,...countDn,1);
-      const bH=22, gap2=4, chartW=gapSizeChartEl.offsetWidth||260;
-      const barMaxW = chartW - 100;
-      gapSizeChartEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:${gap2}px;">`+
-        bins.map((b,i)=>`
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">${b.label}</div>
-            <div style="display:flex;align-items:center;gap:4px;height:${bH}px;">
-              <div style="flex:1;display:flex;flex-direction:column;gap:2px;">
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <div style="width:${(countUp[i]/maxCount*barMaxW).toFixed(0)}px;height:9px;background:#00ff88;border-radius:1px;min-width:${countUp[i]?2:0}px;"></div>
-                  <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#00ff88;">${countUp[i]}</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <div style="width:${(countDn[i]/maxCount*barMaxW).toFixed(0)}px;height:9px;background:#ff3355;border-radius:1px;min-width:${countDn[i]?2:0}px;"></div>
-                  <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#ff3355;">${countDn[i]}</span>
-                </div>
-              </div>
-            </div>
-          </div>`).join('')+
-        `</div><div style="display:flex;gap:12px;margin-top:6px;font-size:10px;">
-          <span style="color:#00ff88;">■ Gap Up</span>
-          <span style="color:#ff3355;">■ Gap Down</span>
-          <span style="color:var(--text3);">avg up: +$${fmt(avgGapUp,2)} (+${fmt(avgGapUpPct,2)}%)</span>
-          <span style="color:var(--text3);">avg dn: -$${fmt(Math.abs(avgGapDn),2)} (${fmt(avgGapDnPct,2)}%)</span>
-        </div>`;
-    }
-
-    // Fill rate by day of week
-    if(gapByDayEl) {
-      const days2 = ['Mon','Tue','Wed','Thu','Fri'];
-      const dayStats = days2.map(d=>{
-        const dayGaps = gaps.filter(g=>g.dow===d);
-        const filled  = dayGaps.filter(g=>g.filledSameDay);
-        return { d, total:dayGaps.length, filled:filled.length, rate:dayGaps.length?filled.length/dayGaps.length*100:0 };
-      });
-      gapByDayEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">`+
-        dayStats.map(ds=>{
-          const c = ds.rate>70?'#00ff88':ds.rate>50?'#ffcc00':'#ff3355';
-          return `<div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text2);width:28px;">${ds.d}</span>
-            <div style="flex:1;height:18px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-              <div style="width:${ds.rate.toFixed(1)}%;height:100%;background:${c};border-radius:2px;"></div>
-            </div>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${c};width:38px;">${fmt(ds.rate,0)}%</span>
-            <span style="font-size:11px;color:var(--text3);">${ds.filled}/${ds.total}</span>
-          </div>`;
-        }).join('')+'</div>'+
-        `<div style="font-size:10px;color:var(--text3);margin-top:6px;">% of gaps filled by weekday</div>`;
-    }
-
-    // Gap close timing (filled intraday breakdown)
-    if(gapTimingEl) {
-      const filledAll = gaps.filter(g=>g.filledSameDay);
-      const notFilled = gaps.filter(g=>!g.filledSameDay);
-      // Categorize: gap up filled = bearish reversal day? gap down filled = bullish recovery?
-      const gapUpFilledBull = gapsUp.filter(g=>g.filledSameDay&&g.close>g.prevClose); // filled but still closed up
-      const gapUpFilledBear = gapsUp.filter(g=>g.filledSameDay&&g.close<=g.prevClose); // filled and reversed
-      const gapDnFilledBull = gapsDn.filter(g=>g.filledSameDay&&g.close>=g.prevClose); // filled and recovered
-      const gapDnFilledBear = gapsDn.filter(g=>g.filledSameDay&&g.close<g.prevClose);  // filled, kept going
-      const items = [
-        {l:'Gap Up → filled, closed above prev', v:gapUpFilledBull.length, c:'#00ff88'},
-        {l:'Gap Up → filled, reversed below prev',v:gapUpFilledBear.length, c:'#ff8800'},
-        {l:'Gap Up → NOT filled',                 v:gapsUp.filter(g=>!g.filledSameDay).length, c:'#00ff8844'},
-        {l:'Gap Down → filled, recovered',        v:gapDnFilledBull.length, c:'#00ccff'},
-        {l:'Gap Down → filled, kept dropping',    v:gapDnFilledBear.length, c:'#ff3355'},
-        {l:'Gap Down → NOT filled',               v:gapsDn.filter(g=>!g.filledSameDay).length, c:'#ff335544'},
-      ];
-      const maxV = Math.max(...items.map(i=>i.v),1);
-      gapTimingEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:5px;">`+
-        items.map(({l,v,c})=>`<div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:${(v/maxV*120).toFixed(0)}px;height:16px;background:${c};border-radius:2px;min-width:${v?2:0}px;flex-shrink:0;"></div>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${c};width:22px;">${v}</span>
-          <span style="font-size:11px;color:var(--text3);line-height:1.3;">${l}</span>
-        </div>`).join('')+'</div>'+
-        `<div style="font-size:10px;color:var(--text3);margin-top:8px;">Largest gap up: +$${fmt(largestUp,2)} · Largest gap dn: -$${fmt(Math.abs(largestDn),2)}</div>`;
-    }
-
-    // Gap table
-    if(gapTableEl) {
-      gapTableEl.innerHTML = [...gaps].map(g=>{
-        const c = g.dir==='UP'?'#00ff88':'#ff3355';
-        const fillC = g.filledSameDay?'#00ff88':'#ff3355';
-        return `<tr>
-          <td>${g.date}</td>
-          <td style="color:var(--text2);">$${fmt(g.prevClose,2)}</td>
-          <td style="color:${c};">$${fmt(g.open,2)}</td>
-          <td style="color:${c};font-weight:bold;">${g.gapAmt>=0?'+':''}$${fmt(g.gapAmt,2)}</td>
-          <td style="color:${c};">${g.gapPct>=0?'+':''}${fmt(g.gapPct,2)}%</td>
-          <td style="color:${c};font-family:'Orbitron',monospace;font-size:9px;">${g.dir}</td>
-          <td style="color:${fillC};font-family:'Orbitron',monospace;font-size:9px;">${g.filledSameDay?'✓ YES':'✗ NO'}</td>
-          <td class="up">$${fmt(g.high,2)}</td>
-          <td class="dn">$${fmt(g.low,2)}</td>
-          <td style="color:${g.close>=g.open?'#00ff88':'#ff3355'};">$${fmt(g.close,2)}</td>
-        </tr>`;
-      }).join('');
-    }
-  }
-
+  // Gap OHLC analysis — rendered by _renderGapOHLCBlocks (called from gap-stats tab and on load)
+  _renderGapOHLCBlocks(sd);
   // ── Raw table ──
   // Raw table — price history
   $('priceHistBody').innerHTML=sd.map(day=>{
@@ -3724,3 +3554,181 @@ async function loadData(){
   }catch(e){console.error('Load error:',e);}
 }
 loadData();
+
+function _renderGapOHLCBlocks(sd) {
+  if(!sd || sd.length <= 1) return;
+  const $ = id => document.getElementById(id);
+  const fmt = (v,d) => { d = d==null?1:d; return v==null?'--':Number(v).toFixed(d); };
+  const gapStatCardsEl = $('gapStatCards');
+  const gapSizeChartEl = $('gapSizeChart');
+  const gapByDayEl     = $('gapByDayChart');
+  const gapTimingEl    = $('gapCloseTimingChart');
+  const gapTableEl     = $('gapHistBody');
+
+  if(gapStatCardsEl && sd.length > 1) {
+    // Build gap dataset from OHLC
+    const gaps = [];
+    for(let i=0; i<sd.length-1; i++){
+      const today2=sd[i], prev2=sd[i+1];
+      if(!today2.open||!prev2.close||!today2.high||!today2.low||!today2.close) continue;
+      const gapAmt = today2.open - prev2.close;
+      if(Math.abs(gapAmt) < 0.05) continue; // filter micro gaps
+      const gapPct = (gapAmt/prev2.close)*100;
+      const dir = gapAmt > 0 ? 'UP' : 'DOWN';
+      // Gap filled same day?
+      // Gap up filled if price traded back down to prev close (low <= prevClose)
+      // Gap down filled if price traded back up to prev close (high >= prevClose)
+      const filledSameDay = dir==='UP'
+        ? today2.low  <= prev2.close
+        : today2.high >= prev2.close;
+      // Day of week
+      const d2 = new Date(today2.date+'T12:00:00');
+      const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d2.getDay()];
+      gaps.push({
+        date: today2.date, dow,
+        prevClose: prev2.close,
+        open: today2.open,
+        high: today2.high,
+        low: today2.low,
+        close: today2.close,
+        gapAmt, gapPct, dir, filledSameDay
+      });
+    }
+
+    const gapsUp   = gaps.filter(g=>g.dir==='UP');
+    const gapsDn   = gaps.filter(g=>g.dir==='DOWN');
+    const fillUp   = gapsUp.filter(g=>g.filledSameDay);
+    const fillDn   = gapsDn.filter(g=>g.filledSameDay);
+    const avgGapUp = gapsUp.length ? gapsUp.reduce((a,g)=>a+g.gapAmt,0)/gapsUp.length : 0;
+    const avgGapDn = gapsDn.length ? gapsDn.reduce((a,g)=>a+g.gapAmt,0)/gapsDn.length : 0;
+    const avgGapUpPct = gapsUp.length ? gapsUp.reduce((a,g)=>a+g.gapPct,0)/gapsUp.length : 0;
+    const avgGapDnPct = gapsDn.length ? gapsDn.reduce((a,g)=>a+g.gapPct,0)/gapsDn.length : 0;
+    const largestUp = gapsUp.length ? Math.max(...gapsUp.map(g=>g.gapAmt)) : 0;
+    const largestDn = gapsDn.length ? Math.min(...gapsDn.map(g=>g.gapAmt)) : 0;
+
+    // Stat cards
+    gapStatCardsEl.innerHTML = [
+      {l:'TOTAL GAPS',       v:gaps.length,                  sub:`${sd.length} days analyzed`,    c:'var(--cyan)'},
+      {l:'GAP UPS',          v:gapsUp.length,                sub:fmt(gapsUp.length/gaps.length*100,1)+'% of gaps',  c:'#00ff88'},
+      {l:'GAP DOWNS',        v:gapsDn.length,                sub:fmt(gapsDn.length/gaps.length*100,1)+'% of gaps',  c:'#ff3355'},
+      {l:'UP FILL RATE',     v:fmt(fillUp.length/Math.max(gapsUp.length,1)*100,1)+'%', sub:`${fillUp.length} of ${gapsUp.length} filled same day`, c:'#00ff88'},
+      {l:'DOWN FILL RATE',   v:fmt(fillDn.length/Math.max(gapsDn.length,1)*100,1)+'%', sub:`${fillDn.length} of ${gapsDn.length} filled same day`, c:'#ff3355'},
+      {l:'OVERALL FILL RATE',v:fmt((fillUp.length+fillDn.length)/Math.max(gaps.length,1)*100,1)+'%', sub:`${fillUp.length+fillDn.length} total filled`,  c:'#ffcc00'},
+    ].map(({l,v,sub,c})=>`<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid ${c};border-radius:3px;padding:10px;text-align:center;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">${l}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${c};">${v}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px;">${sub}</div>
+    </div>`).join('');
+
+    // Gap size distribution chart
+    if(gapSizeChartEl) {
+      const bins = [
+        {label:'0-0.25%', min:0,    max:0.25},
+        {label:'0.25-0.5%', min:0.25, max:0.5},
+        {label:'0.5-1%', min:0.5,  max:1.0},
+        {label:'1-1.5%', min:1.0,  max:1.5},
+        {label:'1.5-2%', min:1.5,  max:2.0},
+        {label:'>2%',    min:2.0,  max:999},
+      ];
+      const countUp = bins.map(b=>gapsUp.filter(g=>Math.abs(g.gapPct)>=b.min&&Math.abs(g.gapPct)<b.max).length);
+      const countDn = bins.map(b=>gapsDn.filter(g=>Math.abs(g.gapPct)>=b.min&&Math.abs(g.gapPct)<b.max).length);
+      const maxCount = Math.max(...countUp,...countDn,1);
+      const bH=22, gap2=4, chartW=gapSizeChartEl.offsetWidth||260;
+      const barMaxW = chartW - 100;
+      gapSizeChartEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:${gap2}px;">`+
+        bins.map((b,i)=>`
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">${b.label}</div>
+            <div style="display:flex;align-items:center;gap:4px;height:${bH}px;">
+              <div style="flex:1;display:flex;flex-direction:column;gap:2px;">
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <div style="width:${(countUp[i]/maxCount*barMaxW).toFixed(0)}px;height:9px;background:#00ff88;border-radius:1px;min-width:${countUp[i]?2:0}px;"></div>
+                  <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#00ff88;">${countUp[i]}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <div style="width:${(countDn[i]/maxCount*barMaxW).toFixed(0)}px;height:9px;background:#ff3355;border-radius:1px;min-width:${countDn[i]?2:0}px;"></div>
+                  <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#ff3355;">${countDn[i]}</span>
+                </div>
+              </div>
+            </div>
+          </div>`).join('')+
+        `</div><div style="display:flex;gap:12px;margin-top:6px;font-size:10px;">
+          <span style="color:#00ff88;">■ Gap Up</span>
+          <span style="color:#ff3355;">■ Gap Down</span>
+          <span style="color:var(--text3);">avg up: +$${fmt(avgGapUp,2)} (+${fmt(avgGapUpPct,2)}%)</span>
+          <span style="color:var(--text3);">avg dn: -$${fmt(Math.abs(avgGapDn),2)} (${fmt(avgGapDnPct,2)}%)</span>
+        </div>`;
+    }
+
+    // Fill rate by day of week
+    if(gapByDayEl) {
+      const days2 = ['Mon','Tue','Wed','Thu','Fri'];
+      const dayStats = days2.map(d=>{
+        const dayGaps = gaps.filter(g=>g.dow===d);
+        const filled  = dayGaps.filter(g=>g.filledSameDay);
+        return { d, total:dayGaps.length, filled:filled.length, rate:dayGaps.length?filled.length/dayGaps.length*100:0 };
+      });
+      gapByDayEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">`+
+        dayStats.map(ds=>{
+          const c = ds.rate>70?'#00ff88':ds.rate>50?'#ffcc00':'#ff3355';
+          return `<div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text2);width:28px;">${ds.d}</span>
+            <div style="flex:1;height:18px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+              <div style="width:${ds.rate.toFixed(1)}%;height:100%;background:${c};border-radius:2px;"></div>
+            </div>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${c};width:38px;">${fmt(ds.rate,0)}%</span>
+            <span style="font-size:11px;color:var(--text3);">${ds.filled}/${ds.total}</span>
+          </div>`;
+        }).join('')+'</div>'+
+        `<div style="font-size:10px;color:var(--text3);margin-top:6px;">% of gaps filled by weekday</div>`;
+    }
+
+    // Gap close timing (filled intraday breakdown)
+    if(gapTimingEl) {
+      const filledAll = gaps.filter(g=>g.filledSameDay);
+      const notFilled = gaps.filter(g=>!g.filledSameDay);
+      // Categorize: gap up filled = bearish reversal day? gap down filled = bullish recovery?
+      const gapUpFilledBull = gapsUp.filter(g=>g.filledSameDay&&g.close>g.prevClose); // filled but still closed up
+      const gapUpFilledBear = gapsUp.filter(g=>g.filledSameDay&&g.close<=g.prevClose); // filled and reversed
+      const gapDnFilledBull = gapsDn.filter(g=>g.filledSameDay&&g.close>=g.prevClose); // filled and recovered
+      const gapDnFilledBear = gapsDn.filter(g=>g.filledSameDay&&g.close<g.prevClose);  // filled, kept going
+      const items = [
+        {l:'Gap Up → filled, closed above prev', v:gapUpFilledBull.length, c:'#00ff88'},
+        {l:'Gap Up → filled, reversed below prev',v:gapUpFilledBear.length, c:'#ff8800'},
+        {l:'Gap Up → NOT filled',                 v:gapsUp.filter(g=>!g.filledSameDay).length, c:'#00ff8844'},
+        {l:'Gap Down → filled, recovered',        v:gapDnFilledBull.length, c:'#00ccff'},
+        {l:'Gap Down → filled, kept dropping',    v:gapDnFilledBear.length, c:'#ff3355'},
+        {l:'Gap Down → NOT filled',               v:gapsDn.filter(g=>!g.filledSameDay).length, c:'#ff335544'},
+      ];
+      const maxV = Math.max(...items.map(i=>i.v),1);
+      gapTimingEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:5px;">`+
+        items.map(({l,v,c})=>`<div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:${(v/maxV*120).toFixed(0)}px;height:16px;background:${c};border-radius:2px;min-width:${v?2:0}px;flex-shrink:0;"></div>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${c};width:22px;">${v}</span>
+          <span style="font-size:11px;color:var(--text3);line-height:1.3;">${l}</span>
+        </div>`).join('')+'</div>'+
+        `<div style="font-size:10px;color:var(--text3);margin-top:8px;">Largest gap up: +$${fmt(largestUp,2)} · Largest gap dn: -$${fmt(Math.abs(largestDn),2)}</div>`;
+    }
+
+    // Gap table
+    if(gapTableEl) {
+      gapTableEl.innerHTML = [...gaps].map(g=>{
+        const c = g.dir==='UP'?'#00ff88':'#ff3355';
+        const fillC = g.filledSameDay?'#00ff88':'#ff3355';
+        return `<tr>
+          <td>${g.date}</td>
+          <td style="color:var(--text2);">$${fmt(g.prevClose,2)}</td>
+          <td style="color:${c};">$${fmt(g.open,2)}</td>
+          <td style="color:${c};font-weight:bold;">${g.gapAmt>=0?'+':''}$${fmt(g.gapAmt,2)}</td>
+          <td style="color:${c};">${g.gapPct>=0?'+':''}${fmt(g.gapPct,2)}%</td>
+          <td style="color:${c};font-family:'Orbitron',monospace;font-size:9px;">${g.dir}</td>
+          <td style="color:${fillC};font-family:'Orbitron',monospace;font-size:9px;">${g.filledSameDay?'✓ YES':'✗ NO'}</td>
+          <td class="up">$${fmt(g.high,2)}</td>
+          <td class="dn">$${fmt(g.low,2)}</td>
+          <td style="color:${g.close>=g.open?'#00ff88':'#ff3355'};">$${fmt(g.close,2)}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+}
