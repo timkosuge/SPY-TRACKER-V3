@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
-  desk:        ['desk','live-chart','intraday','intraday-volume','intraday-windows','gap-stats','session-vol','time-of-day'],
+  desk:        ['desk','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol'],
   derivatives: ['options','gex','wem','volatility'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
