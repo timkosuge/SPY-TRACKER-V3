@@ -1494,7 +1494,6 @@ const MEDIA_SOURCES = [
     group: 'LIVE STREAMS',
     items: [
       { name:'Bloomberg Television', channelId:'UCIALMKvObZNtJ6AmdCLP7Lg', color:'#00ccff', desc:'24/7 Business & Markets', live:true },
-      { name:'Fox News', channelId:'UCJg9wBPyKMNA5sRDnvzmkdg', color:'#00ccff', desc:'24/7 News', live:true },
     ]
   },
   // Channels with specific known video/stream IDs (from your URLs)
