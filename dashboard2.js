@@ -826,9 +826,12 @@ function renderWEM(md){
 
   if(cur){
     // ── Compute STATIC WEM ─────────────────────────────────────────────────
-    // Static = range fixed from Friday's close using original ATM IV (full 6-day √T)
-    const friClose = cur.friday_close || cur.wem_mid;
-    const atmIV    = cur.atm_iv || cur.vix_iv || 0;
+    // Static = range fixed on prior Friday open using THAT Friday's straddle IV.
+    // The previous week record (wems[1]) has the friday_close and atm_iv
+    // that were live when this week's WEM was set on Monday morning.
+    const prevWem    = wems[1] || wems[0];
+    const friClose   = prevWem.friday_close || prevWem.wem_mid;
+    const atmIV      = prevWem.atm_iv || prevWem.vix_iv || 0;
     const staticHalfRange = friClose * atmIV * Math.sqrt(6/365) * 0.70;
     const staticHigh = Math.round((friClose + staticHalfRange) * 100) / 100;
     const staticLow  = Math.round((friClose - staticHalfRange) * 100) / 100;
@@ -943,9 +946,11 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   const zEl   = $('wemZScore');
   if(!dotEl && !zEl) return;
 
-  const isStatic2 = window._wemMode === 'static';
-  const friClose2  = cur ? (cur.friday_close || cur.wem_mid) : 0;
-  const atmIV2     = cur ? (cur.atm_iv || cur.vix_iv || 0) : 0;
+  const isStatic2  = window._wemMode === 'static';
+  // Static uses previous week's friday_close + atm_iv (the straddle price set last Friday)
+  const prevWem2   = wems[1] || wems[0];
+  const friClose2  = prevWem2 ? (prevWem2.friday_close || prevWem2.wem_mid) : 0;
+  const atmIV2     = prevWem2 ? (prevWem2.atm_iv || prevWem2.vix_iv || 0) : 0;
   const sHalf      = friClose2 * atmIV2 * Math.sqrt(6/365) * 0.70;
 
   const lo2  = cur ? (isStatic2 ? Math.round((friClose2-sHalf)*100)/100 : cur.wem_low)  : 0;
@@ -957,9 +962,10 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
   const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
 
-  // Historical Z-scores — for static mode use static computation on each historical week
+  // Exclude current week from historical dots — it shows as NOW dot only
+  const curWeekStart = cur ? cur.week_start : null;
   const histWeeks = wems
-    .filter(w => w.week_close != null && w.wem_low && w.wem_high && w.wem_mid)
+    .filter(w => w.week_close != null && w.wem_low && w.wem_high && w.wem_mid && w.week_start !== curWeekStart)
     .slice().reverse();
   const total = histWeeks.length;
 
