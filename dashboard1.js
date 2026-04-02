@@ -5053,30 +5053,33 @@ function renderExpiryBehavior(md) {
     const wrClr = clr(wr);
     const barW = Math.min(Math.round(Math.abs(stats.avgRet) / 0.5 * 80), 80);
     const barColor = stats.avgRet >= 0 ? '#00ff8880' : '#ff335580';
-    return `<div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)22;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;color:${color};">${name}</div>
-      <div style="display:flex;align-items:center;gap:4px;">
-        <div style="width:${barW}px;height:8px;background:${barColor};border-radius:2px;flex-shrink:0;"></div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${stats.avgRet>=0?'#00ff88':'#ff3355'};">${fmtPct(stats.avgRet,2)}</div>
+    return `<div style="display:grid;grid-template-columns:44px 90px 70px 80px 80px 80px 80px 44px;gap:0;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)22;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:${color};padding:0 6px;">${name}</div>
+      <div style="display:flex;align-items:center;gap:4px;padding:0 6px;">
+        <div style="width:${barW}px;height:8px;background:${barColor};border-radius:2px;flex-shrink:0;min-width:2px;"></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${stats.avgRet>=0?'#00ff88':'#ff3355'};white-space:nowrap;">${fmtPct(stats.avgRet,2)}</div>
       </div>
-      <div></div>
-      <div style="text-align:center;">
+      <div style="text-align:center;padding:0 4px;">
         <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${wrClr};">${wr.toFixed(0)}%</div>
         <div style="font-size:9px;color:var(--text3);">win rate</div>
       </div>
-      <div style="text-align:center;">
+      <div style="text-align:center;padding:0 4px;">
         <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);">$${fmt2(stats.avgRange)}</div>
-        <div style="font-size:9px;color:var(--text3);">avg range</div>
+        <div style="font-size:9px;color:var(--text3);">range</div>
       </div>
-      <div style="text-align:center;">
+      <div style="text-align:center;padding:0 4px;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${stats.medRet>=0?'#00ff88':'#ff3355'};">${fmtPct(stats.medRet,2)}</div>
+        <div style="font-size:9px;color:var(--text3);">median</div>
+      </div>
+      <div style="text-align:center;padding:0 4px;">
         <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#00ff88;">${stats.bigUp.toFixed(0)}%</div>
         <div style="font-size:9px;color:var(--text3);">big up</div>
       </div>
-      <div style="text-align:center;">
+      <div style="text-align:center;padding:0 4px;">
         <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3355;">${stats.bigDn.toFixed(0)}%</div>
         <div style="font-size:9px;color:var(--text3);">big dn</div>
       </div>
-      <div style="text-align:center;">
+      <div style="text-align:center;padding:0 4px;">
         <div style="font-size:9px;color:var(--text3);">n=${stats.n}</div>
       </div>
     </div>`;
@@ -5101,15 +5104,15 @@ function renderExpiryBehavior(md) {
       </div>
 
       <!-- Header row -->
-      <div style="display:grid;grid-template-columns:42px 120px 1fr 80px 80px 80px 80px 50px;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)33;margin-bottom:2px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">DAY</div>
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RETURN</div>
-        <div></div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">WIN RATE</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">AVG RANGE</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG UP</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">BIG DN</div>
-        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">N</div>
+      <div style="display:grid;grid-template-columns:44px 90px 70px 80px 80px 80px 80px 44px;gap:0;padding:4px 0;border-bottom:2px solid rgba(255,255,255,0.1);margin-bottom:2px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:0 6px;letter-spacing:1px;">DAY</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:0 6px;letter-spacing:1px;">AVG RET</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:0 4px;letter-spacing:1px;">WIN %</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:0 4px;letter-spacing:1px;">RANGE</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:0 4px;letter-spacing:1px;">MEDIAN</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:0 4px;letter-spacing:1px;">BIG UP</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:0 4px;letter-spacing:1px;">BIG DN</div>
+        <div style="text-align:center;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:0 4px;letter-spacing:1px;">N</div>
       </div>
       ${days.map(({name, stats}) => renderWeekRow(name, stats, color)).join('')}
       ${weeklySummaryNote ? `<div style="font-size:10px;color:var(--text3);margin-top:4px;">${weeklySummaryNote}</div>` : ''}
@@ -6530,40 +6533,48 @@ function renderGapStats() {
   // ── SECTION 3: PH move bins → gap prediction ───────────────────────────────
   const bins = D.ph_bins || [];
   const binRows = bins.map(b => {
-    const upBar = Math.round(b.gap_up_pct * 0.8);
-    const dnBar = Math.round(b.gap_dn_pct * 0.8);
+    const upPct = Math.min(b.gap_up_pct, 100);
+    const dnPct = Math.min(b.gap_dn_pct, 100);
     const phColor = b.avg_ph_move>0.2?'#00ff88':b.avg_ph_move<-0.2?'#ff3355':'#ffcc00';
+    const barCell = (pct, color) =>
+      `<div style="display:flex;align-items:center;gap:5px;">
+         <div style="width:60px;height:8px;background:var(--bg2);border-radius:2px;overflow:hidden;flex-shrink:0;">
+           <div style="width:${pct}%;height:100%;background:${color};opacity:0.85;border-radius:2px;"></div>
+         </div>
+         <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${color};min-width:32px;">${pct}%</span>
+       </div>`;
     return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
-      <td style="font-size:10px;color:${phColor};padding:5px 8px;white-space:nowrap;">${b.label}</td>
-      <td style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);padding:5px 6px;text-align:center;">${b.n}</td>
-      <td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;font-size:11px;color:${phColor};text-align:right;">${sgn(b.avg_gap)}</td>
-      <td style="padding:5px 8px;">
-        <div style="display:flex;align-items:center;gap:4px;">
-          <div style="width:${upBar}px;height:8px;background:#00ff88;border-radius:2px;opacity:0.8;"></div>
-          <span style="font-size:10px;color:#00ff88;">${b.gap_up_pct}%</span>
-        </div>
-      </td>
-      <td style="padding:5px 8px;">
-        <div style="display:flex;align-items:center;gap:4px;">
-          <div style="width:${dnBar}px;height:8px;background:#ff3355;border-radius:2px;opacity:0.8;"></div>
-          <span style="font-size:10px;color:#ff3355;">${b.gap_dn_pct}%</span>
-        </div>
-      </td>
-      <td style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${b.fill_rate>40?'#00ff88':'var(--text3)'};padding:5px 8px;text-align:right;">${b.fill_rate}%</td>
-      <td style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#ffcc00;padding:5px 8px;text-align:right;">${pct(b.avg_fh_range)}</td>
+      <td style="font-family:'Orbitron',monospace;font-size:10px;color:${phColor};padding:6px 10px;white-space:nowrap;">${b.label}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);padding:6px 10px;text-align:center;">${b.n}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${phColor};padding:6px 10px;text-align:right;">${sgn(b.avg_gap)}</td>
+      <td style="padding:6px 10px;">${barCell(upPct,'#00ff88')}</td>
+      <td style="padding:6px 10px;">${barCell(dnPct,'#ff3355')}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${b.fill_rate>40?'#00ff88':'var(--text3)'};padding:6px 10px;text-align:right;">${b.fill_rate}%</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#ffcc00;padding:6px 10px;text-align:right;">${pct(b.avg_fh_range)}</td>
     </tr>`;
   }).join('');
 
   const phBinHtml = `
     <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Previous day power hour move magnitude → next day gap characteristics. Strong PH moves in either direction tend to produce larger gaps.</div>
-    <table style="width:100%;border-collapse:collapse;">
-      <thead><tr>
-        ${['PH MOVE','N','AVG GAP','GAP UP%','GAP DN%','FILL RATE','NEXT FH RNG'].map(h=>
-          `<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:4px 8px;text-align:${h==='PH MOVE'?'left':'right'};">${h}</th>`
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;min-width:600px;">
+      <colgroup>
+        <col style="width:130px;">
+        <col style="width:44px;">
+        <col style="width:80px;">
+        <col style="width:120px;">
+        <col style="width:120px;">
+        <col style="width:90px;">
+        <col style="width:100px;">
+      </colgroup>
+      <thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
+        ${[{h:'PH MOVE',a:'left'},{h:'N',a:'center'},{h:'AVG GAP',a:'right'},{h:'GAP UP%',a:'left'},{h:'GAP DN%',a:'left'},{h:'FILL RATE',a:'right'},{h:'NEXT FH RNG',a:'right'}].map(({h,a})=>
+          `<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:6px 10px;text-align:${a};letter-spacing:1px;">${h}</th>`
         ).join('')}
       </thead>
       <tbody>${binRows}</tbody>
-    </table>`;
+    </table>
+    </div>`;
 
   // ── SECTION 4: Key signals ─────────────────────────────────────────────────
   const sig = D.signals || {};
@@ -6628,37 +6639,44 @@ function renderGapStats() {
   const dbd = D.dow_breakdown || {};
   const dowRows = ['Mon','Tue','Wed','Thu','Fri'].map(d => {
     const r = dbd[d]; if(!r||!r.n) return '';
-    const upW = r.gap_up_pct; const dnW = r.gap_dn_pct;
+    const upW = Math.min(r.gap_up_pct, 100); const dnW = Math.min(r.gap_dn_pct, 100);
+    const barCell = (pct, color) =>
+      `<div style="display:flex;align-items:center;gap:5px;">
+         <div style="width:60px;height:8px;background:var(--bg2);border-radius:2px;overflow:hidden;flex-shrink:0;">
+           <div style="width:${pct}%;height:100%;background:${color};opacity:0.85;border-radius:2px;"></div>
+         </div>
+         <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${color};min-width:32px;">${pct}%</span>
+       </div>`;
     return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-      <td style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);padding:5px 8px;">${d.toUpperCase()}</td>
-      <td style="font-size:10px;color:var(--text3);padding:5px 8px;text-align:center;">${r.n}</td>
-      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${r.avg_gap>0.05?'#00ff88':r.avg_gap<-0.05?'#ff3355':'var(--text2)'};padding:5px 8px;text-align:right;">${sgn(r.avg_gap)}</td>
-      <td style="padding:5px 10px;">
-        <div style="display:flex;align-items:center;gap:3px;">
-          <div style="width:${upW}px;height:8px;background:#00ff88;border-radius:2px;opacity:0.75;"></div>
-          <span style="font-size:10px;color:#00ff88;">${upW}%</span>
-        </div>
-      </td>
-      <td style="padding:5px 10px;">
-        <div style="display:flex;align-items:center;gap:3px;">
-          <div style="width:${dnW}px;height:8px;background:#ff3355;border-radius:2px;opacity:0.75;"></div>
-          <span style="font-size:10px;color:#ff3355;">${dnW}%</span>
-        </div>
-      </td>
-      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${r.avg_ph_move>=0?'#00ff88':'#ff3355'};padding:5px 8px;text-align:right;">${sgn(r.avg_ph_move)}</td>
+      <td style="font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);padding:6px 10px;">${d.toUpperCase()}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);padding:6px 10px;text-align:center;">${r.n}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${r.avg_gap>0.05?'#00ff88':r.avg_gap<-0.05?'#ff3355':'var(--text2)'};padding:6px 10px;text-align:right;">${sgn(r.avg_gap)}</td>
+      <td style="padding:6px 10px;">${barCell(upW,'#00ff88')}</td>
+      <td style="padding:6px 10px;">${barCell(dnW,'#ff3355')}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${r.avg_ph_move>=0?'#00ff88':'#ff3355'};padding:6px 10px;text-align:right;">${sgn(r.avg_ph_move)}</td>
     </tr>`;
   }).join('');
 
   const dowHtml = `
     <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Mon gaps up most often (43%). Fri has the most balanced gap-up/down split. Tue leans gap-down.</div>
-    <table style="width:100%;border-collapse:collapse;">
-      <thead><tr>
-        ${['DAY','N','AVG GAP','GAP UP%','GAP DN%','AVG PH'].map(h=>
-          `<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:4px 8px;text-align:${h==='DAY'?'left':'right'};">${h}</th>`
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;min-width:550px;">
+      <colgroup>
+        <col style="width:60px;">
+        <col style="width:44px;">
+        <col style="width:80px;">
+        <col style="width:120px;">
+        <col style="width:120px;">
+        <col style="width:90px;">
+      </colgroup>
+      <thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
+        ${[{h:'DAY',a:'left'},{h:'N',a:'center'},{h:'AVG GAP',a:'right'},{h:'GAP UP%',a:'left'},{h:'GAP DN%',a:'left'},{h:'AVG PH',a:'right'}].map(({h,a})=>
+          `<th style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);padding:6px 10px;text-align:${a};letter-spacing:1px;">${h}</th>`
         ).join('')}
       </thead>
       <tbody>${dowRows}</tbody>
-    </table>`;
+    </table>
+    </div>`;
 
   const gsExplain = text =>
     `<div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:12px;">${text}</div>`;
