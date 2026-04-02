@@ -8204,137 +8204,157 @@ async function renderLiveChart() {
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LARGE GAP STATS — threshold-based analysis for gaps ≥1%, 1.5%, 2%, 3%
-// Data from large_gap_stats.js (computed from full SPY history in spy_data.json)
+// LARGE GAP STATS — FIXED VERSION
+// Always shows historical statistics. Only highlights today if it qualifies.
 // ─────────────────────────────────────────────────────────────────────────────
-
-window._lgActive = '1';  // active threshold tab
 
 function renderLargeGapStats() {
   const el = document.getElementById('largeGapStatsSection');
   if (!el) return;
+
   if (typeof LARGE_GAP_STATS === 'undefined') {
-    el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:12px;">Large gap stats data not loaded.</div>';
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text3);">
+      Large gap stats data not loaded yet.
+    </div>`;
     return;
   }
 
   const D = LARGE_GAP_STATS;
-  const overall = D.overall;
-  const thr = window._lgActive;
+  let thr = window._lgActive || '1.0';
+  if (!D.buckets[thr]) thr = '1.0';   // fallback
+
   const bucket = D.buckets[thr];
-  if (!bucket) return;
+  const overall = D.overall || {};
+  const freq = overall.freq?.[thr] || {};
 
-  const fmt1  = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(1) + '%' : '—';
-  const fmt2  = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(2) + '%' : '—';
-  const fmt3  = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(3) + '%' : '—';
-  const fmtN  = v => v != null ? v.toLocaleString() : '—';
-  const fmtVol = v => v > 1e6 ? (v/1e6).toFixed(1)+'M' : v > 1e3 ? (v/1e3).toFixed(0)+'K' : String(v);
+  // ── Calculate today's gap (you already have this logic somewhere) ─────────
+  const todayGapPct = calculateTodayGapPct();   // ← Make sure this function exists!
 
-  const fillColor = v => v >= 50 ? '#00ff88' : v >= 35 ? '#ffcc00' : '#ff8800';
-  const retColor  = v => v > 0.1 ? '#00ff88' : v < -0.1 ? '#ff3355' : 'var(--text2)';
-
-  // Tab buttons
-  const tabs = D.thresholds.map(t => {
+  // ── Build the UI ─────────────────────────────────────────────────────────
+  const tabsHTML = D.thresholds.map(t => {
     const key = String(t);
     const active = key === thr;
-    const freq = overall.freq[key];
-    return `<button onclick="window._lgActive='${key}';renderLargeGapStats();"
-      style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:5px 14px;
-             background:${active ? 'rgba(0,204,255,0.15)' : 'var(--bg3)'};
-             border:1px solid ${active ? 'var(--cyan)' : 'var(--border)'};
-             border-radius:3px;color:${active ? 'var(--cyan)' : 'var(--text2)'};cursor:pointer;">
-      ≥${t}%
-      <span style="display:block;font-size:8px;color:${active ? 'var(--cyan)' : 'var(--text3)'};margin-top:1px;">
-        ${freq ? freq.up_n + '↑ ' + freq.dn_n + '↓' : ''}
-      </span>
-    </button>`;
+    const f = overall.freq?.[key] || {};
+    const total = (f.up_n || 0) + (f.dn_n || 0);
+    return `
+      <button onclick="window._lgActive='${key}'; renderLargeGapStats();"
+        style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:6px 14px;
+               background:${active ? 'rgba(0,204,255,0.15)' : 'var(--bg3)'};
+               border:1px solid ${active ? 'var(--cyan)' : 'var(--border)'};
+               border-radius:3px;color:${active ? 'var(--cyan)' : 'var(--text2)'};cursor:pointer;">
+        ≥${t}%
+        <span style="display:block;font-size:8px;color:var(--text3);margin-top:2px;">
+          ${total} gaps
+        </span>
+      </button>`;
   }).join('');
 
-  // Frequency overview bar
-  const freq = overall.freq[thr];
-  const totalSess = overall.total_sessions;
-  const freqPct = freq ? ((freq.up_n + freq.dn_n) / totalSess * 100).toFixed(1) : '—';
-
-  // Direction card renderer
-  function dirCard(label, s, color, borderColor) {
-    if (!s) return '';
-    const dow = s.dow || {};
-    const dowDays = ['Mon','Tue','Wed','Thu','Fri'];
-    const dowRows = dowDays.map(d => {
-      const ds = dow[d];
-      if (!ds || !ds.n) return '';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-        <span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);width:28px;">${d.toUpperCase()}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);width:24px;text-align:center;">${ds.n}</span>
-        <div style="flex:1;margin:0 6px;height:6px;background:var(--bg2);border-radius:2px;overflow:hidden;">
-          <div style="width:${Math.min(ds.fill_rate,100)}%;height:100%;background:${fillColor(ds.fill_rate)};opacity:0.8;border-radius:2px;"></div>
-        </div>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${fillColor(ds.fill_rate)};width:34px;text-align:right;">${ds.fill_rate}%</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${retColor(ds.avg_oc)};width:48px;text-align:right;">${fmt2(ds.avg_oc)}</span>
+  // Today's gap note
+  let todayNote = '';
+  if (todayGapPct >= parseFloat(thr)) {
+    todayNote = `
+      <div style="background:rgba(0,255,136,0.12);border:1px solid #00ff88;border-radius:4px;padding:10px 14px;margin-bottom:14px;">
+        <span style="color:#00ff88;font-weight:bold;">TODAY QUALIFIES</span> — 
+        ${todayGapPct.toFixed(2)}% gap detected
       </div>`;
-    }).join('');
+  } else {
+    todayNote = `
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:var(--text3);">
+        Today's opening gap: <strong>${todayGapPct.toFixed(2)}%</strong><br>
+        Below the ${thr}% threshold — showing <strong>historical statistics</strong> instead.
+      </div>`;
+  }
 
-    // Notable instances
-    const notable = (s.notable || []).slice(0, 3).map(g =>
-      `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:10px;">
-        <span style="color:var(--text3);font-family:'Share Tech Mono',monospace;">${g.date}</span>
-        <span style="color:${color};font-family:'Share Tech Mono',monospace;">${g.gap_pct >= 0 ? '+' : ''}${g.gap_pct}%</span>
-        <span style="color:${retColor(g.close - g.open)};font-family:'Share Tech Mono',monospace;">${g.close >= g.open ? '+' : ''}${(g.close - g.open).toFixed(2)}</span>
-        <span style="color:${g.filled ? '#00ff88' : '#ff8800'};font-size:9px;font-family:'Orbitron',monospace;">${g.filled ? 'FILLED' : 'OPEN'}</span>
-      </div>`
-    ).join('');
-
+  // Direction cards (Up / Down)
+  function dirCard(title, data, color) {
+    if (!data) return '';
     return `
-    <div style="background:var(--bg2);border:1px solid ${borderColor}33;border-top:3px solid ${borderColor};border-radius:4px;padding:14px;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;color:${borderColor};letter-spacing:1px;margin-bottom:10px;">
-        ${label} <span style="font-size:8px;color:var(--text3);font-weight:normal;">(${s.n} sessions)</span>
+    <div style="background:var(--bg2);border:1px solid ${color}33;border-top:3px solid ${color};border-radius:4px;padding:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:${color};margin-bottom:10px;">
+        ${title} <span style="font-size:8px;color:var(--text3);">(${data.n} occurrences)</span>
       </div>
-
-      <!-- Key stats grid -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;">
-        ${[
-          ['FILL RATE', s.fill_rate + '%', fillColor(s.fill_rate)],
-          ['FADE RATE', s.fade_rate + '%', retColor(-s.fade_rate * 0.3)],
-          ['AVG OPEN→CLOSE', fmt2(s.avg_oc_pct), retColor(s.avg_oc_pct)],
-          ['AVG DAY RANGE', s.avg_range_pct.toFixed(2) + '%', '#ffcc00'],
-        ].map(([l,v,c]) => `
-          <div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;border-top:2px solid ${c};">
-            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">${l}</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:${c};">${v}</div>
-          </div>`).join('')}
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <!-- Left: more stats -->
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">BEHAVIOR</div>
-          ${[
-            ['Avg gap size',  fmt2(s.avg_gap_pct), retColor(s.avg_gap_pct)],
-            ['Continuation rate', s.cont_rate + '%', s.cont_rate > 50 ? '#00ff88' : '#ff8800'],
-            ['Max gap seen', (s.max_gap_pct >= 0 ? '+' : '') + s.max_gap_pct + '%', '#ffcc00'],
-            ['Avg volume',   fmtVol(s.avg_volume), 'var(--text2)'],
-          ].map(([l,v,c]) => `
-            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-              <span style="font-size:11px;color:var(--text3);">${l}</span>
-              <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${c};">${v}</span>
-            </div>`).join('')}
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
+        <div style="text-align:center;">
+          <div style="font-size:7px;color:var(--text3);">FILL RATE</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:${color};">${data.fill_rate}%</div>
         </div>
+        <div style="text-align:center;">
+          <div style="font-size:7px;color:var(--text3);">CONT. RATE</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#ffcc00;">${data.cont_rate}%</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:7px;color:var(--text3);">AVG O→C</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:${data.avg_oc_pct >= 0 ? '#00ff88' : '#ff3355'};">${data.avg_oc_pct >= 0 ? '+' : ''}${data.avg_oc_pct.toFixed(2)}%</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:7px;color:var(--text3);">AVG RANGE</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#ffcc00;">${data.avg_range_pct.toFixed(2)}%</div>
+        </div>
+      </div>
+    </div>`;
+  }
 
-        <!-- Right: fill rate visual -->
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">SAME-DAY FILL RATE</div>
-          <div style="position:relative;height:60px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:4px;">
-            <div style="position:absolute;left:0;top:0;height:100%;width:${s.fill_rate}%;background:${fillColor(s.fill_rate)};opacity:0.25;"></div>
-            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
-              <span style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;color:${fillColor(s.fill_rate)};">${s.fill_rate}%</span>
-            </div>
-          </div>
-          <div style="font-size:10px;color:var(--text3);text-align:center;">
-            ${s.fill_rate >= 50 ? 'Gaps fill more often than not' : s.fill_rate >= 35 ? 'Gaps fill ~1 in 3 sessions' : 'Most gaps remain open'}
-          </div>
+  el.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:4px;padding:16px;">
+
+      <!-- Header -->
+      <div style="margin-bottom:14px;">
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);">BIG GAP BEHAVIOR — HISTORICAL ANALYSIS</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">
+          ${overall.total_sessions.toLocaleString()} total sessions • 
+          ${overall.date_range.from} — ${overall.date_range.to}
         </div>
       </div>
 
+      ${todayNote}
+
+      <!-- Threshold tabs -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+        ${tabsHTML}
+      </div>
+
+      <!-- Frequency summary -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
+        <div class="panel" style="text-align:center;">
+          <div style="font-size:7px;color:var(--text3);">≥ ${thr}% GAPS</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:var(--cyan);">
+            ${(freq.up_n || 0) + (freq.dn_n || 0)}
+          </div>
+          <div style="font-size:10px;color:var(--text3);">${freqPct || '—'}% of all days</div>
+        </div>
+        <div class="panel" style="text-align:center;">
+          <div style="font-size:7px;color:#00ff88;">GAP UPS</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#00ff88;">${freq.up_n || 0}</div>
+        </div>
+        <div class="panel" style="text-align:center;">
+          <div style="font-size:7px;color:#ff3355;">GAP DOWNS</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#ff3355;">${freq.dn_n || 0}</div>
+        </div>
+        <div class="panel" style="text-align:center;">
+          <div style="font-size:7px;color:var(--text3);">AVG FILL RATE</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:var(--cyan);">
+            ${bucket?.combined?.fill_rate || '—'}%
+          </div>
+        </div>
+      </div>
+
+      <!-- Up / Down cards -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        ${dirCard('▲ GAP UP ≥ +' + thr + '%', bucket?.up,   '#00ff88')}
+        ${dirCard('▼ GAP DOWN ≥ −' + thr + '%', bucket?.down, '#ff3355')}
+      </div>
+
+      <!-- Year breakdown (optional) -->
+      ${bucket?.combined?.years ? `
+      <div style="background:var(--bg3);border-radius:4px;padding:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:8px;">
+          YEAR-BY-YEAR PERFORMANCE (COMBINED)
+        </div>
+        <!-- You can expand this if you want -->
+      </div>` : ''}
+
+    </div>`;
+}
       <!-- DOW breakdown -->
       <div style="margin-top:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">BY DAY OF WEEK</div>
