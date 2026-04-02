@@ -68,6 +68,10 @@ export async function onRequest(context) {
     const sessionClose = bars[bars.length - 1].close;
     const sessionVol   = bars.reduce((a, b) => a + (b.vol || 0), 0);
     const prevClose    = meta.previousClose || meta.chartPreviousClose || null;
+
+    // VWAP = sum(typical_price * volume) / sum(volume)
+    const vwapNum = bars.reduce((a, b) => a + ((((b.high??b.close) + (b.low??b.close) + b.close) / 3) * (b.vol||0)), 0);
+    const vwap    = sessionVol > 0 ? Math.round(vwapNum / sessionVol * 100) / 100 : null;
     const change       = prevClose ? Math.round((sessionClose - prevClose) * 100) / 100 : null;
     const changePct    = prevClose && change != null ? Math.round((change / prevClose) * 10000) / 100 : null;
     const asOf = new Date(bars[bars.length - 1].t * 1000).toISOString();
@@ -171,6 +175,15 @@ export async function onRequest(context) {
       changePct,
       bars:         bars.length,
       asOf,
+      vwap,
+      rawBars:      bars.map(b => ({
+        t: b.t,
+        o: b.open  != null ? Math.round(b.open  * 100) / 100 : null,
+        h: b.high  != null ? Math.round(b.high  * 100) / 100 : null,
+        l: b.low   != null ? Math.round(b.low   * 100) / 100 : null,
+        c: b.close != null ? Math.round(b.close * 100) / 100 : null,
+        v: b.vol   || 0,
+      })),
       // Intraday volume breakdown (CT time buckets)
       open_1h:      Math.round(open_1h),
       open_1h_pct,
