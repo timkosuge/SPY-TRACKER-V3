@@ -805,37 +805,90 @@ function renderWEM(md){
   const q=md.quotes||{}, spy=q['SPY']||{};
   const cur=wems.find(w=>!w.week_close)||wems[0];
 
-  if(cur){
-    const lo=cur.wem_low, hi=cur.wem_high, mid=cur.wem_mid;
-    const price=spy.price||mid||0;
-    const halfRange=cur.wem_range/2;
+  // ── Mode toggle ──────────────────────────────────────────────────────────
+  if (!window._wemMode) window._wemMode = 'dynamic';
+  window._wemSetMode = function(m) {
+    window._wemMode = m;
+    const dynBtn    = $('wemModeDyn');
+    const staticBtn = $('wemModeStatic');
+    const desc      = $('wemModeDesc');
+    if (dynBtn)    { dynBtn.style.background    = m==='dynamic'?'var(--cyan)':'transparent'; dynBtn.style.color    = m==='dynamic'?'#000':'var(--text2)'; dynBtn.style.borderColor    = m==='dynamic'?'var(--cyan)':'var(--border)'; }
+    if (staticBtn) { staticBtn.style.background = m==='static' ?'var(--cyan)':'transparent'; staticBtn.style.color = m==='static' ?'#000':'var(--text2)'; staticBtn.style.borderColor = m==='static' ?'var(--cyan)':'var(--border)'; }
+    if (desc) desc.textContent = m==='static'
+      ? 'Fixed range set at Friday close · doesn\'t change during week'
+      : 'Range shrinks as DTE decays · updates daily';
+    const lbl = $('wemZScoreLabel');
+    if (lbl) lbl.textContent = m==='static'
+      ? '⬡ STATIC WEM POSITION — Z-SCORE'
+      : '⬡ WEM POSITION — Z-SCORE';
+    renderWEM(md);
+  };
 
-    $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}`;
+  if(cur){
+    // ── Compute STATIC WEM ─────────────────────────────────────────────────
+    // Static = range fixed from Friday's close using original ATM IV (full 6-day √T)
+    const friClose = cur.friday_close || cur.wem_mid;
+    const atmIV    = cur.atm_iv || cur.vix_iv || 0;
+    const staticHalfRange = friClose * atmIV * Math.sqrt(6/365) * 0.70;
+    const staticHigh = Math.round((friClose + staticHalfRange) * 100) / 100;
+    const staticLow  = Math.round((friClose - staticHalfRange) * 100) / 100;
+    const staticMid  = Math.round(friClose * 100) / 100;
+    const staticRange = Math.round(staticHalfRange * 2 * 100) / 100;
+
+    // ── Select active mode values ──────────────────────────────────────────
+    const isStatic = window._wemMode === 'static';
+    const lo   = isStatic ? staticLow  : cur.wem_low;
+    const hi   = isStatic ? staticHigh : cur.wem_high;
+    const mid  = isStatic ? staticMid  : cur.wem_mid;
+    const halfRange = isStatic ? staticHalfRange : cur.wem_range / 2;
+    const price = spy.price || mid || 0;
+
+    $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}${isStatic?' · STATIC RANGE':' · DYNAMIC RANGE'}`;
 
     $('wemCurrentHeader').innerHTML=`
       <div class="wem-big-card">
-        <div class="wem-big-lbl">WEM LOW</div>
+        <div class="wem-big-lbl">WEM LOW${isStatic?' (STATIC)':''}</div>
         <div class="wem-big-val dn">$${fmt(lo,2)}</div>
         <div class="wem-big-sub">${price>lo?'+':''}$${fmt(price-lo,2)} from here</div>
       </div>
       <div class="wem-big-card">
-        <div class="wem-big-lbl">MID (ANCHOR)</div>
+        <div class="wem-big-lbl">${isStatic?'ANCHOR (FRI CLOSE)':'MID (ANCHOR)'}</div>
         <div class="wem-big-val">$${fmt(mid,2)}</div>
         <div class="wem-big-sub">±$${fmt(halfRange,2)} range</div>
       </div>
       <div class="wem-big-card">
-        <div class="wem-big-lbl">WEM HIGH</div>
+        <div class="wem-big-lbl">WEM HIGH${isStatic?' (STATIC)':''}</div>
         <div class="wem-big-val up">$${fmt(hi,2)}</div>
         <div class="wem-big-sub">${price<hi?'+':''}$${fmt(hi-price,2)} from here</div>
       </div>`;
+
+    // ── Show comparison row if in static mode ──────────────────────────────
+    let comparisonHtml = '';
+    if (isStatic) {
+      const dynHalf = cur.wem_range / 2;
+      const decay = dynHalf < staticHalfRange ? (1 - dynHalf/staticHalfRange)*100 : 0;
+      comparisonHtml = `<div style="display:flex;gap:16px;align-items:center;padding:8px 10px;background:var(--bg3);border-radius:3px;margin-top:8px;font-size:11px;font-family:'Share Tech Mono',monospace;">
+        <span style="color:var(--text3);">STATIC ±$${fmt(staticHalfRange,2)}</span>
+        <span style="color:var(--text3);">→</span>
+        <span style="color:var(--cyan);">DYNAMIC ±$${fmt(dynHalf,2)}</span>
+        <span style="color:var(--text3);">·</span>
+        <span style="color:#ff8800;">${decay.toFixed(0)}% range decay with ${cur.dte||'?'} DTE remaining</span>
+        <span style="color:var(--text3);">·</span>
+        <span style="color:var(--text3);">IV ${fmt(atmIV*100,1)}%</span>
+      </div>`;
+    }
 
     const pct = hi>lo ? Math.min(Math.max((price-lo)/(hi-lo)*100,2),98) : 50;
     $('wemTabNeedle').style.left = pct+'%';
     const nlbl = $('wemTabNeedleLabel'); if(nlbl) nlbl.textContent = '$'+fmt(price,2);
     $('wemTabLowLbl').textContent  = '$'+fmt(lo,2);
-    $('wemTabMidLbl').textContent  = 'MID $'+fmt(mid,2);
+    $('wemTabMidLbl').textContent  = (isStatic?'FRI CLOSE ':'MID ')+'$'+fmt(mid,2);
     $('wemTabHighLbl').textContent = '$'+fmt(hi,2);
-    $('wemTabPosText').textContent = `SPY $${fmt(price,2)} · ${price>=lo&&price<=hi?'INSIDE WEM ✓':'OUTSIDE WEM ⚠'} · ±$${fmt(halfRange,2)} · DTE ${cur.dte||'—'}`;
+    $('wemTabPosText').textContent = `SPY $${fmt(price,2)} · ${price>=lo&&price<=hi?'INSIDE WEM ✓':'OUTSIDE WEM ⚠'} · ±$${fmt(halfRange,2)} · DTE ${cur.dte||'—'}${isStatic?' · STATIC':''}`;
+
+    // Insert comparison row if static
+    const compEl = $('wemCompareRow');
+    if (compEl) compEl.innerHTML = comparisonHtml;
 
     const iv = (cur.atm_iv && cur.atm_iv>0) ? cur.atm_iv : halfRange/(mid*Math.sqrt(6/365)*0.70);
     const dailyEM   = mid * iv * Math.sqrt(1/365)  * 0.70;
@@ -864,7 +917,7 @@ function renderWEM(md){
     const emRow = $('emBoxRow');
     if(emRow) emRow.innerHTML =
       emBox('DAILY EXPECTED MOVE',   dailyEM,   '1 trading day') +
-      emBox('WEEKLY EXPECTED MOVE',  weeklyEM,  `${cur.dte||'—'} DTE · IV ${fmt(iv*100,1)}%`) +
+      emBox(`${isStatic?'STATIC ':''}WEEKLY EXPECTED MOVE`,  weeklyEM,  isStatic?`Fixed from Fri close · IV ${fmt(atmIV*100,1)}%`:`${cur.dte||'—'} DTE · IV ${fmt(iv*100,1)}%`) +
       emBox('MONTHLY EXPECTED MOVE', monthlyEM, '21 trading days');
   }
 
@@ -881,38 +934,65 @@ function renderWEM(md){
 
   if(stats.breach_by_day){
     const days=['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY'];
-    $('breachGrid').innerHTML=days.map(d=>`<div class="breach-day"><div class="bd-name">${d}</div><div class="bd-val ${(stats.breach_by_day[d]||0)>0?'dn':''}">${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">breaches</span></div></div>`).join('');
+    $('breachGrid').innerHTML=days.map(d=>`<div class="breach-day"><div class="bd-name">${d}</div><div class="bd-val ${(stats.breach_by_day[d]||0)>0?'dn':''}">
+${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">breaches</span></div></div>`).join('');
   }
 
-  // WEM Z-Score chart
-  // ── DOT PLOT (left panel) ──────────────────────────────────────────────────
+  // ── Z-Score + thermometer/bell (uses active mode's lo/hi/mid) ─────────────
   const dotEl = $('wemDotPlot');
   const zEl   = $('wemZScore');
   if(!dotEl && !zEl) return;
 
-  const lo  = cur.wem_low, hi = cur.wem_high, mid = cur.wem_mid;
-  const price = spy.price || mid || 0;
-  const halfRange = cur.wem_range / 2;
-  const z = halfRange > 0 ? (price - mid) / halfRange : 0;
+  const isStatic2 = window._wemMode === 'static';
+  const friClose2  = cur ? (cur.friday_close || cur.wem_mid) : 0;
+  const atmIV2     = cur ? (cur.atm_iv || cur.vix_iv || 0) : 0;
+  const sHalf      = friClose2 * atmIV2 * Math.sqrt(6/365) * 0.70;
+
+  const lo2  = cur ? (isStatic2 ? Math.round((friClose2-sHalf)*100)/100 : cur.wem_low)  : 0;
+  const hi2  = cur ? (isStatic2 ? Math.round((friClose2+sHalf)*100)/100 : cur.wem_high) : 0;
+  const mid2 = cur ? (isStatic2 ? Math.round(friClose2*100)/100          : cur.wem_mid)  : 0;
+  const price2 = (spy.price || mid2 || 0);
+  const halfRange2 = isStatic2 ? sHalf : (cur ? cur.wem_range/2 : 1);
+  const z = halfRange2 > 0 ? (price2 - mid2) / halfRange2 : 0;
   const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
   const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
 
+  // Historical Z-scores — for static mode use static computation on each historical week
   const histWeeks = wems
     .filter(w => w.week_close != null && w.wem_low && w.wem_high && w.wem_mid)
-    .slice().reverse(); // oldest first
+    .slice().reverse();
   const total = histWeeks.length;
-  const aboveCount  = histWeeks.filter(w => w.week_close > w.wem_high).length;
-  const belowCount  = histWeeks.filter(w => w.week_close < w.wem_low).length;
-  const insideCount = histWeeks.filter(w => w.week_close >= w.wem_low && w.week_close <= w.wem_high).length;
 
-  const histZ = histWeeks.map(w => (w.week_close - w.wem_mid) / (w.wem_range / 2));
+  let histZ;
+  if (isStatic2) {
+    // Recompute Z-scores using static ranges for historical weeks
+    histZ = histWeeks.map(w => {
+      const fC   = w.friday_close || w.wem_mid;
+      const aIV  = w.atm_iv || w.vix_iv || 0;
+      const sH   = fC * aIV * Math.sqrt(6/365) * 0.70;
+      const sLo  = fC - sH, sHi = fC + sH;
+      const sRng = sH;
+      return sRng > 0 ? (w.week_close - fC) / sRng : 0;
+    });
+  } else {
+    histZ = histWeeks.map(w => (w.week_close - w.wem_mid) / (w.wem_range / 2));
+  }
+
+  const aboveCount  = isStatic2
+    ? histWeeks.filter((w,i) => w.week_close > (w.friday_close||w.wem_mid) + histWeeks.map((_,j)=>{ const f=histWeeks[j].friday_close||histWeeks[j].wem_mid, a=histWeeks[j].atm_iv||0; return f*a*Math.sqrt(6/365)*0.70; })[i]).length
+    : histWeeks.filter(w => w.week_close > w.wem_high).length;
+  const belowCount  = isStatic2
+    ? histWeeks.filter((w,i) => w.week_close < (w.friday_close||w.wem_mid) - histWeeks.map((_,j)=>{ const f=histWeeks[j].friday_close||histWeeks[j].wem_mid, a=histWeeks[j].atm_iv||0; return f*a*Math.sqrt(6/365)*0.70; })[i]).length
+    : histWeeks.filter(w => w.week_close < w.wem_low).length;
+  const insideCount = total - aboveCount - belowCount;
+
   const avgZ  = histZ.length ? histZ.reduce((a,b)=>a+b,0)/histZ.length : 0;
   const stdZ  = histZ.length > 1 ? Math.sqrt(histZ.reduce((a,b)=>a+(b-avgZ)**2,0)/histZ.length) : 0.5;
   const pctBeyond = histZ.length ? histZ.filter(z2=>Math.abs(z2)>Math.abs(z)).length/histZ.length*100 : null;
 
-  // ── DOT PLOT SVG ────────────────────────────────────────────────────────────
+  // ── DOT PLOT ──────────────────────────────────────────────────────────────
   if(dotEl) {
-    const dW = 700; // fixed reference — SVG scales to 100% width
+    const dW = 700;
     const dH = 340;
     const padX = 24, padY = 20;
     const dotR   = 8;
@@ -920,9 +1000,8 @@ function renderWEM(md){
     const rectY  = dH/2 - rectH/2 + 10;
     const overY  = 50;
     const plotW  = dW - padX*2;
-    const slotW  = plotW / Math.max(total + 1, 2); // +1 slot reserved for current open week
+    const slotW  = plotW / Math.max(total + 1, 2);
 
-    // Time labels every ~5 weeks
     const step = Math.max(1, Math.floor(total/6));
     const timeLabels = histWeeks
       .map((w,i) => ({i, label: w.week_start?.slice(2,7)||''}))
@@ -930,18 +1009,28 @@ function renderWEM(md){
 
     const dotsSVG = histWeeks.map((w,i) => {
       const cx = padX + (i + 0.5) * slotW;
-      const wRange = w.wem_high - w.wem_low;
+      // Use static or dynamic range for dot positioning
+      let wLo, wHi;
+      if (isStatic2) {
+        const fC  = w.friday_close || w.wem_mid;
+        const aIV = w.atm_iv || w.vix_iv || 0;
+        const sH  = fC * aIV * Math.sqrt(6/365) * 0.70;
+        wLo = fC - sH; wHi = fC + sH;
+      } else {
+        wLo = w.wem_low; wHi = w.wem_high;
+      }
+      const wRange = wHi - wLo;
       let cy, color;
-      if(w.week_close > w.wem_high) {
-        const excess = Math.min((w.week_close - w.wem_high) / (wRange * 0.5), 1);
+      if(w.week_close > wHi) {
+        const excess = Math.min((w.week_close - wHi) / (wRange * 0.5), 1);
         cy = rectY - excess * (overY - 4) - dotR;
         color = '#00ff88';
-      } else if(w.week_close < w.wem_low) {
-        const excess = Math.min((w.wem_low - w.week_close) / (wRange * 0.5), 1);
+      } else if(w.week_close < wLo) {
+        const excess = Math.min((wLo - w.week_close) / (wRange * 0.5), 1);
         cy = rectY + rectH + excess * (overY - 4) + dotR;
         color = '#ff3355';
       } else {
-        const pct2 = (w.week_close - w.wem_low) / wRange;
+        const pct2 = (w.week_close - wLo) / wRange;
         cy = rectY + rectH - pct2 * rectH;
         color = '#ffcc00';
       }
@@ -951,20 +1040,19 @@ function renderWEM(md){
         stroke="${isNewest?'white':'none'}" stroke-width="${isNewest?1.5:0}"/>`;
     }).join('');
 
-    // Current-week dot: live price vs open WEM (excluded from histWeeks because week_close is null)
     var _cwDot = '';
-    if (lo && hi && price && (hi - lo) > 0) {
-      var _cwRange = hi - lo;
+    if (lo2 && hi2 && price2 && (hi2 - lo2) > 0) {
+      var _cwRange = hi2 - lo2;
       var _cwX = (padX + (total + 0.5) * slotW).toFixed(1);
       var _cwCy, _cwCol;
-      if (price > hi) {
-        _cwCy = (rectY - Math.min((price - hi) / (_cwRange * 0.5), 1) * (overY - 4) - dotR).toFixed(1);
+      if (price2 > hi2) {
+        _cwCy = (rectY - Math.min((price2 - hi2) / (_cwRange * 0.5), 1) * (overY - 4) - dotR).toFixed(1);
         _cwCol = '#00ff88';
-      } else if (price < lo) {
-        _cwCy = (rectY + rectH + Math.min((lo - price) / (_cwRange * 0.5), 1) * (overY - 4) + dotR).toFixed(1);
+      } else if (price2 < lo2) {
+        _cwCy = (rectY + rectH + Math.min((lo2 - price2) / (_cwRange * 0.5), 1) * (overY - 4) + dotR).toFixed(1);
         _cwCol = '#ff3355';
       } else {
-        _cwCy = (rectY + rectH - ((price - lo) / _cwRange) * rectH).toFixed(1);
+        _cwCy = (rectY + rectH - ((price2 - lo2) / _cwRange) * rectH).toFixed(1);
         _cwCol = '#ffcc00';
       }
       var _cwLY = (parseFloat(_cwCy) - dotR - 5).toFixed(1);
@@ -987,21 +1075,15 @@ function renderWEM(md){
             <stop offset="100%" stop-color="#ff3355" stop-opacity="0.1"/>
           </linearGradient>
         </defs>
-        <!-- Zone labels -->
         <text x="${padX}" y="${rectY-overY-6}" fill="#00ff8866" font-size="8" font-family="Orbitron,monospace">ABOVE RANGE</text>
         <text x="${padX}" y="${rectY+rectH+overY+18}" fill="#ff335566" font-size="8" font-family="Orbitron,monospace">BELOW RANGE</text>
-        <!-- Rectangle -->
         <rect x="${padX}" y="${rectY}" width="${plotW}" height="${rectH}" rx="3" fill="url(#rg3)"/>
         <rect x="${padX}" y="${rectY}" width="${plotW}" height="${rectH}" rx="3" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
-        <!-- Labels inside rect -->
         <text x="${padX+6}" y="${rectY+12}" fill="rgba(0,255,136,0.45)" font-size="8" font-family="Orbitron,monospace">HIGH</text>
         <text x="${padX+6}" y="${rectY+rectH/2+4}" fill="rgba(255,255,255,0.22)" font-size="8" font-family="Orbitron,monospace">MID</text>
         <text x="${padX+6}" y="${rectY+rectH-4}" fill="rgba(255,51,85,0.45)" font-size="8" font-family="Orbitron,monospace">LOW</text>
-        <!-- Mid line -->
         <line x1="${padX}" y1="${rectY+rectH/2}" x2="${padX+plotW}" y2="${rectY+rectH/2}" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="3,4"/>
-        <!-- Dots -->
         ${dotsSVG}
-        <!-- Time axis -->
         ${timeLabels.map(({i,label}) => {
           const tx = padX + (i+0.5)*slotW;
           return `<text x="${tx.toFixed(1)}" y="${rectY+rectH+overY+32}" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8" font-family="Share Tech Mono,monospace">${label}</text>`;
@@ -1009,32 +1091,27 @@ function renderWEM(md){
         <line x1="${padX}" y1="${rectY+rectH+overY+24}" x2="${padX+plotW}" y2="${rectY+rectH+overY+24}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
         ${_cwDot}
       </svg>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px;">Oldest → Newest · newest dot has white ring · ${total} weeks</div>`;
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">Oldest → Newest · newest dot has white ring · ${total} weeks${isStatic2?' · Using STATIC ranges':''}</div>`;
   }
 
-  // ── THERMOMETER + BELL CURVE (right panel) ─────────────────────────────────
+  // ── THERMOMETER + BELL ────────────────────────────────────────────────────
   if(zEl) {
     const W = Math.max(zEl.offsetWidth||500, 380);
     const H = 380;
-
-    // Three equal columns
     const col = Math.floor(W / 3);
-    const tX  = 32;           // thermometer center column: 0..col
-    const eX  = col + 16;     // explanation column: col..col*2
-    const bX  = col * 2 + 8;  // bell column: col*2..W
+    const tX  = 32;
+    const eX  = col + 16;
+    const bX  = col * 2 + 8;
     const bW  = W - bX - 12;
-
     const tW  = 44;
-    const tCx = tX + tW/2;    // center x of tube
+    const tCx = tX + tW/2;
     const tH  = H - 100;
     const tY  = 40;
-
     const toY = v => tY + tH - ((v + 1.5) / 3) * tH;
     const zCl = Math.max(-1.5, Math.min(1.5, z));
     const fH  = ((zCl + 1.5) / 3) * tH;
     const fY  = tY + tH - fH;
 
-    // Bell
     const bH = tH, bY = tY;
     const bLine = Array.from({length: bW+1}, (_,i) => {
       const zv = -1.8 + (i/bW)*3.6;
@@ -1043,7 +1120,6 @@ function renderWEM(md){
     }).join(' ');
     const bFill = bLine + ` L${bX+bW},${bY+bH} L${bX},${bY+bH} Z`;
 
-    // Shade
     const shade = (() => {
       const pts = [];
       for(let i=0;i<=bW;i++){
@@ -1062,13 +1138,20 @@ function renderWEM(md){
     })();
     const zBX = bX + ((zCl+1.8)/3.6)*bW;
 
+    const modeNote = isStatic2
+      ? `Static ±$${fmt(halfRange2,2)} · fixed from Fri close`
+      : `Dynamic ±$${fmt(halfRange2,2)} · ${cur?.dte||'?'} DTE`;
+
     zEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
         <div>
           <span style="font-family:'Share Tech Mono',monospace;font-size:34px;font-weight:bold;color:${zColor};">${z>=0?'+':''}${fmt(z,3)}</span>
           <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-left:8px;letter-spacing:2px;">Z-SCORE</span>
         </div>
-        <span style="font-family:'Orbitron',monospace;font-size:11px;color:${zColor};letter-spacing:3px;">${zLabel}</span>
+        <div style="text-align:right;">
+          <div style="font-family:'Orbitron',monospace;font-size:11px;color:${zColor};letter-spacing:3px;">${zLabel}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);margin-top:3px;">${modeNote}</div>
+        </div>
       </div>
       <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;">
 
@@ -1081,7 +1164,6 @@ function renderWEM(md){
         <rect x="${tX}" y="${fY}" width="${tW}" height="${fH}"
           fill="${zColor}" opacity="0.8" clip-path="url(#tc8)"/>
 
-        <!-- Tick marks + Z labels on left of tube -->
         ${[-1.5,-1,-0.5,0,0.5,1,1.5].map(v=>{
           const ty=toY(v), maj=v===Math.round(v);
           const c=Math.abs(v)>=1?'#ff335566':v===0?'#00ff88aa':'rgba(255,255,255,0.15)';
@@ -1091,33 +1173,29 @@ function renderWEM(md){
               fill="${c}" font-size="10" font-family="Orbitron,monospace">${v>0?'+':''}${v}</text>`:''}`;
         }).join('')}
 
-        <!-- NOW arrow pointing right from tube — stays within thermometer column -->
         <polygon points="${tX+tW+3},${toY(zCl)} ${tX+tW+14},${toY(zCl)-7} ${tX+tW+14},${toY(zCl)+7}"
           fill="${zColor}"/>
         <text x="${tX+tW+18}" y="${toY(zCl)-10}"
           fill="${zColor}" font-size="10" font-family="Share Tech Mono,monospace" font-weight="bold">
-          $${fmt(price,2)}</text>
+          $${fmt(price2,2)}</text>
         <text x="${tX+tW+18}" y="${toY(zCl)+4}"
           fill="${zColor}" font-size="8" font-family="Orbitron,monospace">NOW</text>
 
-        <!-- WEM boundary price labels below the arrow zone, tucked to right of tube -->
         <text x="${tX+tW+18}" y="${toY(1)+4}"
-          fill="#00ff8855" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(hi,2)} hi</text>
+          fill="#00ff8855" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(hi2,2)} hi</text>
         <text x="${tX+tW+18}" y="${toY(0)+4}"
-          fill="rgba(255,255,255,0.2)" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(mid,2)} mid</text>
+          fill="rgba(255,255,255,0.2)" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(mid2,2)} mid</text>
         <text x="${tX+tW+18}" y="${toY(-1)+4}"
-          fill="#ff335544" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(lo,2)} lo</text>
+          fill="#ff335544" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(lo2,2)} lo</text>
 
-        <!-- EXPLANATION (middle column) — clean rows, no overlap -->
+        <!-- EXPLANATION -->
         <text x="${eX}" y="${tY+2}" fill="rgba(255,255,255,0.5)"
           font-size="9" font-family="Orbitron,monospace" letter-spacing="1">HOW TO READ</text>
-
-        <!-- Legend rows -->
         ${[
-          {c:'#00ff88', t:'Z = 0  ·  at midpoint ($'+fmt(mid,2)+')'},
+          {c:'#00ff88', t:'Z = 0  ·  at midpoint ($'+fmt(mid2,2)+')'},
           {c:'#ffcc00', t:'Z ±0.25  ·  elevated'},
           {c:'#ff8800', t:'Z ±0.5  ·  near boundary'},
-          {c:'#ff3355', t:'Z ±1.0  ·  at WEM edge ($'+fmt(hi,2)+' / $'+fmt(lo,2)+')'},
+          {c:'#ff3355', t:'Z ±1.0  ·  at WEM edge ($'+fmt(hi2,2)+' / $'+fmt(lo2,2)+')'},
           {c:'#ff3355', t:'Z > ±1.0  ·  outside WEM'},
         ].map(({c,t},i)=>`
           <rect x="${eX}" y="${tY+18+i*20}" width="8" height="8" rx="1"
@@ -1128,38 +1206,37 @@ function renderWEM(md){
 
         <line x1="${eX}" y1="${tY+128}" x2="${eX+col-24}" y2="${tY+128}"
           stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-
         <text x="${eX}" y="${tY+146}" fill="rgba(255,255,255,0.5)"
           font-size="9" font-family="Orbitron,monospace" letter-spacing="1">THIS WEEK</text>
         ${[
           {t:`Z = ${z>=0?'+':''}${fmt(z,3)}  ·  ${zLabel}`, c:zColor},
-          {t:`$${fmt(price,2)} is ${fmt(Math.abs(z)*100,1)}% into range`, c:'rgba(255,255,255,0.5)'},
-          {t:`${z>=0?'Above':'Below'} mid by $${fmt(Math.abs(price-mid),2)}`, c:'rgba(255,255,255,0.4)'},
+          {t:`$${fmt(price2,2)} is ${fmt(Math.abs(z)*100,1)}% into range`, c:'rgba(255,255,255,0.5)'},
+          {t:`${z>=0?'Above':'Below'} mid by $${fmt(Math.abs(price2-mid2),2)}`, c:'rgba(255,255,255,0.4)'},
+          {t:isStatic2?'Using static (fixed) range':'Using dynamic (DTE-adjusted) range', c:'rgba(255,255,255,0.3)'},
         ].map(({t,c},i)=>`
           <text x="${eX}" y="${tY+164+i*16}"
             fill="${c}" font-size="9" font-family="Share Tech Mono,monospace">${t}</text>
         `).join('')}
 
-        <line x1="${eX}" y1="${tY+216}" x2="${eX+col-24}" y2="${tY+216}"
+        <line x1="${eX}" y1="${tY+230}" x2="${eX+col-24}" y2="${tY+230}"
           stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-
-        <text x="${eX}" y="${tY+234}" fill="rgba(255,255,255,0.5)"
+        <text x="${eX}" y="${tY+248}" fill="rgba(255,255,255,0.5)"
           font-size="9" font-family="Orbitron,monospace" letter-spacing="1">BELL CURVE</text>
         ${[
           {t:'Distribution of where',      c:'rgba(255,255,255,0.4)'},
           {t:'each week closed within',    c:'rgba(255,255,255,0.4)'},
-          {t:'its own WEM range.',         c:'rgba(255,255,255,0.4)'},
+          {t:`its own ${isStatic2?'STATIC':'dynamic'} WEM range.`, c:'rgba(255,255,255,0.4)'},
           {t:`Hist avg Z: ${avgZ>=0?'+':''}${fmt(avgZ,2)}  ·  σ: ${fmt(stdZ,2)}`, c:'rgba(255,255,255,0.4)'},
           {t:`NOW: top ${pctBeyond!=null?fmt(100-pctBeyond,0):'-'}% historically`, c:zColor},
           {t:`${pctBeyond!=null?fmt(pctBeyond,0):'-'}% of weeks more extreme`, c:'rgba(255,255,255,0.35)'},
         ].map(({t,c},i)=>`
-          <text x="${eX}" y="${tY+252+i*15}"
+          <text x="${eX}" y="${tY+266+i*15}"
             fill="${c}" font-size="9" font-family="Share Tech Mono,monospace">${t}</text>
         `).join('')}
 
-        <!-- BELL CURVE (right column) -->
+        <!-- BELL CURVE -->
         <text x="${bX}" y="${bY-8}" fill="rgba(255,255,255,0.25)"
-          font-size="9" font-family="Orbitron,monospace">Z-SCORE DISTRIBUTION</text>
+          font-size="9" font-family="Orbitron,monospace">Z-SCORE DISTRIBUTION${isStatic2?' (STATIC)':''}</text>
         <path d="${bFill}" fill="${zColor}" opacity="0.07"/>
         ${shade?`<path d="${shade}" fill="${zColor}" opacity="0.2"/>`:''}
         <path d="${bLine}" fill="none" stroke="${zColor}" stroke-width="1.5" opacity="0.5"/>
@@ -1189,9 +1266,9 @@ function renderWEM(md){
 
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:8px;">
         ${[
-          {l:'FROM MID',         v:(z>=0?'+':'')+'$'+fmt(price-mid,2), c:zColor},
-          {l:'% OF RANGE',       v:fmt(Math.abs(z)*100,1)+'%',         c:zColor},
-          {l:'HIST AVG Z',       v:(avgZ>=0?'+':'')+fmt(avgZ,2),       c:'var(--text2)'},
+          {l:'FROM MID',         v:(z>=0?'+':'')+'$'+fmt(price2-mid2,2), c:zColor},
+          {l:'% OF RANGE',       v:fmt(Math.abs(z)*100,1)+'%',           c:zColor},
+          {l:'HIST AVG Z',       v:(avgZ>=0?'+':'')+fmt(avgZ,2),         c:'var(--text2)'},
           {l:'% WKS MORE EXTR',  v:pctBeyond!=null?fmt(pctBeyond,0)+'%':'—', c:'var(--text3)'},
         ].map(s=>`<div style="text-align:center;background:var(--bg3);border-radius:3px;padding:8px;">
           <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">${s.l}</div>
@@ -1210,12 +1287,14 @@ function renderWEM(md){
     <td>${w.week_open?'$'+fmt(w.week_open,2):'—'}</td>
     <td class="up">${w.week_high?'$'+fmt(w.week_high,2):'—'}</td>
     <td class="dn">${w.week_low?'$'+fmt(w.week_low,2):'—'}</td>
-    <td class="${w.week_close&&w.week_open?clr(w.week_close-w.week_open):''}">${w.week_close?'$'+fmt(w.week_close,2):'—'}</td>
+    <td class="${w.week_close&&w.week_open?clr(w.week_close-w.week_open):''}">
+${w.week_close?'$'+fmt(w.week_close,2):'—'}</td>
     <td class="${clr(w.weekly_gap)}">${w.weekly_gap!=null?sign(w.weekly_gap)+'$'+fmt(Math.abs(w.weekly_gap),2):'—'}</td>
     <td>${w.gap_filled!=null?(w.gap_filled?'<span class="up">YES</span>':'<span class="dn">NO</span>'):'—'}</td>
     <td>${w.closed_inside!=null?(w.closed_inside?'<span class="up">YES</span>':'<span class="dn">NO</span>'):'—'}</td>
     <td>${w.breach!=null?(w.breach?'<span class="dn">YES</span>':'<span class="up">NO</span>'):'—'}</td>
-    <td class="${w.breach_side==='HIGH'?'dn':w.breach_side==='LOW'?'dn':''}">${w.breach_side||'—'}</td>
+    <td class="${w.breach_side==='HIGH'?'dn':w.breach_side==='LOW'?'dn':''}">
+${w.breach_side||'—'}</td>
     <td class="dn">${w.breach_amount?'$'+fmt(Math.abs(w.breach_amount),2):'—'}</td>
   </tr>`).join('');
 }
