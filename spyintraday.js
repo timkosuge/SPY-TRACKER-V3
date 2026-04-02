@@ -68,6 +68,10 @@ export async function onRequest(context) {
     const sessionClose = bars[bars.length - 1].close;
     const sessionVol   = bars.reduce((a, b) => a + (b.vol || 0), 0);
     const prevClose    = meta.previousClose || meta.chartPreviousClose || null;
+
+    // VWAP = sum(typical_price * volume) / sum(volume)
+    const vwapNum = bars.reduce((a, b) => a + ((((b.high??b.close) + (b.low??b.close) + b.close) / 3) * (b.vol||0)), 0);
+    const vwap    = sessionVol > 0 ? Math.round(vwapNum / sessionVol * 100) / 100 : null;
     const change       = prevClose ? Math.round((sessionClose - prevClose) * 100) / 100 : null;
     const changePct    = prevClose && change != null ? Math.round((change / prevClose) * 10000) / 100 : null;
     const asOf = new Date(bars[bars.length - 1].t * 1000).toISOString();
@@ -159,17 +163,6 @@ export async function onRequest(context) {
       if (vol > hvnVolume) { hvnVolume = vol; hvnPrice = parseFloat(price); }
     }
 
-    // VWAP — cumulative (typical price × volume) / cumulative volume across all RTH bars
-    let cumTPV = 0, cumVol = 0;
-    for (const bar of bars) {
-      const vol = bar.vol || 0;
-      if (vol <= 0) continue;
-      const tp = ((bar.high ?? bar.close) + (bar.low ?? bar.close) + bar.close) / 3;
-      cumTPV += tp * vol;
-      cumVol += vol;
-    }
-    const vwap = cumVol > 0 ? Math.round(cumTPV / cumVol * 100) / 100 : null;
-
     return new Response(JSON.stringify({
       available:    true,
       open:         Math.round(sessionOpen  * 100) / 100,
@@ -182,6 +175,15 @@ export async function onRequest(context) {
       changePct,
       bars:         bars.length,
       asOf,
+      vwap,
+      rawBars:      bars.map(b => ({
+        t:     b.t,
+        open:  b.open  != null ? Math.round(b.open  * 100) / 100 : null,
+        high:  b.high  != null ? Math.round(b.high  * 100) / 100 : null,
+        low:   b.low   != null ? Math.round(b.low   * 100) / 100 : null,
+        close: b.close != null ? Math.round(b.close * 100) / 100 : null,
+        vol:   b.vol   || 0,
+      })),
       // Intraday volume breakdown (CT time buckets)
       open_1h:      Math.round(open_1h),
       open_1h_pct,
@@ -191,7 +193,6 @@ export async function onRequest(context) {
       peak_volume:  peakBar ? Math.round(peakBar.vol) : null,
       hvn_price:    hvnPrice,
       hvn_volume:   Math.round(hvnVolume),
-      vwap,
       buckets,
     }), { headers });
 
