@@ -69,7 +69,7 @@ function _switchPanelOnly(id) {
   if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
   if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); }, 50); }
   if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }
-  if(id==='gap-stats') { setTimeout(renderGapStats, 50); setTimeout(renderGapOHLCSections, 80); }
+  if(id==='gap-stats') { setTimeout(renderGapStats, 50); setTimeout(renderGapOHLCSections, 80); setTimeout(renderLargeGapStats, 100); }
   if(id==='session-vol') { setTimeout(renderSessionVolStats, 50); }
   if(id==='time-of-day') { setTimeout(renderTimeOfDay, 50); }
 }
@@ -8202,3 +8202,236 @@ async function renderLiveChart() {
     };
   }
 })();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LARGE GAP STATS — threshold-based analysis for gaps ≥1%, 1.5%, 2%, 3%
+// Data from large_gap_stats.js (computed from full SPY history in spy_data.json)
+// ─────────────────────────────────────────────────────────────────────────────
+
+window._lgActive = '1';  // active threshold tab
+
+function renderLargeGapStats() {
+  const el = document.getElementById('largeGapStatsSection');
+  if (!el) return;
+  if (typeof LARGE_GAP_STATS === 'undefined') {
+    el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:12px;">Large gap stats data not loaded.</div>';
+    return;
+  }
+
+  const D = LARGE_GAP_STATS;
+  const overall = D.overall;
+  const thr = window._lgActive;
+  const bucket = D.buckets[thr];
+  if (!bucket) return;
+
+  const fmt1  = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(1) + '%' : '—';
+  const fmt2  = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(2) + '%' : '—';
+  const fmt3  = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(3) + '%' : '—';
+  const fmtN  = v => v != null ? v.toLocaleString() : '—';
+  const fmtVol = v => v > 1e6 ? (v/1e6).toFixed(1)+'M' : v > 1e3 ? (v/1e3).toFixed(0)+'K' : String(v);
+
+  const fillColor = v => v >= 50 ? '#00ff88' : v >= 35 ? '#ffcc00' : '#ff8800';
+  const retColor  = v => v > 0.1 ? '#00ff88' : v < -0.1 ? '#ff3355' : 'var(--text2)';
+
+  // Tab buttons
+  const tabs = D.thresholds.map(t => {
+    const key = String(t);
+    const active = key === thr;
+    const freq = overall.freq[key];
+    return `<button onclick="window._lgActive='${key}';renderLargeGapStats();"
+      style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:5px 14px;
+             background:${active ? 'rgba(0,204,255,0.15)' : 'var(--bg3)'};
+             border:1px solid ${active ? 'var(--cyan)' : 'var(--border)'};
+             border-radius:3px;color:${active ? 'var(--cyan)' : 'var(--text2)'};cursor:pointer;">
+      ≥${t}%
+      <span style="display:block;font-size:8px;color:${active ? 'var(--cyan)' : 'var(--text3)'};margin-top:1px;">
+        ${freq ? freq.up_n + '↑ ' + freq.dn_n + '↓' : ''}
+      </span>
+    </button>`;
+  }).join('');
+
+  // Frequency overview bar
+  const freq = overall.freq[thr];
+  const totalSess = overall.total_sessions;
+  const freqPct = freq ? ((freq.up_n + freq.dn_n) / totalSess * 100).toFixed(1) : '—';
+
+  // Direction card renderer
+  function dirCard(label, s, color, borderColor) {
+    if (!s) return '';
+    const dow = s.dow || {};
+    const dowDays = ['Mon','Tue','Wed','Thu','Fri'];
+    const dowRows = dowDays.map(d => {
+      const ds = dow[d];
+      if (!ds || !ds.n) return '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);width:28px;">${d.toUpperCase()}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);width:24px;text-align:center;">${ds.n}</span>
+        <div style="flex:1;margin:0 6px;height:6px;background:var(--bg2);border-radius:2px;overflow:hidden;">
+          <div style="width:${Math.min(ds.fill_rate,100)}%;height:100%;background:${fillColor(ds.fill_rate)};opacity:0.8;border-radius:2px;"></div>
+        </div>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${fillColor(ds.fill_rate)};width:34px;text-align:right;">${ds.fill_rate}%</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${retColor(ds.avg_oc)};width:48px;text-align:right;">${fmt2(ds.avg_oc)}</span>
+      </div>`;
+    }).join('');
+
+    // Notable instances
+    const notable = (s.notable || []).slice(0, 3).map(g =>
+      `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:10px;">
+        <span style="color:var(--text3);font-family:'Share Tech Mono',monospace;">${g.date}</span>
+        <span style="color:${color};font-family:'Share Tech Mono',monospace;">${g.gap_pct >= 0 ? '+' : ''}${g.gap_pct}%</span>
+        <span style="color:${retColor(g.close - g.open)};font-family:'Share Tech Mono',monospace;">${g.close >= g.open ? '+' : ''}${(g.close - g.open).toFixed(2)}</span>
+        <span style="color:${g.filled ? '#00ff88' : '#ff8800'};font-size:9px;font-family:'Orbitron',monospace;">${g.filled ? 'FILLED' : 'OPEN'}</span>
+      </div>`
+    ).join('');
+
+    return `
+    <div style="background:var(--bg2);border:1px solid ${borderColor}33;border-top:3px solid ${borderColor};border-radius:4px;padding:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;color:${borderColor};letter-spacing:1px;margin-bottom:10px;">
+        ${label} <span style="font-size:8px;color:var(--text3);font-weight:normal;">(${s.n} sessions)</span>
+      </div>
+
+      <!-- Key stats grid -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;">
+        ${[
+          ['FILL RATE', s.fill_rate + '%', fillColor(s.fill_rate)],
+          ['FADE RATE', s.fade_rate + '%', retColor(-s.fade_rate * 0.3)],
+          ['AVG OPEN→CLOSE', fmt2(s.avg_oc_pct), retColor(s.avg_oc_pct)],
+          ['AVG DAY RANGE', s.avg_range_pct.toFixed(2) + '%', '#ffcc00'],
+        ].map(([l,v,c]) => `
+          <div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;border-top:2px solid ${c};">
+            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">${l}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:${c};">${v}</div>
+          </div>`).join('')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <!-- Left: more stats -->
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">BEHAVIOR</div>
+          ${[
+            ['Avg gap size',  fmt2(s.avg_gap_pct), retColor(s.avg_gap_pct)],
+            ['Continuation rate', s.cont_rate + '%', s.cont_rate > 50 ? '#00ff88' : '#ff8800'],
+            ['Max gap seen', (s.max_gap_pct >= 0 ? '+' : '') + s.max_gap_pct + '%', '#ffcc00'],
+            ['Avg volume',   fmtVol(s.avg_volume), 'var(--text2)'],
+          ].map(([l,v,c]) => `
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+              <span style="font-size:11px;color:var(--text3);">${l}</span>
+              <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${c};">${v}</span>
+            </div>`).join('')}
+        </div>
+
+        <!-- Right: fill rate visual -->
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">SAME-DAY FILL RATE</div>
+          <div style="position:relative;height:60px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:4px;">
+            <div style="position:absolute;left:0;top:0;height:100%;width:${s.fill_rate}%;background:${fillColor(s.fill_rate)};opacity:0.25;"></div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;color:${fillColor(s.fill_rate)};">${s.fill_rate}%</span>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);text-align:center;">
+            ${s.fill_rate >= 50 ? 'Gaps fill more often than not' : s.fill_rate >= 35 ? 'Gaps fill ~1 in 3 sessions' : 'Most gaps remain open'}
+          </div>
+        </div>
+      </div>
+
+      <!-- DOW breakdown -->
+      <div style="margin-top:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">BY DAY OF WEEK</div>
+        <div style="display:flex;justify-content:space-between;padding:2px 0;margin-bottom:3px;">
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);width:28px;">DAY</span>
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);width:24px;text-align:center;">N</span>
+          <div style="flex:1;margin:0 6px;"></div>
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);width:34px;text-align:right;">FILL%</span>
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);width:48px;text-align:right;">AVG O→C</span>
+        </div>
+        ${dowRows || '<div style="font-size:11px;color:var(--text3);">No DOW data</div>'}
+      </div>
+
+      <!-- Notable instances -->
+      ${notable ? `
+      <div style="margin-top:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">LARGEST INSTANCES</div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">DATE</span>
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">GAP</span>
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">DAY CHG</span>
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">STATUS</span>
+        </div>
+        ${notable}
+      </div>` : ''}
+    </div>`;
+  }
+
+  // Year-over-year comparison (combined both directions)
+  const combined = bucket.combined;
+  const years = combined ? combined.years : {};
+  const yearKeys = Object.keys(years).sort();
+  const yearRows = yearKeys.map(y => {
+    const ys = years[y];
+    const bar = Math.min(ys.fill_rate, 100);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+      <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);width:36px;">${y}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);width:24px;text-align:right;">${ys.n}</span>
+      <div style="flex:1;height:8px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+        <div style="width:${bar}%;height:100%;background:${fillColor(ys.fill_rate)};opacity:0.75;border-radius:2px;"></div>
+      </div>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${fillColor(ys.fill_rate)};width:36px;text-align:right;">${ys.fill_rate}%</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${retColor(ys.avg_oc)};width:48px;text-align:right;">${fmt2(ys.avg_oc)}</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+  <div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:4px;padding:14px;">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);letter-spacing:2px;margin-bottom:3px;">⬡ LARGE GAP ANALYSIS — BY THRESHOLD</div>
+        <div style="font-size:11px;color:var(--text3);">
+          ${overall.total_sessions.toLocaleString()} sessions · ${overall.date_range.from} → ${overall.date_range.to} · gaps of equal or greater magnitude to threshold
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${tabs}</div>
+    </div>
+
+    <!-- Frequency summary -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;padding:10px;background:var(--bg3);border-radius:4px;">
+      ${freq ? [
+        ['GAP UP SESSIONS', freq.up_n, freq.up_pct + '% of all days', '#00ff88'],
+        ['GAP DOWN SESSIONS', freq.dn_n, freq.dn_pct + '% of all days', '#ff3355'],
+        ['TOTAL ≥' + thr + '%', freq.up_n + freq.dn_n, freqPct + '% frequency', 'var(--cyan)'],
+        ['BASELINE (ALL DAYS)', overall.total_sessions, 'full history', 'var(--text2)'],
+      ].map(([l,v,sub,c]) => `
+        <div style="text-align:center;">
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">${l}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${c};">${typeof v === 'number' ? v.toLocaleString() : v}</div>
+          <div style="font-size:10px;color:var(--text3);">${sub}</div>
+        </div>`).join('') : ''}
+    </div>
+
+    <!-- Up and Down cards side by side -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+      ${dirCard('▲ GAP UP ≥ +' + thr + '%', bucket.up,   '#00ff88', '#00ff88')}
+      ${dirCard('▼ GAP DOWN ≥ −' + thr + '%', bucket.down, '#ff3355', '#ff3355')}
+    </div>
+
+    <!-- Year-over-year -->
+    ${yearKeys.length ? `
+    <div style="background:var(--bg3);border-radius:4px;padding:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:8px;">
+        YEAR-BY-YEAR FILL RATE & RETURN — COMBINED (≥${thr}% EITHER DIRECTION)
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);width:36px;">YEAR</span>
+        <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);width:24px;text-align:right;">N</span>
+        <div style="flex:1;margin:0 8px;"></div>
+        <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);width:36px;text-align:right;">FILL%</span>
+        <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);width:48px;text-align:right;">AVG O→C</span>
+      </div>
+      ${yearRows}
+      <div style="font-size:10px;color:var(--text3);margin-top:8px;">Fill = gap closed same day · AVG O→C = avg open-to-close return on that session</div>
+    </div>` : ''}
+
+  </div>`;
+}
