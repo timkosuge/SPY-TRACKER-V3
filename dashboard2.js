@@ -655,18 +655,14 @@ function renderWEM(md){
   };
 
   if(cur){
-    // ── Compute STATIC WEM ─────────────────────────────────────────────────
-    // Static = range anchored on THIS week's friday_close (the prior Friday's
-    // closing price) + this week's atm_iv. wems[0] is the current/active week
-    // — its friday_close IS the correct anchor (634.09 not last week's 648.57).
-    const prevWem    = wems[0] || wems[1];
-    const friClose   = prevWem.friday_close || prevWem.wem_mid;
-    const atmIV      = prevWem.atm_iv || prevWem.vix_iv || 0;
-    const staticHalfRange = friClose * atmIV * Math.sqrt(6/365) * 0.70;
-    const staticHigh = Math.round((friClose + staticHalfRange) * 100) / 100;
-    const staticLow  = Math.round((friClose - staticHalfRange) * 100) / 100;
-    const staticMid  = Math.round(friClose * 100) / 100;
-    const staticRange = Math.round(staticHalfRange * 2 * 100) / 100;
+    // ── STATIC WEM — FROZEN at Friday 3/28 close ──────────────────────────
+    // Range locked to 634.09 close + IV captured at that time (±15.61).
+    // These values do NOT change regardless of live IV or workflow updates.
+    const staticMid       = 634.09;
+    const staticHalfRange = 15.61;
+    const staticHigh      = 649.70;
+    const staticLow       = 618.48;
+    const staticRange     = 31.22;
 
     // ── Select active mode values ──────────────────────────────────────────
     const isStatic = window._wemMode === 'static';
@@ -777,15 +773,11 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   if(!dotEl && !zEl) return;
 
   const isStatic2  = window._wemMode === 'static';
-  // Static uses previous week's friday_close + atm_iv (the straddle price set last Friday)
-  const prevWem2   = wems[0] || wems[1];  // current week has the correct friday_close anchor
-  const friClose2  = prevWem2 ? (prevWem2.friday_close || prevWem2.wem_mid) : 0;
-  const atmIV2     = prevWem2 ? (prevWem2.atm_iv || prevWem2.vix_iv || 0) : 0;
-  const sHalf      = friClose2 * atmIV2 * Math.sqrt(6/365) * 0.70;
-
-  const lo2  = cur ? (isStatic2 ? Math.round((friClose2-sHalf)*100)/100 : cur.wem_low)  : 0;
-  const hi2  = cur ? (isStatic2 ? Math.round((friClose2+sHalf)*100)/100 : cur.wem_high) : 0;
-  const mid2 = cur ? (isStatic2 ? Math.round(friClose2*100)/100          : cur.wem_mid)  : 0;
+  // Static — frozen at Friday 3/28 close (634.09, ±15.61)
+  const sHalf      = 15.61;
+  const lo2  = cur ? (isStatic2 ? 618.48 : cur.wem_low)  : 0;
+  const hi2  = cur ? (isStatic2 ? 649.70 : cur.wem_high) : 0;
+  const mid2 = cur ? (isStatic2 ? 634.09 : cur.wem_mid)  : 0;
   const price2 = (spy.price || mid2 || 0);
   const halfRange2 = isStatic2 ? sHalf : (cur ? cur.wem_range/2 : 1);
   const z = halfRange2 > 0 ? (price2 - mid2) / halfRange2 : 0;
