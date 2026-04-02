@@ -655,14 +655,15 @@ function renderWEM(md){
   };
 
   if(cur){
-    // ── STATIC WEM — FROZEN at Friday 3/28 close ──────────────────────────
-    // Range locked to 634.09 close + IV captured at that time (±15.61).
-    // These values do NOT change regardless of live IV or workflow updates.
-    const staticMid       = 634.09;
-    const staticHalfRange = 15.61;
-    const staticHigh      = 649.70;
-    const staticLow       = 618.48;
-    const staticRange     = 31.22;
+    // ── STATIC WEM — locked at prior Friday close via TheoTrade formula ─────
+    // set_next_week_static_wem() writes these on Friday and never overwrites them.
+    // Falls back to dynamic values if static hasn't been computed yet.
+    const staticHigh      = cur.static_wem_high  || cur.wem_high;
+    const staticLow       = cur.static_wem_low   || cur.wem_low;
+    const staticHalfRange = cur.static_wem_range  ? cur.static_wem_range / 2 : cur.wem_range / 2;
+    const staticMid       = cur.friday_close      || cur.wem_mid;
+    const staticRange     = cur.static_wem_range  || cur.wem_range;
+    const staticIV        = cur.static_wem_iv     || cur.atm_iv || 0;
 
     // ── Select active mode values ──────────────────────────────────────────
     const isStatic = window._wemMode === 'static';
@@ -696,14 +697,14 @@ function renderWEM(md){
     if (isStatic) {
       const dynHalf = cur.wem_range / 2;
       const decay = dynHalf < staticHalfRange ? (1 - dynHalf/staticHalfRange)*100 : 0;
-      comparisonHtml = `<div style="display:flex;gap:16px;align-items:center;padding:8px 10px;background:var(--bg3);border-radius:3px;margin-top:8px;font-size:11px;font-family:'Share Tech Mono',monospace;">
+      comparisonHtml = `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--bg3);border-radius:3px;margin-top:8px;font-size:11px;font-family:'Share Tech Mono',monospace;">
         <span style="color:var(--text3);">STATIC ±$${fmt(staticHalfRange,2)}</span>
         <span style="color:var(--text3);">→</span>
         <span style="color:var(--cyan);">DYNAMIC ±$${fmt(dynHalf,2)}</span>
         <span style="color:var(--text3);">·</span>
-        <span style="color:#ff8800;">${decay.toFixed(0)}% range decay with ${cur.dte||'?'} DTE remaining</span>
+        <span style="color:#ff8800;">${decay.toFixed(0)}% decay · ${cur.dte||'?'} DTE remaining</span>
         <span style="color:var(--text3);">·</span>
-        <span style="color:var(--text3);">IV ${fmt(atmIV*100,1)}%</span>
+        <span style="color:var(--text3);">Fri IV ${staticIV?fmt(staticIV*100,1)+'%':'—'} → Live IV ${atmIV?fmt(atmIV*100,1)+'%':'—'}</span>
       </div>`;
     }
 
@@ -773,11 +774,11 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   if(!dotEl && !zEl) return;
 
   const isStatic2  = window._wemMode === 'static';
-  // Static — frozen at Friday 3/28 close (634.09, ±15.61)
-  const sHalf      = 15.61;
-  const lo2  = cur ? (isStatic2 ? 618.48 : cur.wem_low)  : 0;
-  const hi2  = cur ? (isStatic2 ? 649.70 : cur.wem_high) : 0;
-  const mid2 = cur ? (isStatic2 ? 634.09 : cur.wem_mid)  : 0;
+  // Static — uses locked values from set_next_week_static_wem() (Friday close + TheoTrade formula)
+  const sHalf = cur ? ((cur.static_wem_range || cur.wem_range) / 2) : 1;
+  const lo2   = cur ? (isStatic2 ? (cur.static_wem_low  || cur.wem_low)  : cur.wem_low)  : 0;
+  const hi2   = cur ? (isStatic2 ? (cur.static_wem_high || cur.wem_high) : cur.wem_high) : 0;
+  const mid2  = cur ? (isStatic2 ? (cur.friday_close    || cur.wem_mid)  : cur.wem_mid)  : 0;
   const price2 = (spy.price || mid2 || 0);
   const halfRange2 = isStatic2 ? sHalf : (cur ? cur.wem_range/2 : 1);
   const z = halfRange2 > 0 ? (price2 - mid2) / halfRange2 : 0;
