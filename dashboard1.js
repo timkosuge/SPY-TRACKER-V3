@@ -386,28 +386,33 @@ function renderHub(md,sd){
     </div>`;
 
   // Live clock + countdown ticker
-  let _countdownSecs = countdownSecs;
-  setInterval(()=>{
-    const t = new Date();
-    const c=$('hubClock');
-    if(c) c.textContent=new Date(t.toLocaleString('en-US',{timeZone:'America/Chicago'}))
-      .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});
-    const lc=$('hubLonClock');
-    if(lc) lc.textContent=new Date(t.toLocaleString('en-US',{timeZone:'Europe/London'}))
-      .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'});
-    const tc=$('hubTokyoClock');
-    if(tc) tc.textContent=new Date(t.toLocaleString('en-US',{timeZone:'Asia/Tokyo'}))
-      .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Tokyo'});
-    const ec=$('hubEtClock');
-    if(ec) ec.textContent=new Date(t.toLocaleString('en-US',{timeZone:'America/New_York'}))
-      .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/New_York'});
-    const cd=$('hubCountdown');
-    if(cd && _countdownSecs>0){
-      _countdownSecs--;
-      cd.textContent=fmtCountdown(_countdownSecs);
-      if(isMarketHours && _countdownSecs<=300) cd.style.color='#ff3355';
-    }
-  },1000);
+  // Guard: only create one interval ever — renderHub is called on every refresh
+  // cycle (every 15s) so without this guard we'd stack up dozens of competing
+  // intervals all flashing different countdown values simultaneously.
+  window._hubCountdownSecs = countdownSecs; // always resync to current time on renderHub call
+  if (!window._hubClockInterval) {
+    window._hubClockInterval = setInterval(()=>{
+      const t = new Date();
+      const c=$('hubClock');
+      if(c) c.textContent=new Date(t.toLocaleString('en-US',{timeZone:'America/Chicago'}))
+        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});
+      const lc=$('hubLonClock');
+      if(lc) lc.textContent=new Date(t.toLocaleString('en-US',{timeZone:'Europe/London'}))
+        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'});
+      const tc=$('hubTokyoClock');
+      if(tc) tc.textContent=new Date(t.toLocaleString('en-US',{timeZone:'Asia/Tokyo'}))
+        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Tokyo'});
+      const ec=$('hubEtClock');
+      if(ec) ec.textContent=new Date(t.toLocaleString('en-US',{timeZone:'America/New_York'}))
+        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/New_York'});
+      const cd=$('hubCountdown');
+      if(cd && window._hubCountdownSecs>0){
+        window._hubCountdownSecs--;
+        cd.textContent=fmtCountdown(window._hubCountdownSecs);
+        if(window._hubCountdownSecs<=300) cd.style.color='#ff3355';
+      }
+    },1000);
+  }
 
   // VIX + F&G (compact versions in hub)
   if(vix){
