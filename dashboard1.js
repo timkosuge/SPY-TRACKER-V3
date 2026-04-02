@@ -1305,10 +1305,87 @@ function renderDesk(md,sd){
 
     <!-- EXPECTED MOVES -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-      ${wem?`<div class="panel" style="text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ DAILY EXPECTED MOVE</div>
-        ${(()=>{const midP=wem.wem_mid||cur||700;const iv=(wem.atm_iv&&wem.atm_iv>0)?wem.atm_iv:(wem.wem_range/2)/(midP*Math.sqrt(6/365)*0.70);const em=midP*iv*Math.sqrt(1/365)*0.70;return `<div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;">±$${fmt(em,2)}</div><div style="font-size:12px;color:var(--text3);margin-top:6px;">H: $${fmt(midP+em,2)} · L: $${fmt(midP-em,2)}</div>`})()}
-      </div>`:'<div class="panel"><div class="no-data">IV needed</div></div>'}
+      ${wem?(()=>{
+        const midP = wem.wem_mid||cur||700;
+        const iv   = (wem.atm_iv&&wem.atm_iv>0)?wem.atm_iv:(wem.wem_range/2)/(midP*Math.sqrt(6/365)*0.70);
+        const em   = midP*iv*Math.sqrt(1/365)*0.70;
+        const price= cur||midP;
+        const histRanges = sd.filter(r=>r.measurements?.day_range>0).map(r=>r.measurements.day_range);
+        const avgR = histRanges.length ? histRanges.reduce((a,b)=>a+b,0)/histRanges.length : em;
+        const stdR = histRanges.length>1 ? Math.sqrt(histRanges.reduce((a,b)=>a+(b-avgR)**2,0)/histRanges.length) : avgR*0.3;
+        const z    = stdR>0 ? (em-avgR)/stdR : 0;
+        const zCl  = Math.max(-2,Math.min(2,z));
+        const zCol = Math.abs(z)>1.2?'#ff3355':Math.abs(z)>0.7?'#ff8800':Math.abs(z)>0.3?'#ffcc00':'#00ff88';
+        const zLbl = Math.abs(z)>1.5?'EXTREME':Math.abs(z)>1?'HIGH':Math.abs(z)>0.5?'ELEVATED':'NORMAL';
+        const pctBeyond = histRanges.filter(r=>r>em).length/Math.max(histRanges.length,1)*100;
+        const W=340,H=160,tX=18,tW=28,tH=H-40,tY=16;
+        const toY=v=>tY+tH-(v+2)/4*tH;
+        const fH=((zCl+2)/4)*tH, fY=tY+tH-fH;
+        const bX=90,bW=W-bX-12,bH=tH,bY=tY;
+        const bPts=Array.from({length:bW+1},(_,i)=>{
+          const zv=-2.5+(i/bW)*5;
+          const y=bY+bH-Math.exp(-0.5*zv*zv)*bH*0.82;
+          return (i===0?'M':'L')+(bX+i).toFixed(1)+','+y.toFixed(1);
+        });
+        const bLine=bPts.join(' ');
+        const bFill=bLine+' L'+(bX+bW)+','+(bY+bH)+' L'+bX+','+(bY+bH)+' Z';
+        const shadePts=[];
+        for(let i=0;i<=bW;i++){
+          const zv=-2.5+(i/bW)*5;
+          if(zv<=zCl){
+            const y=bY+bH-Math.exp(-0.5*zv*zv)*bH*0.82;
+            if(!shadePts.length)shadePts.push('M'+bX+','+(bY+bH));
+            shadePts.push('L'+(bX+i).toFixed(1)+','+y.toFixed(1));
+          }
+        }
+        if(shadePts.length){const lx=shadePts[shadePts.length-1].split(',')[0].slice(1);shadePts.push('L'+lx+','+(bY+bH)+' Z');}
+        const shade=shadePts.join(' ');
+        const zBX=bX+((zCl+2.5)/5)*bW;
+        const ticks=[-2,-1,0,1,2].map(v=>{
+          const ty=toY(v);
+          const c=Math.abs(v)>=1.5?'#ff335566':v===0?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.15)';
+          return '<line x1="'+(tX-8)+'" y1="'+ty+'" x2="'+tX+'" y2="'+ty+'" stroke="'+c+'" stroke-width="1.5"/>'
+            +'<text x="'+(tX-10)+'" y="'+(ty+3)+'" text-anchor="end" fill="'+c+'" font-size="8" font-family="Orbitron,monospace">'+(v>0?'+':'')+v+'σ</text>';
+        }).join('');
+        const xTicks=[-2,-1,0,1,2].map(v=>{
+          const bx=bX+((v+2.5)/5)*bW;
+          return '<line x1="'+bx+'" y1="'+(bY+bH)+'" x2="'+bx+'" y2="'+(bY+bH+4)+'" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>'
+            +'<text x="'+bx+'" y="'+(bY+bH+12)+'" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8" font-family="Orbitron,monospace">'+(v>0?'+':'')+v+'</text>';
+        }).join('');
+        return '<div class="panel">'
+          +'<div style="font-family:\'Orbitron\',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ DAILY EXPECTED MOVE</div>'
+          +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">'
+            +'<div>'
+              +'<span style="font-family:\'Share Tech Mono\',monospace;font-size:28px;font-weight:bold;">±$'+fmt(em,2)+'</span>'
+              +'<span style="font-family:\'Share Tech Mono\',monospace;font-size:11px;color:var(--text3);margin-left:6px;">H:$'+fmt(price+em,2)+' · L:$'+fmt(price-em,2)+'</span>'
+            +'</div>'
+            +'<div style="text-align:right;">'
+              +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:18px;font-weight:bold;color:'+zCol+';">'+(z>=0?'+':'')+fmt(z,2)+'σ</div>'
+              +'<div style="font-family:\'Orbitron\',monospace;font-size:8px;color:'+zCol+';letter-spacing:1px;">'+zLbl+'</div>'
+            +'</div>'
+          +'</div>'
+          +'<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block;">'
+            +'<rect x="'+tX+'" y="'+tY+'" width="'+tW+'" height="'+tH+'" rx="'+(tW/2)+'" fill="var(--bg3)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>'
+            +'<clipPath id="demClip"><rect x="'+tX+'" y="'+tY+'" width="'+tW+'" height="'+tH+'" rx="'+(tW/2)+'"/></clipPath>'
+            +'<rect x="'+tX+'" y="'+fY+'" width="'+tW+'" height="'+fH+'" fill="'+zCol+'" opacity="0.85" clip-path="url(#demClip)"/>'
+            +ticks
+            +'<polygon points="'+(tX+tW+2)+','+toY(zCl)+' '+(tX+tW+10)+','+(toY(zCl)-5)+' '+(tX+tW+10)+','+(toY(zCl)+5)+'" fill="'+zCol+'"/>'
+            +'<path d="'+bFill+'" fill="'+zCol+'" opacity="0.06"/>'
+            +(shade?'<path d="'+shade+'" fill="'+zCol+'" opacity="0.18"/>':'')
+            +'<path d="'+bLine+'" fill="none" stroke="'+zCol+'" stroke-width="1.5" opacity="0.6"/>'
+            +'<line x1="'+bX+'" y1="'+(bY+bH)+'" x2="'+(bX+bW)+'" y2="'+(bY+bH)+'" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>'
+            +xTicks
+            +'<line x1="'+zBX+'" y1="'+bY+'" x2="'+zBX+'" y2="'+(bY+bH)+'" stroke="'+zCol+'" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.9"/>'
+            +'<text x="'+zBX+'" y="'+(bY-4)+'" text-anchor="middle" fill="'+zCol+'" font-size="9" font-family="Share Tech Mono,monospace" font-weight="bold">NOW</text>'
+            +'<text x="'+(bX+4)+'" y="'+(bY+14)+'" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Orbitron,monospace">DAILY RANGE Z-DIST · '+histRanges.length+'d</text>'
+          +'</svg>'
+          +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;font-family:\'Share Tech Mono\',monospace;text-align:center;">'
+            +'<div style="background:var(--bg3);border-radius:3px;padding:6px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">HIST AVG</div><div style="font-size:13px;color:var(--text2);">$'+fmt(avgR,2)+'</div></div>'
+            +'<div style="background:var(--bg3);border-radius:3px;padding:6px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">TODAY EM</div><div style="font-size:13px;color:'+zCol+';">$'+fmt(em,2)+'</div></div>'
+            +'<div style="background:var(--bg3);border-radius:3px;padding:6px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">% DAYS WIDER</div><div style="font-size:13px;color:var(--text2);">'+fmt(pctBeyond,0)+'%</div></div>'
+          +'</div>'
+        +'</div>';
+      })():'<div class="panel"><div class="no-data">IV needed</div></div>'}
       ${wem?`<div class="panel">
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ WEEKLY EXPECTED MOVE</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
