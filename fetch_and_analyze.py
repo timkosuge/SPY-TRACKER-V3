@@ -88,7 +88,16 @@ def init_db(conn):
         week_open REAL, week_high REAL, week_low REAL, week_close REAL,
         weekly_gap REAL, gap_filled INTEGER, gap_fill_day TEXT,
         closed_inside INTEGER, breach INTEGER, breach_side TEXT,
-        breach_amount REAL, breach_day TEXT, max_pain REAL)""")
+        breach_amount REAL, breach_day TEXT, max_pain REAL,
+        static_wem_high REAL, static_wem_low REAL,
+        static_wem_range REAL, static_wem_iv REAL)""")
+    # Auto-migrate: add static WEM columns if missing
+    for col, typ in [('static_wem_high','REAL'),('static_wem_low','REAL'),
+                     ('static_wem_range','REAL'),('static_wem_iv','REAL')]:
+        try:
+            c.execute(f"ALTER TABLE weekly_em ADD COLUMN {col} {typ}")
+        except Exception:
+            pass  # column already exists
     conn.commit()
     print("DB initialized.")
 
@@ -628,13 +637,90 @@ def fetch_spy_options_yf_fallback():
         print(f"  yf fallback error: {e}"); return {}
 
 # ── Weekly Expected Move ───────────────────────────────────────────────────────
-def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=False):
-    """Calculate and store weekly expected move using Don Kaufman ATM straddle method."""
+def _get_vix_iv():
+    """Fetch current VIX as decimal IV. Returns None on failure."""
     try:
-        today    = datetime.strptime(target_date, "%Y-%m-%d").date()
-        weekday  = today.weekday()
-        monday   = today - timedelta(days=weekday)
-        friday   = monday + timedelta(days=4)
+        import yfinance as yf
+        vix_price = yf.Ticker("^VIX").fast_info.last_price
+        return float(vix_price) / 100 if vix_price else None
+    except Exception:
+        return None
+
+
+def set_next_week_static_wem(conn, friday_date_str, atm_iv):
+    """
+    Called on Friday close. Locks NEXT week's STATIC WEM using the
+    TheoTrade/Don Kaufman formula:
+        half = friday_close * friday_IV * sqrt(6/365) * 0.70
+    This is written once and NEVER overwritten during the trading week.
+    """
+    try:
+        friday   = datetime.strptime(friday_date_str, "%Y-%m-%d").date()
+        next_mon = friday + timedelta(days=3)
+        next_fri = friday + timedelta(days=7)
+        week_start = next_mon.strftime("%Y-%m-%d")
+        week_end   = next_fri.strftime("%Y-%m-%d")
+
+        c = conn.cursor()
+        row = c.execute(
+            "SELECT close FROM daily_ohlcv WHERE date<=? ORDER BY date DESC LIMIT 1",
+            (friday_date_str,)
+        ).fetchone()
+        if not row:
+            print(f"  set_next_week_static_wem: no close for {friday_date_str}")
+            return
+        fri_close = row[0]
+
+        iv = atm_iv or _get_vix_iv()
+        if not iv:
+            print("  set_next_week_static_wem: no IV — skipping.")
+            return
+
+        # TheoTrade formula: always sqrt(6/365), 70% skew
+        half    = fri_close * iv * math.sqrt(6 / 365) * 0.70
+        s_high  = round(fri_close + half, 2)
+        s_low   = round(fri_close - half, 2)
+        s_range = round(half * 2, 2)
+
+        existing = c.execute(
+            "SELECT week_start FROM weekly_em WHERE week_start=?", (week_start,)
+        ).fetchone()
+        if not existing:
+            conn.execute(
+                """INSERT INTO weekly_em
+                   (week_start, week_end, friday_close,
+                    static_wem_high, static_wem_low, static_wem_range, static_wem_iv)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (week_start, week_end, fri_close, s_high, s_low, s_range, iv)
+            )
+        else:
+            conn.execute(
+                """UPDATE weekly_em SET
+                   friday_close=?, static_wem_high=?, static_wem_low=?,
+                   static_wem_range=?, static_wem_iv=?
+                   WHERE week_start=?""",
+                (fri_close, s_high, s_low, s_range, iv, week_start)
+            )
+        conn.commit()
+        print(f"  Static WEM next week locked: Mid={fri_close} High={s_high} Low={s_low}"
+              f" (±{round(half,2)}, IV={iv*100:.2f}%)")
+
+    except Exception as e:
+        print(f"  set_next_week_static_wem error: {e}")
+
+
+def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=False):
+    """
+    Update the DYNAMIC weekly expected move for the current week.
+    Dynamic WEM uses DTE-adjusted IV so the range decays through the week.
+    Static WEM columns are set by set_next_week_static_wem() on Friday
+    and are NEVER touched here.
+    """
+    try:
+        today   = datetime.strptime(target_date, "%Y-%m-%d").date()
+        weekday = today.weekday()
+        monday  = today - timedelta(days=weekday)
+        friday  = monday + timedelta(days=4)
 
         if is_next_week:
             monday = monday + timedelta(days=7)
@@ -654,38 +740,27 @@ def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=Fals
             print(f"  No previous Friday close for WEM ({prev_fri_str}).")
             return
         prev_close = prev_row[0]
+
+        # DTE: calendar days remaining to this Friday (min 1)
         dte = max((friday - today).days + 1, 1)
 
-        vix_iv = None
-        iv_to_use = None
+        # Dynamic IV
+        iv = atm_iv_override or _get_vix_iv()
+        if not iv:
+            print("  No IV available for dynamic WEM — skipping.")
+            return
+        vix_iv = None if atm_iv_override else iv
 
-        if atm_iv_override is not None:
-            # ATM IV provided from options chain
-            iv_to_use = atm_iv_override
-            wem = prev_close * iv_to_use * math.sqrt(6/365) * 0.70
-            print(f"  WEM from ATM IV ({iv_to_use*100:.2f}%): ±${wem:.2f}")
-        else:
-            # Use VIX with TOS TheoTrade formula: close × IV × √(6/365) × 0.70
-            try:
-                import yfinance as yf
-                vix_price = yf.Ticker("^VIX").fast_info.last_price
-                vix_iv = float(vix_price) / 100 if vix_price else None
-                iv_to_use = vix_iv
-            except:
-                iv_to_use = None
-            if iv_to_use is None:
-                print("  No VIX available for WEM — skipping.")
-                return
-            wem = prev_close * iv_to_use * math.sqrt(6/365) * 0.70
-            print(f"  WEM from VIX ({iv_to_use*100:.2f}%): ±${wem:.2f}")
-
-        wem_high  = round(prev_close + wem, 2)
-        wem_low   = round(prev_close - wem, 2)
+        # Dynamic WEM: DTE-adjusted (decays through week)
+        dyn_half  = prev_close * iv * math.sqrt(dte / 365) * 0.70
+        wem_high  = round(prev_close + dyn_half, 2)
+        wem_low   = round(prev_close - dyn_half, 2)
         wem_mid   = round(prev_close, 2)
-        wem_range = round(wem * 2, 2)
+        wem_range = round(dyn_half * 2, 2)
 
         week_rows = c.execute(
-            "SELECT open,high,low,close,date FROM daily_ohlcv WHERE date>=? AND date<=? ORDER BY date",
+            "SELECT open,high,low,close,date FROM daily_ohlcv"
+            " WHERE date>=? AND date<=? ORDER BY date",
             (week_start, week_end)
         ).fetchall()
 
@@ -694,21 +769,20 @@ def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=Fals
         week_low   = min(r[2] for r in week_rows) if week_rows else None
         week_close = week_rows[-1][3] if week_rows else None
 
-        weekly_gap   = round(week_open - prev_close, 2) if week_open else None
-        gap_filled   = None
-        gap_fill_day = None
+        weekly_gap = round(week_open - prev_close, 2) if week_open else None
+        gap_filled = None; gap_fill_day = None
         if weekly_gap and week_rows:
             if weekly_gap > 0:
                 for r in week_rows:
                     if r[2] <= prev_close:
-                        gap_filled   = 1
+                        gap_filled = 1
                         gap_fill_day = datetime.strptime(r[4], "%Y-%m-%d").strftime("%A").upper()
                         break
                 if gap_filled is None: gap_filled = 0
             elif weekly_gap < 0:
                 for r in week_rows:
                     if r[1] >= prev_close:
-                        gap_filled   = 1
+                        gap_filled = 1
                         gap_fill_day = datetime.strptime(r[4], "%Y-%m-%d").strftime("%A").upper()
                         break
                 if gap_filled is None: gap_filled = 0
@@ -717,10 +791,7 @@ def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=Fals
         if week_close:
             closed_inside = 1 if wem_low <= week_close <= wem_high else 0
 
-        breach = None
-        breach_side = None
-        breach_amount = None
-        breach_day = None
+        breach = None; breach_side = None; breach_amount = None; breach_day = None
         if week_rows:
             for r in week_rows:
                 if r[3] > wem_high:
@@ -730,21 +801,36 @@ def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=Fals
                     break
                 elif r[3] < wem_low:
                     breach = 1; breach_side = "LOW"
-                    breach_amount = round(r[3] - wem_low, 2)  # negative when close < low
+                    breach_amount = round(r[3] - wem_low, 2)
                     breach_day = datetime.strptime(r[4], "%Y-%m-%d").strftime("%A").upper()
                     break
             if breach is None: breach = 0
 
+        # Preserve existing static fields — never overwrite them
+        existing = c.execute(
+            "SELECT static_wem_high, static_wem_low, static_wem_range, static_wem_iv"
+            " FROM weekly_em WHERE week_start=?", (week_start,)
+        ).fetchone()
+        s_high  = existing[0] if existing else None
+        s_low   = existing[1] if existing else None
+        s_range = existing[2] if existing else None
+        s_iv    = existing[3] if existing else None
+
         conn.execute(
-            "INSERT OR REPLACE INTO weekly_em VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (week_start, week_end, prev_close, iv_to_use, vix_iv, dte,
-             wem_high, wem_mid, wem_low, wem_range, wem_high, wem_low,
+            """INSERT OR REPLACE INTO weekly_em VALUES
+               (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (week_start, week_end, prev_close, iv, vix_iv, dte,
+             wem_high, wem_mid, wem_low, wem_range,
+             wem_high, wem_low,   # atm_straddle_high/low (legacy)
              week_open, week_high, week_low, week_close,
              weekly_gap, gap_filled, gap_fill_day,
-             closed_inside, breach, breach_side, breach_amount, breach_day, None)
+             closed_inside, breach, breach_side, breach_amount, breach_day,
+             None,                # max_pain
+             s_high, s_low, s_range, s_iv)
         )
         conn.commit()
-        print(f"  WEM {'(next week)' if is_next_week else ''}: Mid={wem_mid} High={wem_high} Low={wem_low} (±{round(wem,2)}, IV={iv_to_use:.4f})")
+        print(f"  Dynamic WEM: Mid={wem_mid} High={wem_high} Low={wem_low}"
+              f" (±{round(dyn_half,2)}, IV={iv*100:.2f}%, DTE={dte})")
 
     except Exception as e:
         print(f"  WEM error: {e}")
@@ -1101,7 +1187,8 @@ def export_market_data(conn, options_data=None):
                 "atm_straddle_high","atm_straddle_low",
                 "week_open","week_high","week_low","week_close",
                 "weekly_gap","gap_filled","gap_fill_day",
-                "closed_inside","breach","breach_side","breach_amount","breach_day","max_pain"]
+                "closed_inside","breach","breach_side","breach_amount","breach_day","max_pain",
+                "static_wem_high","static_wem_low","static_wem_range","static_wem_iv"]
         weekly_em = [dict(zip(cols,r)) for r in rows]
         output["weekly_em"]  = weekly_em
         output["wem_stats"]  = build_wem_stats(weekly_em)
@@ -2144,17 +2231,30 @@ def main():
             options_data = fetch_spy_options_yf_fallback()
 
         print("\n── Weekly Expected Move ─────────────────────────────────────")
+        atm_iv_live = options_data.get("atm_iv") if options_data else None
+        if atm_iv_live:
+            print(f"  Using live ATM IV: {atm_iv_live*100:.2f}%")
+        else:
+            print("  No ATM IV from options — will use VIX fallback")
         try:
-            compute_weekly_em(conn, ref_str, atm_iv_override=None)
+            compute_weekly_em(conn, ref_str, atm_iv_override=atm_iv_live)
         except Exception as e:
             print(f"  WEM error: {e}")
 
         if ref.weekday() == 4:
+            # Friday close: lock NEXT week's static range using today's ATM IV
             try:
-                print("  Friday — computing next week's WEM...")
-                compute_weekly_em(conn, ref_str, atm_iv_override=None, is_next_week=True)
+                print("  Friday — locking next week static WEM...")
+                set_next_week_static_wem(conn, ref_str, atm_iv=atm_iv_live)
             except Exception as e:
-                print(f"  Next week WEM error: {e}")
+                print(f"  Next week static WEM error: {e}")
+        elif ref.weekday() == 3:
+            # Short week (e.g. holiday Friday): treat Thursday as the anchor day
+            try:
+                print("  Thursday (short week) — locking next week static WEM...")
+                set_next_week_static_wem(conn, ref_str, atm_iv=atm_iv_live)
+            except Exception as e:
+                print(f"  Next week static WEM error (Thu): {e}")
 
         print("\n── JSON Export ──────────────────────────────────────────────")
         try:
