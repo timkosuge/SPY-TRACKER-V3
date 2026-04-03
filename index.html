@@ -3548,20 +3548,284 @@ window.renderEvReleases();
 </div>
 
 <script>
-function chipSend(text) {
-  const input = document.getElementById('aiInput');
-  if (input) { input.value = text; sendChat(); }
-  // Hide chips after first use
-  const chips = document.getElementById('aiChips');
-  if (chips) chips.style.display = 'none';
+// ═══════════════════════════════════════════════════════════════════════════
+// SPY TRACKER AI — FULL IMPLEMENTATION
+// Primary: Grok via /ai Cloudflare Function (set XAI_API_KEY in CF env)
+// Fallback: Ollama local (optional, configure in settings)
+// Context:  Pulls spy_data.json, market_data.json, sentiment_data.json
+// ═══════════════════════════════════════════════════════════════════════════
+
+const AI = {
+  open: false,
+  history: [],         // [{role, content}] full conversation kept for multi-turn
+  marketContext: null, // built once per session, injected as system prompt
+  loading: false,
+};
+
+// ── Toggle panel open/closed ──────────────────────────────────────────────
+function toggleChat() {
+  AI.open = !AI.open;
+  const panel   = document.getElementById('aiPanel');
+  const trigger = document.getElementById('aiTrigger');
+  if (AI.open) {
+    panel.classList.add('open');
+    trigger.classList.remove('has-unread');
+    document.getElementById('aiInput').focus();
+    if (!AI.marketContext) loadMarketContext();
+  } else {
+    panel.classList.remove('open');
+    const sp = document.getElementById('aiSettingsPanel');
+    if (sp) sp.style.display = 'none';
+  }
 }
 
-(function initAISettings() {
+// ── Toggle settings panel ─────────────────────────────────────────────────
+function toggleAISettings() {
+  const sp = document.getElementById('aiSettingsPanel');
+  if (!sp) return;
+  const isOpen = sp.style.display === 'block';
+  sp.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) testOllamaStatus();
+}
+
+// ── Save settings ─────────────────────────────────────────────────────────
+function saveAISettings() {
+  const settings = {
+    ollamaEnabled: document.getElementById('ollamaEnabledChk')?.checked ?? false,
+    ollamaUrl:     document.getElementById('ollamaUrlInput')?.value.trim() || 'http://localhost:11434',
+    ollamaModel:   document.getElementById('ollamaModelSel')?.value || 'llama3.2:latest',
+  };
+  localStorage.setItem('spyAI', JSON.stringify(settings));
+  const sp = document.getElementById('aiSettingsPanel');
+  if (sp) sp.style.display = 'none';
+  setBadge(settings.ollamaEnabled ? '● OLLAMA' : '● GROK', settings.ollamaEnabled ? '#00ff88' : '#00ccff');
+}
+
+// ── Test Ollama reachability ──────────────────────────────────────────────
+async function testOllamaStatus() {
+  const dot = document.getElementById('ollamaStatusDot');
+  const lbl = document.getElementById('ollamaStatusLbl');
+  if (!dot || !lbl) return;
+  lbl.textContent = 'Testing...';
+  dot.style.background = 'var(--text3)';
+  try {
+    const settings = JSON.parse(localStorage.getItem('spyAI') || '{}');
+    const base = settings.ollamaUrl || 'http://localhost:11434';
+    const r = await fetch(`/ollama?action=tags&base=${encodeURIComponent(base)}`);
+    const d = await r.json();
+    if (d.ok) {
+      dot.style.background = '#00ff88';
+      lbl.textContent = `Connected — ${d.models?.length || 0} model(s)`;
+      const sel = document.getElementById('ollamaModelSel');
+      if (sel && d.models?.length) {
+        const current = sel.value;
+        sel.innerHTML = '';
+        d.models.forEach(m => {
+          const o = document.createElement('option');
+          o.value = o.textContent = m.name;
+          sel.appendChild(o);
+        });
+        if ([...sel.options].some(o => o.value === current)) sel.value = current;
+      }
+    } else {
+      throw new Error(d.error || 'unreachable');
+    }
+  } catch(e) {
+    dot.style.background = '#ff3355';
+    lbl.textContent = `Can't reach Ollama: ${e.message}`;
+  }
+}
+
+// ── Badge helper ──────────────────────────────────────────────────────────
+function setBadge(text, color) {
+  const b = document.getElementById('aiProviderBadge');
+  if (!b) return;
+  b.textContent = text;
+  b.style.color = color || 'var(--text3)';
+}
+
+// ── Build market context from JSON data files ─────────────────────────────
+async function loadMarketContext() {
+  try {
+    const [mkt, sent, spy] = await Promise.all([
+      fetch('/market_data.json').then(r => r.json()).catch(() => null),
+      fetch('/sentiment_data.json').then(r => r.json()).catch(() => null),
+      fetch('/spy_data.json').then(r => r.json()).catch(() => null),
+    ]);
+
+    const lines = [];
+
+    // SPY recent sessions
+    if (spy?.daily && spy.daily.length) {
+      const recent = spy.daily.slice(-5);
+      lines.push('=== RECENT SPY SESSIONS (last 5) ===');
+      recent.forEach(d => {
+        const chg = d.change_pct != null ? `${d.change_pct > 0 ? '+' : ''}${d.change_pct.toFixed(2)}%` : '';
+        lines.push(`${d.date}: O=${d.open} H=${d.high} L=${d.low} C=${d.close} Vol=${d.volume} ${chg}`);
+      });
+    }
+
+    // Market data snapshot
+    if (mkt) {
+      lines.push('=== MARKET SNAPSHOT ===');
+      if (mkt.spy_price)   lines.push(`SPY price: ${mkt.spy_price}`);
+      if (mkt.vix)         lines.push(`VIX: ${mkt.vix}`);
+      if (mkt.pcr)         lines.push(`Put/Call Ratio: ${mkt.pcr}`);
+      if (mkt.gex)         lines.push(`GEX: ${mkt.gex}`);
+      if (mkt.regime)      lines.push(`Market regime: ${mkt.regime}`);
+      if (mkt.trend)       lines.push(`Trend: ${mkt.trend}`);
+      if (mkt.key_levels)  lines.push(`Key levels: ${JSON.stringify(mkt.key_levels)}`);
+    }
+
+    // Sentiment
+    if (sent) {
+      lines.push('=== SENTIMENT ===');
+      if (sent.fear_greed?.value != null) lines.push(`Fear & Greed: ${sent.fear_greed.value} (${sent.fear_greed.label || ''})`);
+      if (sent.aaii?.bull != null)        lines.push(`AAII Bulls: ${sent.aaii.bull}% Bears: ${sent.aaii.bear}%`);
+    }
+
+    AI.marketContext = lines.length > 2
+      ? lines.join('\n')
+      : 'Market data unavailable — answer from general knowledge.';
+
+  } catch(e) {
+    AI.marketContext = 'Market data unavailable.';
+  }
+}
+
+// ── Build system prompt ───────────────────────────────────────────────────
+function buildSystemPrompt() {
+  const ctx = AI.marketContext || 'Market data loading...';
+  return `You are a sharp, experienced SPY day trader and market analyst. You have real trading instincts — you speak plainly, like someone who's been watching the tape for years. You're not a robot reciting numbers. You interpret, you have opinions, you flag what matters and what doesn't.
+
+When you get a question, lead with your read on the situation, then back it up with data if it's relevant. Keep responses concise — traders don't want essays. Use plain English. No markdown headers. No bullet walls. Just clear, direct trader talk.
+
+Here is the current market data you have access to:
+
+${ctx}
+
+Today's date/time: ${new Date().toLocaleString('en-US', {timeZone:'America/New_York'})} ET`;
+}
+
+// ── Append a message bubble to the chat ──────────────────────────────────
+function appendMsg(role, text) {
+  const box = document.getElementById('aiMessages');
+  if (!box) return;
+  const div = document.createElement('div');
+  div.className = `ai-msg ${role}`;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+// ── Call Grok via /ai Cloudflare Function ─────────────────────────────────
+async function callGrok(messages, system) {
+  const r = await fetch('/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, system, max_tokens: 600 }),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || `Grok error ${r.status}`);
+  return d.content;
+}
+
+// ── Call Ollama via /ollama Cloudflare proxy ──────────────────────────────
+async function callOllama(messages, system) {
+  const settings = JSON.parse(localStorage.getItem('spyAI') || '{}');
+  const r = await fetch('/ollama', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messages,
+      system,
+      model:    settings.ollamaModel || 'llama3.2:latest',
+      base_url: settings.ollamaUrl   || 'http://localhost:11434',
+      max_tokens: 600,
+    }),
+  });
+  const d = await r.json();
+  if (!r.ok || d.error) throw new Error(d.error || `Ollama error ${r.status}`);
+  return d.content;
+}
+
+// ── Quick-chip shortcut ───────────────────────────────────────────────────
+function chipSend(text) {
+  const input = document.getElementById("aiInput");
+  if (input) { input.value = text; sendChat(); }
+}
+
+// ── Main send function ────────────────────────────────────────────────────
+async function sendChat() {
+  if (AI.loading) return;
+  const input = document.getElementById('aiInput');
+  const btn   = document.getElementById('aiSendBtn');
+  const text  = input?.value.trim();
+  if (!text) return;
+
+  // Hide chips on first message
+  const chips = document.getElementById('aiChips');
+  if (chips) chips.style.display = 'none';
+
+  input.value = '';
+  AI.history.push({ role: 'user', content: text });
+  appendMsg('user', text);
+
+  // Thinking indicator
+  AI.loading = true;
+  if (btn) btn.disabled = true;
+  const thinking = appendMsg('assistant', '');
+  thinking.classList.add('thinking');
+
+  const system = buildSystemPrompt();
+  // Send full history for multi-turn conversation
+  const messages = AI.history.map(m => ({ role: m.role, content: m.content }));
+
+  try {
+    const settings = JSON.parse(localStorage.getItem('spyAI') || '{}');
+    const useOllama = settings.ollamaEnabled === true;
+
+    let reply;
+    if (useOllama) {
+      setBadge('● OLLAMA', '#00ff88');
+      try {
+        reply = await callOllama(messages, system);
+      } catch(e) {
+        // Ollama failed — fall back to Grok silently
+        setBadge('● GROK (fallback)', '#ffaa00');
+        reply = await callGrok(messages, system);
+      }
+    } else {
+      setBadge('● GROK', '#00ccff');
+      reply = await callGrok(messages, system);
+    }
+
+    thinking.classList.remove('thinking');
+    thinking.textContent = reply;
+    AI.history.push({ role: 'assistant', content: reply });
+
+  } catch(e) {
+    thinking.classList.remove('thinking');
+    thinking.textContent = `Error: ${e.message}`;
+    thinking.style.color = '#ff3355';
+    // Roll back failed user message
+    AI.history.pop();
+    setBadge('● ERROR', '#ff3355');
+  } finally {
+    AI.loading = false;
+    if (btn) btn.disabled = false;
+    input?.focus();
+  }
+}
+
+// ── Init: restore settings on load ───────────────────────────────────────
+(function initAIPanel() {
   const settings = JSON.parse(localStorage.getItem('spyAI') || '{}');
   const chk  = document.getElementById('ollamaEnabledChk');
   const urlI = document.getElementById('ollamaUrlInput');
   const sel  = document.getElementById('ollamaModelSel');
-  if (chk)  chk.checked = settings.ollamaEnabled ?? true;
+  if (chk)  chk.checked = settings.ollamaEnabled ?? false;
   if (urlI) urlI.value  = settings.ollamaUrl || 'http://localhost:11434';
   if (sel && settings.ollamaModel) {
     const exists = [...sel.options].some(o => o.value === settings.ollamaModel);
@@ -3572,8 +3836,13 @@ function chipSend(text) {
     }
     sel.value = settings.ollamaModel;
   }
+  // Set initial badge
+  if (settings.ollamaEnabled) {
+    setBadge('● OLLAMA', '#00ff88');
+  } else {
+    setBadge('● GROK', '#00ccff');
+  }
 })();
-</script>
 
 
 <script>
