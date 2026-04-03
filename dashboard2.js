@@ -2700,8 +2700,11 @@ async function loadAAII() {
   const el = $('aaiiPanel');
   if (!el) return;
 
-  // Historical AAII data — last 21 weeks (oldest first for chart)
+  // Historical AAII data — 26 weeks (oldest first). Update weekly.
   const AAII_HISTORY = [
+    {d:'Oct 8',  bull:37.7, neu:24.6, bear:37.7},
+    {d:'Oct 15', bull:45.3, neu:22.2, bear:32.5},
+    {d:'Oct 22', bull:43.8, neu:21.4, bear:34.8},
     {d:'Oct 29', bull:44.0, neu:19.1, bear:36.9},
     {d:'Nov 5',  bull:38.0, neu:25.8, bear:36.3},
     {d:'Nov 12', bull:31.6, neu:19.2, bear:49.1},
@@ -2723,45 +2726,63 @@ async function loadAAII() {
     {d:'Mar 4',  bull:33.1, neu:31.4, bear:35.5},
     {d:'Mar 11', bull:31.9, neu:21.7, bear:46.4},
     {d:'Mar 18', bull:30.4, neu:17.6, bear:52.0},
+    {d:'Mar 25', bull:32.1, neu:18.1, bear:49.8},
+    {d:'Apr 1',  bull:33.6, neu:15.0, bear:51.4},
   ];
 
   try {
     const r = await fetch('/sentiment?t='+Date.now());
     if (!r.ok) throw new Error('AAII fetch failed');
     const d = await r.json();
-    const bull = d.bullish || AAII_HISTORY[AAII_HISTORY.length-1].bull;
-    const bear = d.bearish || AAII_HISTORY[AAII_HISTORY.length-1].bear;
-    const neu  = d.neutral || AAII_HISTORY[AAII_HISTORY.length-1].neu;
+
+    // Validate — scraper sometimes grabs wrong numbers; require plausible sum and spread
+    const rawBull = d.bullish, rawBear = d.bearish, rawNeu = d.neutral;
+    const sum = (rawBull||0) + (rawBear||0) + (rawNeu||0);
+    const dataValid = rawBull && rawBear && sum > 85 && sum < 115 && rawBull < 75 && rawBear < 75;
+
+    const lastH = AAII_HISTORY[AAII_HISTORY.length-1];
+    const bull = dataValid ? rawBull : lastH.bull;
+    const bear = dataValid ? rawBear : lastH.bear;
+    const neu  = dataValid ? rawNeu  : lastH.neu;
     const spread = bull - bear;
     const spreadColor = spread > 0 ? '#00ff88' : spread < 0 ? '#ff3355' : '#ffcc00';
     const avgBull = d.avg_bullish || 37.5, avgBear = d.avg_bearish || 31.0;
+    const dateLabel = d.date ? new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
 
     el.innerHTML =
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">'
       +'<div style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:12px;text-align:center;">'
-      +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#00ff88;margin-bottom:6px;letter-spacing:1px;">BULLISH</div>'
-      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#00ff88">'+fmt(bull,1)+'%</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg '+avgBull+'%</div></div>'
+      +'<div style='font-family:'Orbitron',monospace;font-size:10px;color:#00ff88;margin-bottom:6px;letter-spacing:1px;'>BULLISH</div>'
+      +'<div style='font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:bold;color:#00ff88'>'+fmt(bull,1)+'%</div>'
+      +'<div style='font-size:12px;color:var(--text3);margin-top:4px'>avg '+avgBull+'%</div></div>'
       +'<div style="background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.3);border-radius:4px;padding:12px;text-align:center;">'
-      +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#ffcc00;margin-bottom:6px;letter-spacing:1px;">NEUTRAL</div>'
-      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#ffcc00">'+fmt(neu,1)+'%</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg 31.5%</div></div>'
+      +'<div style='font-family:'Orbitron',monospace;font-size:10px;color:#ffcc00;margin-bottom:6px;letter-spacing:1px;'>NEUTRAL</div>'
+      +'<div style='font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:bold;color:#ffcc00'>'+fmt(neu,1)+'%</div>'
+      +'<div style='font-size:12px;color:var(--text3);margin-top:4px'>avg 31.5%</div></div>'
       +'<div style="background:rgba(255,51,85,0.08);border:1px solid rgba(255,51,85,0.3);border-radius:4px;padding:12px;text-align:center;">'
-      +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#ff3355;margin-bottom:6px;letter-spacing:1px;">BEARISH</div>'
-      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#ff3355">'+fmt(bear,1)+'%</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg '+avgBear+'%</div></div></div>'
+      +'<div style='font-family:'Orbitron',monospace;font-size:10px;color:#ff3355;margin-bottom:6px;letter-spacing:1px;'>BEARISH</div>'
+      +'<div style='font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:bold;color:#ff3355'>'+fmt(bear,1)+'%</div>'
+      +'<div style='font-size:12px;color:var(--text3);margin-top:4px'>avg '+avgBear+'%</div></div></div>'
       +'<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;display:flex;justify-content:space-between;align-items:center;">'
-      +'<div><div style="font-family:\'Orbitron\',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">BULL-BEAR SPREAD</div>'
-      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:28px;font-weight:bold;color:'+spreadColor+'">'+(spread>0?'+':'')+fmt(spread,1)+'%</div></div>'
-      +'<div style="text-align:right;"><div style="font-family:\'Orbitron\',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">SIGNAL</div>'
-      +'<div style="font-family:\'Orbitron\',monospace;font-size:13px;letter-spacing:2px;color:'+spreadColor+';margin-top:4px;padding:4px 10px;background:'+spreadColor+'22;border:1px solid '+spreadColor+'44;border-radius:3px;">'
+      +'<div><div style='font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;'>BULL-BEAR SPREAD</div>'
+      +'<div style='font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;color:'+spreadColor+''>'+( spread>0?'+':'')+fmt(spread,1)+'%</div></div>'
+      +'<div style='text-align:right;'><div style='font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;'>SIGNAL</div>'
+      +'<div style='font-family:'Orbitron',monospace;font-size:13px;letter-spacing:2px;color:'+spreadColor+';margin-top:4px;padding:4px 10px;background:'+spreadColor+'22;border:1px solid '+spreadColor+'44;border-radius:3px;'>'
       +(spread < -20 ? 'CONTRARIAN BUY' : spread < -10 ? 'BEARISH EXTREME' : spread < 0 ? 'BEARISH' : spread > 20 ? 'CONTRARIAN SELL' : spread > 10 ? 'BULLISH EXTREME' : 'BULLISH')
       +'</div></div></div>'
-      +'<div style="margin-top:8px;font-size:12px;color:var(--text3);text-align:center;">AAII survey published weekly — extreme readings are contrarian signals</div>';
+      +'<div style='margin-top:8px;font-size:12px;color:var(--text3);text-align:center;'>'
+      +(dataValid&&dateLabel?'Week ending '+dateLabel+' · ':'Using cached data · ')
+      +'AAII survey published weekly — extreme readings are contrarian signals'
+      +(dataValid?'':' <span style='color:#ffcc00;'>(live fetch invalid — showing last known good)</span>')
+      +'</div>';
 
-    // Update last data point with live reading
+    // Append live reading if it's a newer date than last hardcoded entry
     const hist = AAII_HISTORY.slice();
-    hist[hist.length-1] = {d:'Mar 18', bull, neu, bear};
+    if (dataValid && dateLabel && dateLabel !== lastH.d) {
+      hist.push({d: dateLabel, bull, neu, bear});
+    } else if (dataValid) {
+      hist[hist.length-1] = {d: lastH.d, bull, neu, bear};
+    }
     renderAAIIChart(hist);
 
   } catch(e) {
