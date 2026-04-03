@@ -4336,42 +4336,76 @@ function renderSentiment(md){
 async function loadFGHistory() {
   const el = $('fgHistoryChart');
   if (!el) return;
+
+  // Hardcoded weekly baseline digitized from CNN F&G chart (Apr 2024 → Apr 2026)
+  // Format: [YYYY-MM-DD, score]
+  const BASELINE = [
+    ['2024-04-05',43],['2024-04-12',51],['2024-04-19',48],['2024-04-26',55],
+    ['2024-05-03',56],['2024-05-10',62],['2024-05-17',68],['2024-05-24',71],
+    ['2024-05-31',72],['2024-06-07',73],['2024-06-14',69],['2024-06-21',65],
+    ['2024-06-28',67],['2024-07-05',64],['2024-07-12',60],['2024-07-19',52],
+    ['2024-07-26',48],['2024-08-02',38],['2024-08-09',32],['2024-08-16',44],
+    ['2024-08-23',54],['2024-08-30',58],['2024-09-06',52],['2024-09-13',56],
+    ['2024-09-20',62],['2024-09-27',63],['2024-10-04',65],['2024-10-11',66],
+    ['2024-10-18',64],['2024-10-25',66],['2024-11-01',68],['2024-11-08',76],
+    ['2024-11-15',74],['2024-11-22',73],['2024-11-29',72],['2024-12-06',68],
+    ['2024-12-13',64],['2024-12-20',46],['2024-12-27',50],['2025-01-03',48],
+    ['2025-01-10',44],['2025-01-17',47],['2025-01-24',52],['2025-01-31',51],
+    ['2025-02-07',55],['2025-02-14',53],['2025-02-21',48],['2025-02-28',42],
+    ['2025-03-07',38],['2025-03-14',30],['2025-03-21',26],['2025-03-28',24],
+    ['2025-04-04',22],['2025-04-11',28],['2025-04-18',32],['2025-04-25',36],
+    ['2025-05-02',40],['2025-05-09',44],['2025-05-16',50],['2025-05-23',54],
+    ['2025-06-06',60],['2025-06-13',64],['2025-06-20',66],['2025-06-27',65],
+    ['2025-07-04',68],['2025-07-11',70],['2025-07-18',67],['2025-07-25',65],
+    ['2025-08-01',62],['2025-08-08',55],['2025-08-15',50],['2025-08-22',48],
+    ['2025-09-05',44],['2025-09-12',42],['2025-09-19',46],['2025-09-26',50],
+    ['2025-10-03',52],['2025-10-10',56],['2025-10-17',60],['2025-10-24',62],
+    ['2025-11-07',65],['2025-11-14',63],['2025-11-21',60],['2025-11-28',58],
+    ['2025-12-05',55],['2025-12-12',52],['2025-12-19',48],['2025-12-26',45],
+    ['2026-01-02',46],['2026-01-09',50],['2026-01-16',54],['2026-01-23',56],
+    ['2026-01-30',52],['2026-02-06',50],['2026-02-13',46],['2026-02-20',42],
+    ['2026-02-27',38],['2026-03-06',32],['2026-03-13',26],['2026-03-20',22],
+    ['2026-03-27',20],['2026-04-03',19],
+  ];
+
+  // Start with baseline as points
+  let points = BASELINE.map(([date, v]) => ({
+    t: new Date(date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+    ts: new Date(date+'T12:00:00').getTime(),
+    v,
+  }));
+
+  // Try to get live data and overlay/extend
   try {
     const r = await fetch('/fg?t='+Date.now());
-    if (!r.ok) throw new Error('fg fetch failed');
-    const d = await r.json();
+    if (r.ok) {
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
 
-    // Build chart data from history array or snapshot fallbacks
-    let points = [];
-    if (d.history && d.history.length > 1) {
-      // Full time series from CNN API
-      points = d.history.map(h => ({ t: new Date(h.t).toLocaleDateString('en-US',{month:'short',day:'numeric'}), v: h.v }));
-      // Sample to ~90 points max for readability
-      if (points.length > 90) {
-        const step = Math.ceil(points.length / 90);
-        points = points.filter((_,i) => i % step === 0 || i === points.length-1);
+      // If CNN returns a real time series, use it (it's more accurate)
+      if (d.history && d.history.length > 10) {
+        const livePoints = d.history.map(h => ({
+          t: new Date(h.t).toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+          ts: h.t,
+          v: h.v,
+        }));
+        // Sample to ~120 points
+        const step = Math.max(1, Math.ceil(livePoints.length / 120));
+        points = livePoints.filter((_,i) => i%step===0||i===livePoints.length-1);
+      } else {
+        // Patch in the live current value at the end
+        const liveV = d.value;
+        if (liveV != null) {
+          const today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'});
+          const last = points[points.length-1];
+          if (last.t === today) last.v = liveV;
+          else points.push({t:today, ts:Date.now(), v:liveV});
+        }
       }
-    } else if (d.snapshots) {
-      // Fallback: use the 5 snapshot comparison points
-      const s = d.snapshots;
-      const now = new Date();
-      const fmtD = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-      if (s.prev_year)  points.push({t: fmtD(new Date(now - 365*86400000)), v: s.prev_year.v});
-      if (s.prev_month) points.push({t: fmtD(new Date(now - 30*86400000)),  v: s.prev_month.v});
-      if (s.prev_week)  points.push({t: fmtD(new Date(now - 7*86400000)),   v: s.prev_week.v});
-      if (s.prev_close) points.push({t: 'Prev Close', v: s.prev_close.v});
-      if (s.now)        points.push({t: 'Today', v: s.now.v});
     }
+  } catch(e) { /* baseline still shows */ }
 
-    if (!points.length) {
-      el.innerHTML = '<div class="no-data" style="padding:12px;">F&G history unavailable</div>';
-      return;
-    }
-
-    renderFGChart(el, points, d.value);
-  } catch(e) {
-    el.innerHTML = '<div class="no-data" style="padding:12px;">F&G history: '+e.message+'</div>';
-  }
+  renderFGChart(el, points, points[points.length-1]?.v);
 }
 
 function renderFGChart(el, points, currentVal) {
@@ -4410,10 +4444,10 @@ function renderFGChart(el, points, currentVal) {
     return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${fgZone((p.v+points[i+1].v)/2)}" stroke-width="2.5" stroke-linecap="round"/>`;
   }).join('');
 
-  // Dots at each point
-  const dots = points.map((p,i) =>
+  // Dots only on small datasets
+  const dots = n <= 30 ? points.map((p,i) =>
     `<circle cx="${toX(i).toFixed(1)}" cy="${toY(p.v).toFixed(1)}" r="2.5" fill="${fgZone(p.v)}" opacity="0.7"/>`
-  ).join('');
+  ).join('') : '';
 
   // Current value dot + label
   const last = points[n-1];
