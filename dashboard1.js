@@ -53,7 +53,12 @@ function _switchPanelOnly(id) {
   // Tab-specific renders
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
-  if(id==='floor') { if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50); }
+  if(id==='floor') {
+    if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50);
+    if(typeof FLOOR!=='undefined') FLOOR.tabUnread=0;
+    const b=document.getElementById('floor-tab-badge');
+    if(b){b.style.display='none';b.textContent='';}
+  }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
@@ -94,8 +99,12 @@ function switchTab(id){
   const p=$('panel-'+id); if(p)p.classList.add('active');
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
-  if(id==='floor') { if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50); }
-  if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
+  if(id==='floor') {
+    if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50);
+    if(typeof FLOOR!=='undefined') FLOOR.tabUnread=0;
+    const b=document.getElementById('floor-tab-badge');
+    if(b){b.style.display='none';b.textContent='';}
+  }
   if(id==='analog') { renderAnalog(); }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
 }
