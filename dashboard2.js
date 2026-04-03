@@ -2752,28 +2752,28 @@ async function loadAAII() {
     el.innerHTML =
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">'
       +'<div style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:12px;text-align:center;">'
-      +'<div style='font-family:'Orbitron',monospace;font-size:10px;color:#00ff88;margin-bottom:6px;letter-spacing:1px;'>BULLISH</div>'
-      +'<div style='font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:bold;color:#00ff88'>'+fmt(bull,1)+'%</div>'
-      +'<div style='font-size:12px;color:var(--text3);margin-top:4px'>avg '+avgBull+'%</div></div>'
+      +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#00ff88;margin-bottom:6px;letter-spacing:1px;">BULLISH</div>'
+      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#00ff88">'+fmt(bull,1)+'%</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg '+avgBull+'%</div></div>'
       +'<div style="background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.3);border-radius:4px;padding:12px;text-align:center;">'
-      +'<div style='font-family:'Orbitron',monospace;font-size:10px;color:#ffcc00;margin-bottom:6px;letter-spacing:1px;'>NEUTRAL</div>'
-      +'<div style='font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:bold;color:#ffcc00'>'+fmt(neu,1)+'%</div>'
-      +'<div style='font-size:12px;color:var(--text3);margin-top:4px'>avg 31.5%</div></div>'
+      +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#ffcc00;margin-bottom:6px;letter-spacing:1px;">NEUTRAL</div>'
+      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#ffcc00">'+fmt(neu,1)+'%</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg 31.5%</div></div>'
       +'<div style="background:rgba(255,51,85,0.08);border:1px solid rgba(255,51,85,0.3);border-radius:4px;padding:12px;text-align:center;">'
-      +'<div style='font-family:'Orbitron',monospace;font-size:10px;color:#ff3355;margin-bottom:6px;letter-spacing:1px;'>BEARISH</div>'
-      +'<div style='font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:bold;color:#ff3355'>'+fmt(bear,1)+'%</div>'
-      +'<div style='font-size:12px;color:var(--text3);margin-top:4px'>avg '+avgBear+'%</div></div></div>'
+      +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#ff3355;margin-bottom:6px;letter-spacing:1px;">BEARISH</div>'
+      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#ff3355">'+fmt(bear,1)+'%</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg '+avgBear+'%</div></div></div>'
       +'<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;display:flex;justify-content:space-between;align-items:center;">'
-      +'<div><div style='font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;'>BULL-BEAR SPREAD</div>'
-      +'<div style='font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;color:'+spreadColor+''>'+( spread>0?'+':'')+fmt(spread,1)+'%</div></div>'
-      +'<div style='text-align:right;'><div style='font-family:'Orbitron',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;'>SIGNAL</div>'
-      +'<div style='font-family:'Orbitron',monospace;font-size:13px;letter-spacing:2px;color:'+spreadColor+';margin-top:4px;padding:4px 10px;background:'+spreadColor+'22;border:1px solid '+spreadColor+'44;border-radius:3px;'>'
+      +'<div><div style="font-family:\'Orbitron\',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">BULL-BEAR SPREAD</div>'
+      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:28px;font-weight:bold;color:'+spreadColor+'">'+(spread>0?'+':'')+fmt(spread,1)+'%</div></div>'
+      +'<div style="text-align:right;"><div style="font-family:\'Orbitron\',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">SIGNAL</div>'
+      +'<div style="font-family:\'Orbitron\',monospace;font-size:13px;letter-spacing:2px;color:'+spreadColor+';margin-top:4px;padding:4px 10px;background:'+spreadColor+'22;border:1px solid '+spreadColor+'44;border-radius:3px;">'
       +(spread < -20 ? 'CONTRARIAN BUY' : spread < -10 ? 'BEARISH EXTREME' : spread < 0 ? 'BEARISH' : spread > 20 ? 'CONTRARIAN SELL' : spread > 10 ? 'BULLISH EXTREME' : 'BULLISH')
       +'</div></div></div>'
-      +'<div style='margin-top:8px;font-size:12px;color:var(--text3);text-align:center;'>'
+      +'<div style="margin-top:8px;font-size:12px;color:var(--text3);text-align:center;">'
       +(dataValid&&dateLabel?'Week ending '+dateLabel+' · ':'Using cached data · ')
       +'AAII survey published weekly — extreme readings are contrarian signals'
-      +(dataValid?'':' <span style='color:#ffcc00;'>(live fetch invalid — showing last known good)</span>')
+      +(dataValid?'':' <span style="color:#ffcc00;">(live fetch invalid — showing last known good)</span>')
       +'</div>';
 
     // Append live reading if it's a newer date than last hardcoded entry
