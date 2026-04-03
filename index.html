@@ -20,8 +20,8 @@
   body.light-mode {
     --bg:#f0f2f8;--bg2:#e2e6f0;--bg3:#d4d9e8;--panel:#eaecf5;
     --border:#a8b0cc;--border2:#8892b8;
-    --green:#006030;--red:#aa0022;--yellow:#8a6000;--orange:#a04000;
-    --cyan:#005aaa;--purple:#4422aa;--dim:#707090;
+    --green:#1a5c30;--red:#991122;--yellow:#7a5500;--orange:#8a3800;
+    --cyan:#004f99;--purple:#3b1e99;--dim:#707090;
     --text:#0a0a1a;--text2:#1a1a30;--text3:#3a3a5a;
     --glow-green:none;--glow-red:none;--glow-cyan:none;
   }
@@ -74,8 +74,41 @@
     position:absolute;top:2px;left:2px;width:10px;height:10px;
     background:var(--text3);border-radius:50%;transition:all 0.2s;
   }
-  body.light-mode #themeToggle .toggle-track { background:var(--cyan); }
-  body.light-mode #themeToggle .toggle-thumb { left:16px;background:#fff; }
+  body.light-mode #themeToggle .toggle-track { background:var(--cyan) !important; }
+  body.light-mode #themeToggle .toggle-thumb { left:16px !important; background:#fff !important; }
+  /* ── LIGHT MODE: remap neon inline-style colors to dark readable versions ── */
+  body.light-mode [style*="color:#00ff88"],
+  body.light-mode [style*="color: #00ff88"] { color:#1a5c30 !important; }
+  body.light-mode [style*="color:#ff3355"],
+  body.light-mode [style*="color: #ff3355"] { color:#991122 !important; }
+  body.light-mode [style*="color:#00ccff"],
+  body.light-mode [style*="color: #00ccff"] { color:#004f99 !important; }
+  body.light-mode [style*="color:#ffcc00"],
+  body.light-mode [style*="color: #ffcc00"] { color:#7a5500 !important; }
+  body.light-mode [style*="color:#ff8800"],
+  body.light-mode [style*="color: #ff8800"] { color:#8a3800 !important; }
+  body.light-mode [style*="color:#8855ff"],
+  body.light-mode [style*="color: #8855ff"] { color:#3b1e99 !important; }
+  body.light-mode [style*="color:#88cc00"],
+  body.light-mode [style*="color: #88cc00"] { color:#3a6000 !important; }
+  body.light-mode [style*="color:#ff8800"],
+  body.light-mode [style*="color: #ff8800"] { color:#8a3800 !important; }
+  /* Catch rgba neon backgrounds used as text backgrounds */
+  body.light-mode [style*="background:#00ff88"],
+  body.light-mode [style*="background: #00ff88"] { background:#1a5c30 !important; }
+  body.light-mode [style*="background:#ff3355"],
+  body.light-mode [style*="background: #ff3355"] { background:#991122 !important; }
+  /* Up/down color classes */
+  body.light-mode .up  { color:#1a5c30 !important; }
+  body.light-mode .dn  { color:#991122 !important; }
+  body.light-mode .neu { color:#5a5a7a !important; }
+  body.light-mode .spy-price     { color:#1a5c30; }
+  body.light-mode .spy-price.dn  { color:#991122; }
+  body.light-mode .tick-chg.up   { color:#1a5c30; }
+  body.light-mode .tick-chg.dn   { color:#991122; }
+  /* Orbitron labels that tend to be neon */
+  body.light-mode [style*="font-family:'Orbitron'"][style*="color:#00ff88"] { color:#1a5c30 !important; }
+  body.light-mode [style*="font-family:'Orbitron'"][style*="color:#ff3355"] { color:#991122 !important; }
 
   /* Light mode overrides for hardcoded backgrounds */
   body.light-mode .tab        { background:var(--bg2); }
