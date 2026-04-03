@@ -18,19 +18,43 @@
   }
   /* ── LIGHT MODE ── */
   body.light-mode {
-    --bg:#f0f2f7;--bg2:#e4e7ef;--bg3:#d8dce8;--panel:#eaecf4;
-    --border:#b8bdd4;--border2:#9aa0c0;
-    --green:#007a40;--red:#cc1133;--yellow:#b08000;--orange:#c05500;
-    --cyan:#0077cc;--purple:#5533bb;--dim:#888aaa;
-    --text:#1a1a2e;--text2:#2a2a4a;--text3:#555577;
-    --glow-green:0 0 8px rgba(0,122,64,0.3);
-    --glow-red:0 0 8px rgba(204,17,51,0.3);
-    --glow-cyan:0 0 8px rgba(0,119,204,0.3);
+    --bg:#f0f2f8;--bg2:#e2e6f0;--bg3:#d4d9e8;--panel:#eaecf5;
+    --border:#a8b0cc;--border2:#8892b8;
+    --green:#006030;--red:#aa0022;--yellow:#8a6000;--orange:#a04000;
+    --cyan:#005aaa;--purple:#4422aa;--dim:#707090;
+    --text:#0a0a1a;--text2:#1a1a30;--text3:#3a3a5a;
+    --glow-green:none;--glow-red:none;--glow-cyan:none;
   }
   body.light-mode::before { display:none; }
-  body.light-mode .topbar { box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
-  body.light-mode .panel  { box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-  body.light-mode canvas  { filter: none; }
+  body.light-mode body { color: var(--text); }
+  body.light-mode .topbar { background:#dde1ee; box-shadow:0 1px 4px rgba(0,0,0,0.15); }
+  body.light-mode .tabs   { background:#e2e6f0; border-bottom:1px solid var(--border); }
+  body.light-mode .tab    { color:var(--text3); }
+  body.light-mode .tab.active { color:var(--cyan); border-bottom-color:var(--cyan); }
+  body.light-mode .subtab-bar { background:#e8ecf4; border-bottom:1px solid var(--border); }
+  body.light-mode .subtab { color:var(--text3); }
+  body.light-mode .subtab.active { color:var(--cyan); border-bottom-color:var(--cyan); }
+  body.light-mode .panel  { background:var(--panel); border:1px solid var(--border); box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  body.light-mode .panel-label { color:var(--text3); border-bottom-color:var(--border); }
+  body.light-mode .no-data { color:var(--text3); }
+  body.light-mode .data-table th { background:var(--bg2); color:var(--text2); border-bottom-color:var(--border); }
+  body.light-mode .data-table td { border-bottom-color:var(--border); color:var(--text2); }
+  body.light-mode .data-table tr:hover td { background:rgba(0,90,170,0.06); }
+  body.light-mode input, body.light-mode textarea, body.light-mode select {
+    background:var(--bg2) !important; color:var(--text) !important; border-color:var(--border) !important;
+  }
+  body.light-mode input::placeholder, body.light-mode textarea::placeholder { color:var(--text3) !important; opacity:0.7; }
+  /* SVG chart backgrounds */
+  body.light-mode svg rect[fill="#08080f"],
+  body.light-mode svg rect[fill="#0a0a14"],
+  body.light-mode svg rect[fill="#0c0c14"],
+  body.light-mode svg rect[fill="#0a0a12"],
+  body.light-mode svg rect[fill="#08080f"],
+  body.light-mode svg rect[fill="#0a0a14"] { fill:#dde2f0; }
+  /* Force all text to be dark in light mode */
+  body.light-mode { color: var(--text); }
+  body.light-mode .sent-name,
+  body.light-mode .sent-val  { color: var(--text2); }
 
   /* ── THEME TOGGLE BUTTON ── */
   #themeToggle {
