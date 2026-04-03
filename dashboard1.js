@@ -9,7 +9,8 @@ const $=id=>document.getElementById(id);
 const GROUP_TABS = {
   desk:        ['desk','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol','gex-intraday'],
   derivatives: ['options','gex','wem','volatility'],
-  history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
+  history:     ['pricehistory','volhistory','edgestats','events','volstats','analog'],
+  overview:    ['overview','bonds','breadth','sentiment']
 };
 const TAB_TO_GROUP = {};
 Object.entries(GROUP_TABS).forEach(([g,tabs]) => tabs.forEach(t => TAB_TO_GROUP[t]=g));
@@ -59,6 +60,7 @@ function _switchPanelOnly(id) {
     const b=document.getElementById('floor-tab-badge');
     if(b){b.style.display='none';b.textContent='';}
   }
+  if(id==='overview' && typeof _md!=='undefined' && _md) { try { renderOverview(_md); } catch(e){ console.warn('overview:',e); } }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
@@ -476,6 +478,8 @@ function renderHub(md,sd){
   loadHubNews();
   loadFuturesChart();
   try { renderHubEventInsight(); } catch(e) { console.warn('eventInsight:', e); }
+  // Live scrolling narrator feed
+  try { renderNarrator(md); } catch(e) { console.warn('narrator:', e); }
 }
 
 async function loadHubNews() {
@@ -499,6 +503,127 @@ async function loadHubNews() {
       </div>`;
   } catch(e) {
     el.innerHTML = `<div class="no-data">News unavailable — deploy functions/news.js to enable</div>`;
+  }
+}
+
+
+// ── Hub Narrator — live scrolling market feed ─────────────────────────────
+function buildNarratorBullets(md) {
+  const q   = md.quotes || {};
+  const spy = q['SPY']  || {};
+  const vix = q['^VIX'] || {};
+  const fg  = md.fear_greed || {};
+  const gex = md.gex || {};
+  const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
+  const pctStr = (v, sym) => {
+    if (v == null) return null;
+    const dir = v >= 0 ? '▲' : '▼';
+    const c   = v >= 0 ? '#00ff88' : '#ff4466';
+    return `<span style="color:${c}">${dir} ${sym} ${v >= 0 ? '+' : ''}${fmt2(v)}%</span>`;
+  };
+  const bullets = [];
+
+  // SPY price + move
+  if (spy.price) {
+    const dir = (spy.change || 0) >= 0 ? '▲' : '▼';
+    const c   = (spy.change || 0) >= 0 ? '#00ff88' : '#ff4466';
+    bullets.push(`SPY <span style="color:${c}">${dir} $${fmt2(spy.price)}</span> · ${(spy.change||0) >= 0 ? '+' : ''}${fmt2(spy.change)} (${(spy.pct_change||0) >= 0 ? '+' : ''}${fmt2(spy.pct_change)}%)`);
+  }
+
+  // VIX
+  if (vix.price) {
+    const vixChg = vix.change || 0;
+    const vc = vixChg >= 0 ? '#ff4466' : '#00ff88'; // VIX up = bad
+    bullets.push(`VIX <span style="color:${vc}">${fmt2(vix.price)}</span> (${vixChg >= 0 ? '+' : ''}${fmt2(vixChg)})`);
+  }
+
+  // Fear & Greed
+  if (fg.value != null) {
+    const fgc = fg.value <= 25 ? '#ff4466' : fg.value >= 75 ? '#00ff88' : '#ffcc00';
+    bullets.push(`Fear &amp; Greed <span style="color:${fgc}">${fg.value} — ${fg.label || ''}</span>`);
+  }
+
+  // GEX regime
+  if (gex.regime) {
+    bullets.push(`GEX <span style="color:var(--cyan)">${gex.regime}</span> · Flip $${fmt2(gex.flip_point)}`);
+  }
+
+  // Key sectors — top mover up and down
+  const sectors = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU','XLC'];
+  const sectorData = sectors.map(s => ({ sym: s, pct: q[s]?.pct_change })).filter(s => s.pct != null);
+  if (sectorData.length) {
+    sectorData.sort((a,b) => b.pct - a.pct);
+    const best  = sectorData[0];
+    const worst = sectorData[sectorData.length - 1];
+    bullets.push(`Best sector: ${pctStr(best.pct, best.sym)}  ·  Worst: ${pctStr(worst.pct, worst.sym)}`);
+  }
+
+  // Gold, Oil, DXY
+  const gold = q['GC=F'], oil = q['CL=F'], dxy = q['DX-Y.NYB'];
+  const macros = [];
+  if (gold?.price) macros.push(`Gold $${fmt2(gold.price)} (${(gold.pct_change||0) >= 0 ? '+' : ''}${fmt2(gold.pct_change)}%)`);
+  if (oil?.price)  macros.push(`Oil $${fmt2(oil.price)} (${(oil.pct_change||0) >= 0 ? '+' : ''}${fmt2(oil.pct_change)}%)`);
+  if (dxy?.price)  macros.push(`DXY ${fmt2(dxy.price)} (${(dxy.pct_change||0) >= 0 ? '+' : ''}${fmt2(dxy.pct_change)}%)`);
+  if (macros.length) bullets.push(macros.join(' · '));
+
+  // 10-yr yield
+  const tnx = q['^TNX'];
+  if (tnx?.price) {
+    const tc = (tnx.change || 0) >= 0 ? '#ff4466' : '#00ff88';
+    bullets.push(`10-Yr Yield <span style="color:${tc}">${fmt2(tnx.price)}%</span> (${(tnx.change||0) >= 0 ? '+' : ''}${fmt2(tnx.change)})`);
+  }
+
+  // BTC
+  const btc = q['BTC-USD'];
+  if (btc?.price) {
+    const bc = (btc.pct_change || 0) >= 0 ? '#00ff88' : '#ff4466';
+    bullets.push(`BTC <span style="color:${bc}">$${Math.round(btc.price).toLocaleString()}</span> (${(btc.pct_change||0) >= 0 ? '+' : ''}${fmt2(btc.pct_change)}%)`);
+  }
+
+  // SPY key levels from sd
+  return bullets;
+}
+
+function renderNarrator(md) {
+  const el = document.getElementById('hubNarrator');
+  const st = document.getElementById('narratorStatus');
+  if (!el) return;
+
+  const bullets = buildNarratorBullets(md);
+  if (!bullets.length) {
+    el.innerHTML = '<span style="color:var(--text3)">Market data loading...</span>';
+    return;
+  }
+
+  // Build a long repeating string so the scroll is seamless
+  const sep = '<span style="color:var(--border2);margin:0 24px;">·</span>';
+  const joined = bullets.join(sep);
+  // Duplicate for seamless loop
+  el.innerHTML = `<span class="narrator-inner">${joined}${sep}${joined}</span>`;
+
+  // Inject keyframe + animation once
+  if (!document.getElementById('narratorStyle')) {
+    const style = document.createElement('style');
+    style.id = 'narratorStyle';
+    // Measure width after render to set accurate duration
+    style.textContent = `
+      .narrator-inner {
+        display: inline-block;
+        white-space: nowrap;
+        animation: narratorScroll 60s linear infinite;
+      }
+      @keyframes narratorScroll {
+        0%   { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+      }
+      .narrator-inner:hover { animation-play-state: paused; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  if (st) {
+    const now = new Date();
+    st.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
   }
 }
 
