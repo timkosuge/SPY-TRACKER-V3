@@ -3780,7 +3780,7 @@ const CHAT = {
   replyTo:   null,   // {id, username, preview}
   pinnedId:  null,
   giphyTimer:null,
-  GIPHY_KEY: 'c617tuIpcPjzzeEAe8LhExfrccuIkaYe',     // Set your Giphy API key here
+  GIPHY_KEY: '',     // Set your Giphy API key here
 };
 
 // ── Toggle panel ──────────────────────────────────────────────────────────
@@ -4166,10 +4166,12 @@ function chatGiphySearch(val) {
         img.src=g.images.fixed_height_small.url;
         img.title=g.title;
         img.onclick=()=>{
-          chatSendContent(g.images.original.url);
+          const gifUrl = g.images.original.url || g.images.downsized.url;
+          console.log('Sending GIF:', gifUrl);
           chatToggleGiphy();
           document.getElementById('chat-giphy-input').value='';
           grid.innerHTML=''; status.textContent='Type to search GIFs'; status.style.display='block'; grid.style.display='none';
+          chatSendContent(gifUrl);
         };
         grid.appendChild(img);
       });
