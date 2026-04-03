@@ -1,0 +1,19 @@
+name: Backfill Static WEM
+on:
+  workflow_dispatch:
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python backfill_static_wem.py
+      - run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add spy_data.db market_data.json
+          git commit -m "Backfill static WEM columns and next week row"
+          git push
