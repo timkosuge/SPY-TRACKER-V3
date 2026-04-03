@@ -1,31 +1,42 @@
--- SPY Tracker Chat Schema
--- Run once: wrangler d1 execute spy-chat --remote --file=chat_schema.sql
+-- Chat enhancements schema — run after chat_schema.sql
+-- wrangler d1 execute spy-chat --remote --file=chat_schema_v2.sql
 
-CREATE TABLE IF NOT EXISTS chat_users (
+-- Reply threading: store which message this replies to
+ALTER TABLE chat_messages ADD COLUMN reply_to_id INTEGER REFERENCES chat_messages(id);
+ALTER TABLE chat_messages ADD COLUMN reply_to_username TEXT;
+ALTER TABLE chat_messages ADD COLUMN reply_to_preview TEXT;
+
+-- Reactions table
+CREATE TABLE IF NOT EXISTS chat_reactions (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  username    TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-  password    TEXT    NOT NULL,
-  created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
-  last_seen   INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS chat_sessions (
-  token       TEXT    PRIMARY KEY,
+  message_id  INTEGER NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
   user_id     INTEGER NOT NULL REFERENCES chat_users(id) ON DELETE CASCADE,
   username    TEXT    NOT NULL,
+  emoji       TEXT    NOT NULL,
   created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
-  expires_at  INTEGER NOT NULL
+  UNIQUE(message_id, user_id, emoji)
 );
+CREATE INDEX IF NOT EXISTS idx_reactions_msg ON chat_reactions(message_id);
 
-CREATE TABLE IF NOT EXISTS chat_messages (
+-- Pinned messages
+CREATE TABLE IF NOT EXISTS chat_pins (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id     INTEGER NOT NULL REFERENCES chat_users(id) ON DELETE CASCADE,
-  username    TEXT    NOT NULL,
-  content     TEXT    NOT NULL,
-  msg_type    TEXT    NOT NULL DEFAULT 'text',  -- 'text' | 'image' | 'gif' | 'video'
-  created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+  message_id  INTEGER NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+  pinned_by   TEXT    NOT NULL,
+  pinned_at   INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
-CREATE INDEX IF NOT EXISTS idx_messages_created ON chat_messages(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_sessions_token   ON chat_sessions(token);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires ON chat_sessions(expires_at);
+-- Admin bans
+CREATE TABLE IF NOT EXISTS chat_bans (
+  user_id     INTEGER PRIMARY KEY REFERENCES chat_users(id) ON DELETE CASCADE,
+  banned_by   TEXT    NOT NULL,
+  reason      TEXT,
+  banned_at   INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+-- Online presence heartbeats
+CREATE TABLE IF NOT EXISTS chat_presence (
+  user_id     INTEGER PRIMARY KEY REFERENCES chat_users(id) ON DELETE CASCADE,
+  username    TEXT    NOT NULL,
+  last_seen   INTEGER NOT NULL DEFAULT (unixepoch())
+);
