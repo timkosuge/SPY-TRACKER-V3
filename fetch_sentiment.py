@@ -117,7 +117,7 @@ def fetch_aaii():
     except Exception as e:
         print(f"  AAII Stooq failed: {e}")
 
-    # Method 3 — AAII HTML scrape
+    # Method 3 — AAII HTML scrape (improved: look for survey table context)
     try:
         r = SESSION.get(
             "https://www.aaii.com/sentimentsurvey",
@@ -126,25 +126,54 @@ def fetch_aaii():
         )
         if r.status_code == 200:
             text = r.text
-            # Look for three consecutive percentages (bull / neutral / bear)
-            m = re.search(
-                r"(\d{1,2}\.\d)\s*%.*?(\d{1,2}\.\d)\s*%.*?(\d{1,2}\.\d)\s*%",
-                text,
-                re.S,
-            )
-            if m:
-                bull, neu, bear = float(m.group(1)), float(m.group(2)), float(m.group(3))
-                print(f"  AAII (HTML scrape): bull={bull}% bear={bear}%")
-                return {
-                    "date":       datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                    "bullish":    bull,
-                    "neutral":    neu,
-                    "bearish":    bear,
-                    "spread":     round(bull - bear, 2),
-                    "avg_bullish": 37.5,
-                    "avg_bearish": 31.0,
-                    "source":     "aaii_html",
-                }
+            # Strategy 1: Look for the survey results table near "Bullish" "Neutral" "Bearish" labels
+            # The actual survey data appears near these keywords in the page
+            bull, neu, bear = None, None, None
+
+            # Try to find percentages near "Bullish" label in the survey section
+            m_bull = re.search(r'Bullish[^<]{0,200}?(\d{1,2}\.\d)\s*%', text, re.S | re.I)
+            m_neu  = re.search(r'Neutral[^<]{0,200}?(\d{1,2}\.\d)\s*%', text, re.S | re.I)
+            m_bear = re.search(r'Bearish[^<]{0,200}?(\d{1,2}\.\d)\s*%', text, re.S | re.I)
+
+            if m_bull and m_neu and m_bear:
+                bull = float(m_bull.group(1))
+                neu  = float(m_neu.group(1))
+                bear = float(m_bear.group(1))
+                total = bull + neu + bear
+                # Validate: must sum near 100 and be plausible
+                if 85 <= total <= 115 and bull < 75 and bear < 75:
+                    print(f"  AAII (HTML label scrape): bull={bull}% bear={bear}% sum={total:.1f}%")
+                    return {
+                        "date":       datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        "bullish":    bull,
+                        "neutral":    neu,
+                        "bearish":    bear,
+                        "spread":     round(bull - bear, 2),
+                        "avg_bullish": 37.5,
+                        "avg_bearish": 31.0,
+                        "source":     "aaii_html",
+                    }
+                else:
+                    print(f"  AAII HTML label scrape: values failed validation ({bull}/{neu}/{bear}, sum={total:.1f}) — skipping")
+
+            # Strategy 2: find a block of 3 consecutive plausible percentages
+            matches = re.findall(r'(\d{1,2}\.\d)\s*%', text)
+            for i in range(len(matches) - 2):
+                b, n, br = float(matches[i]), float(matches[i+1]), float(matches[i+2])
+                total = b + n + br
+                if 85 <= total <= 115 and b < 75 and br < 75 and n < 60:
+                    print(f"  AAII (HTML window scrape): bull={b}% neu={n}% bear={br}% sum={total:.1f}%")
+                    return {
+                        "date":       datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        "bullish":    b,
+                        "neutral":    n,
+                        "bearish":    br,
+                        "spread":     round(b - br, 2),
+                        "avg_bullish": 37.5,
+                        "avg_bearish": 31.0,
+                        "source":     "aaii_html",
+                    }
+            print("  AAII HTML: no valid triplet found in page")
     except Exception as e:
         print(f"  AAII HTML scrape failed: {e}")
 
