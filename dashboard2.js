@@ -3626,22 +3626,23 @@ function _renderGapOHLCBlocks(sd) {
       const countUp = bins.map(b=>gapsUp.filter(g=>Math.abs(g.gapPct)>=b.min&&Math.abs(g.gapPct)<b.max).length);
       const countDn = bins.map(b=>gapsDn.filter(g=>Math.abs(g.gapPct)>=b.min&&Math.abs(g.gapPct)<b.max).length);
       const maxCount = Math.max(...countUp,...countDn,1);
-      const bH=22, gap2=4, chartW=gapSizeChartEl.offsetWidth||260;
-      const barMaxW = chartW - 100;
+      const gap2=4;
       gapSizeChartEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:${gap2}px;">`+
         bins.map((b,i)=>`
           <div>
             <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">${b.label}</div>
-            <div style="display:flex;align-items:center;gap:4px;height:${bH}px;">
-              <div style="flex:1;display:flex;flex-direction:column;gap:2px;">
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <div style="width:${(countUp[i]/maxCount*barMaxW).toFixed(0)}px;height:9px;background:#00ff88;border-radius:1px;min-width:${countUp[i]?2:0}px;"></div>
-                  <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#00ff88;">${countUp[i]}</span>
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <div style="display:flex;align-items:center;gap:4px;">
+                <div style="flex:1;height:9px;background:var(--bg3);border-radius:1px;overflow:hidden;">
+                  <div style="width:${(countUp[i]/maxCount*100).toFixed(1)}%;height:100%;background:#00ff88;border-radius:1px;"></div>
                 </div>
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <div style="width:${(countDn[i]/maxCount*barMaxW).toFixed(0)}px;height:9px;background:#ff3355;border-radius:1px;min-width:${countDn[i]?2:0}px;"></div>
-                  <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#ff3355;">${countDn[i]}</span>
+                <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#00ff88;width:22px;text-align:right;">${countUp[i]}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <div style="flex:1;height:9px;background:var(--bg3);border-radius:1px;overflow:hidden;">
+                  <div style="width:${(countDn[i]/maxCount*100).toFixed(1)}%;height:100%;background:#ff3355;border-radius:1px;"></div>
                 </div>
+                <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#ff3355;width:22px;text-align:right;">${countDn[i]}</span>
               </div>
             </div>
           </div>`).join('')+
@@ -3696,7 +3697,9 @@ function _renderGapOHLCBlocks(sd) {
       const maxV = Math.max(...items.map(i=>i.v),1);
       gapTimingEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:5px;">`+
         items.map(({l,v,c})=>`<div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:${(v/maxV*120).toFixed(0)}px;height:16px;background:${c};border-radius:2px;min-width:${v?2:0}px;flex-shrink:0;"></div>
+          <div style="width:80px;flex-shrink:0;height:16px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+            <div style="width:${(v/maxV*100).toFixed(1)}%;height:100%;background:${c};border-radius:2px;"></div>
+          </div>
           <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${c};width:22px;">${v}</span>
           <span style="font-size:11px;color:var(--text3);line-height:1.3;">${l}</span>
         </div>`).join('')+'</div>'+
