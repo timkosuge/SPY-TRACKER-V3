@@ -4328,6 +4328,123 @@ function renderSentiment(md){
         </div>
       </div>
     </div>`:'<div class="no-data">Fear & Greed data unavailable</div>';
+
+  // Load F&G history chart async
+  loadFGHistory();
+}
+
+async function loadFGHistory() {
+  const el = $('fgHistoryChart');
+  if (!el) return;
+  try {
+    const r = await fetch('/fg?t='+Date.now());
+    if (!r.ok) throw new Error('fg fetch failed');
+    const d = await r.json();
+
+    // Build chart data from history array or snapshot fallbacks
+    let points = [];
+    if (d.history && d.history.length > 1) {
+      // Full time series from CNN API
+      points = d.history.map(h => ({ t: new Date(h.t).toLocaleDateString('en-US',{month:'short',day:'numeric'}), v: h.v }));
+      // Sample to ~90 points max for readability
+      if (points.length > 90) {
+        const step = Math.ceil(points.length / 90);
+        points = points.filter((_,i) => i % step === 0 || i === points.length-1);
+      }
+    } else if (d.snapshots) {
+      // Fallback: use the 5 snapshot comparison points
+      const s = d.snapshots;
+      const now = new Date();
+      const fmtD = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      if (s.prev_year)  points.push({t: fmtD(new Date(now - 365*86400000)), v: s.prev_year.v});
+      if (s.prev_month) points.push({t: fmtD(new Date(now - 30*86400000)),  v: s.prev_month.v});
+      if (s.prev_week)  points.push({t: fmtD(new Date(now - 7*86400000)),   v: s.prev_week.v});
+      if (s.prev_close) points.push({t: 'Prev Close', v: s.prev_close.v});
+      if (s.now)        points.push({t: 'Today', v: s.now.v});
+    }
+
+    if (!points.length) {
+      el.innerHTML = '<div class="no-data" style="padding:12px;">F&G history unavailable</div>';
+      return;
+    }
+
+    renderFGChart(el, points, d.value);
+  } catch(e) {
+    el.innerHTML = '<div class="no-data" style="padding:12px;">F&G history: '+e.message+'</div>';
+  }
+}
+
+function renderFGChart(el, points, currentVal) {
+  const n = points.length;
+  const W = 800, H = 160, PAD = {t:16, r:50, b:28, l:36};
+  const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
+  const toX = i => PAD.l + (i / Math.max(n-1,1)) * cW;
+  const toY = v => PAD.t + cH - (Math.min(Math.max(v,0),100) / 100 * cH);
+
+  const fgZone = (v) => v<=25?'#ff3355':v<=45?'#ff8800':v<=55?'#ffcc00':v<=75?'#88cc00':'#00ff88';
+  const fgLbl  = (v) => v<=25?'EXTREME FEAR':v<=45?'FEAR':v<=55?'NEUTRAL':v<=75?'GREED':'EXTREME GREED';
+
+  // Zone bands
+  const bands = [
+    {lo:0,  hi:25,  color:'rgba(255,51,85,0.06)'},
+    {lo:25, hi:45,  color:'rgba(255,136,0,0.05)'},
+    {lo:45, hi:55,  color:'rgba(255,204,0,0.04)'},
+    {lo:55, hi:75,  color:'rgba(136,204,0,0.05)'},
+    {lo:75, hi:100, color:'rgba(0,255,136,0.06)'},
+  ];
+  const bandsSvg = bands.map(b =>
+    `<rect x="${PAD.l}" y="${toY(b.hi).toFixed(1)}" width="${cW}" height="${(toY(b.lo)-toY(b.hi)).toFixed(1)}" fill="${b.color}"/>`
+  ).join('');
+
+  // Grid lines at 25, 50, 75
+  const grid = [25,50,75].map(v => {
+    const y = toY(v).toFixed(1);
+    return `<line x1="${PAD.l}" x2="${PAD.l+cW}" y1="${y}" y2="${y}" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+            <text x="${PAD.l-4}" y="${parseFloat(y)+4}" text-anchor="end" font-size="9" fill="#606080">${v}</text>`;
+  }).join('');
+
+  // Gradient polyline — color each segment by zone
+  const segments = points.slice(0,-1).map((p,i) => {
+    const x1=toX(i).toFixed(1), y1=toY(p.v).toFixed(1);
+    const x2=toX(i+1).toFixed(1), y2=toY(points[i+1].v).toFixed(1);
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${fgZone((p.v+points[i+1].v)/2)}" stroke-width="2.5" stroke-linecap="round"/>`;
+  }).join('');
+
+  // Dots at each point
+  const dots = points.map((p,i) =>
+    `<circle cx="${toX(i).toFixed(1)}" cy="${toY(p.v).toFixed(1)}" r="2.5" fill="${fgZone(p.v)}" opacity="0.7"/>`
+  ).join('');
+
+  // Current value dot + label
+  const last = points[n-1];
+  const lx = toX(n-1).toFixed(1), ly = toY(last.v).toFixed(1);
+  const lc = fgZone(last.v);
+  const currentDot = `<circle cx="${lx}" cy="${ly}" r="5" fill="${lc}" stroke="#fff" stroke-width="1.5"/>
+    <text x="${parseFloat(lx)+8}" y="${parseFloat(ly)+4}" font-size="11" fill="${lc}" font-family="Share Tech Mono,monospace" font-weight="bold">${last.v}</text>`;
+
+  // X axis labels — sample evenly
+  const xStep = Math.max(1, Math.floor(n / 8));
+  const xlbls = points.map((p,i) => {
+    if (i % xStep !== 0 && i !== n-1) return '';
+    return `<text x="${toX(i).toFixed(1)}" y="${H-4}" text-anchor="middle" font-size="8" fill="#606080">${p.t}</text>`;
+  }).join('');
+
+  // Zone label on right
+  const zoneLabel = `<text x="${W-4}" y="${parseFloat(ly)+4}" font-size="8" fill="${lc}" text-anchor="end" font-family="Orbitron,monospace">${fgLbl(last.v)}</text>`;
+
+  el.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">
+      ${bandsSvg}${grid}${segments}${dots}${currentDot}${xlbls}${zoneLabel}
+    </svg>
+    <div style="display:flex;gap:14px;justify-content:center;margin-top:6px;font-size:10px;font-family:'Share Tech Mono',monospace;flex-wrap:wrap;">
+      <span style="color:#ff3355;">■ Extreme Fear (0–25)</span>
+      <span style="color:#ff8800;">■ Fear (25–45)</span>
+      <span style="color:#ffcc00;">■ Neutral (45–55)</span>
+      <span style="color:#88cc00;">■ Greed (55–75)</span>
+      <span style="color:#00ff88;">■ Extreme Greed (75–100)</span>
+    </div>
+    ${n <= 5 ? '<div style="font-size:10px;color:var(--text3);text-align:center;margin-top:4px;">Showing comparison snapshots · Full history loads when CNN API returns time series</div>' : ''}
+  `;
 }
 
 function renderCommodities(md){
