@@ -1722,8 +1722,16 @@ def export_gap_stats(conn):
 
     d12m={p['curr_date'] for p in pairs if p['curr_date']>=cutoff_12m}
     dyr={p['curr_date'] for p in pairs if p['curr_date'].startswith(year_str)}
+    # Determine which years are present in the data
+    all_years=sorted(set(p['curr_date'][:4] for p in pairs))
     out={'all':stats(pairs),'12m':stats([p for p in pairs if p['curr_date'] in d12m]),
          'year':stats([p for p in pairs if p['curr_date'] in dyr])}
+    # Per-year slices
+    for yr in all_years:
+        dyr2={p['curr_date'] for p in pairs if p['curr_date'].startswith(yr)}
+        out[f'yr_{yr}']=stats([p for p in pairs if p['curr_date'] in dyr2])
+        for d in range(5):
+            out[f'yr_{yr}_{DOW[d]}']=stats([p for p in pairs if p['curr_date'] in dyr2 and p['dow']==d])
     for d in range(5):
         out[f'all_{DOW[d]}']=stats([p for p in pairs if p['dow']==d])
         out[f'12m_{DOW[d]}']=stats([p for p in pairs if p['curr_date'] in d12m and p['dow']==d])
