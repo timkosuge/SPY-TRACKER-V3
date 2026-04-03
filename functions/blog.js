@@ -15,23 +15,26 @@ const err  = (m, s=400) => json({ error:m }, s);
 
 // Initialise tables if they don't exist yet
 async function ensureTables(db) {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS blog_posts (
+  // D1 does not support multiple statements in one exec() call
+  await db.exec(
+    `CREATE TABLE IF NOT EXISTS blog_posts (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       title      TEXT NOT NULL,
       body       TEXT NOT NULL,
       tags       TEXT DEFAULT '',
       created_at INTEGER NOT NULL,
       read_time  INTEGER DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS blog_comments (
+    )`
+  );
+  await db.exec(
+    `CREATE TABLE IF NOT EXISTS blog_comments (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       post_id    INTEGER NOT NULL,
       author     TEXT NOT NULL DEFAULT 'Anonymous',
       body       TEXT NOT NULL,
       created_at INTEGER NOT NULL
-    );
-  `);
+    )`
+  );
 }
 
 function readTime(body) {
