@@ -53,9 +53,7 @@ function _switchPanelOnly(id) {
   // Tab-specific renders
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
-  if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
-  if(id==='analog') { renderAnalog(); }
-  if(id==='declines') { try { renderDeclines(); } catch(e){ console.warn('declines:',e); } }
+  if(id==='floor') { if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50); }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
@@ -87,7 +85,7 @@ function switchTab(id){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
   // Find and activate the correct top-level tab button
-  const topTabs = ['hub','desk','overview','derivatives','history','media','journal'];
+  const topTabs = ['hub','desk','overview','derivatives','history','media','journal','floor'];
   const btnIdx = topTabs.indexOf(id);
   const allTabs = document.querySelectorAll('.tab');
   if(btnIdx>=0 && allTabs[btnIdx]) allTabs[btnIdx].classList.add('active');
@@ -95,6 +93,7 @@ function switchTab(id){
   const p=$('panel-'+id); if(p)p.classList.add('active');
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
+  if(id==='floor') { if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50); }
   if(id==='gex' && _md) { renderGEX(_md); renderGEXAdditions(_md); }
   if(id==='analog') { renderAnalog(); }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
