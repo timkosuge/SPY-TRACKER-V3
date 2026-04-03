@@ -4314,7 +4314,7 @@ async function sendChat() {
     setBadge('● GROK', '#00ccff');
   }
 })();
-
+</script>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
@@ -6004,7 +6004,7 @@ function blogRenderComments(comments) {
   const el = document.getElementById('bpvComments');
   if (!el) return;
   if (!comments.length) {
-    el.innerHTML = '<div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);padding:12px 0;">No comments yet. Be the first.</div>';
+    el.innerHTML = '<div style="font-family:Share Tech Mono,monospace;font-size:12px;color:var(--text3);padding:12px 0;">No comments yet. Be the first.</div>';
     return;
   }
   el.innerHTML = comments.map(c => `
