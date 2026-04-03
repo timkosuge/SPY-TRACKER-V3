@@ -3733,3 +3733,394 @@ function _renderGapOHLCBlocks(sd) {
   }
 
 }
+
+// ─── GEX INTRADAY INTERVAL MAP ───────────────────────────────────────────────
+async function renderGEXIntradayMap() {
+  const el = document.getElementById('gexIntradayContent');
+  if (!el) return;
+  el.innerHTML = '<div class="no-data" style="padding:32px;">Loading GEX interval data...</div>';
+
+  let snapshots = [];
+  let intradayErr = null;
+  try {
+    const r = await fetch('/gex-history?type=intraday');
+    const d = await r.json();
+    snapshots = d.snapshots || [];
+    if (d.error) intradayErr = d.error;
+  } catch(e) { intradayErr = e.message; }
+
+  // Also get current live GEX to show latest state even if KV is empty
+  let liveGex = null;
+  try {
+    const md = window._md || {};
+    if (md.gex && md.gex.flip_point) liveGex = md.gex;
+  } catch(e) {}
+
+  // Merge live into snapshots if not already represented
+  if (liveGex) {
+    const now = new Date();
+    const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const t = `${String(et.getHours()).padStart(2,'0')}:${String(et.getMinutes()).padStart(2,'0')}`;
+    if (!snapshots.some(s => s.t === t)) {
+      snapshots.push({ t, ts: now.toISOString(), flip: liveGex.flip_point, sup: liveGex.support, res: liveGex.resistance, net: liveGex.net_gex, spot: liveGex.spot, regime: liveGex.regime });
+    }
+  }
+
+  const spot = liveGex?.spot || (snapshots.length ? snapshots[snapshots.length-1].spot : 0);
+
+  // ── KV not bound notice ──────────────────────────────────────────────────
+  const kvNotice = intradayErr && intradayErr.includes('KV') ? `
+    <div style="background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.3);border-radius:4px;padding:10px 16px;margin-bottom:14px;font-size:11px;color:#ffcc00;font-family:'Share Tech Mono',monospace;">
+      ⚠ KV NOT BOUND — Add GEX_HISTORY KV namespace in Cloudflare Pages → Settings → Functions → KV bindings. Data will accumulate automatically once bound.
+    </div>` : '';
+
+  if (!snapshots.length) {
+    el.innerHTML = kvNotice + `
+      <div style="padding:40px;text-align:center;color:var(--text3);">
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;margin-bottom:8px;">⬡ NO INTRADAY GEX DATA YET</div>
+        <div style="font-size:12px;line-height:1.8;">
+          ${intradayErr && !intradayErr.includes('KV') ? `Error: ${intradayErr}<br>` : ''}
+          Data builds automatically as /gex is polled during market hours.<br>
+          Snapshots stored every 5 minutes · Today's map appears at ~9:35 AM ET
+        </div>
+      </div>`;
+    return;
+  }
+
+  // ── Canvas chart ────────────────────────────────────────────────────────
+  // Collect price range
+  const allPrices = snapshots.flatMap(s => [s.spot, s.flip, s.sup, s.res].filter(Boolean));
+  const minP = Math.min(...allPrices) - 2;
+  const maxP = Math.max(...allPrices) + 2;
+
+  const regime = liveGex?.regime || snapshots[snapshots.length-1]?.regime || '';
+  const isPos = (liveGex?.net_gex || snapshots[snapshots.length-1]?.net || 0) > 0;
+  const regimeColor = isPos ? '#00ff88' : '#ff3355';
+  const fmtB = n => { if (!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
+  const lastSnap = snapshots[snapshots.length-1];
+
+  el.innerHTML = kvNotice + `
+    <!-- Header row -->
+    <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:10px;align-items:center;margin-bottom:14px;">
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);">⬡ GEX INTERVAL MAP — INTRADAY</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">${snapshots.length} snapshots · updates every 5 min · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'})} ET</div>
+      </div>
+      <div style="text-align:center;padding:8px 14px;background:rgba(0,204,255,0.07);border:1px solid rgba(0,204,255,0.25);border-radius:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-bottom:3px;">FLIP</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:var(--cyan);">$${fmt(lastSnap?.flip,2)}</div>
+      </div>
+      <div style="text-align:center;padding:8px 14px;background:rgba(255,51,85,0.07);border:1px solid rgba(255,51,85,0.25);border-radius:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">SUPPORT</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#ff3355;">$${fmt(lastSnap?.sup,2)}</div>
+      </div>
+      <div style="text-align:center;padding:8px 14px;background:rgba(0,255,136,0.07);border:1px solid rgba(0,255,136,0.25);border-radius:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">RESISTANCE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#00ff88;">$${fmt(lastSnap?.res,2)}</div>
+      </div>
+      <div style="text-align:center;padding:8px 14px;background:${regimeColor}11;border:1px solid ${regimeColor}44;border-radius:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:${regimeColor};margin-bottom:3px;">NET GEX</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${regimeColor};">${fmtB(lastSnap?.net)}</div>
+      </div>
+    </div>
+    <!-- Canvas -->
+    <div style="position:relative;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;">
+      <canvas id="gexIntradayCanvas" style="width:100%;display:block;"></canvas>
+    </div>
+    <!-- Legend -->
+    <div style="display:flex;gap:20px;margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);">
+      <span><span style="color:var(--cyan);">━━</span> SPOT PRICE</span>
+      <span><span style="color:#ffcc00;">• • •</span> GAMMA FLIP</span>
+      <span><span style="color:#ff3355;">• • •</span> GEX SUPPORT</span>
+      <span><span style="color:#00ff88;">• • •</span> GEX RESISTANCE</span>
+      <span style="margin-left:auto;color:var(--text3);">Regime: <span style="color:${regimeColor};">${regime}</span></span>
+    </div>
+    <!-- Snapshot table -->
+    <details style="margin-top:14px;">
+      <summary style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);cursor:pointer;padding:6px 0;">SNAPSHOT LOG (${snapshots.length} records)</summary>
+      <div style="overflow-x:auto;margin-top:8px;">
+        <table style="width:100%;font-family:'Share Tech Mono',monospace;font-size:11px;border-collapse:collapse;">
+          <thead><tr style="color:var(--text3);border-bottom:1px solid var(--border);">
+            <th style="padding:4px 8px;text-align:left;">TIME</th>
+            <th style="padding:4px 8px;text-align:right;">SPOT</th>
+            <th style="padding:4px 8px;text-align:right;color:#ffcc00;">FLIP</th>
+            <th style="padding:4px 8px;text-align:right;color:#ff3355;">SUPPORT</th>
+            <th style="padding:4px 8px;text-align:right;color:#00ff88;">RESISTANCE</th>
+            <th style="padding:4px 8px;text-align:right;">NET GEX</th>
+          </tr></thead>
+          <tbody>
+            ${[...snapshots].reverse().slice(0,30).map(s => {
+              const n = s.net||0;
+              const nc = n>0?'#00ff88':'#ff3355';
+              return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                <td style="padding:3px 8px;color:var(--text2);">${s.t}</td>
+                <td style="padding:3px 8px;text-align:right;color:var(--cyan);">$${fmt(s.spot,2)}</td>
+                <td style="padding:3px 8px;text-align:right;color:#ffcc00;">$${fmt(s.flip,2)}</td>
+                <td style="padding:3px 8px;text-align:right;color:#ff3355;">$${fmt(s.sup,2)}</td>
+                <td style="padding:3px 8px;text-align:right;color:#00ff88;">$${fmt(s.res,2)}</td>
+                <td style="padding:3px 8px;text-align:right;color:${nc};">${fmtB(n)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  `;
+
+  // ── Draw canvas ──────────────────────────────────────────────────────────
+  requestAnimationFrame(() => {
+    const canvas = document.getElementById('gexIntradayCanvas');
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.parentElement.clientWidth - 24;
+    const H = Math.max(260, Math.round(W * 0.28));
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const pad = { l: 58, r: 16, t: 16, b: 32 };
+    const cw = W - pad.l - pad.r;
+    const ch = H - pad.t - pad.b;
+    const n  = snapshots.length;
+
+    const toX = i => pad.l + (i / Math.max(n-1,1)) * cw;
+    const toY = v => pad.t + ch - ((v - minP) / (maxP - minP)) * ch;
+
+    // Background
+    ctx.fillStyle = '#0c0c14';
+    ctx.fillRect(0, 0, W, H);
+
+    // Horizontal grid
+    const priceStep = cw > 400 ? 2 : 5;
+    const gridStart = Math.ceil(minP / priceStep) * priceStep;
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    ctx.font = `10px 'Share Tech Mono', monospace`;
+    ctx.fillStyle = '#606080';
+    ctx.textAlign = 'right';
+    for (let p = gridStart; p <= maxP; p += priceStep) {
+      const y = toY(p);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+      ctx.fillText('$' + p.toFixed(0), pad.l - 4, y + 3);
+    }
+
+    // Time labels
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#606080';
+    const timeStep = Math.max(1, Math.floor(n / 8));
+    snapshots.forEach((s, i) => {
+      if (i % timeStep !== 0 && i !== n-1) return;
+      ctx.fillText(s.t, toX(i), H - pad.b + 14);
+    });
+
+    // Helper: draw dotted line for a level series
+    const drawDots = (color, key, radius=3) => {
+      ctx.fillStyle = color;
+      snapshots.forEach((s, i) => {
+        if (!s[key]) return;
+        const x = toX(i), y = toY(s[key]);
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI*2);
+        ctx.fill();
+      });
+    };
+
+    // Helper: draw connected line
+    const drawLine = (color, key, width=2, dash=[]) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.setLineDash(dash);
+      ctx.beginPath();
+      let started = false;
+      snapshots.forEach((s, i) => {
+        if (!s[key]) return;
+        const x = toX(i), y = toY(s[key]);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    // Shade above/below flip
+    snapshots.forEach((s, i) => {
+      if (!s.flip || !s.spot) return;
+      const x1 = toX(i);
+      const x2 = i < n-1 ? toX(i+1) : x1+1;
+      const aboveFlip = s.spot > s.flip;
+      ctx.fillStyle = aboveFlip ? 'rgba(0,255,136,0.04)' : 'rgba(255,51,85,0.04)';
+      ctx.fillRect(x1, pad.t, x2-x1, ch);
+    });
+
+    // Draw GEX levels as dotted trails
+    drawLine('#ff335544', 'sup',  1, [3,3]);
+    drawLine('#00ff8844', 'res',  1, [3,3]);
+    drawLine('#ffcc0066', 'flip', 1.5, [4,3]);
+    drawDots('#ff3355', 'sup',  2.5);
+    drawDots('#00ff88', 'res',  2.5);
+    drawDots('#ffcc00', 'flip', 3.5);
+
+    // Spot price line (solid, prominent)
+    drawLine('rgba(0,204,255,0.9)', 'spot', 2.5);
+
+    // Current spot dot
+    if (spot && snapshots.length) {
+      const lx = toX(n-1), ly = toY(spot);
+      ctx.beginPath(); ctx.arc(lx, ly, 5, 0, Math.PI*2);
+      ctx.fillStyle = '#00ccff'; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+      // Label
+      ctx.fillStyle = '#00ccff';
+      ctx.textAlign = 'left';
+      ctx.font = `bold 11px 'Share Tech Mono', monospace`;
+      ctx.fillText('$' + fmt(spot,2), lx+8, ly+4);
+    }
+  });
+}
+
+// ─── GEX DAILY HISTORY CHART (added to GEX tab) ──────────────────────────────
+async function renderGEXDailyHistory() {
+  const el = document.getElementById('gexDailyHistory');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:16px;color:var(--text3);font-size:12px;">Loading daily GEX history...</div>';
+
+  let history = [];
+  let err = null;
+  try {
+    const r = await fetch('/gex-history?type=daily&days=90');
+    const d = await r.json();
+    history = d.history || [];
+    if (d.error) err = d.error;
+  } catch(e) { err = e.message; }
+
+  if (!history.length) {
+    el.innerHTML = `
+      <div style="padding:20px;text-align:center;color:var(--text3);">
+        <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;margin-bottom:6px;">⬡ NO DAILY HISTORY YET</div>
+        <div style="font-size:11px;line-height:1.8;">
+          ${err ? `${err}<br>` : ''}
+          Daily GEX levels build automatically. After market hours today the first record will appear.<br>
+          ${err && err.includes('KV') ? '<span style="color:#ffcc00;">→ Bind GEX_HISTORY KV namespace in Cloudflare Pages → Settings → Functions</span>' : ''}
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Price range
+  const allPrices = history.flatMap(d => [d.spot, d.flip, d.sup, d.res].filter(Boolean));
+  const minP = Math.min(...allPrices) - 3;
+  const maxP = Math.max(...allPrices) + 3;
+  const fmtB = n => { if (!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
+
+  el.innerHTML = `
+    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:10px;">
+      ⬡ GEX LEVEL HISTORY — ${history.length} TRADING DAYS · FLIP / SUPPORT / RESISTANCE vs PRICE
+    </div>
+    <div style="position:relative;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;">
+      <canvas id="gexDailyCanvas" style="width:100%;display:block;"></canvas>
+    </div>
+    <div style="display:flex;gap:20px;margin-top:8px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);">
+      <span><span style="color:var(--cyan);">━━</span> SPOT</span>
+      <span><span style="color:#ffcc00;">━━</span> GAMMA FLIP</span>
+      <span><span style="color:#ff3355;">- -</span> SUPPORT</span>
+      <span><span style="color:#00ff88;">- -</span> RESISTANCE</span>
+    </div>
+    <!-- Regime bar -->
+    <div style="margin-top:12px;overflow-x:auto;">
+      <div style="display:flex;gap:2px;height:8px;border-radius:3px;overflow:hidden;min-width:300px;">
+        ${history.map(d => {
+          const pos = (d.net||0) > 0;
+          return `<div style="flex:1;background:${pos?'rgba(0,255,136,0.5)':'rgba(255,51,85,0.5)'}" title="${d.date}: ${d.regime||''} ${fmtB(d.net)}"></div>`;
+        }).join('')}
+      </div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text3);margin-top:3px;">
+        GEX REGIME: <span style="color:#00ff88;">█</span> POSITIVE (stabilizing) &nbsp; <span style="color:#ff3355;">█</span> NEGATIVE (destabilizing)
+      </div>
+    </div>
+  `;
+
+  requestAnimationFrame(() => {
+    const canvas = document.getElementById('gexDailyCanvas');
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.parentElement.clientWidth - 24;
+    const H = Math.max(220, Math.round(W * 0.22));
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const pad = { l: 58, r: 16, t: 12, b: 28 };
+    const cw = W - pad.l - pad.r;
+    const ch = H - pad.t - pad.b;
+    const n  = history.length;
+
+    const toX = i => pad.l + (i / Math.max(n-1,1)) * cw;
+    const toY = v => pad.t + ch - ((v - minP) / (maxP - minP)) * ch;
+
+    ctx.fillStyle = '#0c0c14';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    const priceStep = (maxP - minP) > 30 ? 10 : 5;
+    const gridStart = Math.ceil(minP / priceStep) * priceStep;
+    ctx.font = `10px 'Share Tech Mono', monospace`;
+    ctx.fillStyle = '#606080';
+    ctx.textAlign = 'right';
+    for (let p = gridStart; p <= maxP; p += priceStep) {
+      const y = toY(p);
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+      ctx.fillText('$'+p.toFixed(0), pad.l-4, y+3);
+    }
+
+    // Date labels
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#606080';
+    const step = Math.max(1, Math.floor(n/8));
+    history.forEach((d,i) => {
+      if (i%step!==0 && i!==n-1) return;
+      const label = d.date.slice(5); // MM-DD
+      ctx.fillText(label, toX(i), H-pad.b+14);
+    });
+
+    const drawLine = (color, key, width, dash=[]) => {
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash);
+      ctx.beginPath();
+      let started = false;
+      history.forEach((d,i) => {
+        if (!d[key]) return;
+        const x=toX(i), y=toY(d[key]);
+        if (!started) { ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    // Shade spot vs flip
+    history.forEach((d,i) => {
+      if (!d.flip || !d.spot) return;
+      const x1=toX(i), x2=i<n-1?toX(i+1):x1+1;
+      ctx.fillStyle = d.spot>d.flip ? 'rgba(0,255,136,0.04)' : 'rgba(255,51,85,0.04)';
+      ctx.fillRect(x1, pad.t, x2-x1, ch);
+    });
+
+    drawLine('rgba(255,51,85,0.5)',   'sup',  1, [4,3]);
+    drawLine('rgba(0,255,136,0.5)',   'res',  1, [4,3]);
+    drawLine('rgba(255,204,0,0.85)',  'flip', 2);
+    drawLine('rgba(0,204,255,0.95)',  'spot', 2.5);
+
+    // Latest dot
+    const last = history[n-1];
+    if (last?.spot) {
+      const lx=toX(n-1), ly=toY(last.spot);
+      ctx.beginPath(); ctx.arc(lx,ly,4,0,Math.PI*2);
+      ctx.fillStyle='#00ccff'; ctx.fill();
+    }
+  });
+}
