@@ -16,6 +16,59 @@
     --glow-red:0 0 10px rgba(255,51,85,0.4);
     --glow-cyan:0 0 10px rgba(0,204,255,0.3);
   }
+  /* ── LIGHT MODE ── */
+  body.light-mode {
+    --bg:#f0f2f7;--bg2:#e4e7ef;--bg3:#d8dce8;--panel:#eaecf4;
+    --border:#b8bdd4;--border2:#9aa0c0;
+    --green:#007a40;--red:#cc1133;--yellow:#b08000;--orange:#c05500;
+    --cyan:#0077cc;--purple:#5533bb;--dim:#888aaa;
+    --text:#1a1a2e;--text2:#2a2a4a;--text3:#555577;
+    --glow-green:0 0 8px rgba(0,122,64,0.3);
+    --glow-red:0 0 8px rgba(204,17,51,0.3);
+    --glow-cyan:0 0 8px rgba(0,119,204,0.3);
+  }
+  body.light-mode::before { display:none; }
+  body.light-mode .topbar { box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+  body.light-mode .panel  { box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  body.light-mode canvas  { filter: none; }
+
+  /* ── THEME TOGGLE BUTTON ── */
+  #themeToggle {
+    display:flex;align-items:center;gap:6px;
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:20px;padding:4px 10px;cursor:pointer;
+    font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;
+    color:var(--text3);transition:all 0.2s;flex-shrink:0;
+    user-select:none;
+  }
+  #themeToggle:hover { border-color:var(--cyan);color:var(--cyan); }
+  #themeToggle .toggle-track {
+    width:28px;height:14px;background:var(--border2);border-radius:7px;
+    position:relative;transition:background 0.2s;
+  }
+  #themeToggle .toggle-thumb {
+    position:absolute;top:2px;left:2px;width:10px;height:10px;
+    background:var(--text3);border-radius:50%;transition:all 0.2s;
+  }
+  body.light-mode #themeToggle .toggle-track { background:var(--cyan); }
+  body.light-mode #themeToggle .toggle-thumb { left:16px;background:#fff; }
+
+  /* Light mode overrides for hardcoded backgrounds */
+  body.light-mode .tab        { background:var(--bg2); }
+  body.light-mode .tab.active { background:var(--bg3);border-bottom:2px solid var(--cyan); }
+  body.light-mode .subtab-bar { background:var(--bg2);border-bottom:1px solid var(--border); }
+  body.light-mode .panel      { background:var(--panel);border:1px solid var(--border); }
+  body.light-mode .no-data    { color:var(--text3); }
+  body.light-mode input, body.light-mode textarea, body.light-mode select {
+    background:var(--bg2);color:var(--text);border-color:var(--border);
+  }
+  /* SVG charts use fill="#08080f" etc — invert dark chart backgrounds in light mode */
+  body.light-mode svg rect[fill="#08080f"],
+  body.light-mode svg rect[fill="#0a0a14"],
+  body.light-mode svg rect[fill="#0c0c14"],
+  body.light-mode svg rect[fill="#0a0a12"] {
+    fill: #e8eaf2;
+  }
   *{margin:0;padding:0;box-sizing:border-box;}
   body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;font-size:16px;min-height:100vh;overflow-x:hidden;}
   body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.02) 2px,rgba(0,0,0,0.02) 4px);pointer-events:none;z-index:9999;}
@@ -527,6 +580,10 @@
 <div class="topbar">
   <div class="logo">SPY <span>//</span> TRACKER</div>
   <div class="ticker-tape"><div class="ticker-inner" id="tickerInner"></div></div>
+  <div id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+    <span id="themeLabel">DARK</span>
+    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+  </div>
   <div class="topbar-right">
     <div class="spy-price" id="topPrice">—</div>
     <div class="topbar-date" id="topDate">—</div>
@@ -2028,6 +2085,23 @@
 
 
 <script src="session_vol_profile.js"></script><script src="intraday_vol_profile.js"></script><script src="intraday_vol_stats.js"></script><script src="window_stats.js"></script><script src="gap_stats.js"></script><script src="large_gap_stats.js"></script><script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script>
+<script>
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light-mode');
+  localStorage.setItem('spyt_theme', isLight ? 'light' : 'dark');
+  document.getElementById('themeLabel').textContent = isLight ? 'LIGHT' : 'DARK';
+}
+// Apply saved theme immediately (before paint)
+(function() {
+  const saved = localStorage.getItem('spyt_theme');
+  if (saved === 'light') {
+    document.body.classList.add('light-mode');
+    const lbl = document.getElementById('themeLabel');
+    if (lbl) lbl.textContent = 'LIGHT';
+  }
+})();
+</script>
 <script src="dashboard1.js"></script><script src="dashboard2.js"></script><script src="intraday_data.js"></script><script src="journal_trades.js"></script>
 
 <!-- ============================================================
