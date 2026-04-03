@@ -2857,7 +2857,7 @@ async function loadCOT() {
 
     // TFF groups
     const groups = [
-      { label:'LEVERAGED MONEY', sublabel:'Hedge Funds / CTAs — fast money signal',
+      { label:'LEVERAGED MONEY / SPECULATORS', sublabel:'Hedge Funds & CTAs — fast money, most predictive signal',
         l:d.lev_l, s:d.lev_s, net:d.lev_net, chg:d.chg_lev_net, color:'#ff8800', key:'lev' },
       { label:'ASSET MANAGER', sublabel:'Pensions / Mutual Funds — institutional conviction',
         l:d.asset_l, s:d.asset_s, net:d.asset_net, chg:d.chg_asset_net, color:'#00ccff', key:'asset' },
@@ -2920,14 +2920,17 @@ function renderCOTChart(el, hist) {
   const cW = W-PAD.l-PAD.r, cH = H-PAD.t-PAD.b;
 
   const series = [
-    { key:'asset_net',  label:'Asset Manager (Institutions)',   color:'#00ccff', width:2 },
-    { key:'lev_net',    label:'Leveraged Money (Hedge Funds)',  color:'#ff8800', width:2 },
-    { key:'dealer_net', label:'Dealer/Intermediary (Banks)',    color:'#8855ff', width:1.5 },
+    { key:'asset_net',  label:'Asset Manager / Institutional', color:'#00ccff', width:1.5, dash:'6,3' },
+    { key:'lev_net',    label:'Leveraged Money / Speculators',  color:'#ff8800', width:2.5, dash:'' },
+    { key:'dealer_net', label:'Dealer / Intermediary',          color:'#8855ff', width:1.5, dash:'' },
   ];
 
-  const allVals = hist.flatMap(h => series.map(s => h[s.key]||0));
-  const minV = Math.min(...allVals), maxV = Math.max(...allVals);
-  const padV = (maxV-minV)*0.08;
+  // Scale Y axis to lev+dealer range (asset mgr is always large long and distorts scale)
+  // Asset mgr still drawn but may clip at top — that's fine, it's the least actionable line
+  const scalingVals = hist.flatMap(h => [h.lev_net||0, h.dealer_net||0]);
+  const allVals     = hist.flatMap(h => series.map(s => h[s.key]||0));
+  const minV = Math.min(...scalingVals), maxV = Math.max(...scalingVals);
+  const padV = (maxV-minV)*0.15;
   const lo = minV-padV, hi = maxV+padV;
 
   const toX = i => PAD.l + (i/Math.max(n-1,1))*cW;
@@ -2960,10 +2963,11 @@ function renderCOTChart(el, hist) {
   const bandH = Math.max(2, Math.abs(toY(-gStep*0.15)-toY(gStep*0.15)));
   const zeroBand = `<rect x="${PAD.l}" y="${parseFloat(zY)-1}" width="${cW}" height="2" fill="rgba(255,255,255,0.08)"/>`;
 
-  // Lines (asset first so lev renders on top)
-  const polyline = (key, color, w) => {
+  // Lines (with optional dash pattern)
+  const polyline = (key, color, w, dash='') => {
     const pts = hist.map((h,i) => `${toX(i).toFixed(1)},${toY(h[key]||0).toFixed(1)}`).join(' ');
-    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const dashAttr = dash ? `stroke-dasharray="${dash}"` : '';
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" ${dashAttr} clip-path="url(#cotClip)"/>`;
   };
 
   // End-of-line labels on right side
@@ -2985,17 +2989,24 @@ function renderCOTChart(el, hist) {
 
   el.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;border-radius:4px;">
+      <defs>
+        <clipPath id="cotClip">
+          <rect x="${PAD.l}" y="${PAD.t}" width="${cW}" height="${cH}"/>
+        </clipPath>
+      </defs>
       <rect x="0" y="0" width="${W}" height="${H}" fill="#08080f" rx="4"/>
       <rect x="${PAD.l}" y="${PAD.t}" width="${cW}" height="${cH}" fill="#0a0a14"/>
       ${grid}${zeroLine}${zeroBand}
-      ${series.map(s => polyline(s.key, s.color, s.width)).join('')}
+      ${series.map(s => polyline(s.key, s.color, s.width, s.dash)).join('')}
       ${endLabels}${xlbls}
     </svg>
     <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-top:8px;font-size:10px;font-family:'Share Tech Mono',monospace;">
-      ${series.map(s => `<span style="color:${s.color};">━━ ${s.label}</span>`).join('')}
+      <span style="color:#ff8800;">━━ Leveraged Money / Speculators (Hedge Funds): <b>${fmtV(hist[n-1].lev_net||0)}</b></span>
+      <span style="color:#8855ff;">━━ Dealer / Intermediary (Banks): <b>${fmtV(hist[n-1].dealer_net||0)}</b></span>
+      <span style="color:#00ccff;opacity:0.7;">╌╌ Asset Manager (Institutions): <b>${fmtV(hist[n-1].asset_net||0)}</b></span>
     </div>
     <div style="text-align:center;font-size:10px;color:var(--text3);margin-top:3px;">
-      Net = Long − Short · Above 0 = net long · Below 0 = net short · ${n} weeks · TFF Report (S&P 500 Consolidated)
+      Y-axis scaled to Lev Money + Dealer range · Asset Mgr line may clip (always large net long) · ${n} weeks · TFF Report
     </div>`;
 }
 
