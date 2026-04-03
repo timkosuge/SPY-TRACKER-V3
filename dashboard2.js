@@ -2916,84 +2916,86 @@ async function loadCOTHistory() {
 
 function renderCOTChart(el, hist) {
   const n = hist.length;
-  const W = 960, H = 260, PAD = {t:20, r:20, b:32, l:90};
+  const W = 960, H = 220, PAD = {t:16, r:60, b:28, l:72};
   const cW = W-PAD.l-PAD.r, cH = H-PAD.t-PAD.b;
 
-  // Lines to draw: lev_net (orange), asset_net (cyan), dealer_net (purple)
   const series = [
-    { key:'lev_net',    label:'Leveraged Money (Hedge Funds)', color:'#ff8800', width:2.5 },
     { key:'asset_net',  label:'Asset Manager (Institutions)',   color:'#00ccff', width:2 },
+    { key:'lev_net',    label:'Leveraged Money (Hedge Funds)',  color:'#ff8800', width:2 },
     { key:'dealer_net', label:'Dealer/Intermediary (Banks)',    color:'#8855ff', width:1.5 },
   ];
 
   const allVals = hist.flatMap(h => series.map(s => h[s.key]||0));
   const minV = Math.min(...allVals), maxV = Math.max(...allVals);
-  const padV = (maxV-minV)*0.06;
+  const padV = (maxV-minV)*0.08;
   const lo = minV-padV, hi = maxV+padV;
 
   const toX = i => PAD.l + (i/Math.max(n-1,1))*cW;
   const toY = v => PAD.t + cH - ((v-lo)/(hi-lo))*cH;
-  const fmtV = v => { const a=Math.abs(v),s=v>=0?'+':'-'; return s+'$'+(a>=1e6?(a/1e6).toFixed(1)+'M':a>=1e3?(a/1e3).toFixed(0)+'K':Math.round(a)); };
+  const fmtV = v => {
+    const a=Math.abs(v), s=v>=0?'+':'-';
+    return s+'$'+(a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(0)+'K':Math.round(a));
+  };
 
   // Zero line
   const zY = toY(0).toFixed(1);
-  const zeroLine = `<line x1="${PAD.l}" x2="${PAD.l+cW}" y1="${zY}" y2="${zY}" stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="4,3"/>
-    <text x="${PAD.l-4}" y="${parseFloat(zY)+4}" text-anchor="end" font-size="9" fill="#808080">0</text>`;
+  const zeroLine = `<line x1="${PAD.l}" x2="${PAD.l+cW}" y1="${zY}" y2="${zY}" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="5,4"/>
+    <text x="${PAD.l-5}" y="${parseFloat(zY)+4}" text-anchor="end" font-size="9" fill="#909090" font-family="Share Tech Mono,monospace">0</text>`;
 
-  // Grid
-  const rawStep = (hi-lo)/5;
-  const mag = Math.pow(10,Math.floor(Math.log10(Math.abs(rawStep)||1)));
-  const gStep = Math.ceil(rawStep/mag)*mag;
-  let grid='';
-  for(let v=Math.ceil(lo/gStep)*gStep; v<=hi; v+=gStep){
-    if(Math.abs(v)<gStep*0.1) continue;
-    const y=toY(v).toFixed(1);
-    grid+=`<line x1="${PAD.l}" x2="${PAD.l+cW}" y1="${y}" y2="${y}" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
-      <text x="${PAD.l-4}" y="${parseFloat(y)+4}" text-anchor="end" font-size="8" fill="#505070">${fmtV(v)}</text>`;
+  // Grid — pick ~4 clean rounded levels, skip if too close to zero line
+  const range = hi - lo;
+  const rawStep = range / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(Math.abs(rawStep)||1)));
+  const gStep = Math.round(rawStep/mag)*mag || mag;
+  let grid = '';
+  for (let v = Math.ceil(lo/gStep)*gStep; v <= hi; v += gStep) {
+    if (Math.abs(v) < gStep*0.3) continue; // skip near-zero duplicates
+    const y = toY(v).toFixed(1);
+    if (parseFloat(y) < PAD.t || parseFloat(y) > PAD.t+cH) continue;
+    grid += `<line x1="${PAD.l}" x2="${PAD.l+cW}" y1="${y}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+      <text x="${PAD.l-5}" y="${parseFloat(y)+4}" text-anchor="end" font-size="9" fill="#606080" font-family="Share Tech Mono,monospace">${fmtV(v)}</text>`;
   }
 
-  // Lev money fill above/below zero
-  let fill='';
-  const levVals = hist.map(h=>h.lev_net||0);
-  for(let i=0;i<n-1;i++){
-    const x1=toX(i).toFixed(1),x2=toX(i+1).toFixed(1);
-    const y1=toY(levVals[i]).toFixed(1),y2=toY(levVals[i+1]).toFixed(1);
-    fill+=`<polygon points="${x1},${zY} ${x1},${y1} ${x2},${y2} ${x2},${zY}" fill="${(levVals[i]+levVals[i+1])/2>=0?'rgba(255,136,0,0.12)':'rgba(255,136,0,0.08)'}"/>`;
-  }
+  // Subtle zero-band shading (just a thin stripe, not full fill)
+  const bandH = Math.max(2, Math.abs(toY(-gStep*0.15)-toY(gStep*0.15)));
+  const zeroBand = `<rect x="${PAD.l}" y="${parseFloat(zY)-1}" width="${cW}" height="2" fill="rgba(255,255,255,0.08)"/>`;
 
-  // Lines
-  const polyline = (key,color,w) => {
-    const pts = hist.map((h,i)=>`${toX(i).toFixed(1)},${toY(h[key]||0).toFixed(1)}`).join(' ');
-    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round"/>`;
+  // Lines (asset first so lev renders on top)
+  const polyline = (key, color, w) => {
+    const pts = hist.map((h,i) => `${toX(i).toFixed(1)},${toY(h[key]||0).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"/>`;
   };
 
-  // X labels
-  const step = Math.max(1,Math.floor(n/10));
-  let xlbls='';
-  hist.forEach((h,i)=>{
-    if(i%step!==0&&i!==n-1) return;
-    xlbls+=`<text x="${toX(i).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="8" fill="#505070">${(h.date||'').slice(2,7).replace('-','/')}</text>`;
-  });
-
-  // End labels
-  const lx=(PAD.l+cW+4).toFixed(1);
-  const lastLabels = series.map(s=>{
-    const v=hist[n-1][s.key]||0;
-    return `<circle cx="${toX(n-1).toFixed(1)}" cy="${toY(v).toFixed(1)}" r="3.5" fill="${s.color}"/>`;
+  // End-of-line labels on right side
+  const endLabels = series.map(s => {
+    const v = hist[n-1][s.key]||0;
+    const x = toX(n-1), y = toY(v);
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${s.color}" stroke="#0a0a12" stroke-width="1.5"/>
+      <text x="${(x+10).toFixed(1)}" y="${(y+4).toFixed(1)}" font-size="9" fill="${s.color}" font-family="Share Tech Mono,monospace" font-weight="bold">${fmtV(v)}</text>`;
   }).join('');
 
-  el.innerHTML=`
-    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">
-      <rect x="${PAD.l}" y="${PAD.t}" width="${cW}" height="${cH}" fill="#08080f"/>
-      ${grid}${zeroLine}${fill}
-      ${series.map(s=>polyline(s.key,s.color,s.width)).join('')}
-      ${lastLabels}${xlbls}
+  // X axis labels — month/year marks
+  const step = Math.max(1, Math.floor(n/10));
+  let xlbls = '';
+  hist.forEach((h,i) => {
+    if (i%step!==0 && i!==n-1) return;
+    const label = (h.date||'').slice(2,7).replace('-','/');
+    xlbls += `<text x="${toX(i).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="8" fill="#505070" font-family="Share Tech Mono,monospace">${label}</text>`;
+  });
+
+  el.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;border-radius:4px;">
+      <rect x="0" y="0" width="${W}" height="${H}" fill="#08080f" rx="4"/>
+      <rect x="${PAD.l}" y="${PAD.t}" width="${cW}" height="${cH}" fill="#0a0a14"/>
+      ${grid}${zeroLine}${zeroBand}
+      ${series.map(s => polyline(s.key, s.color, s.width)).join('')}
+      ${endLabels}${xlbls}
     </svg>
-    <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap;margin-top:8px;font-size:10px;font-family:'Share Tech Mono',monospace;">
-      ${series.map(s=>`<span style="color:${s.color};">━━ ${s.label}: <b>${fmtV(hist[n-1][s.key]||0)}</b></span>`).join('')}
+    <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-top:8px;font-size:10px;font-family:'Share Tech Mono',monospace;">
+      ${series.map(s => `<span style="color:${s.color};">━━ ${s.label}</span>`).join('')}
     </div>
     <div style="text-align:center;font-size:10px;color:var(--text3);margin-top:3px;">
-      Net position = Long − Short · Above 0 = net long · Below 0 = net short · ${n} weeks · TFF Report
+      Net = Long − Short · Above 0 = net long · Below 0 = net short · ${n} weeks · TFF Report (S&P 500 Consolidated)
     </div>`;
 }
 
