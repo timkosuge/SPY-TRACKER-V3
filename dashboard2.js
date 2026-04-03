@@ -666,11 +666,12 @@ function renderWEM(md){
     const staticIV        = cur.static_wem_iv     || cur.atm_iv || 0;
 
     // ── Select active mode values ──────────────────────────────────────────
+    // Dynamic falls back to static when workflow hasn't run yet for the new week
     const isStatic = window._wemMode === 'static';
-    const lo   = isStatic ? staticLow  : cur.wem_low;
-    const hi   = isStatic ? staticHigh : cur.wem_high;
-    const mid  = isStatic ? staticMid  : cur.wem_mid;
-    const halfRange = isStatic ? staticHalfRange : cur.wem_range / 2;
+    const lo   = isStatic ? staticLow  : (cur.wem_low  || staticLow);
+    const hi   = isStatic ? staticHigh : (cur.wem_high || staticHigh);
+    const mid  = isStatic ? staticMid  : (cur.wem_mid  || staticMid);
+    const halfRange = isStatic ? staticHalfRange : (cur.wem_range ? cur.wem_range / 2 : staticHalfRange);
     const price = spy.price || mid || 0;
 
     $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}${isStatic?' · STATIC RANGE':' · DYNAMIC RANGE'}`;
@@ -775,12 +776,16 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
 
   const isStatic2  = window._wemMode === 'static';
   // Static — uses locked values from set_next_week_static_wem() (Friday close + TheoTrade formula)
+  // Dynamic falls back to static when workflow hasn't run yet for the new week
   const sHalf = cur ? ((cur.static_wem_range || cur.wem_range) / 2) : 1;
-  const lo2   = cur ? (isStatic2 ? (cur.static_wem_low  || cur.wem_low)  : cur.wem_low)  : 0;
-  const hi2   = cur ? (isStatic2 ? (cur.static_wem_high || cur.wem_high) : cur.wem_high) : 0;
-  const mid2  = cur ? (isStatic2 ? (cur.friday_close    || cur.wem_mid)  : cur.wem_mid)  : 0;
+  const _sLo  = cur ? (cur.static_wem_low  || cur.wem_low)  : 0;
+  const _sHi  = cur ? (cur.static_wem_high || cur.wem_high) : 0;
+  const _sMid = cur ? (cur.friday_close    || cur.wem_mid)  : 0;
+  const lo2   = cur ? (isStatic2 ? _sLo  : (cur.wem_low   || _sLo))  : 0;
+  const hi2   = cur ? (isStatic2 ? _sHi  : (cur.wem_high  || _sHi))  : 0;
+  const mid2  = cur ? (isStatic2 ? _sMid : (cur.wem_mid   || _sMid)) : 0;
   const price2 = (spy.price || mid2 || 0);
-  const halfRange2 = isStatic2 ? sHalf : (cur ? cur.wem_range/2 : 1);
+  const halfRange2 = isStatic2 ? sHalf : (cur ? (cur.wem_range/2 || sHalf) : 1);
   const z = halfRange2 > 0 ? (price2 - mid2) / halfRange2 : 0;
   const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
   const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
