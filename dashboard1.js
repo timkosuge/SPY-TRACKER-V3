@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id);
 
 // Group tab mapping
 const GROUP_TABS = {
-  desk:        ['desk','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol'],
+  desk:        ['desk','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol','gex-intraday'],
   derivatives: ['options','gex','wem','volatility'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog']
 };
@@ -62,7 +62,7 @@ function _switchPanelOnly(id) {
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
-  if(id==='gex' && _md) { try { renderGEX(_md); renderGEXAdditions(_md); } catch(e){ console.warn('gex:',e); } }
+  if(id==='gex' && _md) { try { renderGEX(_md); renderGEXAdditions(_md); renderGEXDailyHistory(); } catch(e){ console.warn('gex:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
   if(id==='edgestats') { if(typeof renderEdgeStats==='function') renderEdgeStats(); }
   if(id==='breadth' && _md && _sd) { try { renderBreadth(_md,_sd); } catch(e){} }
@@ -75,6 +75,7 @@ function _switchPanelOnly(id) {
   if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }
   if(id==='gap-stats') { setTimeout(renderGapStats, 50); setTimeout(renderGapOHLCSections, 80); setTimeout(renderLargeGapStats, 100); }
   if(id==='session-vol') { setTimeout(renderSessionVolStats, 50); }
+  if(id==='gex-intraday') { setTimeout(renderGEXIntradayMap, 50); }
   if(id==='time-of-day') { setTimeout(renderTimeOfDay, 50); }
 }
 
