@@ -1552,26 +1552,34 @@ function renderDeskSession(md,sd){
   const cached = loadPMCache();
   if (cached) {
     setPM(cached.high, cached.mid, cached.low);
-  } else if (!window._pmFetchInFlight) {
-    // Guard: only one fetch in flight at a time — renderDeskSession runs on every
-    // refresh tick so without this we’d fire a new /premarket request every 15s
-    window._pmFetchInFlight = true;
-    fetch('/premarket?t=' + Date.now()).then(r=>r.ok?r.json():null).then(pm=>{
+  } else {
+    // Reset stuck flag if it's been more than 30s (handles page-reload edge cases)
+    const _pmNow = Date.now();
+    if (window._pmFetchInFlight && (_pmNow - (window._pmFetchStart || 0)) > 30000) {
       window._pmFetchInFlight = false;
-      if (pm?.available && pm.high) {
-        savePMCache(pm);
-        setPM(pm.high, pm.mid, pm.low);
-      } else {
-        // Not available yet (pre-4am ET) or PM window closed with no data
-        // Do NOT clear — keep any existing display from earlier in session
+    }
+    if (!window._pmFetchInFlight) {
+      // Guard: only one fetch in flight at a time — renderDeskSession runs on every
+      // refresh tick so without this we'd fire a new /premarket request every 15s
+      window._pmFetchInFlight = true;
+      window._pmFetchStart = _pmNow;
+      fetch('/premarket?t=' + _pmNow).then(r=>r.ok?r.json():null).then(pm=>{
+        window._pmFetchInFlight = false;
+        if (pm?.available && pm.high) {
+          savePMCache(pm);
+          setPM(pm.high, pm.mid, pm.low);
+        } else {
+          // Not available yet (pre-4am ET) or PM window closed with no data
+          // Do NOT clear — keep any existing display from earlier in session
+          const still = loadPMCache();
+          if (still) setPM(still.high, still.mid, still.low);
+        }
+      }).catch(() => {
+        window._pmFetchInFlight = false;
         const still = loadPMCache();
         if (still) setPM(still.high, still.mid, still.low);
-      }
-    }).catch(() => {
-      window._pmFetchInFlight = false;
-      const still = loadPMCache();
-      if (still) setPM(still.high, still.mid, still.low);
-    });
+      });
+    }
   }
 
   // ── VWAP panels update ───────────────────────────────────────────────────
@@ -8208,7 +8216,7 @@ async function renderLiveChart() {
 // Data from large_gap_stats.js (computed from full SPY history in spy_data.json)
 // ─────────────────────────────────────────────────────────────────────────────
 
-window._lgActive = '1';  // active threshold tab
+window._lgActive = '1.0';  // active threshold tab
 
 function renderLargeGapStats() {
   const el = document.getElementById('largeGapStatsSection');
