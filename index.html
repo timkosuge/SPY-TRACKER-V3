@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -543,7 +541,7 @@
   <div class="tab group-tab" onclick="switchGroupTab('history','pricehistory')">HISTORY ▾</div>
   <div class="tab" onclick="switchTab('media')">▶ MEDIA</div>
   <div class="tab" onclick="switchTab('journal')">⬡ JOURNAL</div>
-  <div class="tab" id="floor-tab-btn" onclick="switchTab('floor')">⬡ FLOOR</div>
+  <div class="tab" id="floor-tab-btn" onclick="switchTab('floor')" style="position:relative;">⬡ FLOOR<span id="floor-tab-badge" style="display:none;position:absolute;top:2px;right:2px;min-width:16px;height:16px;background:#ff3355;color:#fff;font-family:'Share Tech Mono',monospace;font-size:9px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center;"></span></div>
 </div>
 
 <!-- Subtab bar — shown below main tabs when a group is active -->
@@ -3712,7 +3710,19 @@ async function floorPoll() {
       if (btn) btn.style.display='block';
     }
     floorUpdatePinned(msgs);
-    msgs.forEach(m => { if(m.username!==CHAT.username) chatPlaySound(); });
+    msgs.forEach(m => {
+      if(m.username!==CHAT.username) {
+        chatPlaySound();
+        chatFireNotif(m.username, m.content);
+        // bump tab badge if not on floor
+        const active = document.querySelector('.tab-panel.active');
+        if (!active || active.id !== 'panel-floor') {
+          FLOOR.tabUnread = (FLOOR.tabUnread||0) + 1;
+          const b = document.getElementById('floor-tab-badge');
+          if (b) { b.textContent = FLOOR.tabUnread > 9 ? '9+' : FLOOR.tabUnread; b.style.display='inline-block'; }
+        }
+      }
+    });
   } catch(e) {}
 }
 
@@ -4580,6 +4590,24 @@ function chatShowChat() {
   clearInterval(CHAT.pollTimer); CHAT.pollTimer=setInterval(chatPoll, 3000);
   clearInterval(CHAT.hbTimer);  CHAT.hbTimer=setInterval(chatHeartbeat, 30000);
   chatHeartbeat();
+  // Request browser notification permission on first login
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+// ── Browser push notification ─────────────────────────────────────────────
+function chatFireNotif(username, content) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;
+  const body = content.replace(/!\[gif\]\([^)]+\)/g,'[gif]').substring(0, 80);
+  try {
+    const n = new Notification(`⬡ THE FLOOR — ${username}`, {
+      body, icon: '/favicon.ico', tag: 'floor-msg', renotify: true,
+      silent: false,
+    });
+    n.onclick = () => { window.focus(); switchTab('floor'); n.close(); };
+  } catch(e) {}
 }
 
 // ── Presence heartbeat ────────────────────────────────────────────────────
@@ -4632,7 +4660,7 @@ async function chatPoll() {
     const atBottom=container.scrollHeight-container.scrollTop-container.clientHeight<80;
     renderMessages(msgs,container);
     if (atBottom) chatScrollBottom();
-    msgs.forEach(m=>{ if(m.username!==CHAT.username) chatBumpUnread(); });
+    msgs.forEach(m=>{ if(m.username!==CHAT.username) { chatBumpUnread(); chatFireNotif(m.username, m.content); } });
     updatePinned(msgs);
   } catch(e) {}
 }
