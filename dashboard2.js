@@ -1729,21 +1729,70 @@ function runPatternAlerts(md, sd) {
 }
 
 // Daily summary
-async function generateSummary(md, sd) {
+async function generateSummary(md, sd, forceRefresh) {
   const el = document.getElementById('aiSummary');
   if (!el) return;
+
+  // Throttle: don't re-run within 10 min unless forced
+  const now = Date.now();
+  if (!forceRefresh && window._lastSummaryTs && (now - window._lastSummaryTs) < 10 * 60 * 1000) return;
+  window._lastSummaryTs = now;
+
+  el.textContent = '';
+  el.classList.add('loading');
+
+  const badge = document.getElementById('aiSummaryModel');
+
   try {
     const context = buildContext(md, sd);
-    const reply = await callAI(
-      [{ role: 'user', content: 'Write a concise daily market summary in 3-4 sentences oriented toward options day traders. Lead with where SPY is vs key levels (prev close, prev high, prev low, week open, prev week close, premarket levels, WEM range). Mention the volatility regime, breadth (A/D ratio, sectors), and the most notable cross-market signal. Reference GEX regime and nearest max pain if relevant. Use actual numbers from the data.' }],
-      `You are a professional trading desk analyst. You have full market data including price structure, volume, volatility, sector analysis, options (GEX, max pain by expiry with correct labels), and macro. CRITICAL: Monday through Thursday expiries are NOT the weekly expiration. Only Friday is the weekly OPEX. Never reference a Wednesday or Monday expiry as significant for positioning. For options expiration information, focus on the Friday expiration and the next monthly expiration. Be specific and use real numbers.\n\n${context}`,
-      400
-    );
-    el.className = 'ai-summary-box';
-    el.innerHTML = reply.replace(/\n/g, '<br>');
+
+    const system = `You are a veteran SPY day trader with 20 years on a prop desk. You've seen every kind of market — crashes, melt-ups, Fed-induced whipsaws, retail-driven squeezes, and the usual daily nonsense. You're sharp, sardonic, and deeply knowledgeable. You call it like you see it. You don't sugarcoat, you don't hedge every sentence with disclaimers, and you have zero patience for financial media clichés.
+
+Your job is to write the daily market overview that greets traders when they open this dashboard. It should be intelligent, entertaining, and genuinely useful. Think of it as your morning briefing to a desk of experienced traders who can handle the truth and appreciate a dry sense of humor.
+
+PERSONALITY RULES:
+- Be blunt and direct. No "it remains to be seen" or "investors are monitoring."
+- Dry wit and sarcasm are welcome — especially about the Fed, retail behavior, analyst consensus, or anything absurd in the data.
+- Funny is good. Forced is not. Don't try to be funny every sentence.
+- Strong opinions are fine when backed by the data. Hedge with data, not words.
+- You can be irreverent about things that deserve it. The market is not sacred.
+- Write like a smart human being, not a robot or a Bloomberg terminal.
+- No bullet points. No headers. Just flowing paragraphs.
+
+FORMAT:
+- 3 to 5 paragraphs. Each one punchy and substantive.
+- Start with where SPY actually is and what it means in plain English — don't open with "As of today."
+- Hit the key levels, volatility regime, notable cross-market signals, and any options structure that matters.
+- End with something honest — the real risk, the real opportunity, or the thing everyone is ignoring.
+- Use actual numbers from the data. Don't make things up. Don't round unless it makes sense.
+
+CRITICAL OPTIONS RULES:
+- Mon/Tue/Wed/Thu expiries are mid-week 0DTE noise. Only Friday is the WEEKLY OPEX.
+- Never say "this week's expiry" about a Wednesday. The weekly is Friday.
+- Reference max pain only for Friday and monthly expiries — they're the ones that matter for positioning.
+
+\n\n${context}`;
+
+    const userMsg = `Write today's market overview. Give me the full picture — where SPY stands relative to key structure, what volatility is signaling, what the options market is pricing in, what's working cross-asset, and what the real story is that most people are probably missing or misreading. Be honest about what's clear, what's murky, and what's actually interesting today. Write it like you're talking to traders who know what they're doing.`;
+
+    const reply = await callAI([{ role: 'user', content: userMsg }], system, 900);
+
+    el.classList.remove('loading');
+
+    // Render paragraphs with spacing
+    const paras = reply.split(/\n\n+/).filter(p => p.trim());
+    if (paras.length > 1) {
+      el.innerHTML = paras.map(p => `<div class="ov-para">${p.trim().replace(/\n/g, '<br>')}</div>`).join('');
+    } else {
+      el.innerHTML = reply.replace(/\n/g, '<br>');
+    }
+
+    if (badge) badge.textContent = '● GROK';
+
   } catch(e) {
-    el.className = 'ai-summary-box';
-    el.textContent = 'Summary unavailable — ' + e.message;
+    el.classList.remove('loading');
+    el.innerHTML = `<span style="color:var(--text3);font-size:12px;">Overview unavailable — ${e.message}</span>`;
+    if (badge) { badge.textContent = '● ERROR'; badge.style.color = '#ff3355'; }
   }
 }
 
