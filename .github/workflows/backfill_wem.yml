@@ -5,15 +5,16 @@ jobs:
   backfill:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: python backfill_static_wem.py
-      - run: |
+      - name: Run backfill script
+        run: python backfill_static_wem.py
+      - name: Commit results
+        run: |
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
           git add spy_data.db market_data.json
-          git commit -m "Backfill static WEM columns and next week row"
+          git commit -m "Backfill static WEM columns and next week row" || echo "Nothing to commit"
           git push
