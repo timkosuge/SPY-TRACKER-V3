@@ -26,7 +26,7 @@ function detectMediaType(content) {
   if (/\.(gif)(\?|$)/i.test(t)) return 'gif';
   if (/\.(mp4|webm|mov|ogg)(\?|$)/i.test(t)) return 'video';
   if (/\.(jpg|jpeg|png|webp|avif|bmp|svg)(\?|$)/i.test(t)) return 'image';
-  if (/tenor\.com|giphy\.com/i.test(t)) return 'gif';
+  if (/tenor\.com|giphy\.com|media\.giphy\.com/i.test(t)) return 'gif';
   if (/youtube\.com|youtu\.be|vimeo\.com/i.test(t)) return 'video';
   return 'text';
 }
