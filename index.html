@@ -475,6 +475,359 @@
   .breach-day .bd-name{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;}
   .breach-day .bd-val{font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;}
 
+
+  /* ═══════════════ BLOG ═══════════════ */
+  #panel-blog { padding: 0; overflow-y: auto; }
+
+  .blog-wrap {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 20px 60px;
+  }
+
+  /* Header bar */
+  .blog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .blog-title-block { display: flex; flex-direction: column; gap: 4px; }
+  .blog-masthead {
+    font-family: 'Orbitron', monospace;
+    font-size: 22px;
+    letter-spacing: 5px;
+    color: var(--cyan);
+  }
+  .blog-tagline {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 2px;
+  }
+  .blog-write-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text3);
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 8px 16px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .blog-write-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* Tag filters */
+  .blog-tags-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+  .blog-tag-filter {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    color: var(--text3);
+    transition: all 0.15s;
+    background: none;
+  }
+  .blog-tag-filter:hover,
+  .blog-tag-filter.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,204,255,0.07); }
+
+  /* Post grid */
+  .blog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 16px;
+  }
+
+  /* Post card */
+  .blog-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 22px 24px;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .blog-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--cyan), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .blog-card:hover { border-color: rgba(0,204,255,0.35); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+  .blog-card:hover::before { opacity: 1; }
+
+  .blog-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--text3);
+  }
+  .blog-card-meta .dot { width: 3px; height: 3px; background: var(--border2); border-radius: 50%; }
+
+  .blog-card-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: var(--text1);
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  .blog-card-excerpt {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: var(--text3);
+    line-height: 1.7;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .blog-card-tags {
+    margin-top: 14px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .blog-tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text3);
+  }
+
+  /* Single post view */
+  .blog-post-view { display: none; }
+  .blog-post-view.open { display: block; }
+  .blog-list-view.hidden { display: none; }
+
+  .blog-back-btn {
+    background: none;
+    border: none;
+    color: var(--text3);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: color 0.15s;
+  }
+  .blog-back-btn:hover { color: var(--cyan); }
+
+  .blog-post-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    letter-spacing: 2px;
+    color: var(--text1);
+    line-height: 1.4;
+    margin-bottom: 14px;
+  }
+  .blog-post-meta {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 32px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .blog-post-body {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    line-height: 1.95;
+    color: var(--text2);
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 48px;
+  }
+
+  /* Comments */
+  .blog-comments-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text3);
+    margin-bottom: 16px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+  .blog-comment {
+    padding: 14px 16px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 10px;
+  }
+  .blog-comment-header {
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--cyan);
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .blog-comment-body {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .blog-comment-form {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .blog-comment-form input,
+  .blog-comment-form textarea {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text1);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .blog-comment-form input:focus,
+  .blog-comment-form textarea:focus { border-color: var(--cyan); }
+  .blog-comment-form textarea { resize: vertical; min-height: 80px; }
+  .blog-comment-submit {
+    align-self: flex-start;
+    background: rgba(0,204,255,0.1);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 10px 20px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .blog-comment-submit:hover { background: rgba(0,204,255,0.2); }
+  .blog-comment-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Write modal */
+  .blog-write-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .blog-write-overlay.open { display: flex; }
+  .blog-write-modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 720px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+  }
+  .blog-write-modal h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: var(--cyan);
+    margin: 0 0 6px;
+  }
+  .blog-write-modal input,
+  .blog-write-modal textarea {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text1);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+  }
+  .blog-write-modal input:focus,
+  .blog-write-modal textarea:focus { border-color: var(--cyan); }
+  .blog-write-modal label {
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text3);
+    margin-bottom: -6px;
+  }
+  .blog-write-modal textarea#bwBody { min-height: 280px; resize: vertical; line-height: 1.7; }
+  .blog-write-row { display: flex; gap: 10px; align-items: center; }
+  .blog-publish-btn {
+    flex: 1;
+    background: rgba(0,204,255,0.12);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .blog-publish-btn:hover { background: rgba(0,204,255,0.22); }
+  .blog-publish-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .blog-close-btn {
+    position: absolute;
+    top: 16px; right: 20px;
+    background: none; border: none;
+    color: var(--text3); font-size: 20px;
+    cursor: pointer; line-height: 1;
+  }
+  .blog-close-btn:hover { color: var(--text1); }
+  .blog-write-error { font-family:'Share Tech Mono',monospace; font-size:12px; color:#ff3355; min-height:16px; }
+  .blog-no-posts {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--text3);
+    text-align: center;
+    padding: 60px 0;
+  }
+
   /* ── AI CHAT PANEL ── */
   /* Floating trigger button */
   #aiTrigger{
@@ -669,6 +1022,7 @@
   <div class="tab group-tab" onclick="switchGroupTab('history','pricehistory')">HISTORY ▾</div>
   <div class="tab" onclick="switchTab('media')">▶ MEDIA</div>
   <div class="tab" onclick="switchTab('journal')">⬡ JOURNAL</div>
+  <div class="tab" onclick="switchTab('blog')">✦ BLOG</div>
   <div class="tab" id="floor-tab-btn" onclick="switchTab('floor')" style="position:relative;">⬡ FLOOR<span id="floor-tab-badge" style="display:none;position:absolute;top:2px;right:2px;min-width:16px;height:16px;background:#ff3355;color:#fff;font-family:'Share Tech Mono',monospace;font-size:9px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center;"></span></div>
 </div>
 
@@ -2124,6 +2478,74 @@
   </div><!-- /jpanel-chart -->
 
 </div><!-- /panel-journal -->
+
+<!-- ═══════════════════════════════════════════════════════
+     BLOG TAB
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-blog">
+  <div class="blog-wrap">
+
+    <!-- Header -->
+    <div class="blog-header">
+      <div class="blog-title-block">
+        <div class="blog-masthead">⬡ SIGNAL</div>
+        <div class="blog-tagline">THOUGHTS ON MARKETS · MACRO · EVERYTHING ELSE</div>
+      </div>
+      <button class="blog-write-btn" onclick="blogOpenWrite()">+ WRITE POST</button>
+    </div>
+
+    <!-- Tag filter bar -->
+    <div class="blog-tags-bar" id="blogTagsBar"></div>
+
+    <!-- List view -->
+    <div id="blogListView">
+      <div class="blog-grid" id="blogGrid">
+        <div class="blog-no-posts">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Single post view -->
+    <div class="blog-post-view" id="blogPostView">
+      <button class="blog-back-btn" onclick="blogBack()">← BACK TO ALL POSTS</button>
+      <div class="blog-post-title" id="bpvTitle"></div>
+      <div class="blog-post-meta" id="bpvMeta"></div>
+      <div class="blog-post-body" id="bpvBody"></div>
+      <!-- Comments -->
+      <div class="blog-comments-title" id="bpvCommentTitle">⬡ COMMENTS</div>
+      <div id="bpvComments"></div>
+      <div class="blog-comment-form">
+        <input id="bpvAuthor" type="text" placeholder="Your name (optional)" maxlength="50">
+        <textarea id="bpvCommentBody" placeholder="Leave a comment..."></textarea>
+        <button class="blog-comment-submit" id="bpvCommentBtn" onclick="blogSubmitComment()">POST COMMENT</button>
+        <div id="bpvCommentErr" style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#ff3355;min-height:14px;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Write modal -->
+<div class="blog-write-overlay" id="blogWriteOverlay" onclick="blogOverlayClick(event)">
+  <div class="blog-write-modal">
+    <button class="blog-close-btn" onclick="blogCloseWrite()">×</button>
+    <h2>⬡ NEW POST</h2>
+
+    <label>TITLE</label>
+    <input id="bwTitle" type="text" placeholder="Post title...">
+
+    <label>TAGS <span style="color:var(--text3);font-size:9px;">(comma separated)</span></label>
+    <input id="bwTags" type="text" placeholder="macro, psychology, markets">
+
+    <label>BODY</label>
+    <textarea id="bwBody" placeholder="Write your post here..."></textarea>
+
+    <div class="blog-write-row">
+      <input id="bwPassword" type="password" placeholder="Password" style="max-width:180px;">
+      <button class="blog-publish-btn" id="bwPublishBtn" onclick="blogPublish()">PUBLISH</button>
+    </div>
+    <div class="blog-write-error" id="bwError"></div>
+  </div>
+</div>
 
 </div><!-- /content -->
 <div class="tab-panel" id="panel-floor" style="padding:0;overflow:hidden;height:calc(100vh - 90px);">
@@ -5392,6 +5814,243 @@ function chatLightbox(src){ document.getElementById('chat-lightbox-img').src=src
 (function chatBoot(){
   if (CHAT.token&&CHAT.username) chatShowChat();
 })();
+</script>
+
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// BLOG TAB
+// ═══════════════════════════════════════════════════════════════════════════
+
+const BLOG = {
+  posts:       [],
+  activeTag:   null,
+  activePostId: null,
+  loaded:      false,
+};
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+function blogFmtDate(ts) {
+  return new Date(ts * 1000).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+}
+function blogEsc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Load post list ─────────────────────────────────────────────────────────
+async function blogLoad() {
+  if (BLOG.loaded) { blogRenderList(); return; }
+  try {
+    const r = await fetch('/blog?action=list&t=' + Date.now());
+    const d = await r.json();
+    BLOG.posts  = d.posts || [];
+    BLOG.loaded = true;
+    blogRenderTagBar();
+    blogRenderList();
+  } catch(e) {
+    document.getElementById('blogGrid').innerHTML =
+      '<div class="blog-no-posts">Failed to load posts.</div>';
+  }
+}
+
+// ── Tag bar ────────────────────────────────────────────────────────────────
+function blogRenderTagBar() {
+  const bar = document.getElementById('blogTagsBar');
+  if (!bar) return;
+  // Collect all unique tags
+  const tagSet = new Set();
+  BLOG.posts.forEach(p => {
+    (p.tags || '').split(',').map(t => t.trim()).filter(Boolean).forEach(t => tagSet.add(t));
+  });
+  const tags = [...tagSet].sort();
+  if (!tags.length) { bar.style.display = 'none'; return; }
+  bar.innerHTML = [
+    `<button class="blog-tag-filter ${!BLOG.activeTag?'active':''}" onclick="blogSetTag(null)">ALL</button>`,
+    ...tags.map(t => `<button class="blog-tag-filter ${BLOG.activeTag===t?'active':''}" onclick="blogSetTag('${blogEsc(t)}')">${blogEsc(t)}</button>`)
+  ].join('');
+}
+
+function blogSetTag(tag) {
+  BLOG.activeTag = tag;
+  blogRenderTagBar();
+  blogRenderList();
+}
+
+// ── Post list ──────────────────────────────────────────────────────────────
+function blogRenderList() {
+  const grid = document.getElementById('blogGrid');
+  if (!grid) return;
+  let posts = BLOG.posts;
+  if (BLOG.activeTag) {
+    posts = posts.filter(p =>
+      (p.tags||'').split(',').map(t=>t.trim()).includes(BLOG.activeTag)
+    );
+  }
+  if (!posts.length) {
+    grid.innerHTML = '<div class="blog-no-posts">No posts yet.</div>';
+    return;
+  }
+  grid.innerHTML = posts.map(p => {
+    const tags = (p.tags||'').split(',').map(t=>t.trim()).filter(Boolean);
+    const tagHtml = tags.map(t => `<span class="blog-tag">${blogEsc(t)}</span>`).join('');
+    const excerpt = blogEsc((p.excerpt||p.body||'').replace(/\n/g,' ')).slice(0,240);
+    return `
+      <div class="blog-card" onclick="blogOpenPost(${p.id})">
+        <div class="blog-card-meta">
+          <span>${blogFmtDate(p.created_at)}</span>
+          <span class="dot"></span>
+          <span>${p.read_time || 1} min read</span>
+        </div>
+        <div class="blog-card-title">${blogEsc(p.title)}</div>
+        <div class="blog-card-excerpt">${excerpt}${(p.excerpt||'').length>=240?'…':''}</div>
+        ${tagHtml ? `<div class="blog-card-tags">${tagHtml}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+// ── Open single post ───────────────────────────────────────────────────────
+async function blogOpenPost(id) {
+  BLOG.activePostId = id;
+  document.getElementById('blogListView').classList.add('hidden');
+  const pv = document.getElementById('blogPostView');
+  pv.classList.add('open');
+  document.getElementById('bpvTitle').textContent  = 'Loading...';
+  document.getElementById('bpvBody').textContent   = '';
+  document.getElementById('bpvMeta').innerHTML     = '';
+  document.getElementById('bpvComments').innerHTML = '';
+  document.getElementById('bpvCommentErr').textContent = '';
+
+  try {
+    const r = await fetch(`/blog?action=post&id=${id}&t=` + Date.now());
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+
+    const p = d.post;
+    const tags = (p.tags||'').split(',').map(t=>t.trim()).filter(Boolean);
+
+    document.getElementById('bpvTitle').textContent = p.title;
+    document.getElementById('bpvMeta').innerHTML = `
+      <span>${blogFmtDate(p.created_at)}</span>
+      <span>·</span>
+      <span>${p.read_time||1} min read</span>
+      ${tags.map(t=>`<span class="blog-tag">${blogEsc(t)}</span>`).join('')}
+    `;
+    document.getElementById('bpvBody').textContent = p.body;
+
+    // Comments
+    blogRenderComments(d.comments || []);
+    const ct = document.getElementById('bpvCommentTitle');
+    if (ct) ct.textContent = `⬡ COMMENTS (${(d.comments||[]).length})`;
+
+    // Scroll to top of blog wrap
+    const wrap = document.querySelector('#panel-blog .blog-wrap');
+    if (wrap) wrap.scrollTop = 0;
+
+  } catch(e) {
+    document.getElementById('bpvTitle').textContent = 'Error loading post.';
+  }
+}
+
+function blogRenderComments(comments) {
+  const el = document.getElementById('bpvComments');
+  if (!el) return;
+  if (!comments.length) {
+    el.innerHTML = '<div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);padding:12px 0;">No comments yet. Be the first.</div>';
+    return;
+  }
+  el.innerHTML = comments.map(c => `
+    <div class="blog-comment">
+      <div class="blog-comment-header">
+        <span>${blogEsc(c.author || 'Anonymous')}</span>
+        <span style="color:var(--text3)">${blogFmtDate(c.created_at)}</span>
+      </div>
+      <div class="blog-comment-body">${blogEsc(c.body)}</div>
+    </div>`).join('');
+}
+
+function blogBack() {
+  document.getElementById('blogListView').classList.remove('hidden');
+  document.getElementById('blogPostView').classList.remove('open');
+  BLOG.activePostId = null;
+  // Reload list to pick up any new comments etc.
+  BLOG.loaded = false;
+  blogLoad();
+}
+
+// ── Submit comment ─────────────────────────────────────────────────────────
+async function blogSubmitComment() {
+  const author = document.getElementById('bpvAuthor').value.trim() || 'Anonymous';
+  const body   = document.getElementById('bpvCommentBody').value.trim();
+  const errEl  = document.getElementById('bpvCommentErr');
+  const btn    = document.getElementById('bpvCommentBtn');
+  errEl.textContent = '';
+  if (!body) { errEl.textContent = 'Write something first.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'POSTING...';
+  try {
+    const r = await fetch('/blog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action:'comment', postId: BLOG.activePostId, author, body }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Failed');
+    document.getElementById('bpvCommentBody').value = '';
+    document.getElementById('bpvAuthor').value = '';
+    // Reload post to show new comment
+    blogOpenPost(BLOG.activePostId);
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'POST COMMENT';
+  }
+}
+
+// ── Write / publish ────────────────────────────────────────────────────────
+function blogOpenWrite() {
+  document.getElementById('blogWriteOverlay').classList.add('open');
+  document.getElementById('bwTitle').focus();
+}
+function blogCloseWrite() {
+  document.getElementById('blogWriteOverlay').classList.remove('open');
+  document.getElementById('bwError').textContent = '';
+}
+function blogOverlayClick(e) {
+  if (e.target === document.getElementById('blogWriteOverlay')) blogCloseWrite();
+}
+
+async function blogPublish() {
+  const title    = document.getElementById('bwTitle').value.trim();
+  const tags     = document.getElementById('bwTags').value.trim();
+  const body     = document.getElementById('bwBody').value.trim();
+  const password = document.getElementById('bwPassword').value;
+  const errEl    = document.getElementById('bwError');
+  const btn      = document.getElementById('bwPublishBtn');
+  errEl.textContent = '';
+  if (!title || !body) { errEl.textContent = 'Title and body are required.'; return; }
+  if (!password)       { errEl.textContent = 'Enter your password.'; return; }
+  btn.disabled = true; btn.textContent = 'PUBLISHING...';
+  try {
+    const r = await fetch('/blog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action:'publish', title, tags, body, password }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Failed');
+    blogCloseWrite();
+    // Reset form
+    ['bwTitle','bwTags','bwBody','bwPassword'].forEach(id => { document.getElementById(id).value=''; });
+    // Reload list
+    BLOG.loaded = false;
+    blogLoad();
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'PUBLISH';
+  }
+}
 </script>
 
 </body></html>
