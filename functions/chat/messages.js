@@ -76,12 +76,20 @@ export async function onRequest(context) {
     const limit  = Math.min(parseInt(url.searchParams.get('limit')||'60', 10), 100);
     const search = (url.searchParams.get('search')||'').trim();
 
+    const before = parseInt(url.searchParams.get('before')||'0', 10);
+
     let rows;
     if (search) {
       rows = await db.prepare(
         `SELECT id,username,content,msg_type,created_at,reply_to_id,reply_to_username,reply_to_preview
          FROM chat_messages WHERE content LIKE ? ORDER BY created_at DESC LIMIT ?`
       ).bind(`%${search}%`, limit).all();
+      rows.results = (rows.results||[]).reverse();
+    } else if (before > 0) {
+      rows = await db.prepare(
+        `SELECT id,username,content,msg_type,created_at,reply_to_id,reply_to_username,reply_to_preview
+         FROM chat_messages WHERE created_at < ? ORDER BY created_at DESC LIMIT ?`
+      ).bind(before, limit).all();
       rows.results = (rows.results||[]).reverse();
     } else if (since > 0) {
       rows = await db.prepare(
