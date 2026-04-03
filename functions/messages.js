@@ -1,14 +1,41 @@
 // functions/chat/messages.js
-// GET  /chat/messages?since=<unix_ts>&limit=<n>   — fetch messages
-// POST /chat/messages  { content }                 — send a message
+// GET  /chat/messages?since=<unix_ts>&limit=<n>
+// POST /chat/messages  { content }
 
-import { json, err, preflight, validateSession, detectMediaType } from './_utils.js';
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+const json = (data, status = 200) => new Response(JSON.stringify(data), {
+  status, headers: { 'Content-Type': 'application/json', ...CORS },
+});
+const err  = (msg, status = 400) => json({ error: msg }, status);
+const preflight = () => new Response(null, { status: 204, headers: CORS });
 
-const MAX_CONTENT  = 2000;   // characters
-const MAX_MESSAGES = 100;    // max fetch per call
-const RATE_LIMIT_S = 1;      // min seconds between posts per user
+async function validateSession(db, token) {
+  if (!token) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const row = await db.prepare(
+    'SELECT user_id, username FROM chat_sessions WHERE token = ? AND expires_at > ?'
+  ).bind(token, now).first();
+  return row || null;
+}
 
-// Simple in-memory rate limiter (resets per Worker instance)
+function detectMediaType(content) {
+  const trimmed = content.trim();
+  const isURL = /^https?:\/\//i.test(trimmed) && !trimmed.includes(' ');
+  if (!isURL) return 'text';
+  if (/\.(gif)(\?|$)/i.test(trimmed)) return 'gif';
+  if (/\.(mp4|webm|mov|ogg)(\?|$)/i.test(trimmed)) return 'video';
+  if (/\.(jpg|jpeg|png|webp|avif|bmp|svg)(\?|$)/i.test(trimmed)) return 'image';
+  if (/tenor\.com|giphy\.com/i.test(trimmed)) return 'gif';
+  if (/youtube\.com|youtu\.be|vimeo\.com/i.test(trimmed)) return 'video';
+  return 'text';
+}
+
+const MAX_CONTENT  = 2000;
+const MAX_MESSAGES = 100;
 const lastPost = new Map();
 
 export async function onRequest(context) {
@@ -21,10 +48,9 @@ export async function onRequest(context) {
   const token = (request.headers.get('Authorization') || '').replace('Bearer ', '').trim();
 
   if (request.method === 'GET') {
-    // Public read — no auth required, but pass token to annotate "mine"
-    const url    = new URL(request.url);
-    const since  = parseInt(url.searchParams.get('since') || '0', 10);
-    const limit  = Math.min(parseInt(url.searchParams.get('limit') || '60', 10), MAX_MESSAGES);
+    const url   = new URL(request.url);
+    const since = parseInt(url.searchParams.get('since') || '0', 10);
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '60', 10), MAX_MESSAGES);
 
     let rows;
     if (since > 0) {
@@ -32,25 +58,21 @@ export async function onRequest(context) {
         'SELECT id, username, content, msg_type, created_at FROM chat_messages WHERE created_at > ? ORDER BY created_at ASC LIMIT ?'
       ).bind(since, limit).all();
     } else {
-      // Initial load — last N messages
       rows = await db.prepare(
         'SELECT id, username, content, msg_type, created_at FROM chat_messages ORDER BY created_at DESC LIMIT ?'
       ).bind(limit).all();
-      rows.results = rows.results.reverse();
+      rows.results = (rows.results || []).reverse();
     }
-
     return json({ messages: rows.results || [] });
   }
 
   if (request.method === 'POST') {
-    // Auth required to post
     const session = await validateSession(db, token);
     if (!session) return err('Not authenticated', 401);
 
-    // Rate limit
     const last = lastPost.get(session.user_id) || 0;
     const now  = Date.now() / 1000;
-    if (now - last < RATE_LIMIT_S) return err('Slow down', 429);
+    if (now - last < 1) return err('Slow down', 429);
     lastPost.set(session.user_id, now);
 
     let body;
@@ -58,8 +80,8 @@ export async function onRequest(context) {
     catch { return err('Invalid JSON'); }
 
     const content = (body.content || '').trim();
-    if (!content)             return err('Message cannot be empty');
-    if (content.length > MAX_CONTENT) return err(`Message too long (max ${MAX_CONTENT} chars)`);
+    if (!content) return err('Message cannot be empty');
+    if (content.length > MAX_CONTENT) return err('Message too long');
 
     const msgType = detectMediaType(content);
     const ts = Math.floor(Date.now() / 1000);
@@ -68,11 +90,9 @@ export async function onRequest(context) {
       'INSERT INTO chat_messages (user_id, username, content, msg_type, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id, username, content, msg_type, created_at'
     ).bind(session.user_id, session.username, content, msgType, ts).first();
 
-    // Update last_seen
     await db.prepare('UPDATE chat_users SET last_seen = ? WHERE id = ?')
       .bind(ts, session.user_id).run();
 
-    // Prune old messages — keep last 1000
     await db.prepare(
       'DELETE FROM chat_messages WHERE id NOT IN (SELECT id FROM chat_messages ORDER BY created_at DESC LIMIT 1000)'
     ).run();
