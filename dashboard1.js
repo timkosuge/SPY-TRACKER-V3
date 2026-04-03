@@ -435,12 +435,18 @@ function renderHub(md,sd){
   const cal=md.econ_calendar||[];
   const renderCal = (events) => {
     if (!events || !events.length) { $('calList').innerHTML='<div class="cal-empty">No data</div>'; return; }
-    const highOnly = events.filter(e => e.impact==='High'||e.impact==='high');
-    const toShow = highOnly.length>0 ? highOnly : events;
+    const impactRank = i => { const s=(i||'').toLowerCase(); return s==='high'?0:s==='medium'||s==='med'?1:2; };
+    const toShow = [...events].sort((a,b) => {
+      const dateTimeCmp = (a.date+a.time).localeCompare(b.date+b.time);
+      if (dateTimeCmp !== 0) return dateTimeCmp;
+      return impactRank(a.impact) - impactRank(b.impact);
+    });
     const etToCt = t => { if(!t||!t.includes(':'))return t; const [h,m]=t.split(':').map(Number); return `${String(h-1).padStart(2,'0')}:${String(m).padStart(2,'0')} CT`; };
     const dayN = d => { if(!d)return ''; return ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date(d+'T12:00:00').getDay()]; };
     const shortD = d => { if(!d)return ''; const [y,mo,dd]=d.split('-'); return `${mo}/${dd}`; };
-    $('calList').innerHTML=toShow.slice(0,8).map(ev=>{
+    $('calList').style.maxHeight='320px';
+    $('calList').style.overflowY='auto';
+    $('calList').innerHTML=toShow.map(ev=>{
       const ic=ev.impact==='High'||ev.impact==='high'?'#ff3355':ev.impact==='Medium'||ev.impact==='med'?'#ffcc00':'#606060';
       return `<div style="display:grid;grid-template-columns:70px 60px 60px 1fr;gap:6px;align-items:center;padding:6px 8px;border-left:3px solid ${ic};background:var(--bg3);border-radius:0 3px 3px 0;margin-bottom:4px;font-size:13px;">
         <span style="font-family:'Share Tech Mono',monospace;color:var(--cyan);font-size:11px;">${dayN(ev.date)} ${shortD(ev.date)}</span>
