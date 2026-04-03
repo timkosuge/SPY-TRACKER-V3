@@ -585,46 +585,113 @@ function buildNarratorBullets(md) {
   return bullets;
 }
 
-function renderNarrator(md) {
+// ── AI Weatherman narrator ───────────────────────────────────────────────
+async function renderNarrator(md) {
   const el = document.getElementById('hubNarrator');
   const st = document.getElementById('narratorStatus');
   if (!el) return;
 
-  const bullets = buildNarratorBullets(md);
-  if (!bullets.length) {
-    el.innerHTML = '<span style="color:var(--text3)">Market data loading...</span>';
-    return;
-  }
-
-  // Build a long repeating string so the scroll is seamless
-  const sep = '<span style="color:var(--border2);margin:0 24px;">·</span>';
-  const joined = bullets.join(sep);
-  // Duplicate for seamless loop
-  el.innerHTML = `<span class="narrator-inner">${joined}${sep}${joined}</span>`;
-
-  // Inject keyframe + animation once
+  // Inject scroll styles once
   if (!document.getElementById('narratorStyle')) {
     const style = document.createElement('style');
     style.id = 'narratorStyle';
-    // Measure width after render to set accurate duration
-    style.textContent = `
-      .narrator-inner {
-        display: inline-block;
-        white-space: nowrap;
-        animation: narratorScroll 60s linear infinite;
-      }
-      @keyframes narratorScroll {
-        0%   { transform: translateX(0); }
-        100% { transform: translateX(-50%); }
-      }
-      .narrator-inner:hover { animation-play-state: paused; }
-    `;
+    style.textContent = [
+      '.narrator-inner {',
+      '  display: inline-block;',
+      '  white-space: nowrap;',
+      '  animation: narratorScroll 55s linear infinite;',
+      '}',
+      '@keyframes narratorScroll {',
+      '  0%   { transform: translateX(0); }',
+      '  100% { transform: translateX(-50%); }',
+      '}',
+      '.narrator-inner:hover { animation-play-state: paused; }'
+    ].join('\n');
     document.head.appendChild(style);
   }
 
+  // Throttle: only regenerate every 30 min
+  const now = Date.now();
+  if (window._narratorTs && (now - window._narratorTs) < 30 * 60 * 1000 && window._narratorText) {
+    _setNarratorText(window._narratorText, st);
+    return;
+  }
+
+  el.innerHTML = '<span style="color:var(--text3);font-style:italic;">⬡ Consulting the market oracle...</span>';
+
+  try {
+    const q   = md.quotes || {};
+    const spy = q['SPY']  || {};
+    const vix = q['^VIX'] || {};
+    const fg  = md.fear_greed || {};
+    const gex = md.gex || {};
+    const gold = q['GC=F'] || {};
+    const oil  = q['CL=F'] || {};
+    const tnx  = q['^TNX'] || {};
+    const btc  = q['BTC-USD'] || {};
+    const f2 = v => v == null ? '?' : Number(v).toFixed(2);
+
+    const sectors = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLC'];
+    const secData = sectors.map(s => q[s]?.pct_change != null
+      ? s + ':' + Number(q[s].pct_change).toFixed(2) + '%' : '').filter(Boolean).join(' ');
+
+    const snapshot = 'SPY $' + f2(spy.price) + ' (' + (spy.pct_change>=0?'+':'') + f2(spy.pct_change) + '%)'
+      + ' | VIX ' + f2(vix.price)
+      + ' | Fear&Greed ' + (fg.value??'?') + '/100 (' + (fg.label||'') + ')'
+      + ' | GEX ' + (gex.regime||'?') + ' flip $' + f2(gex.flip_point)
+      + ' | Gold $' + f2(gold.price) + ' ' + (gold.pct_change>=0?'+':'') + f2(gold.pct_change) + '%'
+      + ' | Oil $' + f2(oil.price) + ' ' + (oil.pct_change>=0?'+':'') + f2(oil.pct_change) + '%'
+      + ' | 10YR ' + f2(tnx.price) + '%'
+      + ' | BTC $' + Math.round(btc.price||0).toLocaleString()
+      + ' | Sectors: ' + secData;
+
+    const systemPrompt = 'You are the market weatherman — a hybrid of an eccentric TV meteorologist'
+      + ' and a seasoned floor trader who has seen too much. You deliver market commentary as if'
+      + ' giving a weather forecast: dramatic, theatrical, a little unhinged. Think Jim Cantore'
+      + ' if he traded SPY options. Funny delivery, but the underlying market read is completely'
+      + ' accurate and grounded in the real data. No emojis.';
+
+    const userMsg = 'Using this real market data, write a single scrolling ticker line in the style'
+      + ' of an over-the-top TV weatherman giving a market forecast. One continuous run or a few'
+      + ' punchy segments separated by " ··· ". Include 4-6 actual data points woven in naturally.'
+      + ' Funny and theatrical but the read is accurate. Under 420 characters total. No hashtags,'
+      + ' no emojis, no quotes around the output. Data: ' + snapshot;
+
+    const resp = await fetch('/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: userMsg }],
+        system: systemPrompt,
+        max_tokens: 200
+      })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    const text = (data.content || '').trim().replace(/^"+|"+$/g, '');
+    window._narratorText = text;
+    window._narratorTs   = Date.now();
+    _setNarratorText(text, st);
+
+  } catch(e) {
+    // Fallback to data bullets
+    const bullets = buildNarratorBullets(md);
+    window._narratorText = bullets.join(' ··· ');
+    _setNarratorText(window._narratorText, st);
+  }
+}
+
+function _setNarratorText(text, st) {
+  const el = document.getElementById('hubNarrator');
+  if (!el) return;
+  const doubled = text + '     ···     ' + text;
+  el.innerHTML = '<span class="narrator-inner">' + doubled + '</span>';
   if (st) {
     const now = new Date();
-    st.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
+    st.textContent = now.toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', timeZone: 'America/Chicago'
+    }) + ' CT';
   }
 }
 
