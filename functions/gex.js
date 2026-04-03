@@ -442,7 +442,7 @@ export async function onRequest(context) {
       if (w) wallsByExpiry.push({ label: labelExpiry(exp), ...w });
     }
 
-    return new Response(JSON.stringify({
+    const responsePayload = {
       spot,
       updated: new Date().toISOString(),
       source: "cboe_live",
@@ -468,7 +468,45 @@ export async function onRequest(context) {
       total_call_oi: totalCallOI,
       total_put_oi: totalPutOI,
       walls_by_expiry: wallsByExpiry,
-    }), { headers });
+    };
+
+    // ── Persist snapshot to KV for history charts (fire-and-forget) ─────────
+    try {
+      const kv = context.env?.GEX_HISTORY;
+      if (kv && flipPoint) {
+        const now = new Date();
+        const toET = d => new Date(d.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        const et = toET(now);
+        const mins = et.getHours()*60 + et.getMinutes();
+        const day  = et.getDay();
+        const inMarket = day >= 1 && day <= 5 && mins >= 570 && mins <= 960;
+        if (inMarket) {
+          const dateStr = `${et.getFullYear()}-${String(et.getMonth()+1).padStart(2,'0')}-${String(et.getDate()).padStart(2,'0')}`;
+          const timeStr = `${String(et.getHours()).padStart(2,'0')}:${String(et.getMinutes()).padStart(2,'0')}`;
+          const entry = { t: timeStr, ts: now.toISOString(), flip: flipPoint, sup: support, res: resistance, net: Math.round(totalNetGEX), spot, regime };
+          // Intraday
+          const intradayKey = `gex:intraday:${dateStr}`;
+          let existing = [];
+          try { const raw = await kv.get(intradayKey, 'json'); if (Array.isArray(raw)) existing = raw; } catch(e) {}
+          if (!existing.some(e => e.t === timeStr)) {
+            existing.push(entry);
+            if (existing.length > 100) existing = existing.slice(-100);
+            await kv.put(intradayKey, JSON.stringify(existing), { expirationTtl: 86400 * 3 });
+          }
+          // Daily
+          const dailyKey = 'gex:daily';
+          let daily = [];
+          try { const raw = await kv.get(dailyKey, 'json'); if (Array.isArray(raw)) daily = raw; } catch(e) {}
+          const dayEntry = { date: dateStr, flip: flipPoint, sup: support, res: resistance, net: Math.round(totalNetGEX), spot, regime, updated: now.toISOString() };
+          const idx = daily.findIndex(d => d.date === dateStr);
+          if (idx >= 0) daily[idx] = dayEntry; else { daily.push(dayEntry); daily.sort((a,b)=>a.date.localeCompare(b.date)); }
+          if (daily.length > 365) daily = daily.slice(-365);
+          await kv.put(dailyKey, JSON.stringify(daily));
+        }
+      }
+    } catch(kvErr) { /* non-fatal */ }
+
+    return new Response(JSON.stringify(responsePayload), { headers });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { headers, status: 200 });
   }
