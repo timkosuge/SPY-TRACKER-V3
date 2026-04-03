@@ -181,187 +181,152 @@ def fetch_aaii():
     return None
 
 
-# ── COT ────────────────────────────────────────────────────────────────────────
-
-# CFTC publishes COT for financial futures as a ZIP of CSVs.
-# The E-Mini S&P 500 contract code is 13874A (legacy) or search by name.
-CFTC_FIN_ZIP = "https://www.cftc.gov/files/dea/history/fin_fut_txt_{year}.zip"
-CFTC_FIN_CURRENT = "https://www.cftc.gov/files/dea/history/fin_fut_txt_{year}.zip"
-
-# Nasdaq Data Link (Quandl) free endpoint — no key needed for COT
-NASDAQ_COT_URL = (
-    "https://data.nasdaq.com/api/v3/datasets/CFTC/13874A_F_L_ALL.json?rows=3"
-)
-
+# ── COT (TFF — Traders in Financial Futures) ─────────────────────────────────
+#
+# Uses the TFF report which gives 5 categories including Leveraged Money (hedge funds)
+# S&P 500 Consolidated = code 13874A_FO_ALL on Nasdaq Data Link
+# Also parses CFTC ZIP directly as fallback
+#
+NASDAQ_TFF_URL = "https://data.nasdaq.com/api/v3/datasets/CFTC/13874A_FO_ALL.json?rows=2"
+CFTC_FIN_ZIP   = "https://www.cftc.gov/files/dea/history/tff_fut_txt_{year}.zip"
 
 def fetch_cot():
     """
-    Try three methods in order:
-    1. Nasdaq Data Link (Quandl) — most reliable, structured JSON
-    2. CFTC ZIP download + CSV parse — authoritative source
-    3. CFTC HTML page scrape — fragile fallback
-    Returns dict with nc_long/nc_short/nc_net/c_long/c_short/c_net/date/source or None.
+    Fetch TFF report for S&P 500 Consolidated (all 5 groups).
+    Returns dict with dealer/asset/lev_money/other/nonrept fields or None.
     """
 
-    # Method 1 — Nasdaq Data Link (free, no key)
+    # Method 1 — Nasdaq Data Link TFF (free, structured JSON)
     try:
-        r = SESSION.get(NASDAQ_COT_URL, timeout=15)
+        r = SESSION.get(NASDAQ_TFF_URL, timeout=15)
         if r.status_code == 200:
             data = r.json()
-            rows = data.get("dataset", {}).get("data", [])
+            rows     = data.get("dataset", {}).get("data", [])
             col_names = data.get("dataset", {}).get("column_names", [])
             if rows and col_names:
                 def col(name, row):
-                    try:
-                        return row[col_names.index(name)]
-                    except (ValueError, IndexError):
-                        return None
+                    try: return row[col_names.index(name)]
+                    except: return None
 
                 latest = rows[0]
                 prev   = rows[1] if len(rows) > 1 else None
 
-                nc_long  = col("Noncommercial Long",  latest)
-                nc_short = col("Noncommercial Short", latest)
-                c_long   = col("Commercial Long",     latest)
-                c_short  = col("Commercial Short",    latest)
-                oi       = col("Open Interest",        latest)
-                date_str = col("Date",                 latest)
+                dl  = col("Dealer Long",               latest) or 0
+                ds  = col("Dealer Short",              latest) or 0
+                al  = col("Asset Manager Long",        latest) or 0
+                as_ = col("Asset Manager Short",       latest) or 0
+                ll  = col("Leveraged Money Long",      latest) or 0
+                ls  = col("Leveraged Money Short",     latest) or 0
+                ol  = col("Other Reportable Long",     latest) or 0
+                os_ = col("Other Reportable Short",    latest) or 0
+                nl  = col("Non-Reportable Long",       latest) or 0
+                ns  = col("Non-Reportable Short",      latest) or 0
+                oi  = col("Open Interest",             latest) or 0
+                date_str = col("Date", latest)
 
-                nc_net = (nc_long - nc_short) if nc_long and nc_short else None
-                c_net  = (c_long  - c_short)  if c_long  and c_short  else None
+                lev_net   = int(ll - ls)
+                asset_net = int(al - as_)
+                dealer_net = int(dl - ds)
 
-                # Week-over-week change in non-commercial net
-                nc_net_prev = None
+                # W/W change for leveraged money
+                chg_lev = None
+                chg_asset = None
+                chg_dealer = None
                 if prev:
-                    prev_nc_l = col("Noncommercial Long",  prev)
-                    prev_nc_s = col("Noncommercial Short", prev)
-                    if prev_nc_l and prev_nc_s:
-                        nc_net_prev = prev_nc_l - prev_nc_s
+                    pl  = col("Leveraged Money Long",  prev) or 0
+                    ps  = col("Leveraged Money Short", prev) or 0
+                    pal = col("Asset Manager Long",    prev) or 0
+                    pas = col("Asset Manager Short",   prev) or 0
+                    pdl = col("Dealer Long",           prev) or 0
+                    pds = col("Dealer Short",          prev) or 0
+                    chg_lev    = lev_net   - int(pl - ps)
+                    chg_asset  = asset_net - int(pal - pas)
+                    chg_dealer = dealer_net - int(pdl - pds)
 
-                nc_net_change = round(nc_net - nc_net_prev, 0) if nc_net and nc_net_prev else None
-
-                print(f"  COT (Nasdaq DL): nc_net={nc_net:+,.0f} date={date_str}")
+                print(f"  COT TFF (Nasdaq DL): lev_net={lev_net:+,} asset_net={asset_net:+,} date={date_str}")
                 return {
                     "report_date":    date_str,
-                    "nc_long":        int(nc_long)  if nc_long  else None,
-                    "nc_short":       int(nc_short) if nc_short else None,
-                    "nc_net":         int(nc_net)   if nc_net   else None,
-                    "nc_net_change":  int(nc_net_change) if nc_net_change else None,
-                    "c_long":         int(c_long)   if c_long   else None,
-                    "c_short":        int(c_short)  if c_short  else None,
-                    "c_net":          int(c_net)    if c_net    else None,
-                    "open_interest":  int(oi)       if oi       else None,
-                    "source":         "nasdaq_data_link",
+                    "oi":             int(oi),
+                    "dealer_l":       int(dl),  "dealer_s":  int(ds),  "dealer_net":  dealer_net,
+                    "asset_l":        int(al),  "asset_s":   int(as_), "asset_net":   asset_net,
+                    "lev_l":          int(ll),  "lev_s":     int(ls),  "lev_net":     lev_net,
+                    "other_l":        int(ol),  "other_s":   int(os_), "other_net":   int(ol-os_),
+                    "nonrept_l":      int(nl),  "nonrept_s": int(ns),  "nonrept_net": int(nl-ns),
+                    "chg_dealer_net": chg_dealer,
+                    "chg_asset_net":  chg_asset,
+                    "chg_lev_net":    chg_lev,
+                    "source":         "nasdaq_tff",
                 }
     except Exception as e:
-        print(f"  COT Nasdaq DL failed: {e}")
+        print(f"  COT TFF Nasdaq DL failed: {e}")
 
-    # Method 2 — CFTC official ZIP (current year + prior year fallback)
+    # Method 2 — CFTC ZIP (TFF futures only)
     for year in [datetime.now().year, datetime.now().year - 1]:
         try:
             url = CFTC_FIN_ZIP.format(year=year)
             r = SESSION.get(url, timeout=30)
             if r.status_code != 200:
                 continue
-
             with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
-                # Find the financial futures CSV inside the ZIP
-                csv_names = [n for n in zf.namelist() if n.lower().endswith(".txt") or n.lower().endswith(".csv")]
+                csv_names = [n for n in zf.namelist() if n.lower().endswith((".txt", ".csv"))]
                 if not csv_names:
                     continue
                 with zf.open(csv_names[0]) as f:
                     reader = csv.DictReader(io.TextIOWrapper(f, encoding="latin-1"))
-                    rows = []
-                    for row in reader:
-                        name = row.get("Market and Exchange Names", "")
-                        if "E-MINI S&P 500" in name.upper():
-                            rows.append(row)
+                    rows = [row for row in reader if "S&P 500" in row.get("Market_and_Exchange_Names","").upper()]
+            if not rows:
+                continue
+            rows.sort(key=lambda r: r.get("Report_Date_as_YYYY_MM_DD",""), reverse=True)
+            latest = rows[0]
+            prev   = rows[1] if len(rows) > 1 else None
 
-                if not rows:
-                    continue
+            def gi(field):
+                try: return int(latest.get(field,"0").replace(",","") or 0)
+                except: return 0
 
-                # Most recent row first
-                rows.sort(key=lambda r: r.get("As of Date in Form YYYY-MM-DD", ""), reverse=True)
-                latest = rows[0]
-                prev   = rows[1] if len(rows) > 1 else None
+            dl  = gi("Dealer_Positions_Long_All");   ds  = gi("Dealer_Positions_Short_All")
+            al  = gi("Asset_Mgr_Positions_Long_All");as_ = gi("Asset_Mgr_Positions_Short_All")
+            ll  = gi("Lev_Money_Positions_Long_All");ls  = gi("Lev_Money_Positions_Short_All")
+            ol  = gi("Other_Rept_Positions_Long_All");os_= gi("Other_Rept_Positions_Short_All")
+            nl  = gi("NonRept_Positions_Long_All");  ns  = gi("NonRept_Positions_Short_All")
+            oi  = gi("Open_Interest_All")
+            date_raw = latest.get("Report_Date_as_YYYY_MM_DD","")
+            try:
+                date_str = datetime.strptime(date_raw.strip(), "%Y %b %d 12:00:00 AM").strftime("%Y-%m-%d")
+            except:
+                date_str = date_raw
 
-                def gi(field):
-                    try:
-                        return int(latest.get(field, "0").replace(",", "") or 0)
-                    except:
-                        return None
+            lev_net    = ll - ls
+            asset_net  = al - as_
+            dealer_net = dl - ds
 
-                nc_long  = gi("Noncommercial Positions-Long (All)")
-                nc_short = gi("Noncommercial Positions-Short (All)")
-                c_long   = gi("Commercial Positions-Long (All)")
-                c_short  = gi("Commercial Positions-Short (All)")
-                oi       = gi("Open Interest (All)")
-                date_str = latest.get("As of Date in Form YYYY-MM-DD", "")
+            chg_lev = chg_asset = chg_dealer = None
+            if prev:
+                def pi(field):
+                    try: return int(prev.get(field,"0").replace(",","") or 0)
+                    except: return 0
+                chg_lev    = lev_net    - (pi("Lev_Money_Positions_Long_All")   - pi("Lev_Money_Positions_Short_All"))
+                chg_asset  = asset_net  - (pi("Asset_Mgr_Positions_Long_All")   - pi("Asset_Mgr_Positions_Short_All"))
+                chg_dealer = dealer_net - (pi("Dealer_Positions_Long_All")       - pi("Dealer_Positions_Short_All"))
 
-                nc_net = (nc_long - nc_short) if nc_long and nc_short else None
-                c_net  = (c_long  - c_short)  if c_long  and c_short  else None
-
-                nc_net_change = None
-                if prev:
-                    try:
-                        prev_nc_l = int(prev.get("Noncommercial Positions-Long (All)",  "0").replace(",", "") or 0)
-                        prev_nc_s = int(prev.get("Noncommercial Positions-Short (All)", "0").replace(",", "") or 0)
-                        nc_net_change = nc_net - (prev_nc_l - prev_nc_s)
-                    except:
-                        pass
-
-                print(f"  COT (CFTC ZIP {year}): nc_net={nc_net:+,.0f} date={date_str}")
-                return {
-                    "report_date":   date_str,
-                    "nc_long":       nc_long,
-                    "nc_short":      nc_short,
-                    "nc_net":        nc_net,
-                    "nc_net_change": int(nc_net_change) if nc_net_change else None,
-                    "c_long":        c_long,
-                    "c_short":       c_short,
-                    "c_net":         c_net,
-                    "open_interest": oi,
-                    "source":        f"cftc_zip_{year}",
-                }
+            print(f"  COT TFF (CFTC ZIP {year}): lev_net={lev_net:+,} date={date_str}")
+            return {
+                "report_date":    date_str,
+                "oi":             oi,
+                "dealer_l":       dl,  "dealer_s":  ds,  "dealer_net":  dealer_net,
+                "asset_l":        al,  "asset_s":   as_, "asset_net":   asset_net,
+                "lev_l":          ll,  "lev_s":     ls,  "lev_net":     lev_net,
+                "other_l":        ol,  "other_s":   os_, "other_net":   ol-os_,
+                "nonrept_l":      nl,  "nonrept_s": ns,  "nonrept_net": nl-ns,
+                "chg_dealer_net": chg_dealer,
+                "chg_asset_net":  chg_asset,
+                "chg_lev_net":    chg_lev,
+                "source":         f"cftc_tff_zip_{year}",
+            }
         except Exception as e:
-            print(f"  COT CFTC ZIP {year} failed: {e}")
+            print(f"  COT TFF CFTC ZIP {year} failed: {e}")
 
-    # Method 3 — CFTC HTML page scrape (legacy fallback)
-    try:
-        r = SESSION.get(
-            "https://www.cftc.gov/dea/futures/financial_lf.htm",
-            timeout=15,
-        )
-        if r.status_code == 200:
-            text = r.text
-            idx = re.search(r"E-MINI S.?P 500", text, re.I)
-            if idx:
-                section = text[idx.start(): idx.start() + 2000]
-                numbers = re.findall(r"[\d,]{5,}", section)
-                if len(numbers) >= 6:
-                    def ci(s):
-                        return int(s.replace(",", ""))
-                    nc_long  = ci(numbers[0])
-                    nc_short = ci(numbers[1])
-                    c_long   = ci(numbers[3])
-                    c_short  = ci(numbers[4])
-                    print(f"  COT (CFTC HTML): nc_net={nc_long-nc_short:+,}")
-                    return {
-                        "report_date":   datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                        "nc_long":       nc_long,
-                        "nc_short":      nc_short,
-                        "nc_net":        nc_long - nc_short,
-                        "nc_net_change": None,
-                        "c_long":        c_long,
-                        "c_short":       c_short,
-                        "c_net":         c_long - c_short,
-                        "open_interest": None,
-                        "source":        "cftc_html",
-                    }
-    except Exception as e:
-        print(f"  COT CFTC HTML failed: {e}")
-
-    print("  COT: all methods failed, no update.")
+    print("  COT TFF: all methods failed.")
     return None
 
 
