@@ -1730,51 +1730,45 @@
   <!-- ── TRADE LOG SUBTAB ───────────────────────────── -->
   <div id="jpanel-trades">
 
-    <!-- Summary strip -->
-    <div id="tjSummaryStrip" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:12px;"></div>
+    <!-- Summary strip (8 boxes) -->
+    <div id="tjSummaryStrip" style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:12px;"></div>
 
     <!-- Main layout: form left, log right -->
-    <div style="display:grid;grid-template-columns:320px 1fr;gap:12px;align-items:start;">
+    <div style="display:grid;grid-template-columns:340px 1fr;gap:12px;align-items:start;">
 
-      <!-- ADD TRADE FORM -->
-      <div class="panel" style="position:sticky;top:0;">
-        <div class="panel-label" style="margin-bottom:12px;">⬡ LOG TRADE</div>
+      <!-- ── ADD / EDIT TRADE FORM ── -->
+      <div class="panel" id="tj_form_panel" style="position:sticky;top:0;">
+        <div class="panel-label" id="tj_form_label" style="margin-bottom:12px;">⬡ LOG TRADE</div>
 
-        <!-- Date / Time -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <!-- Date / Entry Time / Exit Time -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
           <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DATE</div>
-            <input id="tj_date" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">DATE</div>
+            <input id="tj_date" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 6px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;"/>
           </div>
           <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">TIME (CT)</div>
-            <input id="tj_time" type="time" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">ENTRY TIME</div>
+            <input id="tj_time" type="time" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 6px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">EXIT TIME</div>
+            <input id="tj_exit_time" type="time" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 6px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;" placeholder="for hold time"/>
           </div>
         </div>
 
         <!-- Direction + Type -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">DIRECTION</div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">DIRECTION</div>
             <div style="display:flex;gap:4px;">
-              <button id="tj_dir_call" onclick="tjSetDir('CALL')"
-                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--green);color:#000;border:none;font-weight:bold;">
-                CALL
-              </button>
-              <button id="tj_dir_put" onclick="tjSetDir('PUT')"
-                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">
-                PUT
-              </button>
+              <button id="tj_dir_call" onclick="tjSetDir('CALL')" style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--green);color:#000;border:none;font-weight:bold;">CALL</button>
+              <button id="tj_dir_put"  onclick="tjSetDir('PUT')"  style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:9px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">PUT</button>
             </div>
           </div>
           <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">TRADE TYPE</div>
-            <select id="tj_type" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:7px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;">
-              <option>Buy to Open</option>
-              <option>Sell to Close</option>
-              <option>Sell to Open</option>
-              <option>Buy to Close</option>
-              <option>Spread</option>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">TRADE TYPE</div>
+            <select id="tj_type" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
+              <option>Buy to Open</option><option>Sell to Close</option><option>Sell to Open</option><option>Buy to Close</option><option>Spread</option>
             </select>
           </div>
         </div>
@@ -1782,135 +1776,127 @@
         <!-- Strike / Expiry -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">STRIKE</div>
-            <input id="tj_strike" type="number" step="0.5" placeholder="e.g. 555" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">STRIKE</div>
+            <input id="tj_strike" type="number" step="0.5" placeholder="e.g. 555" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
           </div>
           <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">EXPIRY</div>
-            <input id="tj_expiry" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">EXPIRY</div>
+            <input id="tj_expiry" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 6px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;"/>
           </div>
         </div>
 
         <!-- Entry / Exit price -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">ENTRY PRICE</div>
-            <input id="tj_entry" type="number" step="0.01" placeholder="0.00" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">ENTRY PRICE</div>
+            <input id="tj_entry" type="number" step="0.01" placeholder="0.00" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
           </div>
           <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">EXIT PRICE</div>
-            <input id="tj_exit" type="number" step="0.01" placeholder="0.00 (blank=open)" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
-          </div>
-        </div>
-
-        <!-- Contracts / SPY price at entry -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">CONTRACTS (QTY)</div>
-            <input id="tj_qty" type="number" step="1" min="1" placeholder="1" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
-          </div>
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">SPY @ ENTRY</div>
-            <input id="tj_spy_price" type="number" step="0.01" placeholder="auto-fill" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">EXIT PRICE <span style="color:var(--text3);font-size:7px;">(blank = OPEN)</span></div>
+            <input id="tj_exit" type="number" step="0.01" placeholder="leave blank if still open" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
           </div>
         </div>
 
-        <!-- Setup tag / DTE -->
+        <!-- SPY @ Entry / Exit -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">SETUP / TAG</div>
-            <select id="tj_setup" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:7px 8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">QTY (CONTRACTS)</div>
+            <input id="tj_qty" type="number" step="1" min="1" placeholder="1" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">SPY @ ENTRY</div>
+            <input id="tj_spy_price" type="number" step="0.01" placeholder="auto-filled" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+        </div>
+
+        <!-- SPY @ Exit / Setup -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">SPY @ EXIT</div>
+            <input id="tj_spy_exit" type="number" step="0.01" placeholder="optional" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">SETUP / TAG</div>
+            <select id="tj_setup" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:6px 8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
               <option value="">— none —</option>
-              <option>OR Breakout</option>
-              <option>OR Fade</option>
-              <option>Gap Fill</option>
-              <option>VWAP Reclaim</option>
-              <option>VWAP Rejection</option>
-              <option>Support Bounce</option>
-              <option>Resistance Reject</option>
-              <option>HOD/LOD Chase</option>
-              <option>Power Hour</option>
-              <option>News/Catalyst</option>
-              <option>Scalp</option>
-              <option>Swing</option>
-              <option>Other</option>
+              <option>OR Breakout</option><option>OR Fade</option><option>Gap Fill</option>
+              <option>VWAP Reclaim</option><option>VWAP Rejection</option>
+              <option>Support Bounce</option><option>Resistance Reject</option>
+              <option>HOD/LOD Chase</option><option>Power Hour</option>
+              <option>News/Catalyst</option><option>Scalp</option><option>Swing</option><option>Other</option>
             </select>
           </div>
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">OUTCOME</div>
-            <div style="display:flex;gap:4px;">
-              <button id="tj_out_win" onclick="tjSetOutcome('WIN')"
-                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">
-                WIN
-              </button>
-              <button id="tj_out_loss" onclick="tjSetOutcome('LOSS')"
-                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">
-                LOSS
-              </button>
-              <button id="tj_out_be" onclick="tjSetOutcome('BE')"
-                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">
-                B/E
-              </button>
-              <button id="tj_out_open" onclick="tjSetOutcome('OPEN')"
-                style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--cyan);color:#000;border:none;">
-                OPEN
-              </button>
-            </div>
+        </div>
+
+        <!-- Outcome buttons -->
+        <div style="margin-bottom:10px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">OUTCOME <span style="color:var(--text3);font-size:7px;">— select OPEN to save partial entry and update later</span></div>
+          <div style="display:flex;gap:4px;">
+            <button id="tj_out_win"  onclick="tjSetOutcome('WIN')"  style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">WIN</button>
+            <button id="tj_out_loss" onclick="tjSetOutcome('LOSS')" style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">LOSS</button>
+            <button id="tj_out_be"   onclick="tjSetOutcome('BE')"   style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);">B/E</button>
+            <button id="tj_out_open" onclick="tjSetOutcome('OPEN')" style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;border-radius:3px;cursor:pointer;background:var(--cyan);color:#000;border:none;font-weight:bold;">OPEN</button>
           </div>
         </div>
 
-        <!-- Notes -->
-        <div style="margin-bottom:10px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">NOTES / THESIS</div>
-          <textarea id="tj_notes" placeholder="Why did you take this trade? What did you see?" rows="3"
-            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:11px;resize:vertical;outline:none;"></textarea>
+        <!-- Notes / Thesis -->
+        <div style="margin-bottom:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">NOTES / THESIS</div>
+          <textarea id="tj_notes" placeholder="Why did you take this trade? What did you see?" rows="3" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;resize:vertical;outline:none;"></textarea>
         </div>
 
-        <!-- Mistake / lesson -->
+        <!-- Lesson / Mistake -->
+        <div style="margin-bottom:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">MISTAKE / LESSON LEARNED</div>
+          <textarea id="tj_lesson" placeholder="What would you do differently?" rows="2" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;resize:vertical;outline:none;"></textarea>
+        </div>
+
+        <!-- Screenshot upload -->
         <div style="margin-bottom:12px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;">MISTAKE / LESSON</div>
-          <textarea id="tj_lesson" placeholder="What would you do differently?" rows="2"
-            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:11px;resize:vertical;outline:none;"></textarea>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;">SCREENSHOT <span style="color:var(--text3);font-size:7px;">— upload or paste (Ctrl+V) a chart image</span></div>
+          <input type="hidden" id="tj_screenshot_data"/>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <label style="flex:1;padding:7px;text-align:center;background:var(--bg3);border:1px dashed var(--border);border-radius:3px;cursor:pointer;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">
+              📷 UPLOAD IMAGE
+              <input type="file" accept="image/*" style="display:none;" onchange="tjHandleScreenshot(this)"/>
+            </label>
+            <div style="flex:1;padding:7px;text-align:center;background:var(--bg3);border:1px dashed var(--border);border-radius:3px;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">CTRL+V TO PASTE</div>
+          </div>
+          <div id="tj_screenshot_preview"></div>
         </div>
 
-        <div style="display:flex;gap:8px;">
-          <button onclick="tjAddTrade()"
-            style="flex:1;padding:10px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;background:var(--green);color:#000;border:none;border-radius:3px;cursor:pointer;font-weight:bold;">
-            + LOG TRADE
-          </button>
-          <button onclick="tjClearForm()"
-            style="padding:10px 14px;font-family:'Orbitron',monospace;font-size:10px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;">
-            CLR
-          </button>
+        <!-- Action buttons -->
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button id="tj_submit_btn" onclick="tjAddTrade()" style="flex:1;padding:10px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;background:var(--green);color:#000;border:none;border-radius:3px;cursor:pointer;font-weight:bold;">+ LOG TRADE</button>
+          <button onclick="tjClearForm()" style="padding:10px 14px;font-family:'Orbitron',monospace;font-size:10px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;" title="Clear the form">CLR</button>
         </div>
 
-        <!-- Import/Export -->
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <button onclick="tjExportCSV()"
-            style="flex:1;padding:7px;font-family:'Orbitron',monospace;font-size:9px;background:var(--bg3);color:var(--cyan);border:1px solid var(--cyan)44;border-radius:3px;cursor:pointer;">
-            ↓ CSV
-          </button>
-          <button onclick="document.getElementById('tjImportInput').click()"
-            style="flex:1;padding:7px;font-family:'Orbitron',monospace;font-size:9px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;">
-            ↑ IMPORT
-          </button>
-          <input id="tjImportInput" type="file" accept=".json" style="display:none" onchange="tjImportJSON(this)"/>
-          <button onclick="tjExportJSON()"
-            style="flex:1;padding:7px;font-family:'Orbitron',monospace;font-size:9px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;">
-            ↓ JSON
-          </button>
+        <!-- Import / Export with explanations -->
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:10px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:8px;">DATA BACKUP &amp; EXPORT</div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <button onclick="tjExportCSV()" style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;background:var(--bg2);color:var(--cyan);border:1px solid var(--cyan)44;border-radius:3px;cursor:pointer;">↓ CSV</button>
+            <button onclick="document.getElementById('tjImportInput').click()" style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;background:var(--bg2);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;">↑ IMPORT</button>
+            <input id="tjImportInput" type="file" accept=".json" style="display:none" onchange="tjImportJSON(this)"/>
+            <button onclick="tjExportJSON()" style="flex:1;padding:7px 4px;font-family:'Orbitron',monospace;font-size:8px;background:var(--bg2);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;">↓ JSON</button>
+          </div>
+          <div style="font-size:9px;color:var(--text3);font-family:'Share Tech Mono',monospace;line-height:1.7;">
+            <b style="color:var(--cyan);">↓ CSV</b> — Download all trades as a spreadsheet (opens in Excel/Google Sheets)<br>
+            <b style="color:var(--text2);">↑ IMPORT</b> — Load trades from a previously exported JSON backup file<br>
+            <b style="color:var(--text2);">↓ JSON</b> — Download full backup including screenshots (use to migrate or restore)
+          </div>
         </div>
       </div>
 
-      <!-- RIGHT: filter bar + trade log table -->
+      <!-- RIGHT: filter bar + trade log table + stats -->
       <div style="display:flex;flex-direction:column;gap:10px;">
 
-        <!-- Filter / sort bar -->
+        <!-- Filter bar -->
         <div class="panel" style="padding:10px 14px;">
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;margin-right:4px;">FILTER:</div>
+            <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;">FILTER:</div>
             <select id="tj_filt_dir" onchange="tjRender()" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
-              <option value="">ALL</option><option>CALL</option><option>PUT</option>
+              <option value="">ALL DIRS</option><option>CALL</option><option>PUT</option>
             </select>
             <select id="tj_filt_outcome" onchange="tjRender()" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
               <option value="">ALL OUTCOMES</option><option>WIN</option><option>LOSS</option><option>BE</option><option>OPEN</option>
@@ -1918,26 +1904,19 @@
             <select id="tj_filt_setup" onchange="tjRender()" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;">
               <option value="">ALL SETUPS</option>
             </select>
-            <input id="tj_filt_search" type="text" placeholder="search notes…" oninput="tjRender()"
-              style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;width:130px;"/>
-            <button onclick="tjClearFilters()"
-              style="padding:5px 10px;font-family:'Orbitron',monospace;font-size:9px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;margin-left:auto;">
-              RESET
-            </button>
-            <button onclick="tjClearAll()"
-              style="padding:5px 10px;font-family:'Orbitron',monospace;font-size:9px;background:none;color:#ff335566;border:1px solid #ff335530;border-radius:3px;cursor:pointer;">
-              DELETE ALL
-            </button>
+            <input id="tj_filt_search" type="text" placeholder="search notes…" oninput="tjRender()" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:5px 8px;color:var(--text2);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;width:130px;"/>
+            <button onclick="tjClearFilters()" style="padding:5px 10px;font-family:'Orbitron',monospace;font-size:9px;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:3px;cursor:pointer;margin-left:auto;">RESET</button>
+            <button onclick="tjClearAll()" style="padding:5px 10px;font-family:'Orbitron',monospace;font-size:9px;background:none;color:#ff335566;border:1px solid #ff335530;border-radius:3px;cursor:pointer;">DELETE ALL</button>
           </div>
         </div>
 
-        <!-- P&L Equity curve -->
+        <!-- P&L equity curve -->
         <div class="panel" style="padding:12px 14px;">
           <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;margin-bottom:8px;">P&amp;L CURVE — CUMULATIVE</div>
           <canvas id="tjPnlChart" height="80" style="width:100%;display:block;"></canvas>
         </div>
 
-        <!-- Extended stats panel -->
+        <!-- Extended stats -->
         <div class="panel" style="padding:12px 14px;" id="tjStatsPanel"></div>
 
         <!-- Trade table -->
@@ -1946,24 +1925,25 @@
             <table class="data-table" id="tjTradeTable" style="font-size:11px;">
               <thead>
                 <tr>
-                  <th style="text-align:left;padding-left:12px;" onclick="tjSortBy('date')">DATE ⇅</th>
+                  <th style="text-align:left;padding-left:10px;" onclick="tjSortBy('date')">DATE ⇅</th>
                   <th onclick="tjSortBy('direction')">DIR ⇅</th>
                   <th onclick="tjSortBy('strike')">STRIKE ⇅</th>
-                  <th>EXPIRY</th>
-                  <th>TYPE</th>
+                  <th>EXP</th>
                   <th>SETUP</th>
                   <th onclick="tjSortBy('entry')">ENTRY ⇅</th>
                   <th onclick="tjSortBy('exit')">EXIT ⇅</th>
                   <th>QTY</th>
                   <th onclick="tjSortBy('pnl')">P&amp;L ⇅</th>
-                  <th onclick="tjSortBy('pnlpct')">P&amp;L % ⇅</th>
+                  <th>P&amp;L %</th>
+                  <th onclick="tjSortBy('holdingMins')">HOLD ⇅</th>
                   <th onclick="tjSortBy('outcome')">RESULT ⇅</th>
                   <th style="text-align:left;">NOTES</th>
+                  <th title="Screenshot">📷</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody id="tjTradeBody">
-                <tr><td colspan="14" style="text-align:center;color:var(--text3);padding:24px;font-size:12px;">No trades logged yet. Use the form to add your first trade.</td></tr>
+                <tr><td colspan="15" style="text-align:center;color:var(--text3);padding:24px;font-size:12px;">No trades logged yet. Use the form to add your first trade.</td></tr>
               </tbody>
             </table>
           </div>
