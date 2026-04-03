@@ -828,6 +828,53 @@
     padding: 60px 0;
   }
 
+
+  /* ── HUB AI OVERVIEW ── */
+  .hub-ai-overview {
+    margin-bottom: 10px;
+  }
+  .hub-ai-overview .panel-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .hub-ai-overview .panel-label .ai-ov-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--cyan);
+    opacity: 0.7;
+  }
+  #aiSummary {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.85;
+    color: var(--text2);
+    padding: 4px 2px;
+    min-height: 48px;
+  }
+  #aiSummary.loading::after {
+    content: '▌';
+    animation: blink 0.9s step-end infinite;
+  }
+  #aiSummary .ov-para {
+    margin-bottom: 14px;
+  }
+  #aiSummary .ov-para:last-child { margin-bottom: 0; }
+  #aiSummaryRefresh {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text3);
+    font-family: 'Orbitron', monospace;
+    font-size: 8px;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  #aiSummaryRefresh:hover { border-color: var(--cyan); color: var(--cyan); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
   /* ── AI CHAT PANEL ── */
   /* Floating trigger button */
   #aiTrigger{
@@ -1107,6 +1154,18 @@
       </div>
     </div>
     <div id="narratorStatus" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);flex-shrink:0;">—</div>
+  </div>
+
+  <!-- Row 3b: AI Market Overview -->
+  <div class="panel hub-ai-overview" style="margin-bottom:10px;">
+    <div class="panel-label">
+      ⬡ MARKET OVERVIEW — AI ANALYSIS
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="ai-ov-badge" id="aiSummaryModel">● GROK</span>
+        <button id="aiSummaryRefresh" onclick="generateSummary(_md,_sd,true)">↻ REFRESH</button>
+      </div>
+    </div>
+    <div id="aiSummary"><span style="color:var(--text3);font-size:12px;">Generating overview...</span></div>
   </div>
 
   <!-- Row 4: Chart + Bloomberg -->
