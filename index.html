@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -692,46 +691,50 @@
      GAP STATS
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-gap-stats">
-  <!-- Section 1: PH/FH deep-dive (GAP_STATS data) -->
-  <div id="gapStatsContent"><div class="no-data">Loading Gap Stats...</div></div>
+  <div style="max-width:1400px;margin:0 auto;box-sizing:border-box;">
 
-  <!-- Section 2: Daily gap analysis (OHLC-derived) -->
-  <div id="gapOHLCSection" style="margin-top:16px;">
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">⬡ DAILY GAP ANALYSIS — OHLC DERIVED</div>
-    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;" id="gapStatCards"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
-      <div>
-        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">GAP SIZE DISTRIBUTION</div>
-        <div id="gapSizeChart"></div>
+    <!-- Section 1: Daily gap analysis (OHLC-derived) -->
+    <div id="gapOHLCSection" style="margin-bottom:16px;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">⬡ DAILY GAP ANALYSIS — OHLC DERIVED</div>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;min-width:0;" id="gapStatCards"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;min-width:0;">
+        <div style="min-width:0;overflow:hidden;">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">GAP SIZE DISTRIBUTION</div>
+          <div id="gapSizeChart"></div>
+        </div>
+        <div style="min-width:0;overflow:hidden;">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">GAP FILL RATE BY DAY OF WEEK</div>
+          <div id="gapByDayChart"></div>
+        </div>
+        <div style="min-width:0;overflow:hidden;">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">GAP CLOSE TIMING</div>
+          <div id="gapCloseTimingChart"></div>
+        </div>
       </div>
-      <div>
-        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">GAP FILL RATE BY DAY OF WEEK</div>
-        <div id="gapByDayChart"></div>
-      </div>
-      <div>
-        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">GAP CLOSE TIMING</div>
-        <div id="gapCloseTimingChart"></div>
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">ALL GAPS — MOST RECENT FIRST</div>
+      <div style="overflow-x:auto;max-height:240px;overflow-y:auto;">
+        <table class="data-table" id="gapHistTable">
+          <thead><tr>
+            <th>DATE</th><th>PREV CLOSE</th><th>OPEN</th><th>GAP $</th><th>GAP %</th>
+            <th>DIR</th><th>FILLED SAME DAY</th><th>HIGH</th><th>LOW</th><th>CLOSE</th>
+          </tr></thead>
+          <tbody id="gapHistBody"></tbody>
+        </table>
       </div>
     </div>
-    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">ALL GAPS — MOST RECENT FIRST</div>
-    <div style="overflow-x:auto;max-height:240px;overflow-y:auto;">
-      <table class="data-table" id="gapHistTable">
-        <thead><tr>
-          <th>DATE</th><th>PREV CLOSE</th><th>OPEN</th><th>GAP $</th><th>GAP %</th>
-          <th>DIR</th><th>FILLED SAME DAY</th><th>HIGH</th><th>LOW</th><th>CLOSE</th>
-        </tr></thead>
-        <tbody id="gapHistBody"></tbody>
-      </table>
+
+    <!-- Section 2: Weekly gap stats (WEM-derived) -->
+    <div style="margin-bottom:16px;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">⬡ WEEKLY GAP STATS</div>
+      <div id="gapStats"></div>
     </div>
-  </div>
 
-  <!-- Section 3: Large gap threshold analysis -->
-  <div id="largeGapStatsSection" style="margin-top:16px;"></div>
+    <!-- Section 3: Large gap threshold analysis -->
+    <div id="largeGapStatsSection" style="margin-bottom:16px;"></div>
 
-  <!-- Section 4: Weekly gap stats (WEM-derived) -->
-  <div style="margin-top:16px;">
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">⬡ WEEKLY GAP STATS</div>
-    <div id="gapStats"></div>
+    <!-- Section 4: PH/FH deep-dive (GAP_STATS data) -->
+    <div id="gapStatsContent"><div class="no-data">Loading Gap Stats...</div></div>
+
   </div>
 </div>
 
