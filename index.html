@@ -556,6 +556,7 @@
     <div class="subtab" onclick="switchGroupSub('intraday-windows',this)">WINDOWS</div>
     <div class="subtab" onclick="switchGroupSub('intraday-volume',this)">VOLUME</div>
     <div class="subtab" onclick="switchGroupSub('session-vol',this)">VOLATILITY</div>
+    <div class="subtab" onclick="switchGroupSub('gex-intraday',this)">⬡ GEX MAP</div>
   </div>
   <!-- Derivatives subtabs -->
   <div class="subtab-group" id="subtabs-derivatives">
@@ -744,6 +745,13 @@
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-session-vol">
   <div id="sessionVolContent"><div class="no-data">Loading Session Volatility...</div></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     GEX INTRADAY INTERVAL MAP
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-gex-intraday">
+  <div id="gexIntradayContent" style="padding:16px;"><div class="no-data">Loading GEX Interval Map...</div></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -1575,6 +1583,11 @@
       <div class="panel-label">⬡ VIX TERM STRUCTURE + SKEW</div>
       <div id="gexVixTerm"></div>
     </div>
+  </div>
+  <!-- Row 4: Daily GEX History Chart -->
+  <div class="panel" style="margin-top:10px;">
+    <div class="panel-label">⬡ GEX LEVEL HISTORY — DAILY (90 DAYS)</div>
+    <div id="gexDailyHistory"><div class="no-data">Loading...</div></div>
   </div>
 </div>
 
