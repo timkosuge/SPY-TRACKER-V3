@@ -1,9 +1,38 @@
 // functions/chat/login.js
 // POST /chat/login  { username, password }
 
-import { json, err, preflight, verifyPassword, generateToken } from './_utils.js';
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+const json = (data, status = 200) => new Response(JSON.stringify(data), {
+  status, headers: { 'Content-Type': 'application/json', ...CORS },
+});
+const err  = (msg, status = 400) => json({ error: msg }, status);
+const preflight = () => new Response(null, { status: 204, headers: CORS });
 
-const SESSION_TTL = 60 * 60 * 24 * 30; // 30 days
+async function hashPassword(password, salt) {
+  const s = salt || crypto.randomUUID().replace(/-/g, '');
+  const data = new TextEncoder().encode(s + password);
+  const hashBuf = await crypto.subtle.digest('SHA-256', data);
+  const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  return { hash: `${s}:${hashHex}` };
+}
+
+async function verifyPassword(password, stored) {
+  const [salt] = stored.split(':');
+  const { hash } = await hashPassword(password, salt);
+  return hash === stored;
+}
+
+function generateToken() {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+const SESSION_TTL = 60 * 60 * 24 * 30;
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -30,11 +59,9 @@ export async function onRequest(context) {
   const ok = await verifyPassword(password, user.password);
   if (!ok) return err('Invalid username or password', 401);
 
-  // Update last_seen
   await db.prepare('UPDATE chat_users SET last_seen = unixepoch() WHERE id = ?')
     .bind(user.id).run();
 
-  // Create session
   const token = generateToken();
   const now   = Math.floor(Date.now() / 1000);
   await db.prepare(
