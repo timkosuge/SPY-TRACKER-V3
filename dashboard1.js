@@ -94,11 +94,13 @@ function switchTab(id){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
-  // Find and activate the correct top-level tab button
-  const topTabs = ['hub','desk','overview','derivatives','history','media','journal','blog','floor'];
-  const btnIdx = topTabs.indexOf(id);
-  const allTabs = document.querySelectorAll('.tab');
-  if(btnIdx>=0 && allTabs[btnIdx]) allTabs[btnIdx].classList.add('active');
+  // Find and activate tab button by onclick content — index lookup breaks with group-tabs in the list
+  document.querySelectorAll('.tab').forEach(t => {
+    const oc = t.getAttribute('onclick') || '';
+    if (oc.includes("switchTab('" + id + "')") || oc.includes('switchTab("' + id + '")')) {
+      t.classList.add('active');
+    }
+  });
 
   const p=$('panel-'+id); if(p)p.classList.add('active');
   if(id==='media') initMediaTab();
