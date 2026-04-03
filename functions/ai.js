@@ -1,6 +1,7 @@
 // Cloudflare Pages Function — /ai
-// Routes to Grok (xAI) primary, with model config via env var.
-// Set XAI_API_KEY in Cloudflare Pages environment variables.
+// Routes to Grok (xAI API).
+// Set XAI_API_KEY in Cloudflare Pages → Settings → Environment Variables.
+// Optional: set GROK_MODEL to override model (default: grok-3-mini-fast-beta)
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -22,15 +23,17 @@ export async function onRequestPost(context) {
 
     const apiKey = env.XAI_API_KEY;
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'XAI_API_KEY not configured in Cloudflare env vars' }), {
-        status: 500, headers: CORS
-      });
+      return new Response(JSON.stringify({
+        error: 'XAI_API_KEY not set. Go to Cloudflare Pages → your project → Settings → Environment Variables and add XAI_API_KEY.',
+      }), { status: 500, headers: CORS });
     }
 
-    // Build messages array — system prompt goes as first message with role 'system'
+    // System prompt first, then conversation history
     const fullMessages = [];
     if (system) fullMessages.push({ role: 'system', content: system });
     fullMessages.push(...(messages || []));
+
+    const model = env.GROK_MODEL || 'grok-3-mini-fast-beta';
 
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
@@ -39,18 +42,17 @@ export async function onRequestPost(context) {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: env.GROK_MODEL || 'grok-beta',
-        max_tokens: max_tokens || 800,
+        model,
+        max_tokens: max_tokens || 600,
         messages: fullMessages,
-      })
+      }),
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      return new Response(JSON.stringify({ error: data.error?.message || `xAI API error ${response.status}` }), {
-        status: response.status, headers: CORS
-      });
+      const msg = data.error?.message || `xAI API returned ${response.status}`;
+      return new Response(JSON.stringify({ error: msg }), { status: response.status, headers: CORS });
     }
 
     const content = data.choices?.[0]?.message?.content || '';
