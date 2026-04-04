@@ -5976,6 +5976,26 @@ window._ivpSetLookback = function(val) { _ivpLookback = val; renderIntradayVolPr
 window._ivpSetDow      = function(val) { _ivpDow = val;      renderIntradayVolProfile(); };
 
 function renderIntradayVolProfile() {
+  // ── Tab intro banner ─────────────────────────────────────────────────────────
+  const _ivIntro = `<div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:14px 18px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
+    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">⬡ WHAT IS THIS TAB?</div>
+    <strong style="color:var(--text1);">Intraday Volatility</strong> tracks how SPY's realized volatility and range behave throughout the trading session.
+    Where does volatility compress? Where does it expand? This is the foundation for setting realistic targets and stops for intraday trades.
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;font-size:11px;">
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid var(--cyan);">
+        <div style="color:var(--cyan);font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">RANGE BY TIME BUCKET</div>
+        Average point range for each 30-minute window of the day. The open is always the widest. Use this to calibrate stop size by time of day.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ff8800;">
+        <div style="color:#ff8800;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">VOLATILITY REGIMES</div>
+        High-vol vs low-vol days behave differently across all time windows. This tab separates them so you can see how the intraday structure shifts on big-range days.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ffcc00;">
+        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">CUMULATIVE RANGE</div>
+        How much of the day's total range has typically been realized by each time bucket? By noon, what percentage of the expected range is usually in?
+      </div>
+    </div>
+  </div>`;
   const el = document.getElementById('intradayVolContent');
   if (!el) return;
 
@@ -6111,6 +6131,26 @@ function renderIntradayVolProfile() {
 // INTRADAY VOLUME STATS — correlations, quintile analysis, cumulative curve
 // ─────────────────────────────────────────────────────────────────────────────
 function renderIntradayVolStats() {
+  // ── Tab intro banner ─────────────────────────────────────────────────────────
+  const _ivIntro = `<div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:14px 18px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
+    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">⬡ WHAT IS THIS TAB?</div>
+    <strong style="color:var(--text1);">Intraday Volatility</strong> tracks how SPY's realized volatility and range behave throughout the trading session.
+    Where does volatility compress? Where does it expand? This is the foundation for setting realistic targets and stops for intraday trades.
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;font-size:11px;">
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid var(--cyan);">
+        <div style="color:var(--cyan);font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">RANGE BY TIME BUCKET</div>
+        Average point range for each 30-minute window of the day. The open is always the widest. Use this to calibrate stop size by time of day.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ff8800;">
+        <div style="color:#ff8800;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">VOLATILITY REGIMES</div>
+        High-vol vs low-vol days behave differently across all time windows. This tab separates them so you can see how the intraday structure shifts on big-range days.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ffcc00;">
+        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">CUMULATIVE RANGE</div>
+        How much of the day's total range has typically been realized by each time bucket? By noon, what percentage of the expected range is usually in?
+      </div>
+    </div>
+  </div>`;
   const el = document.getElementById('intradayVolContent');
   if (!el) return;
   if (typeof INTRADAY_VOL_STATS === 'undefined' || typeof INTRADAY_VOL_PROFILE === 'undefined') return;
@@ -6235,7 +6275,7 @@ function renderIntradayVolStats() {
   const statsDiv = document.getElementById('intradayVolStats');
   if (!statsDiv) return;
 
-  statsDiv.innerHTML =
+  statsDiv.innerHTML = _ivIntro +
     section('⬡ HOW MUCH VOLUME CHANGES EVERYTHING',
       `<div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
         Not all trading days are equal — days with much heavier volume than usual behave very differently 
@@ -6295,6 +6335,30 @@ function renderIntradayVolStats() {
 // WINDOW STATS — London Close & Pre-Power-Hour windows
 // ─────────────────────────────────────────────────────────────────────────────
 function renderWindowStats() {
+  // ── Tab intro banner ─────────────────────────────────────────────────────────
+  const _wsIntro = `<div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:14px 18px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
+    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">⬡ WHAT IS THIS TAB?</div>
+    <strong style="color:var(--text1);">Intraday Windows</strong> analyzes specific time windows within the trading day — not just when the high and low form, but how each window
+    performs as a standalone trade. Think of it as slicing the day into chunks and asking: if you only traded this window, what would your edge look like?
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px;font-size:11px;">
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid var(--cyan);">
+        <div style="color:var(--cyan);font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">OPEN WINDOW (9:30–10:00)</div>
+        The most volatile 30 minutes of the day. Average range, directional bias, fill rates, and how often the open direction held through the session.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #00ccff;">
+        <div style="color:#00ccff;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">MIDDAY WINDOW (12:00–1:30)</div>
+        The lunch lull — volume dries up, ranges compress. How consistent is the midday drift? Does it mean revert or continue the morning move?
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ffcc00;">
+        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">POWER HOUR (1:00–2:00 CT)</div>
+        The most directional window of the day. High correlation with next-day gap direction. Strong power hours tend to continue; weak ones tend to reverse.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ff8800;">
+        <div style="color:#ff8800;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">CLOSE WINDOW (2:00–3:00 CT)</div>
+        MOC orders, rebalancing, and institutional positioning all hit here. The close window often reverses the power hour or amplifies it — the data tells you which.
+      </div>
+    </div>
+  </div>`;
   const el = document.getElementById('intradayWindowsContent');
   if (!el) return;
   if (typeof WINDOW_STATS === 'undefined') {
@@ -6496,7 +6560,7 @@ function renderWindowStats() {
   </div>`;
 
   // ── Assemble ───────────────────────────────────────────────────────────────
-  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+  el.innerHTML = _wsIntro + `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
     <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;">⬡ KEY INTRADAY WINDOWS</div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
       Two recurring intraday time windows tend to produce predictable directional moves in SPY — 
@@ -6659,6 +6723,38 @@ window._gsSetLookback = function(v){ _gsLookback=v; renderGapStats(); };
 window._gsSetDow      = function(v){ _gsDow=v;      renderGapStats(); };
 
 function renderGapStats() {
+  // ── Tab intro banner ─────────────────────────────────────────────────────────
+  const _gsIntro = `<div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:14px 18px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
+    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">⬡ WHAT IS THIS TAB?</div>
+    <strong style="color:var(--text1);">Gap Stats</strong> analyzes what happens when SPY opens above or below the prior day's close.
+    Every section here is built from 1-minute intraday bars and answers a specific question traders care about.
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;font-size:11px;">
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid var(--cyan);">
+        <div style="color:var(--cyan);font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">AT A GLANCE</div>
+        Summary stats for all gap days — average gap size, fill rate, first-hour behavior, and how often the first hour predicted the close.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #00ccff;">
+        <div style="color:#00ccff;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">GAP TYPE BEHAVIOR</div>
+        Breaks sessions into Gap Up, Flat, and Gap Down. Shows what the power hour the day before looked like and how the next morning played out.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ffcc00;">
+        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">POWER HOUR → GAP</div>
+        If the prior day's 1–2pm CT hour was strong or weak, how did that affect the next morning's gap? Pattern recognition across hundreds of sessions.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #8855ff;">
+        <div style="color:#8855ff;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">KEY PATTERNS</div>
+        Momentum vs reversal days — when the first hour goes with vs against the gap. Late-session surges and fades. Gap fill rates by scenario.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ff8800;">
+        <div style="color:#ff8800;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">DAY OF WEEK</div>
+        Monday gaps behave differently than Friday gaps. This section breaks down gap frequency, fill rate, and average day range by weekday.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ff3355;">
+        <div style="color:#ff3355;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">BIG GAPS + FOLLOW-THROUGH</div>
+        Isolates the largest gaps (1%, 1.5%, 2%+) and shows continuation vs reversal rates, average session returns, and whether the first hour predicted direction.
+      </div>
+    </div>
+  </div>`;
   const el = document.getElementById('gapStatsContent');
   if (!el) return;
   if (typeof GAP_STATS === 'undefined') {
@@ -6981,7 +7077,7 @@ function renderGapStats() {
     <div>Gap = (today's open − prior close) ÷ prior close × 100 · Gap Fill = price touched prior close during session</div>
   </div>`;
 
-  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+  el.innerHTML = _gsIntro + `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
       <div>
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;">⬡ GAP STATS — PREVIOUS DAY POWER HOUR + NEXT MORNING ANALYSIS</div>
@@ -7075,6 +7171,26 @@ window._todSetLb  = v => { _todLookback = v; renderTimeOfDay(); };
 window._todSetDow = v => { _todDow = v;      renderTimeOfDay(); };
 
 function renderTimeOfDay() {
+  // ── Tab intro banner ─────────────────────────────────────────────────────────
+  const _todIntro = `<div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:14px 18px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
+    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">⬡ WHAT IS THIS TAB?</div>
+    <strong style="color:var(--text1);">Time of Day Stats</strong> maps SPY's intraday behavior by the clock — when does the day's high and low typically form?
+    When does volume spike? When does price drift? Built from years of 1-minute bars filtered by day of week and lookback period.
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;font-size:11px;">
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid var(--cyan);">
+        <div style="color:var(--cyan);font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">HIGH OF DAY TIMING</div>
+        Which 30-minute bucket most often produces the session high? The open spike at 9:30 is real — but how real, and does it vary by day of week?
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ff3355;">
+        <div style="color:#ff3355;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">LOW OF DAY TIMING</div>
+        When does SPY typically find its session low? Morning weakness, midday lows, and late-day capitulation all show up differently in the data.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ffcc00;">
+        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">VOLUME BY TIME</div>
+        Volume is not evenly distributed. The open and close dominate. This shows the exact volume profile through the day so you know when liquidity is thin.
+      </div>
+    </div>
+  </div>`;
   const el = document.getElementById('todStatsContent');
   if (!el) return;
   if (typeof TOD_STATS === 'undefined' || typeof INTRADAY_SESSION_STATS === 'undefined') {
@@ -7498,7 +7614,7 @@ function renderTimeOfDay() {
     </div>`;
 
   // ── Assemble ──────────────────────────────────────────────────────────────
-  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+  el.innerHTML = _todIntro + `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
       <div>
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ TIME OF DAY — INTRADAY TIMING ANALYSIS</div>
@@ -7621,6 +7737,30 @@ window._svStSetLb  = v => { _svStLookback = v; renderSessionVolStats(); };
 window._svStSetDow = v => { _svStDow = v;      renderSessionVolStats(); };
 
 function renderSessionVolStats() {
+  // ── Tab intro banner ─────────────────────────────────────────────────────────
+  const _svIntro = `<div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:14px 18px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
+    <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">⬡ WHAT IS THIS TAB?</div>
+    <strong style="color:var(--text1);">Session Volume Profile</strong> shows where volume actually traded throughout the day — not just total volume, but <em>where price was</em> when volume happened.
+    High-volume nodes (HVNs) act as magnets and support/resistance. Low-volume nodes are air pockets where price moves fast.
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px;font-size:11px;">
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid var(--cyan);">
+        <div style="color:var(--cyan);font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">VOLUME AT PRICE</div>
+        The horizontal bar chart showing how much volume traded at each price level. The widest bars are where the market spent the most time and has the most interest.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ffcc00;">
+        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">HIGH VOLUME NODES (HVN)</div>
+        Price levels with unusually high volume concentration. These tend to act as support/resistance and are often where price stalls or reverses. Watch for retests.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ff8800;">
+        <div style="color:#ff8800;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">LOW VOLUME NODES (LVN)</div>
+        Price gaps in the volume profile — levels where little trading occurred. Price tends to move through these quickly, making them useful for projecting targets.
+      </div>
+      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #8855ff;">
+        <div style="color:#8855ff;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">POINT OF CONTROL (POC)</div>
+        The single price level with the highest volume for the session. Often acts as a gravitational center — price rotates back to POC when momentum fades.
+      </div>
+    </div>
+  </div>`;
   const el = document.getElementById('sessionVolContent');
   if (!el) return;
   if (typeof SESSION_VOL_PROFILE === 'undefined') {
@@ -7934,7 +8074,7 @@ async function renderLiveChart() {
   const el = document.getElementById('liveChartContent');
   if (!el) return;
 
-  el.innerHTML = `
+  el.innerHTML = _svIntro + `
     <div id="lcWrap" style="padding:14px 16px;max-width:1400px;margin:0 auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);">⬡ SPY CHART</div>
