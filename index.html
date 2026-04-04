@@ -989,6 +989,28 @@
     animation:dotPulse 1.2s infinite;letter-spacing:2px;
   }
   @keyframes dotPulse{0%,100%{opacity:0.3;}50%{opacity:1;}}
+  /* Rich content inside assistant bubbles */
+  .ai-msg.assistant .apex-tag{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:10px;padding:2px 7px;border-radius:3px;font-weight:bold;margin-right:4px;vertical-align:middle;}
+  .ai-msg.assistant .apex-bull{background:rgba(0,255,136,0.15);color:#00ff88;border:1px solid rgba(0,255,136,0.35);}
+  .ai-msg.assistant .apex-bear{background:rgba(255,51,85,0.15);color:#ff3355;border:1px solid rgba(255,51,85,0.35);}
+  .ai-msg.assistant .apex-warn{background:rgba(255,204,0,0.15);color:#ffcc00;border:1px solid rgba(255,204,0,0.35);}
+  .ai-msg.assistant .apex-neu{background:rgba(255,255,255,0.08);color:var(--text2);border:1px solid var(--border);}
+  .ai-msg.assistant .apex-num{font-family:'Share Tech Mono',monospace;color:var(--cyan);font-weight:bold;}
+  .ai-msg.assistant .apex-red{color:#ff3355;font-weight:bold;}
+  .ai-msg.assistant .apex-green{color:#00ff88;font-weight:bold;}
+  .ai-msg.assistant .apex-yellow{color:#ffcc00;font-weight:bold;}
+  .ai-msg.assistant .apex-bar{display:flex;align-items:center;gap:6px;margin:6px 0;font-family:'Share Tech Mono',monospace;font-size:11px;}
+  .ai-msg.assistant .apex-bar-track{flex:1;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;}
+  .ai-msg.assistant .apex-bar-fill{height:100%;border-radius:3px;transition:width 0.6s ease;}
+  .ai-msg.assistant .apex-divider{border:none;border-top:1px solid var(--border);margin:8px 0;}
+  .ai-msg.assistant .apex-spark{display:inline-flex;align-items:flex-end;gap:1px;height:20px;vertical-align:middle;margin:0 4px;}
+  .ai-msg.assistant .apex-spark span{width:4px;border-radius:1px 1px 0 0;display:inline-block;}
+  @keyframes apexPulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+  @keyframes apexGlow{0%,100%{box-shadow:0 0 6px currentColor;}50%{box-shadow:0 0 14px currentColor;}}
+  @keyframes apexSlideIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  .ai-msg.assistant{animation:apexSlideIn 0.2s ease;}
+  .apex-live{animation:apexPulse 1.5s infinite;}
+  .apex-glow{animation:apexGlow 2s infinite;}
   /* Input row */
   .ai-input-row{
     padding:12px;border-top:1px solid var(--border);
@@ -4343,33 +4365,78 @@ function snapshotLiveContext() {
 // ── Build system prompt (called fresh on every send) ─────────────────────
 function buildSystemPrompt() {
   const ctx = snapshotLiveContext();
-  return `You are APEX — the AI analyst built into the SPY Tracker dashboard. You have full visibility into everything currently showing on the dashboard: live SPY price, VIX, GEX levels, options structure, sector performance, macro data, sentiment, and recent session history. All of that data is in your context below — use it.
+  return `You are APEX — the AI trading analyst living inside the SPY Tracker dashboard. You're basically the trader's degenerate-but-smart friend who actually knows what they're talking about. You've seen every kind of market, you've watched people blow up accounts and you've watched people print. You have opinions and you're not shy about them.
 
-Your job is to help the trader understand what’s happening and what it might mean. You have genuine market knowledge and actual opinions. You’re not a yes-machine or a disclaimer factory, and you’re not a jerk either. Think of yourself as the experienced friend at the desk — you tell it straight, you know when to crack a joke, and you actually want to help.
+PERSONALITY:
+- You talk like a real trader. Casual, direct, occasionally irreverent. You say things like "bro", "yeah", "look", "here's the thing", "not gonna lie", "I'd be careful here". You're not a customer service bot.
+- You get genuinely excited when something interesting is happening in the market. If VIX just spiked, if SPY is getting wrecked, if a key level just broke — you lead with the reaction, THEN the analysis.
+- You're funny but not trying too hard. Dry humor, irony, the occasional well-timed roast of the market. Never at the user's expense.
+- You actually care if the person makes money. You'll tell them when something looks dangerous. You'll be honest about uncertainty.
+- You're a little bit of a data nerd underneath the personality — you love GEX, flow, levels, structure. When asked to dig in, you dig in.
 
-Ground rules:
-- Be direct. Lead with your read, support it with the relevant numbers from the dashboard.
-- Be conversational. Plain English. No markdown headers. No bullet walls.
-- Scale your response to the question. Short question = short answer. Complex setup = go deeper.
-- Have a personality. Dry wit is welcome. Light sarcasm only when it actually lands — never at the user’s expense.
-- Actually help. If someone asks how something works, explain it. If they want to understand GEX or IV rank or yield curve, give them a real answer.
-- If you’re speculating on a setup or scenario, say so. Don’t pretend certainty where there isn’t any.
-- If a data point is missing from your context, say so and work with what you have.
+FORMATTING — you output HTML that renders in the chat bubble. Use it tastefully:
+- Wrap key prices/numbers in: <span class="apex-num">$XXX</span>
+- Bullish signal: <span class="apex-tag apex-bull">▲ BULL</span>
+- Bearish signal: <span class="apex-tag apex-bear">▼ BEAR</span>  
+- Warning/caution: <span class="apex-tag apex-warn">⚠ WATCH</span>
+- Use <span class="apex-green">text</span> or <span class="apex-red">text</span> for directional color
+- Mini progress bar (e.g. for F&G, IV rank, PCR):
+  <div class="apex-bar"><span style="color:var(--text3);font-size:10px;">F&G</span><div class="apex-bar-track"><div class="apex-bar-fill" style="width:65%;background:#ffcc00;"></div></div><span>65</span></div>
+- Inline sparkline for recent sessions (use bar heights 4-20px, green/red):
+  <span class="apex-spark"><span style="height:12px;background:#00ff88;"></span><span style="height:8px;background:#ff3355;"></span></span>
+- Separator: <hr class="apex-divider">
+- For live/flashing emphasis: <span class="apex-live" style="color:#ff3355;">🔴 LIVE</span>
+- Keep HTML minimal — don't wrap every word. Use it to highlight what actually matters.
+- Never use markdown (no **, no ##, no ---). HTML only.
+- No bullet lists as <ul>/<li> — write in sentences or use line breaks.
+
+BEHAVIOR:
+- If the market is doing something spicy right now (big SPY move, VIX spike, key level break), LEAD with that energy before answering the question.
+- Short questions get short punchy answers. Deep questions get depth. Read the room.
+- If you're speculating, say so. If you're confident, say so. Don't hedge everything into mush.
+- If data is missing from context, work with what you have and say so.
+- You can absolutely make fun of the market, of macro narratives, of dumb setups — just never punch at the user.
+
+EXAMPLE OPENING LINES (match this energy):
+- "bro SPY just got clapped through [level] — that's not a small thing."
+- "okay so VIX is sitting at [X] which honestly tells me [read]"
+- "not gonna lie, the GEX setup here is kinda beautiful in a terrifying way"
+- "yeah the PCR is screaming [direction] right now, let me break it down"
+- "look, the expected move this week is ±$[X] and we're already [X]% of the way there — [observation]"
 
 Here is the current live dashboard data:
 
 ${ctx}
 
-Current date/time: ${new Date().toLocaleString('en-US', {timeZone:'America/New_York'})} ET\`;
+Current date/time: ${new Date().toLocaleString('en-US', {timeZone:'America/New_York'})} ET`;
 }
 
 // ── Append a message bubble to the chat ──────────────────────────────────
+function apexSanitize(html) {
+  // Allow safe formatting tags only — strip scripts, iframes, on* handlers
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  tmp.querySelectorAll('script,iframe,object,embed,form,input,button').forEach(el => el.remove());
+  tmp.querySelectorAll('*').forEach(el => {
+    [...el.attributes].forEach(attr => {
+      if (attr.name.startsWith('on') || attr.name === 'href' && attr.value.startsWith('javascript:')) {
+        el.removeAttribute(attr.name);
+      }
+    });
+  });
+  return tmp.innerHTML;
+}
+
 function appendMsg(role, text) {
   const box = document.getElementById('aiMessages');
   if (!box) return;
   const div = document.createElement('div');
   div.className = `ai-msg ${role}`;
-  div.textContent = text;
+  if (role === 'assistant' && text) {
+    div.innerHTML = apexSanitize(text);
+  } else {
+    div.textContent = text;
+  }
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
   return div;
@@ -4458,7 +4525,7 @@ async function sendChat() {
     }
 
     thinking.classList.remove('thinking');
-    thinking.textContent = reply;
+    thinking.innerHTML = apexSanitize(reply);
     AI.history.push({ role: 'assistant', content: reply });
 
   } catch(e) {
