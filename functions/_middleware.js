@@ -12,6 +12,7 @@ export async function onRequest(context) {
     '/premarket', '/ai', '/liquidity', '/ollama', '/gex-history',
     '/chat',  // chat API — has its own session auth
     '/blog',  // blog API — public read, password-protected write
+    '/videos', // video library — public read, password-protected write
   ];
   if (API_PATHS.some(p => path === p || path.startsWith(p + '?') || path.startsWith(p + '/'))) {
     return next();
