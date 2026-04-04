@@ -1068,23 +1068,31 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
     const tY  = 40;
     const toY = v => tY + tH - ((v + 1.5) / 3) * tH;
     const zCl = Math.max(-1.5, Math.min(1.5, z));
-    const fH  = ((zCl + 1.5) / 3) * tH;
-    const fY  = tY + tH - fH;
+    // Fill from center (z=0) outward — up for positive z, down for negative z
+    const midY = toY(0); // pixel Y of center line
+    const fillTop    = zCl >= 0 ? toY(zCl) : midY;
+    const fillBottom = zCl <  0 ? toY(zCl) : midY;
+    const fY = fillTop;
+    const fH = fillBottom - fillTop;
 
     const bH = tH, bY = tY;
+    // Bell curve always centered at z=0 (neutral midpoint), stdZ sets spread
+    // avgZ line drawn separately to show where historical avg falls
+    const bellSigma = Math.max(stdZ, 0.3); // don't let it go too narrow
     const bLine = Array.from({length: bW+1}, (_,i) => {
       const zv = -1.8 + (i/bW)*3.6;
-      const y  = bY + bH - Math.exp(-0.5*((zv-avgZ)/Math.max(stdZ,0.01))**2) * bH * 0.82;
+      const y  = bY + bH - Math.exp(-0.5*(zv/bellSigma)**2) * bH * 0.82;
       return `${i===0?'M':'L'}${(bX+i).toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
     const bFill = bLine + ` L${bX+bW},${bY+bH} L${bX},${bY+bH} Z`;
 
+    // Shade from center to NOW position
     const shade = (() => {
       const pts = [];
       for(let i=0;i<=bW;i++){
         const zv=-1.8+(i/bW)*3.6;
-        if(z>=0 ? zv<=zCl : zv>=zCl){
-          const y=bY+bH-Math.exp(-0.5*((zv-avgZ)/Math.max(stdZ,0.01))**2)*bH*0.82;
+        if(z>=0 ? zv<=zCl && zv>=0 : zv>=zCl && zv<=0){
+          const y=bY+bH-Math.exp(-0.5*(zv/bellSigma)**2)*bH*0.82;
           if(!pts.length) pts.push(`M${(bX+i).toFixed(1)},${(bY+bH).toFixed(1)}`);
           pts.push(`L${(bX+i).toFixed(1)},${y.toFixed(1)}`);
         }
@@ -1095,7 +1103,8 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
       }
       return pts.join(' ');
     })();
-    const zBX = bX + ((zCl+1.8)/3.6)*bW;
+    const zBX  = bX + ((zCl+1.8)/3.6)*bW;   // NOW line x position
+    const z0BX = bX + (1.8/3.6)*bW;          // z=0 center x position
 
     const modeNote = isStatic2
       ? `Static ±$${fmt(halfRange2,2)} · fixed from Fri close`
@@ -1132,6 +1141,10 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
               fill="${c}" font-size="10" font-family="Orbitron,monospace">${v>0?'+':''}${v}</text>`:''}`;
         }).join('')}
 
+        <!-- Center line at z=0 always visible -->
+        <line x1="${tX-4}" y1="${midY}" x2="${tX+tW+4}" y2="${midY}"
+          stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="3,3"/>
+        <!-- Fill indicator arrow -->
         <polygon points="${tX+tW+3},${toY(zCl)} ${tX+tW+14},${toY(zCl)-7} ${tX+tW+14},${toY(zCl)+7}"
           fill="${zColor}"/>
         <text x="${tX+tW+18}" y="${toY(zCl)-10}"
@@ -1213,14 +1226,20 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
           stroke="${zColor}" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.8"/>
         <text x="${zBX}" y="${bY-4}" text-anchor="middle"
           fill="${zColor}" font-size="10" font-family="Share Tech Mono,monospace" font-weight="bold">NOW</text>
-        ${(()=>{
+        <!-- z=0 center tick always at midpoint of bell -->
+        <line x1="${z0BX}" y1="${bY+bH}" x2="${z0BX}" y2="${bY+bH+5}"
+          stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+        <text x="${z0BX}" y="${bY+bH+14}" text-anchor="middle"
+          fill="rgba(255,255,255,0.3)" font-size="8" font-family="Orbitron,monospace">0</text>
+        <!-- avgZ indicator if meaningfully off center -->
+        ${Math.abs(avgZ) > 0.05 ? (()=>{
           const ax=bX+((Math.max(-1.8,Math.min(1.8,avgZ))+1.8)/3.6)*bW;
           return `<line x1="${ax}" y1="${bY+bH-5}" x2="${ax}" y2="${bY+bH+4}"
-              stroke="#555070" stroke-width="1.5"/>
+              stroke="#556688" stroke-width="1.5" stroke-dasharray="2,2"/>
             <text x="${ax}" y="${bY+bH+22}" text-anchor="middle"
-              fill="#505070" font-size="8" font-family="Share Tech Mono,monospace">
-              AVG ${avgZ>=0?'+':''}${fmt(avgZ,2)}</text>`;
-        })()}
+              fill="#556688" font-size="8" font-family="Share Tech Mono,monospace">
+              μ${avgZ>=0?'+':''}${fmt(avgZ,2)}</text>`;
+        })() : ''}
       </svg>
 
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:8px;">
