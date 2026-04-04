@@ -2202,166 +2202,153 @@
      MEDIA
 ════════════════════════════════════════════════════════ -->
 <style>
-  #mediaLayout { display:flex; gap:0; height:calc(100vh - 120px); min-height:560px; overflow:hidden; }
-  #mediaLeft   { flex:1; display:flex; flex-direction:column; gap:8px; min-width:0; transition: margin-right 0.25s ease; }
+  /* ── Media tab layout ── */
+  #mediaWrap     { display:flex; flex-direction:column; height:calc(100vh - 120px); min-height:560px; gap:8px; }
+  #mediaQuickBar { display:flex; gap:6px; flex-shrink:0; align-items:center; flex-wrap:nowrap; overflow-x:auto; padding-bottom:2px; }
+  #mediaQuickBar::-webkit-scrollbar { height:3px; }
+  #mediaQuickBar::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 
-  /* Right side: toggle tab + inner panel side by side */
-  #mediaDrawerWrap {
-    display: flex;
-    flex-direction: row;
-    align-items: stretch;
-    margin-left: 10px;
-    flex-shrink: 0;
+  /* Quick-source pill buttons */
+  .mq-pill {
+    display:inline-flex; align-items:center; gap:6px; flex-shrink:0;
+    padding:5px 12px; border-radius:20px; cursor:pointer;
+    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px;
+    border:1px solid var(--border); background:var(--bg3); color:var(--text2);
+    transition:all 0.15s; white-space:nowrap;
   }
+  .mq-pill:hover { border-color:var(--cyan); color:var(--cyan); background:rgba(0,204,255,0.08); }
+  .mq-pill .mq-live { width:6px; height:6px; border-radius:50%; background:#ff3355; animation:mqPulse 1.5s infinite; flex-shrink:0; }
+  .mq-pill .mq-tab  { width:6px; height:6px; border-radius:50%; background:var(--text3); flex-shrink:0; }
+  @keyframes mqPulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
 
-  /* Vertical toggle tab — always visible */
+  /* Player + drawer row */
+  #mediaLayout   { display:flex; gap:0; flex:1; min-height:0; overflow:hidden; }
+  #mediaLeft     { flex:1; display:flex; flex-direction:column; gap:8px; min-width:0; }
+
+  /* Drawer wrap */
+  #mediaDrawerWrap { display:flex; flex-direction:row; align-items:stretch; margin-left:10px; flex-shrink:0; }
+
+  /* Toggle tab */
   #mediaDrawerToggle {
-    width: 26px;
-    flex-shrink: 0;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-    color: var(--text3);
-    user-select: none;
-    position: relative;
-    z-index: 1;
+    width:28px; flex-shrink:0;
+    background:var(--bg3); border:1px solid var(--border); border-radius:4px;
+    cursor:pointer; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:8px;
+    transition:background 0.15s, color 0.15s, border-color 0.15s;
+    color:var(--text3); user-select:none;
   }
-  #mediaDrawerToggle:hover { background: rgba(0,204,255,0.08); color: var(--cyan); border-color: rgba(0,204,255,0.3); }
-  #mediaDrawerToggle .dt-label {
-    writing-mode: vertical-rl;
-    font-family: 'Orbitron', monospace;
-    font-size: 7px;
-    letter-spacing: 2px;
-  }
-  #mediaDrawerToggle .dt-arrow {
-    font-size: 9px;
-    transition: transform 0.25s;
-    line-height: 1;
-  }
-  /* When open: arrow points right (◀ = close); when closed: arrow points left (▶ = open) */
-  #mediaDrawerToggle.open .dt-arrow { transform: rotate(0deg); }
-  #mediaDrawerToggle.closed .dt-arrow { transform: rotate(180deg); }
+  #mediaDrawerToggle:hover { background:rgba(0,204,255,0.08); color:var(--cyan); border-color:rgba(0,204,255,0.3); }
+  #mediaDrawerToggle .dt-label { writing-mode:vertical-rl; font-family:'Orbitron',monospace; font-size:7px; letter-spacing:2px; }
+  #mediaDrawerToggle .dt-arrow { font-size:9px; transition:transform 0.25s; line-height:1; }
+  #mediaDrawerToggle.open  .dt-arrow { transform:rotate(0deg); }
+  #mediaDrawerToggle.closed .dt-arrow { transform:rotate(180deg); }
 
-  /* Sliding inner panel */
+  /* Sliding inner panel — wider for more library space */
   #mediaDrawerInner {
-    width: 360px;
-    max-width: 360px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border);
-    border-left: none;
-    border-radius: 0 4px 4px 0;
-    background: var(--bg2);
-    transition: max-width 0.25s ease, opacity 0.2s ease;
-    opacity: 1;
-    margin-left: -1px; /* merge with toggle tab border */
+    width:480px; max-width:480px; overflow:hidden;
+    display:flex; flex-direction:column;
+    border:1px solid var(--border); border-left:none; border-radius:0 4px 4px 0;
+    background:var(--bg2);
+    transition:max-width 0.25s ease, opacity 0.2s ease;
+    opacity:1; margin-left:-1px;
   }
-  #mediaDrawerInner.hidden {
-    max-width: 0;
-    opacity: 0;
-    pointer-events: none;
-    border-color: transparent;
-  }
+  #mediaDrawerInner.hidden { max-width:0; opacity:0; pointer-events:none; border-color:transparent; }
 
-  /* Sources section */
-  #mediaSourcesSection { flex-shrink: 0; border-bottom: 1px solid var(--border); }
-  #mediaSourcesToggle {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 12px; cursor: pointer;
-    font-family: 'Orbitron', monospace; font-size: 8px; letter-spacing: 1.5px; color: var(--text3);
-  }
-  #mediaSourcesToggle:hover { color: var(--text2); background: rgba(255,255,255,0.03); }
-  #mediaSourcesBody { padding: 0 10px 10px; overflow-y: auto; max-height: 220px; }
-  #mediaSourcesSection.sources-collapsed #mediaSourcesBody { display: none; }
-  #mediaSourcesSection.sources-collapsed #sourcesArrow { transform: rotate(-90deg); }
-  #sourcesArrow { transition: transform 0.2s; display: inline-block; }
-
-  /* Video library section */
-  #mediaLibSection { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  /* Library header */
   #mediaLibHeader {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 12px; flex-shrink: 0; border-bottom: 1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 12px; flex-shrink:0; border-bottom:1px solid var(--border);
   }
-  #videoLibTopicBar {
-    display: flex; gap: 4px; flex-wrap: wrap;
-    padding: 6px 10px; flex-shrink: 0; border-bottom: 1px solid var(--border);
-    min-height: 0;
+
+  /* Topic dropdown row */
+  #mediaLibTopicRow {
+    display:flex; align-items:center; gap:8px;
+    padding:6px 10px; flex-shrink:0; border-bottom:1px solid var(--border);
   }
-  #videoLibList { flex: 1; overflow-y: auto; padding: 8px 10px; }
-  #videoLibList::-webkit-scrollbar { width: 4px; }
-  #videoLibList::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  #videoLibTopicSel {
+    flex:1; background:var(--bg3); border:1px solid var(--border); border-radius:3px;
+    padding:4px 8px; color:var(--text1); font-family:'Share Tech Mono',monospace;
+    font-size:11px; outline:none; cursor:pointer;
+  }
+
+  /* Library list */
+  #mediaLibSection { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+  #videoLibList { flex:1; overflow-y:auto; padding:8px 10px; }
+  #videoLibList::-webkit-scrollbar { width:4px; }
+  #videoLibList::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 </style>
 
 <div class="tab-panel" id="panel-media">
-  <div id="mediaLayout">
+  <div id="mediaWrap">
 
-    <!-- LEFT: Player -->
-    <div id="mediaLeft">
-      <div class="panel" style="flex-shrink:0;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div class="panel-label" style="margin-bottom:0;flex-shrink:0;">▶ PLAYER</div>
-          <span id="mediaNowPlaying" style="font-size:11px;color:var(--cyan);font-family:'Share Tech Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <input id="mediaUrlInput" type="text"
-            placeholder="Paste any YouTube URL (watch, live, shorts) to embed..."
-            style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:7px 12px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"
-            onkeydown="if(event.key==='Enter')loadMediaUrl()"/>
-          <button onclick="loadMediaUrl()"
-            style="background:var(--cyan);color:#000;border:none;border-radius:3px;padding:7px 14px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;cursor:pointer;font-weight:bold;flex-shrink:0;">LOAD</button>
-        </div>
+    <!-- QUICK SOURCE BAR — horizontal pills above player -->
+    <div id="mediaQuickBar">
+      <span style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);flex-shrink:0;">SOURCES:</span>
+      <!-- Live embeds -->
+      <div class="mq-pill" onclick="playLiveChannel('UCIALMKvObZNtJ6AmdCLP7Lg','Bloomberg Television')">
+        <span class="mq-live"></span>Bloomberg TV
       </div>
-      <!-- iframe fills remaining height -->
-      <div style="flex:1;position:relative;border-radius:4px;overflow:hidden;background:#000;border:1px solid var(--border);">
-        <iframe id="mediaIframe" src="about:blank"
-          style="width:100%;height:100%;border:none;display:block;"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowfullscreen></iframe>
-        <div id="mediaPlaceholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg2);">
-          <div style="font-size:52px;opacity:0.2;margin-bottom:14px;">▶</div>
-          <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--text3);margin-bottom:8px;">SELECT A SOURCE OR PASTE A URL</div>
-          <div style="font-size:10px;color:rgba(255,255,255,0.2);text-align:center;line-height:1.8;">
-            🔴 LIVE sources embed instantly<br>
-            ↗ TAB sources open YouTube in a new tab<br>
-            Paste any video URL above to embed
-          </div>
-        </div>
+      <div class="mq-pill" onclick="playVideoId('KoBI00adF2w','Live Stock Scanner')">
+        <span class="mq-live"></span>Stock Scanner
+      </div>
+      <!-- Tab-openers -->
+      <div class="mq-pill" onclick="window.open('https://www.youtube.com/@fxevolutionvideo','_blank')">
+        <span class="mq-tab"></span>FX Evolution ↗
+      </div>
+      <div class="mq-pill" onclick="window.open('https://www.youtube.com/@titans.of.tomorrow','_blank')">
+        <span class="mq-tab"></span>Titans of Tomorrow ↗
+      </div>
+      <div class="mq-pill" onclick="window.open('https://www.youtube.com/@wordsofrizdom','_blank')">
+        <span class="mq-tab"></span>Words of Rizdom ↗
       </div>
     </div>
 
-    <!-- RIGHT: Collapsible drawer -->
-    <div id="mediaDrawerWrap">
+    <!-- PLAYER + LIBRARY ROW -->
+    <div id="mediaLayout">
 
-      <!-- Toggle tab — always visible -->
-      <div id="mediaDrawerToggle" class="open" onclick="mediaToggleDrawer()">
-        <span class="dt-arrow">◀</span>
-        <span class="dt-label">LIBRARY</span>
-      </div>
-
-      <!-- Sliding inner panel -->
-      <div id="mediaDrawerInner">
-
-        <!-- Sources — collapsible subsection -->
-        <div id="mediaSourcesSection">
-          <div id="mediaSourcesToggle" onclick="mediaToggleSources()">
-            <span>⬡ SOURCES</span>
-            <span id="sourcesArrow">▾</span>
+      <!-- LEFT: Player -->
+      <div id="mediaLeft">
+        <div class="panel" style="flex-shrink:0;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="panel-label" style="margin-bottom:0;flex-shrink:0;">▶ PLAYER</div>
+            <span id="mediaNowPlaying" style="font-size:11px;color:var(--cyan);font-family:'Share Tech Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
           </div>
-          <div id="mediaSourcesBody">
-            <div id="mediaSourceList"></div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <input id="mediaUrlInput" type="text"
+              placeholder="Paste any YouTube URL (watch, live, shorts) to embed..."
+              style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:7px 12px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;"
+              onkeydown="if(event.key==='Enter')loadMediaUrl()"/>
+            <button onclick="loadMediaUrl()"
+              style="background:var(--cyan);color:#000;border:none;border-radius:3px;padding:7px 14px;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;cursor:pointer;font-weight:bold;flex-shrink:0;">LOAD</button>
           </div>
         </div>
+        <!-- iframe fills remaining height -->
+        <div style="flex:1;position:relative;border-radius:4px;overflow:hidden;background:#000;border:1px solid var(--border);">
+          <iframe id="mediaIframe" src="about:blank"
+            style="width:100%;height:100%;border:none;display:block;"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen></iframe>
+          <div id="mediaPlaceholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg2);">
+            <div style="font-size:52px;opacity:0.2;margin-bottom:14px;">▶</div>
+            <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--text3);margin-bottom:8px;">SELECT A SOURCE OR PASTE A URL</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.2);text-align:center;line-height:1.8;">
+              Click a source above or paste any URL to play
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <!-- Video Library — fills rest -->
-        <div id="mediaLibSection">
+      <!-- RIGHT: Collapsible library drawer -->
+      <div id="mediaDrawerWrap">
+
+        <!-- Toggle tab — always visible -->
+        <div id="mediaDrawerToggle" class="open" onclick="mediaToggleDrawer()">
+          <span class="dt-arrow">◀</span>
+          <span class="dt-label">LIBRARY</span>
+        </div>
+
+        <!-- Sliding inner panel -->
+        <div id="mediaDrawerInner">
           <div id="mediaLibHeader">
             <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1.5px;color:var(--cyan);">▶ VIDEO LIBRARY</div>
             <button onclick="videoLibOpenAdd()"
@@ -2369,12 +2356,20 @@
               + ADD
             </button>
           </div>
-          <div id="videoLibTopicBar"></div>
-          <div id="videoLibList">
-            <div style="color:var(--text3);font-size:11px;text-align:center;padding:20px;">Loading library...</div>
+          <!-- Topic filter — single dropdown, no tag sprawl -->
+          <div id="mediaLibTopicRow">
+            <span style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);flex-shrink:0;">TOPIC</span>
+            <select id="videoLibTopicSel" onchange="videoLibSetTopicFromSel(this.value)">
+              <option value="ALL">— ALL TOPICS —</option>
+            </select>
+            <span id="vLibCount" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);flex-shrink:0;"></span>
+          </div>
+          <div id="mediaLibSection">
+            <div id="videoLibList">
+              <div style="color:var(--text3);font-size:11px;text-align:center;padding:20px;">Loading library...</div>
+            </div>
           </div>
         </div>
-
       </div>
     </div>
   </div>
