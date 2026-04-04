@@ -3107,6 +3107,7 @@ async function loadAAII() {
     {d:'Mar 18', bull:30.4, neu:17.6, bear:52.0},
     {d:'Mar 25', bull:32.1, neu:18.1, bear:49.8},
     {d:'Apr 1',  bull:33.6, neu:15.0, bear:51.4},
+    {d:'Apr 4',  bull:21.5, neu:26.3, bear:52.2},
   ];
 
   try {
@@ -3117,7 +3118,9 @@ async function loadAAII() {
     // Validate — scraper sometimes grabs wrong numbers; require plausible sum and spread
     const rawBull = d.bullish, rawBear = d.bearish, rawNeu = d.neutral;
     const sum = (rawBull||0) + (rawBear||0) + (rawNeu||0);
-    const dataValid = rawBull && rawBear && sum > 85 && sum < 115 && rawBull < 75 && rawBear < 75;
+    // Reject round numbers (60/20/20 type scrape failures) and historically impossible readings
+    const isRound = rawBull % 10 === 0 && rawNeu % 10 === 0 && rawBear % 10 === 0;
+    const dataValid = rawBull && rawBear && sum > 85 && sum < 115 && rawBull < 57 && rawBear < 75 && !isRound;
 
     const lastH = AAII_HISTORY[AAII_HISTORY.length-1];
     const bull = dataValid ? rawBull : lastH.bull;
