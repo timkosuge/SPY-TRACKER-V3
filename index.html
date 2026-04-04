@@ -4116,67 +4116,179 @@ function setBadge(text, color) {
 }
 
 // ── Build market context from JSON data files ─────────────────────────────
+// ── Legacy stub — kept so nothing breaks if called elsewhere ─────────────
 async function loadMarketContext() {
+  // Context is now built live from window._md on every prompt — nothing to do here.
+  AI.marketContext = 'live';
+}
+
+// ── Snapshot ALL live dashboard data into a context string ───────────────
+function snapshotLiveContext() {
+  const lines = [];
+  const f = (v, d = 2) => (v != null && !isNaN(v)) ? Number(v).toFixed(d) : '\u2014';
+  const pct = v => v != null ? (v >= 0 ? '+' : '') + f(v, 2) + '%' : '\u2014';
+
   try {
-    const [mkt, sent, spy] = await Promise.all([
-      fetch('/market_data.json').then(r => r.json()).catch(() => null),
-      fetch('/sentiment_data.json').then(r => r.json()).catch(() => null),
-      fetch('/spy_data.json').then(r => r.json()).catch(() => null),
-    ]);
+    const md    = window._md  || {};
+    const sd    = window._sd  || {};
+    const lv    = window._spyLevels || {};
+    const intra = window._spyIntraday || {};
+    const q     = md.quotes || {};
+    const spy   = q['SPY']      || {};
+    const vix   = q['^VIX']     || {};
+    const qqq   = q['QQQ']      || {};
+    const iwm   = q['IWM']      || {};
+    const tnx   = q['^TNX']     || {};
+    const irx   = q['^IRX']     || {};
+    const tlt   = q['TLT']      || {};
+    const hyg   = q['HYG']      || {};
+    const dxy   = q['DX-Y.NYB'] || {};
+    const gold  = q['GC=F']     || {};
+    const oil   = q['CL=F']     || {};
+    const btc   = q['BTC-USD']  || {};
+    const gex   = md.gex || {};
+    const opt   = md.options_summary || {};
+    const fg    = md.fear_greed || {};
+    const wems  = md.weekly_em  || [];
+    const mp    = md.max_pain   || [];
 
-    const lines = [];
+    // SPY live price
+    lines.push('=== SPY LIVE ===');
+    if (spy.price) {
+      lines.push(`Price: $${f(spy.price,2)}  Change: ${pct(spy.pct_change)}  (${spy.change >= 0 ? '+' : ''}${f(spy.change,2)})`);
+      lines.push(`Today O=${f(spy.open,2)} H=${f(spy.high,2)} L=${f(spy.low,2)} PrevClose=${f(spy.prev_close,2)}`);
+      if (spy.volume) lines.push(`Volume: ${(spy.volume/1e6).toFixed(1)}M`);
+    }
 
-    // SPY recent sessions
-    if (spy?.daily && spy.daily.length) {
-      const recent = spy.daily.slice(-5);
+    // Key price levels
+    if (lv.todayOpen || lv.weekOpen || lv.support || lv.resistance) {
+      lines.push('=== KEY LEVELS ===');
+      if (lv.todayOpen)  lines.push(`Today Open: $${f(lv.todayOpen,2)}`);
+      if (lv.weekOpen)   lines.push(`Week Open: $${f(lv.weekOpen,2)}`);
+      if (lv.support)    lines.push(`Support: $${f(lv.support,2)}`);
+      if (lv.resistance) lines.push(`Resistance: $${f(lv.resistance,2)}`);
+      if (lv.cur && lv.todayOpen) {
+        const dist = ((lv.cur - lv.todayOpen) / lv.todayOpen * 100);
+        lines.push(`SPY is ${dist >= 0 ? 'above' : 'below'} today open by ${Math.abs(dist).toFixed(2)}%`);
+      }
+    }
+
+    // Intraday snapshot
+    if (intra.open) {
+      lines.push('=== INTRADAY ===');
+      lines.push(`Intraday O=${f(intra.open,2)} H=${f(intra.high,2)} L=${f(intra.low,2)} Last=${f(intra.close,2)}`);
+      if (intra.volume) lines.push(`Intraday Volume: ${(intra.volume/1e6).toFixed(1)}M`);
+    }
+
+    // VIX
+    lines.push('=== VIX ===');
+    if (vix.price) {
+      lines.push(`VIX: ${f(vix.price,2)}  ${pct(vix.pct_change)}`);
+      const vr = vix.price < 15 ? 'LOW VOL' : vix.price < 20 ? 'CALM' : vix.price < 25 ? 'ELEVATED' : vix.price < 35 ? 'HIGH VOL' : 'EXTREME';
+      lines.push(`VIX Regime: ${vr}`);
+    }
+
+    // GEX / options structure
+    lines.push('=== GEX / OPTIONS STRUCTURE ===');
+    if (gex.flip_point)    lines.push(`GEX Flip Point: $${f(gex.flip_point,2)}`);
+    if (gex.support)       lines.push(`GEX Support: $${f(gex.support,2)}`);
+    if (gex.resistance)    lines.push(`GEX Resistance: $${f(gex.resistance,2)}`);
+    if (gex.net_gex != null) lines.push(`Net GEX: ${(gex.net_gex/1e9).toFixed(2)}B (${gex.net_gex > 0 ? 'POSITIVE — stabilizing' : 'NEGATIVE — destabilizing'})`);
+    if (gex.regime)        lines.push(`GEX Regime: ${gex.regime}`);
+    if (spy.price && gex.flip_point) {
+      lines.push(`SPY is ${spy.price > gex.flip_point ? 'ABOVE' : 'BELOW'} GEX flip — dealers are ${spy.price > gex.flip_point ? 'long gamma, dampening moves' : 'short gamma, amplifying moves'}`);
+    }
+    if (opt.pc_ratio_vol) {
+      const pcrNote = opt.pc_ratio_vol < 0.7 ? 'bullish lean' : opt.pc_ratio_vol > 1.1 ? 'bearish lean' : 'neutral';
+      lines.push(`Put/Call Ratio (vol): ${f(opt.pc_ratio_vol,2)} — ${pcrNote}`);
+    }
+    const atmIV = opt.atm_iv || wems[0]?.atm_iv;
+    if (atmIV) lines.push(`ATM IV: ${f(atmIV,1)}%`);
+    if (wems.length) {
+      const w = wems[0];
+      lines.push(`Weekly Expected Move: ±$${f(w.expected_move,2)} (${f(w.expected_move_pct,2)}%)  Upper=$${f(w.upper,2)} Lower=$${f(w.lower,2)}`);
+    }
+    if (mp.length) lines.push(`Max Pain: $${f(mp[0]?.strike || mp[0],2)}`);
+
+    // Sentiment
+    lines.push('=== SENTIMENT ===');
+    if (fg.value != null) {
+      const fgL = fg.value <= 25 ? 'EXTREME FEAR' : fg.value <= 45 ? 'FEAR' : fg.value <= 55 ? 'NEUTRAL' : fg.value <= 75 ? 'GREED' : 'EXTREME GREED';
+      lines.push(`Fear & Greed: ${fg.value} (${fg.label || fgL})`);
+    }
+    if (md.aaii) lines.push(`AAII — Bulls: ${f(md.aaii.bull,1)}%  Bears: ${f(md.aaii.bear,1)}%`);
+
+    // Composite regime
+    const vixV = vix.price || 0, fgV = fg.value || 50, pcrV = opt.pc_ratio_vol || 1;
+    let score = 0;
+    if (vixV < 20) score += 2; else if (vixV < 25) score += 1; else if (vixV > 30) score -= 2; else score -= 1;
+    if (fgV > 55) score += 2; else if (fgV > 45) score += 1; else if (fgV < 30) score -= 2; else score -= 1;
+    if (pcrV < 0.7) score += 1; else if (pcrV > 1.1) score -= 1;
+    const regLbl = score >= 3 ? 'RISK ON' : score >= 1 ? 'LEANING BULLISH' : score === 0 ? 'NEUTRAL' : score >= -2 ? 'CAUTIOUS' : 'RISK OFF';
+    lines.push(`Composite Regime: ${regLbl} (score ${score >= 0 ? '+' : ''}${score})`);
+
+    // Macro / related
+    lines.push('=== MACRO / RELATED ===');
+    if (qqq.price)  lines.push(`QQQ: $${f(qqq.price,2)} ${pct(qqq.pct_change)}`);
+    if (iwm.price)  lines.push(`IWM: $${f(iwm.price,2)} ${pct(iwm.pct_change)}`);
+    if (tnx.price)  lines.push(`10YR Yield: ${f(tnx.price,3)}% ${pct(tnx.pct_change)}`);
+    if (irx.price && tnx.price) lines.push(`Yield Curve (10Y-3M): ${f(tnx.price - irx.price,3)}%`);
+    if (tlt.price)  lines.push(`TLT: $${f(tlt.price,2)} ${pct(tlt.pct_change)}`);
+    if (hyg.price)  lines.push(`HYG: $${f(hyg.price,2)} ${pct(hyg.pct_change)}`);
+    if (dxy.price)  lines.push(`DXY: ${f(dxy.price,2)} ${pct(dxy.pct_change)}`);
+    if (gold.price) lines.push(`Gold: $${f(gold.price,2)} ${pct(gold.pct_change)}`);
+    if (oil.price)  lines.push(`Oil: $${f(oil.price,2)} ${pct(oil.pct_change)}`);
+    if (btc.price)  lines.push(`BTC: $${f(btc.price,2)} ${pct(btc.pct_change)}`);
+
+    // Sectors
+    const SECTORS = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU','XLC'];
+    const SNAMES  = {XLK:'Tech',XLF:'Financials',XLE:'Energy',XLV:'Health',XLI:'Industrials',XLY:'Disc',XLP:'Staples',XLB:'Materials',XLRE:'RealEstate',XLU:'Utilities',XLC:'Comm'};
+    const sl = SECTORS.map(s => { const d = q[s]; return d?.pct_change != null ? `${SNAMES[s]}=${pct(d.pct_change)}` : null; }).filter(Boolean);
+    if (sl.length) lines.push('=== SECTORS ==='); lines.push(sl.join('  '));
+
+    // Recent SPY sessions
+    const daily = sd.daily || sd;
+    if (Array.isArray(daily) && daily.length) {
+      const recent = daily.slice(-5);
       lines.push('=== RECENT SPY SESSIONS (last 5) ===');
       recent.forEach(d => {
-        const chg = d.change_pct != null ? `${d.change_pct > 0 ? '+' : ''}${d.change_pct.toFixed(2)}%` : '';
+        const chg = d.change_pct != null ? (d.change_pct >= 0 ? '+' : '') + Number(d.change_pct).toFixed(2) + '%' : '';
         lines.push(`${d.date}: O=${d.open} H=${d.high} L=${d.low} C=${d.close} Vol=${d.volume} ${chg}`);
       });
     }
 
-    // Market data snapshot
-    if (mkt) {
-      lines.push('=== MARKET SNAPSHOT ===');
-      if (mkt.spy_price)   lines.push(`SPY price: ${mkt.spy_price}`);
-      if (mkt.vix)         lines.push(`VIX: ${mkt.vix}`);
-      if (mkt.pcr)         lines.push(`Put/Call Ratio: ${mkt.pcr}`);
-      if (mkt.gex)         lines.push(`GEX: ${mkt.gex}`);
-      if (mkt.regime)      lines.push(`Market regime: ${mkt.regime}`);
-      if (mkt.trend)       lines.push(`Trend: ${mkt.trend}`);
-      if (mkt.key_levels)  lines.push(`Key levels: ${JSON.stringify(mkt.key_levels)}`);
-    }
-
-    // Sentiment
-    if (sent) {
-      lines.push('=== SENTIMENT ===');
-      if (sent.fear_greed?.value != null) lines.push(`Fear & Greed: ${sent.fear_greed.value} (${sent.fear_greed.label || ''})`);
-      if (sent.aaii?.bull != null)        lines.push(`AAII Bulls: ${sent.aaii.bull}% Bears: ${sent.aaii.bear}%`);
-    }
-
-    AI.marketContext = lines.length > 2
-      ? lines.join('\n')
-      : 'Market data unavailable — answer from general knowledge.';
-
   } catch(e) {
-    AI.marketContext = 'Market data unavailable.';
+    lines.push('[Context snapshot error: ' + e.message + ']');
   }
+
+  return lines.length > 3
+    ? lines.join('\n')
+    : 'Live market data not yet loaded \u2014 answer from general knowledge and note data is unavailable.';
 }
 
-// ── Build system prompt ───────────────────────────────────────────────────
+// ── Build system prompt (called fresh on every send) ─────────────────────
 function buildSystemPrompt() {
-  const ctx = AI.marketContext || 'Market data loading...';
-  return `You are a sharp, experienced SPY day trader and market analyst. You have real trading instincts — you speak plainly, like someone who's been watching the tape for years. You're not a robot reciting numbers. You interpret, you have opinions, you flag what matters and what doesn't.
+  const ctx = snapshotLiveContext();
+  return `You are APEX — the AI analyst built into the SPY Tracker dashboard. You have full visibility into everything currently showing on the dashboard: live SPY price, VIX, GEX levels, options structure, sector performance, macro data, sentiment, and recent session history. All of that data is in your context below — use it.
 
-When you get a question, lead with your read on the situation, then back it up with data if it's relevant. Keep responses concise — traders don't want essays. Use plain English. No markdown headers. No bullet walls. Just clear, direct trader talk.
+Your job is to help the trader understand what’s happening and what it might mean. You have genuine market knowledge and actual opinions. You’re not a yes-machine or a disclaimer factory, and you’re not a jerk either. Think of yourself as the experienced friend at the desk — you tell it straight, you know when to crack a joke, and you actually want to help.
 
-Here is the current market data you have access to:
+Ground rules:
+- Be direct. Lead with your read, support it with the relevant numbers from the dashboard.
+- Be conversational. Plain English. No markdown headers. No bullet walls.
+- Scale your response to the question. Short question = short answer. Complex setup = go deeper.
+- Have a personality. Dry wit is welcome. Light sarcasm only when it actually lands — never at the user’s expense.
+- Actually help. If someone asks how something works, explain it. If they want to understand GEX or IV rank or yield curve, give them a real answer.
+- If you’re speculating on a setup or scenario, say so. Don’t pretend certainty where there isn’t any.
+- If a data point is missing from your context, say so and work with what you have.
+
+Here is the current live dashboard data:
 
 ${ctx}
 
-Today's date/time: ${new Date().toLocaleString('en-US', {timeZone:'America/New_York'})} ET`;
+Current date/time: ${new Date().toLocaleString('en-US', {timeZone:'America/New_York'})} ET\`;
 }
+
 
 // ── Append a message bubble to the chat ──────────────────────────────────
 function appendMsg(role, text) {
