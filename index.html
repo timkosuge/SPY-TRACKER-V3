@@ -895,7 +895,7 @@
   }
   /* Chat window */
   #aiPanel{
-    position:fixed;bottom:90px;right:28px;z-index:9099;
+    position:fixed;bottom:90px;right:66px;z-index:9099;
     width:400px;
     background:var(--bg2);
     border:1px solid var(--border);
@@ -1067,8 +1067,126 @@
   .vol-bar-fill{height:100%;border-radius:2px;transition:width 0.3s;}
   .vol-bar-amt{font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text2);width:60px;}
 </style>
+
+<style>
+/* ── Right sidebar ──────────────────────────────────────────────── */
+#rightSidebar {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 8000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  padding: 8px 0;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+}
+
+.rsb-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 54px;
+  padding: 9px 4px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+  color: var(--text3);
+  position: relative;
+  user-select: none;
+}
+.rsb-btn:hover { background: rgba(255,255,255,0.05); color: var(--text2); }
+.rsb-btn.active { background: rgba(0,204,255,0.1); color: var(--cyan); }
+.rsb-btn.ai-active { background: rgba(0,255,136,0.1); color: #00ff88; }
+
+.rsb-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.rsb-label {
+  font-family: 'Orbitron', monospace;
+  font-size: 7px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.rsb-divider {
+  width: 32px;
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
+}
+
+/* Unread badge on FLOOR and MSG buttons */
+.rsb-badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  min-width: 14px;
+  height: 14px;
+  background: #ff3355;
+  color: #fff;
+  font-family: 'Orbitron', monospace;
+  font-size: 8px;
+  border-radius: 7px;
+  padding: 0 3px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  line-height: 14px;
+}
+
+/* Adjust content area so nothing hides behind the sidebar */
+.content { padding-right: 70px !important; }
+</style>
 </head>
 <body>
+
+<!-- ── Right Sidebar ────────────────────────────────────────────── -->
+<span id="floor-tab-badge" style="display:none;position:absolute;"></span>
+<div id="rightSidebar">
+
+  <!-- Community / tools section -->
+  <div class="rsb-btn" id="rsb-media" onclick="sidebarSwitch('media')" title="Media">
+    <span class="rsb-icon">▶</span>
+    <span class="rsb-label">MEDIA</span>
+  </div>
+  <div class="rsb-btn" id="rsb-journal" onclick="sidebarSwitch('journal')" title="Journal">
+    <span class="rsb-icon">⬡</span>
+    <span class="rsb-label">JOURNAL</span>
+  </div>
+  <div class="rsb-btn" id="rsb-floor" onclick="sidebarSwitch('floor')" title="The Floor" style="position:relative;">
+    <span class="rsb-icon">⬡</span>
+    <span class="rsb-label">FLOOR</span>
+    <span class="rsb-badge" id="rsb-floor-badge"></span>
+  </div>
+  <div class="rsb-btn" id="rsb-blog" onclick="sidebarSwitch('blog')" title="Blog">
+    <span class="rsb-icon">✦</span>
+    <span class="rsb-label">BLOG</span>
+  </div>
+
+  <div class="rsb-divider"></div>
+
+  <!-- AI + Chat -->
+  <div class="rsb-btn" id="rsb-ai" onclick="sidebarToggleAI()" title="AI Assistant">
+    <span class="rsb-icon">⬡</span>
+    <span class="rsb-label">APEX</span>
+  </div>
+  <div class="rsb-btn" id="rsb-msg" onclick="sidebarToggleMsg()" title="Trading Chat" style="position:relative;">
+    <span class="rsb-icon">💬</span>
+    <span class="rsb-label">CHAT</span>
+    <span class="rsb-badge" id="rsb-msg-badge"></span>
+  </div>
+
+</div>
 
 <div class="topbar">
   <div class="logo">SPY <span>//</span> TRACKER</div>
@@ -1089,11 +1207,7 @@
   <div class="tab group-tab" onclick="switchGroupTab('overview','overview')">MARKET OVERVIEW ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('derivatives','options')">DERIVATIVES ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('history','pricehistory')">HISTORY ▾</div>
-  <div class="tab" onclick="switchTab('media')">▶ MEDIA</div>
-  <div class="tab" onclick="switchTab('journal')">⬡ JOURNAL</div>
-  <div class="tab" id="floor-tab-btn" onclick="switchTab('floor')" style="position:relative;">⬡ FLOOR<span id="floor-tab-badge" style="display:none;position:absolute;top:2px;right:2px;min-width:16px;height:16px;background:#ff3355;color:#fff;font-family:'Share Tech Mono',monospace;font-size:9px;border-radius:8px;padding:0 4px;line-height:16px;text-align:center;"></span></div>
-
-  <div class="tab" id="blog-tab-btn" onclick="switchTab('blog')">✦ BLOG</div></div>
+</div>
 
 <!-- Subtab bar — shown below main tabs when a group is active -->
 <div class="subtab-bar" id="subtabBar" style="display:none;">
@@ -4208,9 +4322,8 @@ window.renderEvReleases();
 </script>
 
 <!-- ═══════════════ AI CHAT PANEL ═══════════════ -->
-
-<!-- Floating trigger button -->
-<div id="aiTrigger" onclick="toggleChat()" title="AI Assistant">⬡</div>
+<!-- aiTrigger moved to sidebar — kept as hidden anchor for JS compatibility -->
+<div id="aiTrigger" onclick="toggleChat()" title="AI Assistant" style="display:none;">⬡</div>
 
 <!-- Chat window -->
 <div id="aiPanel">
@@ -5475,7 +5588,7 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
 
 /* ── PANEL ── */
 #chat-panel{
-  position:fixed;bottom:88px;right:88px;z-index:9001;
+  position:fixed;bottom:88px;right:66px;z-index:9001;
   width:400px;height:600px;
   background:#0c0c14;border:1px solid var(--border);
   border-radius:8px;display:flex;flex-direction:column;
@@ -5705,8 +5818,8 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
   <img id="chat-lightbox-img" src="" alt="">
 </div>
 
-<!-- FAB -->
-<div id="chat-fab" onclick="chatToggle()" title="Chat">MSG
+<!-- MSG FAB moved to sidebar — hidden original kept for JS compat -->
+<div id="chat-fab" onclick="chatToggle()" title="Chat" style="display:none;">MSG
   <div id="chat-unread-badge"></div>
 </div>
 
@@ -6520,6 +6633,108 @@ async function blogPublish() {
     btn.disabled = false; btn.textContent = 'PUBLISH';
   }
 }
+</script>
+
+
+<script>
+// ── Sidebar navigation ────────────────────────────────────────────────────
+
+const SIDEBAR_TABS = ['media','journal','floor','blog'];
+
+function sidebarSwitch(id) {
+  // If already active, deactivate and go back to hub
+  const btn = document.getElementById('rsb-' + id);
+  const isActive = btn && btn.classList.contains('active');
+
+  // Clear all sidebar tab active states
+  SIDEBAR_TABS.forEach(t => {
+    const b = document.getElementById('rsb-' + t);
+    if (b) b.classList.remove('active');
+  });
+
+  if (isActive) {
+    // Toggle off — return to hub
+    switchTab('hub');
+  } else {
+    if (btn) btn.classList.add('active');
+    switchTab(id);
+  }
+}
+
+function sidebarToggleAI() {
+  toggleChat();
+  const btn = document.getElementById('rsb-ai');
+  // Reflect open state
+  setTimeout(() => {
+    const panel = document.getElementById('aiPanel');
+    if (btn) btn.classList.toggle('ai-active', panel && panel.classList.contains('open'));
+  }, 50);
+}
+
+function sidebarToggleMsg() {
+  chatToggle();
+  // Clear unread badge
+  const badge = document.getElementById('rsb-msg-badge');
+  if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+}
+
+// ── Keep sidebar active state in sync with switchTab ─────────────────────
+const _origSwitchTab = window.switchTab;
+// Override switchTab to sync sidebar highlights
+// (works because switchTab is defined in dashboard1.js which loads before this)
+document.addEventListener('DOMContentLoaded', () => {
+  // Patch after all scripts have loaded
+  const patchSidebar = () => {
+    if (typeof switchTab !== 'function') return;
+    const orig = switchTab;
+    window.switchTab = function(id) {
+      orig(id);
+      // Sync sidebar buttons
+      SIDEBAR_TABS.forEach(t => {
+        const b = document.getElementById('rsb-' + t);
+        if (b) b.classList.toggle('active', t === id);
+      });
+    };
+  };
+  setTimeout(patchSidebar, 200);
+});
+
+// ── Sync floor badge from existing badge system ───────────────────────────
+function sidebarSyncFloorBadge() {
+  const orig = document.getElementById('floor-tab-badge');
+  const rsb  = document.getElementById('rsb-floor-badge');
+  if (!rsb) return;
+  if (orig) {
+    const visible = orig.style.display !== 'none' && orig.textContent;
+    rsb.style.display = visible ? 'flex' : 'none';
+    rsb.textContent = orig.textContent || '';
+  }
+}
+
+// ── Sync MSG unread badge ─────────────────────────────────────────────────
+function sidebarSyncMsgBadge() {
+  const orig = document.getElementById('chat-unread-badge');
+  const rsb  = document.getElementById('rsb-msg-badge');
+  if (!orig || !rsb) return;
+  const visible = orig.style.display !== 'none' && orig.textContent;
+  rsb.style.display = visible ? 'flex' : 'none';
+  rsb.textContent = orig.textContent || '';
+}
+
+// ── Sync AI button state when panel closes ────────────────────────────────
+document.addEventListener('click', (e) => {
+  setTimeout(() => {
+    const panel = document.getElementById('aiPanel');
+    const btn   = document.getElementById('rsb-ai');
+    if (btn) btn.classList.toggle('ai-active', panel && panel.classList.contains('open'));
+  }, 60);
+});
+
+// Poll badge states
+setInterval(() => {
+  sidebarSyncFloorBadge();
+  sidebarSyncMsgBadge();
+}, 1000);
 </script>
 
 </body></html>
