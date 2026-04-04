@@ -113,7 +113,6 @@ function switchTab(id){
   }
   if(id==='analog') { renderAnalog(); }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
-  if(id==='blog') { if(typeof blogLoad==='function') blogLoad(); }
 }
 
 // ── VIX bar marker ──
@@ -2971,10 +2970,21 @@ function renderVolatility(md){
           <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">DAILY EM (±1σ)</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${ivColor};">±$${fmt(dailyEM,2)}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px;">$${fmt(dailyL,2)} — $${fmt(dailyH,2)}</div>
-          ${pctOfDailyEM!=null?`<div style="margin-top:6px;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden;">
-            <div style="width:${Math.min(pctOfDailyEM,100).toFixed(1)}%;height:100%;background:${pctOfDailyEM>80?'#ff3355':pctOfDailyEM>50?'#ff8800':'#00ff88'};"></div>
-          </div>
-          <div style="font-size:10px;color:var(--text3);margin-top:2px;">SPY used ${fmt(pctOfDailyEM,0)}% of daily EM</div>`:''}
+          ${pctOfDailyEM!=null?`
+          <div style="margin-top:8px;">
+            <div style="position:relative;height:10px;background:var(--bg2);border-radius:5px;overflow:hidden;">
+              <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:rgba(255,255,255,0.25);z-index:2;"></div>
+              ${spyPct >= 0
+                ? `<div style="position:absolute;left:50%;top:0;width:${Math.min(pctOfDailyEM/2,50).toFixed(1)}%;height:100%;background:${pctOfDailyEM>80?"#ff3355":pctOfDailyEM>50?"#ff8800":"#00ff88"};border-radius:0 5px 5px 0;"></div>`
+                : `<div style="position:absolute;right:50%;top:0;width:${Math.min(pctOfDailyEM/2,50).toFixed(1)}%;height:100%;background:${pctOfDailyEM>80?"#ff3355":pctOfDailyEM>50?"#ff8800":"#00ff88"};border-radius:5px 0 0 5px;"></div>`
+              }
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:3px;">
+              <span style="font-size:9px;color:var(--text3);">▼ DN</span>
+              <span style="font-size:10px;color:${pctOfDailyEM>80?"#ff3355":pctOfDailyEM>50?"#ff8800":"#00ff88"};">${spyPct>=0?"▲":"▼"} ${fmt(pctOfDailyEM,0)}% used</span>
+              <span style="font-size:9px;color:var(--text3);">UP ▲</span>
+            </div>
+          </div>`:''}
         </div>
         <div style="padding:8px;background:var(--bg3);border-radius:4px;border-left:3px solid var(--cyan);">
           <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">WEEKLY EM (±1σ)</div>
