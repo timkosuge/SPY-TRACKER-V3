@@ -5889,20 +5889,16 @@ function blogEsc(s) {
 // ── Load post list ─────────────────────────────────────────────────────────
 async function blogLoad() {
   if (BLOG.loaded) { blogRenderList(); return; }
-  const grid = document.getElementById('blogGrid');
-  if (grid) grid.innerHTML = '<div class="blog-no-posts">Loading...</div>';
   try {
     const r = await fetch('/blog?action=list&t=' + Date.now());
     const d = await r.json();
-    if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
     BLOG.posts  = d.posts || [];
     BLOG.loaded = true;
     blogRenderTagBar();
     blogRenderList();
   } catch(e) {
-    if (grid) grid.innerHTML =
-      '<div class="blog-no-posts">Could not load posts: ' + blogEsc(e.message) + '.<br><br>'
-      + '<span style="font-size:11px;color:var(--text3);">Check that the /blog Cloudflare function is deployed and the DB binding is configured in Pages settings.</span></div>';
+    document.getElementById('blogGrid').innerHTML =
+      '<div class="blog-no-posts">Failed to load posts.</div>';
   }
 }
 
