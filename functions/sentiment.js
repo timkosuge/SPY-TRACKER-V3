@@ -25,8 +25,9 @@ export async function onRequestGet(context) {
   // Cloudflare Pages serves static assets at the same origin — fetch it directly.
   try {
     const base = new URL(request.url).origin;
-    const r = await fetch(`${base}/sentiment_data.json`, {
+    const r = await fetch(`${base}/sentiment_data.json?t=${Date.now()}`, {
       cf: { cacheEverything: false },
+      headers: { 'Cache-Control': 'no-cache, no-store' },
     });
     if (r.ok) {
       const data = await r.json();
