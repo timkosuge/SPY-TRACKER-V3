@@ -6527,15 +6527,19 @@ async function blogLoad() {
   while (attempts < 3) {
     try {
       attempts++;
+      console.log('[blog] fetch attempt', attempts);
       const r = await fetch('/blog?action=list&t=' + Date.now());
       const d = await r.json();
+      console.log('[blog] response ok:', r.ok, 'posts:', d.posts?.length);
       if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
       BLOG.posts  = d.posts || [];
       BLOG.loaded = true;
       blogRenderTagBar();
       blogRenderList();
+      console.log('[blog] rendered', BLOG.posts.length, 'posts');
       return;
     } catch(e) {
+      console.log('[blog] attempt', attempts, 'failed:', e.message);
       if (attempts >= 3) {
         if (grid) grid.innerHTML =
           '<div class="blog-no-posts">Could not load posts: ' + blogEsc(String(e.message)) + '.<br><br>'
