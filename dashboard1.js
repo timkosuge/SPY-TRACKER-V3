@@ -1342,7 +1342,9 @@ function renderDesk(md,sd){
         const _etDow = _etNow.getDay(); // 0=Sun,6=Sat
         const _etMins = _etNow.getHours()*60+_etNow.getMinutes();
         const mktOpen = _etDow>=1 && _etDow<=5 && _etMins>=570 && _etMins<960; // 9:30am-4:00pm ET weekdays
-        const price = mktOpen ? (cur||midP) : (prevClose||cur||midP);
+        // When closed, use sd[0].close as anchor — most reliable last trading day close
+        const lastClose = (sd&&sd[0]&&sd[0].close) ? sd[0].close : (prevClose||cur||midP);
+        const price = mktOpen ? (cur||midP) : lastClose;
         const histRanges = sd.filter(r=>r.measurements?.day_range>0).map(r=>r.measurements.day_range);
         const avgR  = histRanges.length ? histRanges.reduce((a,b)=>a+b,0)/histRanges.length : em;
         const stdR  = histRanges.length>1 ? Math.sqrt(histRanges.reduce((a,b)=>a+(b-avgR)**2,0)/histRanges.length) : avgR*0.3;
@@ -4040,5 +4042,3 @@ function renderBondsAdditions(md) {
     });
     if(vix.price) html += `<div style="margin-top:8px;padding:6px 8px;background:var(--bg3);border-radius:3px;font-size:11px;color:var(--text3);">Rates rising + VIX ${vix.price>25?'elevated':'low'} = ${vix.price>25&&rising>1?'double headwind for equities':'mixed regime'}</div>`;
     rocEl.innerHTML = html;
-  }
-}
