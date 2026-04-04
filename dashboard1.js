@@ -1348,7 +1348,11 @@ function renderDesk(md,sd){
         const pctBeyond = histRanges.filter(r=>r>em).length/Math.max(histRanges.length,1)*100;
         const W=340,H=160,tX=18,tW=28,tH=H-40,tY=16;
         const toY=v=>tY+tH-(v+2)/4*tH;
-        const fH=((zCl+2)/4)*tH, fY=tY+tH-fH;
+        // Fill from center (z=0) outward — up for positive, down for negative
+        const midY=toY(0);
+        const fillTop    = zCl>=0 ? toY(zCl) : midY;
+        const fillBottom = zCl<0  ? toY(zCl) : midY;
+        const fY=fillTop, fH=fillBottom-fillTop;
         const bX=90,bW=W-bX-12,bH=tH,bY=tY;
         const bPts=Array.from({length:bW+1},(_,i)=>{
           const zv=-2.5+(i/bW)*5;
@@ -1357,18 +1361,21 @@ function renderDesk(md,sd){
         });
         const bLine=bPts.join(' ');
         const bFill=bLine+' L'+(bX+bW)+','+(bY+bH)+' L'+bX+','+(bY+bH)+' Z';
+        // Shade from center (z=0) outward to NOW position only
         const shadePts=[];
         for(let i=0;i<=bW;i++){
           const zv=-2.5+(i/bW)*5;
-          if(zv<=zCl){
+          const inShade = zCl>=0 ? (zv>=0 && zv<=zCl) : (zv<=0 && zv>=zCl);
+          if(inShade){
             const y=bY+bH-Math.exp(-0.5*zv*zv)*bH*0.82;
-            if(!shadePts.length)shadePts.push('M'+bX+','+(bY+bH));
+            if(!shadePts.length)shadePts.push('M'+(bX+i).toFixed(1)+','+(bY+bH));
             shadePts.push('L'+(bX+i).toFixed(1)+','+y.toFixed(1));
           }
         }
         if(shadePts.length){const lx=shadePts[shadePts.length-1].split(',')[0].slice(1);shadePts.push('L'+lx+','+(bY+bH)+' Z');}
         const shade=shadePts.join(' ');
         const zBX=bX+((zCl+2.5)/5)*bW;
+        const z0BX=bX+((0+2.5)/5)*bW; // pixel x of z=0 center
         const ticks=[-2,-1,0,1,2].map(v=>{
           const ty=toY(v);
           const c=Math.abs(v)>=1.5?'#ff335566':v===0?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.15)';
@@ -1395,7 +1402,8 @@ function renderDesk(md,sd){
           +'<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block;">'
             +'<rect x="'+tX+'" y="'+tY+'" width="'+tW+'" height="'+tH+'" rx="'+(tW/2)+'" fill="var(--bg3)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>'
             +'<clipPath id="demClip"><rect x="'+tX+'" y="'+tY+'" width="'+tW+'" height="'+tH+'" rx="'+(tW/2)+'"/></clipPath>'
-            +'<rect x="'+tX+'" y="'+fY+'" width="'+tW+'" height="'+fH+'" fill="'+zCol+'" opacity="0.85" clip-path="url(#demClip)"/>'
+            +(fH>0?'<rect x="'+tX+'" y="'+fY+'" width="'+tW+'" height="'+fH+'" fill="'+zCol+'" opacity="0.85" clip-path="url(#demClip)"/>':'')
+            +'<line x1="'+(tX-4)+'" y1="'+midY+'" x2="'+(tX+tW+4)+'" y2="'+midY+'" stroke="rgba(255,255,255,0.3)" stroke-width="1" stroke-dasharray="2,2"/>'
             +ticks
             +'<polygon points="'+(tX+tW+2)+','+toY(zCl)+' '+(tX+tW+10)+','+(toY(zCl)-5)+' '+(tX+tW+10)+','+(toY(zCl)+5)+'" fill="'+zCol+'"/>'
             +'<path d="'+bFill+'" fill="'+zCol+'" opacity="0.06"/>'
@@ -1403,6 +1411,7 @@ function renderDesk(md,sd){
             +'<path d="'+bLine+'" fill="none" stroke="'+zCol+'" stroke-width="1.5" opacity="0.6"/>'
             +'<line x1="'+bX+'" y1="'+(bY+bH)+'" x2="'+(bX+bW)+'" y2="'+(bY+bH)+'" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>'
             +xTicks
+            +'<line x1="'+z0BX+'" y1="'+(bY+bH-2)+'" x2="'+z0BX+'" y2="'+(bY+bH+4)+'" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>'
             +'<line x1="'+zBX+'" y1="'+bY+'" x2="'+zBX+'" y2="'+(bY+bH)+'" stroke="'+zCol+'" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.9"/>'
             +'<text x="'+zBX+'" y="'+(bY-4)+'" text-anchor="middle" fill="'+zCol+'" font-size="9" font-family="Share Tech Mono,monospace" font-weight="bold">NOW</text>'
             +'<text x="'+(bX+4)+'" y="'+(bY+14)+'" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Orbitron,monospace">DAILY RANGE Z-DIST · '+histRanges.length+'d</text>'
