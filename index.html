@@ -5268,6 +5268,19 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
   .spy-song-remove { background: none; border: none; color: #ff3355; cursor: pointer; font-size: 12px; padding: 0 2px; }
   #spyAdminLogin { margin-bottom: 8px; }
   #spyAdminPw { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); padding: 4px 8px; border-radius: 3px; width: 100%; font-family: inherit; font-size: 11px; }
+
+  #aiPanel{
+  position:fixed;bottom:88px;right:66px;z-index:9001;
+  width:400px;height:600px;
+  background:#0c0c14;border:1px solid var(--border);
+  border-radius:8px;display:flex;flex-direction:column;
+  box-shadow:0 8px 40px rgba(0,0,0,0.85),0 0 0 1px rgba(0,204,255,0.06);
+  transform:scale(0.95) translateY(12px);
+  opacity:0;pointer-events:none;
+  transition:transform 0.2s ease,opacity 0.2s ease;
+  overflow:hidden;
+  }
+  #aiPanel.open{transform:scale(1) translateY(0);opacity:1;pointer-events:all;}
 </style>
 
 <!-- Lightbox -->
@@ -6266,4 +6279,4 @@ async function spyAdminAddPrompt() {
 // ── Boot ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', spyPlayerInit);
 </script>
-</body></html>
+</body></html>s
