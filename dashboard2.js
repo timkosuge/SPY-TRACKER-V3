@@ -277,9 +277,45 @@ function phRenderFiltered(sd) {
 let _phAllData = null;
 
 function phSetFilter(mode, btn) {
-  document.querySelectorAll('.ph-fb').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#phFilterBtns .ph-fb').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   phApplyFilter(mode);
+}
+
+// ── DOW filter state ─────────────────────────────────────────────────────
+let _phActiveDows = new Set([1,2,3,4,5]); // Mon=1 … Fri=5 (JS getDay())
+
+function phToggleDow(dow, btn) {
+  if (_phActiveDows.has(dow)) {
+    _phActiveDows.delete(dow);
+    btn.classList.remove('active');
+  } else {
+    _phActiveDows.add(dow);
+    btn.classList.add('active');
+  }
+  phApplyFilter();
+}
+
+function phDowAll() {
+  _phActiveDows = new Set([1,2,3,4,5]);
+  document.querySelectorAll('#phDowBtns .ph-dow[data-dow]').forEach(b => {
+    if (!isNaN(Number(b.dataset.dow))) b.classList.add('active');
+    else b.classList.remove('active');
+  });
+  phApplyFilter();
+}
+
+function phDowNone() {
+  _phActiveDows = new Set();
+  document.querySelectorAll('#phDowBtns .ph-dow[data-dow]').forEach(b => {
+    b.classList.remove('active');
+  });
+  phApplyFilter();
+}
+
+function _getDow(dateStr) {
+  // Returns 1=Mon … 5=Fri. Use noon UTC to avoid timezone edge cases.
+  return new Date(dateStr + 'T12:00:00').getDay();
 }
 
 function phApplyFilter(mode) {
@@ -288,7 +324,7 @@ function phApplyFilter(mode) {
   const curYear = new Date().getFullYear();
 
   if(!mode || typeof mode !== 'string') {
-    const active = document.querySelector('.ph-fb.active');
+    const active = document.querySelector('#phFilterBtns .ph-fb.active');
     mode = active ? (active.textContent.includes('2020') ? '2020' : active.textContent.includes('YTD') ? 'ytd' : 'all') : 'all';
   }
 
@@ -296,6 +332,13 @@ function phApplyFilter(mode) {
   if(mode === '2020')     filtered = sd.filter(d => d.date && d.date >= '2020-01-01');
   else if(mode === 'ytd') filtered = sd.filter(d => d.date && d.date.startsWith(String(curYear)));
   else                    filtered = sd;
+
+  // DOW filter — skip if all 5 days selected (no-op)
+  if (_phActiveDows.size > 0 && _phActiveDows.size < 5) {
+    filtered = filtered.filter(d => d.date && _phActiveDows.has(_getDow(d.date)));
+  } else if (_phActiveDows.size === 0) {
+    filtered = []; // none selected — show nothing
+  }
 
   // Sort
   const sortVal = (document.getElementById('phSortCol') || {}).value || 'date_desc';
@@ -456,8 +499,90 @@ function renderTODStats() {
   }
 }
 
+// ─── VOLUME HISTORY FILTER + DOW ─────────────────────────────────────────────
+let _vhAllData  = null;
+let _vhActiveDows = new Set([1,2,3,4,5]);
+
+function vhSetFilter(mode, btn) {
+  document.querySelectorAll('#vhFilterBtns .ph-fb').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  vhApplyFilter(mode);
+}
+
+function vhToggleDow(dow, btn) {
+  if (_vhActiveDows.has(dow)) {
+    _vhActiveDows.delete(dow);
+    btn.classList.remove('active');
+  } else {
+    _vhActiveDows.add(dow);
+    btn.classList.add('active');
+  }
+  vhApplyFilter();
+}
+
+function vhDowAll() {
+  _vhActiveDows = new Set([1,2,3,4,5]);
+  document.querySelectorAll('#vhDowBtns .ph-dow[data-dow]').forEach(b => {
+    if (!isNaN(Number(b.dataset.dow))) b.classList.add('active');
+    else b.classList.remove('active');
+  });
+  vhApplyFilter();
+}
+
+function vhDowNone() {
+  _vhActiveDows = new Set();
+  document.querySelectorAll('#vhDowBtns .ph-dow[data-dow]').forEach(b => {
+    b.classList.remove('active');
+  });
+  vhApplyFilter();
+}
+
+function vhApplyFilter(mode) {
+  if (!_vhAllData) return;
+  const sd = _vhAllData;
+  const curYear = new Date().getFullYear();
+
+  if (!mode || typeof mode !== 'string') {
+    const active = document.querySelector('#vhFilterBtns .ph-fb.active');
+    mode = active ? (active.textContent.includes('2020') ? '2020' : active.textContent.includes('YTD') ? 'ytd' : 'all') : 'all';
+  }
+
+  let filtered;
+  if (mode === '2020')     filtered = sd.filter(d => d.date && d.date >= '2020-01-01');
+  else if (mode === 'ytd') filtered = sd.filter(d => d.date && d.date.startsWith(String(curYear)));
+  else                     filtered = sd;
+
+  // DOW filter
+  if (_vhActiveDows.size > 0 && _vhActiveDows.size < 5) {
+    filtered = filtered.filter(d => d.date && _vhActiveDows.has(_getDow(d.date)));
+  } else if (_vhActiveDows.size === 0) {
+    filtered = [];
+  }
+
+  const meta = document.getElementById('vhFilterMeta');
+  if (meta) {
+    const dowNote = _vhActiveDows.size < 5 ? ` · ${_vhActiveDows.size} day${_vhActiveDows.size !== 1 ? 's' : ''} selected` : '';
+    meta.textContent = filtered.length.toLocaleString() + ' sessions shown' + dowNote;
+  }
+
+  renderVolHistory(filtered);
+}
+
 function renderVolHistory(sd){
-  if(!sd||!sd.length){$('volHistBody').innerHTML='<tr><td colspan="9" class="no-data">No data</td></tr>';return;}
+  // Cache full dataset and update meta on direct calls (from data load)
+  if (sd && (!_vhAllData || sd.length > _vhAllData.length)) {
+    _vhAllData = sd;
+    const meta = document.getElementById('vhFilterMeta');
+    if (meta) meta.textContent = sd.length.toLocaleString() + ' sessions shown';
+  }
+
+  if(!sd||!sd.length){
+    $('volHistBody').innerHTML='<tr><td colspan="9" class="no-data">No data</td></tr>';
+    // Still update analytics with empty
+    const vaRow = $('volAnalyticsRow');
+    if (vaRow) vaRow.innerHTML = '';
+    return;
+  }
 
   const vdays = sd.filter(d=>d.volume_analysis&&d.volume>100000);
   const avgVol = vdays.reduce((a,d)=>a+d.volume,0)/(vdays.length||1);
