@@ -7002,6 +7002,65 @@ function renderGapStats() {
     ${section('⬡ KEY PATTERNS — LATE MOMENTUM, GAP FILLS, VOLATILITY','#8855ff', signalHtml)}
     ${section('⬡ GAP PATTERNS BY DAY OF WEEK','#ff8800', `${dowNote?`<div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:14px;">${dowNote}</div>`:''}<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">${dowCards}</div>`)}
     ${section('⬡ LARGE GAP BEHAVIOR — 1%, 1.5%, AND 2%+ GAPS ONLY','#ff3355', bigGapHtml)}
+    ${section('⬡ GAP FOLLOW-THROUGH — CONTINUATION VS REVERSAL','#00ff88', (() => {
+  const gb = D.gap_breakdown || {};
+  const up = gb.GAP_UP || {};
+  const dn = gb.GAP_DOWN || {};
+  const sig = D.signals || {};
+
+  const ftRow = (label, val, color, note) =>
+    `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <span style="font-size:11px;color:var(--text3);">${label}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${color};">${val}${note?`<span style="font-size:10px;color:var(--text3);margin-left:6px;">${note}</span>`:''}</span>
+    </div>`;
+
+  const ftCard = (title, color, data, gapDir) => {
+    if (!data.n) return '';
+    const continued = gapDir === 'up' ? data.fh_up_pct : (100 - (data.fh_up_pct||0));
+    const reversed  = 100 - continued;
+    const dayMove   = data.avg_day_move || 0;
+    const dayColor  = dayMove > 0.2 ? '#00ff88' : dayMove < -0.2 ? '#ff3355' : 'var(--text2)';
+    const fillColor = (data.fill_rate||0) >= 50 ? '#ff8800' : '#00ccff';
+    const contColor = continued >= 55 ? '#00ff88' : continued <= 45 ? '#ff3355' : '#ffcc00';
+    return `<div style="background:var(--bg2);border:1px solid var(--border);border-top:3px solid ${color};border-radius:4px;padding:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:${color};margin-bottom:4px;">${title}</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:12px;">${data.n} sessions · avg gap ${gapDir==='up'?'+':''}${(data.avg_gap_pct||0).toFixed(2)}%</div>
+      ${ftRow('Continued in gap direction', continued.toFixed(0)+'%', contColor)}
+      ${ftRow('Reversed against gap', reversed.toFixed(0)+'%', reversed>=55?'#ff8800':'var(--text2)')}
+      ${ftRow('Gap filled same session', (data.fill_rate||0)+'%', fillColor)}
+      ${ftRow('Avg full-day return', (dayMove>=0?'+':'')+dayMove.toFixed(2)+'%', dayColor)}
+      ${ftRow('Avg full-day range', '$'+(data.avg_day_range||0).toFixed(2), '#ffcc00')}
+      ${ftRow('1st hour predicts close', (data.fh_predicts_day||0)+'%', (data.fh_predicts_day||0)>=65?'#00ff88':'var(--text2)', '% accuracy')}
+    </div>`;
+  };
+
+  // Gap + session decline combo (from signals)
+  const momentumNote = sig.momentum_n ? `${sig.momentum_n} sessions where 1st hour continued gap direction → filled ${sig.momentum_fill}% of the time` : '';
+  const reversalNote = sig.reversal_n ? `${sig.reversal_n} sessions where 1st hour reversed vs gap → filled ${sig.reversal_fill}% of the time` : '';
+
+  return `<div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:14px;">
+    When SPY gaps, what happens <em>during the session</em>? This section breaks down how often the gap direction continued vs reversed,
+    how often the gap filled, and what the average full-day return looked like.
+    <strong>Continued</strong> means the first hour moved in the same direction as the gap.
+    <strong>Gap filled</strong> means price traded back to the prior close at some point during the session.
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+    ${ftCard('GAP UP — FOLLOW-THROUGH', '#00ff88', up, 'up')}
+    ${ftCard('GAP DOWN — FOLLOW-THROUGH', '#ff3355', dn, 'down')}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-top:3px solid #00ccff;border-radius:4px;padding:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ccff;margin-bottom:10px;">MOMENTUM DAYS — 1ST HOUR WITH GAP</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.8;">${momentumNote || 'No data'}</div>
+      ${sig.late_surge_n ? `<div style="margin-top:8px;font-size:11px;color:var(--text3);">${sig.late_surge_n} gap-up sessions had a late surge → gap filled ${sig.late_surge_gap_up}% of the time</div>` : ''}
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-top:3px solid #ff8800;border-radius:4px;padding:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:#ff8800;margin-bottom:10px;">REVERSAL DAYS — 1ST HOUR AGAINST GAP</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.8;">${reversalNote || 'No data'}</div>
+      ${sig.late_fade_n ? `<div style="margin-top:8px;font-size:11px;color:var(--text3);">${sig.late_fade_n} gap-down sessions had a late fade → closed below gap ${sig.late_fade_gap_dn}% of the time</div>` : ''}
+    </div>
+  </div>`;
+})())}
   </div>`;
 }
 
