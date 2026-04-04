@@ -22,8 +22,10 @@ const json = (d, s = 200) => new Response(JSON.stringify(d), {
 // Default playlist — filenames relative to /music/
 // Edit this list to match your actual MP3 filenames
 const DEFAULT_SONGS = [
-  { id: 'song1', file: 'song1.mp3', title: 'Track 1' },
-  { id: 'song2', file: 'song2.mp3', title: 'Track 2' },
+  { id: 'all_those_times', file: 'SITE PLAYLIST All Those Times Reminisce.mp3', title: 'All Those Times Reminisce' },
+  { id: 'im_a_dude',       file: "SITE PLAYLIST I'm a Dude.mp3",                title: "I'm a Dude" },
+  { id: 'the_way_she',     file: 'SITE PLAYLIST The Way She Moves.mp3',         title: 'The Way She Moves' },
+  { id: 'longest_road',    file: 'SITE PLAYLIST longest road.mp3',              title: 'Longest Road' },
 ];
 
 async function getPlaylist(kv) {
