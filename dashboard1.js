@@ -1406,9 +1406,8 @@ function renderDesk(md,sd){
             +'<line x1="'+(tX-4)+'" y1="'+midY+'" x2="'+(tX+tW+4)+'" y2="'+midY+'" stroke="rgba(255,255,255,0.3)" stroke-width="1" stroke-dasharray="2,2"/>'
             +ticks
             +'<polygon points="'+(tX+tW+2)+','+toY(zCl)+' '+(tX+tW+10)+','+(toY(zCl)-5)+' '+(tX+tW+10)+','+(toY(zCl)+5)+'" fill="'+zCol+'"/>'
-            +'<path d="'+bFill+'" fill="'+zCol+'" opacity="0.06"/>'
-            +(shade?'<path d="'+shade+'" fill="'+zCol+'" opacity="0.18"/>':'')
-            +'<path d="'+bLine+'" fill="none" stroke="'+zCol+'" stroke-width="1.5" opacity="0.6"/>'
+            +(shade?'<path d="'+shade+'" fill="'+zCol+'" opacity="0.22"/>':'')
+            +'<path d="'+bLine+'" fill="none" stroke="'+zCol+'" stroke-width="1.5" opacity="0.7"/>'
             +'<line x1="'+bX+'" y1="'+(bY+bH)+'" x2="'+(bX+bW)+'" y2="'+(bY+bH)+'" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>'
             +xTicks
             +'<line x1="'+z0BX+'" y1="'+(bY+bH-2)+'" x2="'+z0BX+'" y2="'+(bY+bH+4)+'" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>'
