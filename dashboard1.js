@@ -1341,13 +1341,10 @@ function renderDesk(md,sd){
         const histRanges = sd.filter(r=>r.measurements?.day_range>0).map(r=>r.measurements.day_range);
         const avgR = histRanges.length ? histRanges.reduce((a,b)=>a+b,0)/histRanges.length : em;
         const stdR = histRanges.length>1 ? Math.sqrt(histRanges.reduce((a,b)=>a+(b-avgR)**2,0)/histRanges.length) : avgR*0.3;
-        // When market is closed, H-L range is 0 -- force z to 0 so bell and thermometer stay centered
-        const todayHL = (spy.high && spy.low) ? spy.high - spy.low : 0;
-        const mktClosed = todayHL === 0;
-        const z    = mktClosed ? 0 : (stdR>0 ? (em-avgR)/stdR : 0);
+        const z    = stdR>0 ? (em-avgR)/stdR : 0;
         const zCl  = Math.max(-2,Math.min(2,z));
-        const zCol = mktClosed ? '#888888' : (Math.abs(z)>1.2?'#ff3355':Math.abs(z)>0.7?'#ff8800':Math.abs(z)>0.3?'#ffcc00':'#00ff88');
-        const zLbl = mktClosed ? 'MKT CLOSED' : (Math.abs(z)>1.5?'EXTREME':Math.abs(z)>1?'HIGH':Math.abs(z)>0.5?'ELEVATED':'NORMAL');
+        const zCol = Math.abs(z)>1.2?'#ff3355':Math.abs(z)>0.7?'#ff8800':Math.abs(z)>0.3?'#ffcc00':'#00ff88';
+        const zLbl = Math.abs(z)>1.5?'EXTREME':Math.abs(z)>1?'HIGH':Math.abs(z)>0.5?'ELEVATED':'NORMAL';
         const pctBeyond = histRanges.filter(r=>r>em).length/Math.max(histRanges.length,1)*100;
         const W=340,H=160,tX=18,tW=28,tH=H-40,tY=16;
         const toY=v=>tY+tH-(v+2)/4*tH;
@@ -6380,4 +6377,10 @@ function renderWindowStats() {
     </div>`;
 
   // ── Summary cards for a window ─────────────────────────────────────────────
-  const summaryCards = (ws, label, accen
+  const summaryCards = (ws, label, accentColor) => {
+    const s = ws.summary;
+    const p = ws.patterns;
+    return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
+      ${[
+        ['SESSIONS', s.n, 'var(--cyan)'],
+        ['DAY FOLLOW', pct(s.day_follow_pct), followColor(s.day_foll
