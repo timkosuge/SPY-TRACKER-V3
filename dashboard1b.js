@@ -1,3 +1,5 @@
+  }
+}
 
 function renderBreadth(md, sd){
   const q=md.quotes||{};
