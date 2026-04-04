@@ -1447,6 +1447,175 @@ function renderMediaSources() {
 
 function initMediaTab() {
   renderMediaSources();
+  videoLibInit();
+}
+
+// ─── VIDEO LIBRARY ─────────────────────────────────────────────────────────────
+
+const VL = {
+  videos:      [],
+  topics:      [],
+  activeTopic: 'ALL',
+  loaded:      false,
+};
+
+async function videoLibInit() {
+  if (VL.loaded) { videoLibRender(); return; }
+  try {
+    const [vRes, tRes] = await Promise.all([
+      fetch('/videos?action=list&t=' + Date.now()).then(r => r.json()),
+      fetch('/videos?action=topics&t=' + Date.now()).then(r => r.json()),
+    ]);
+    VL.videos = vRes.videos || [];
+    VL.topics = tRes.topics || [];
+    VL.loaded = true;
+    videoLibRenderTopicBar();
+    videoLibRender();
+  } catch(e) {
+    const el = document.getElementById('videoLibList');
+    if (el) el.innerHTML = '<div style="color:var(--red);font-size:11px;text-align:center;padding:20px;">Failed to load library.</div>';
+  }
+}
+
+function videoLibRenderTopicBar() {
+  const bar = document.getElementById('videoLibTopicBar');
+  if (!bar) return;
+  const all   = ['ALL', ...VL.topics];
+  bar.innerHTML = all.map(t => {
+    const active = VL.activeTopic === t;
+    return `<button onclick="videoLibSetTopic('${t.replace(/'/g,"\'")}')"
+      style="font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 8px;border-radius:2px;cursor:pointer;border:1px solid ${active ? 'var(--cyan)' : 'var(--border)'};background:${active ? 'rgba(0,204,255,0.1)' : 'transparent'};color:${active ? 'var(--cyan)' : 'var(--text3)'};">${t}</button>`;
+  }).join('');
+}
+
+function videoLibSetTopic(t) {
+  VL.activeTopic = t;
+  videoLibRenderTopicBar();
+  videoLibRender();
+}
+
+function videoLibRender() {
+  const el = document.getElementById('videoLibList');
+  if (!el) return;
+  let list = VL.videos;
+  if (VL.activeTopic !== 'ALL') list = list.filter(v => v.topic === VL.activeTopic);
+  if (!list.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:11px;text-align:center;padding:20px;">No videos yet' + (VL.activeTopic !== 'ALL' ? ' in this topic' : '') + '.</div>';
+    return;
+  }
+  el.innerHTML = list.map(v => {
+    const thumb = v.video_id
+      ? `<img src="https://img.youtube.com/vi/${v.video_id}/mqdefault.jpg" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;border-radius:3px 3px 0 0;" loading="lazy" onerror="this.style.display='none'">`
+      : `<div style="width:100%;aspect-ratio:16/9;background:var(--bg3);display:flex;align-items:center;justify-content:center;border-radius:3px 3px 0 0;"><span style="font-size:28px;opacity:0.25;">▶</span></div>`;
+    const date = new Date(v.created_at * 1000).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    return `
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;margin-bottom:8px;overflow:hidden;cursor:pointer;transition:border-color 0.15s;"
+        onmouseover="this.style.borderColor='rgba(0,204,255,0.35)'" onmouseout="this.style.borderColor='var(--border)'"
+        onclick="videoLibPlay(${JSON.stringify(v).replace(/"/g,'&quot;')})">
+        ${thumb}
+        <div style="padding:8px 10px;">
+          <div style="font-size:12px;color:var(--text1);line-height:1.4;margin-bottom:4px;">${videoLibEsc(v.title)}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--cyan);background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.25);padding:2px 7px;border-radius:2px;">${videoLibEsc(v.topic)}</span>
+            <span style="font-size:10px;color:var(--text3);">${date}</span>
+          </div>
+          ${v.notes ? `<div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5;border-top:1px solid var(--border);padding-top:5px;">${videoLibEsc(v.notes)}</div>` : ''}
+        </div>
+        <div style="padding:0 10px 8px;text-align:right;">
+          <button onclick="event.stopPropagation();videoLibDelete(${v.id})"
+            style="background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;padding:2px 6px;border-radius:2px;"
+            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">✕ delete</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function videoLibEsc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function videoLibPlay(v) {
+  if (v.video_id) {
+    playVideoId(v.video_id, v.title);
+  } else {
+    window.open(v.url, '_blank');
+  }
+}
+
+async function videoLibDelete(id) {
+  const pw = prompt('Enter password to delete:');
+  if (!pw) return;
+  try {
+    const r = await fetch('/videos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', id, password: pw }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) { alert('Error: ' + (d.error || 'failed')); return; }
+    VL.videos = VL.videos.filter(v => v.id !== id);
+    videoLibRender();
+  } catch(e) { alert('Network error'); }
+}
+
+// ── Add modal ───────────────────────────────────────────────────────────────
+
+function videoLibOpenAdd() {
+  // Pre-populate existing topics dropdown
+  const sel = document.getElementById('vlTopicSel');
+  if (sel && VL.topics.length) {
+    sel.innerHTML = '<option value="">existing...</option>' + VL.topics.map(t => `<option value="${videoLibEsc(t)}">${videoLibEsc(t)}</option>`).join('');
+  }
+  document.getElementById('vlError').textContent = '';
+  const overlay = document.getElementById('videoLibOverlay');
+  if (overlay) { overlay.style.display = 'flex'; }
+}
+
+function videoLibCloseAdd() {
+  const overlay = document.getElementById('videoLibOverlay');
+  if (overlay) overlay.style.display = 'none';
+  ['vlUrl','vlTitle','vlTopic','vlNotes','vlPassword'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
+function videoLibOverlayClick(e) {
+  if (e.target === document.getElementById('videoLibOverlay')) videoLibCloseAdd();
+}
+
+async function videoLibSubmit() {
+  const btn  = document.getElementById('vlSubmitBtn');
+  const errEl = document.getElementById('vlError');
+  const url   = (document.getElementById('vlUrl')?.value || '').trim();
+  const title = (document.getElementById('vlTitle')?.value || '').trim();
+  const topic = (document.getElementById('vlTopic')?.value || '').trim() || 'General';
+  const notes = (document.getElementById('vlNotes')?.value || '').trim();
+  const pw    = (document.getElementById('vlPassword')?.value || '').trim();
+
+  errEl.textContent = '';
+  if (!url)   { errEl.textContent = 'URL is required.'; return; }
+  if (!title) { errEl.textContent = 'Title is required.'; return; }
+  if (!pw)    { errEl.textContent = 'Password is required.'; return; }
+
+  btn.disabled = true; btn.textContent = 'SAVING...';
+  try {
+    const r = await fetch('/videos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add', url, title, topic, notes, password: pw }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Failed');
+    videoLibCloseAdd();
+    // Reload library
+    VL.loaded = false;
+    await videoLibInit();
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'SAVE VIDEO';
+  }
 }
 
 // ─── CHART JOURNAL ─────────────────────────────────────────────────────────────
