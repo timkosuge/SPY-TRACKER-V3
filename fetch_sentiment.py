@@ -141,7 +141,9 @@ def fetch_aaii():
                 bear = float(m_bear.group(1))
                 total = bull + neu + bear
                 # Validate: must sum near 100 and be plausible
-                if 85 <= total <= 115 and bull < 75 and bear < 75:
+                # Extra sanity: reject suspiciously round numbers and impossible extremes
+                is_round = (bull % 10 == 0 and neu % 10 == 0 and bear % 10 == 0)
+                if 85 <= total <= 115 and bull < 57 and bear < 75 and not is_round:
                     print(f"  AAII (HTML label scrape): bull={bull}% bear={bear}% sum={total:.1f}%")
                     return {
                         "date":       datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -161,7 +163,8 @@ def fetch_aaii():
             for i in range(len(matches) - 2):
                 b, n, br = float(matches[i]), float(matches[i+1]), float(matches[i+2])
                 total = b + n + br
-                if 85 <= total <= 115 and b < 75 and br < 75 and n < 60:
+                is_round = (b % 10 == 0 and n % 10 == 0 and br % 10 == 0)
+                if 85 <= total <= 115 and b < 57 and br < 75 and n < 60 and not is_round:
                     print(f"  AAII (HTML window scrape): bull={b}% neu={n}% bear={br}% sum={total:.1f}%")
                     return {
                         "date":       datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -344,6 +347,16 @@ def main():
 
     print("=== Fetching AAII sentiment ===")
     aaii = fetch_aaii()
+
+    # Extra guard: reject obviously bad round-number scrape results before writing
+    if aaii:
+        bull = aaii.get('bullish', 0)
+        neu  = aaii.get('neutral', 0)
+        bear = aaii.get('bearish', 0)
+        is_round = (bull % 10 == 0 and neu % 10 == 0 and bear % 10 == 0)
+        if is_round or bull > 65 or bear > 80:
+            print(f"  AAII: final validation rejected data ({bull}/{neu}/{bear}) — using existing.")
+            aaii = None
 
     print("=== Fetching COT (E-Mini S&P 500) ===")
     cot = fetch_cot()
