@@ -1,15 +1,14 @@
 {
-  "updated": "2026-04-03T17:28:07Z",
+  "updated": "2026-04-04T05:14:41Z",
   "aaii": {
-    "date": "2026-04-01",
-    "bullish": 33.6,
-    "neutral": 15.0,
-    "bearish": 51.4,
-    "spread": -17.8,
+    "date": "2026-04-04",
+    "bullish": 60.0,
+    "neutral": 20.0,
+    "bearish": 20.0,
+    "spread": 40.0,
     "avg_bullish": 37.5,
     "avg_bearish": 31.0,
-    "source": "manual_correction",
-    "stale": false
+    "source": "aaii_html"
   },
   "cot": {
     "report_date": "2026-04-03",
@@ -21,6 +20,7 @@
     "c_short": 45599,
     "c_net": 745311,
     "open_interest": null,
-    "source": "cftc_html"
+    "source": "cftc_html",
+    "stale": true
   }
 }
