@@ -1576,15 +1576,29 @@ function initMediaTab() {
   // Restore drawer state
   const drawerCollapsed = localStorage.getItem('mediaDrawerCollapsed') === 'true';
   const sourcesCollapsed = localStorage.getItem('mediaSourcesCollapsed') === 'true';
-  if (drawerCollapsed) document.getElementById('mediaDrawer')?.classList.add('collapsed');
+  if (drawerCollapsed) {
+    document.getElementById('mediaDrawerInner')?.classList.add('hidden');
+    const t = document.getElementById('mediaDrawerToggle');
+    if (t) { t.classList.remove('open'); t.classList.add('closed'); }
+  }
   if (sourcesCollapsed) document.getElementById('mediaSourcesSection')?.classList.add('sources-collapsed');
 }
 
 function mediaToggleDrawer() {
-  const drawer = document.getElementById('mediaDrawer');
-  if (!drawer) return;
-  drawer.classList.toggle('collapsed');
-  localStorage.setItem('mediaDrawerCollapsed', drawer.classList.contains('collapsed'));
+  const inner  = document.getElementById('mediaDrawerInner');
+  const toggle = document.getElementById('mediaDrawerToggle');
+  if (!inner || !toggle) return;
+  const isOpen = !inner.classList.contains('hidden');
+  if (isOpen) {
+    inner.classList.add('hidden');
+    toggle.classList.remove('open');
+    toggle.classList.add('closed');
+  } else {
+    inner.classList.remove('hidden');
+    toggle.classList.remove('closed');
+    toggle.classList.add('open');
+  }
+  localStorage.setItem('mediaDrawerCollapsed', isOpen ? 'true' : 'false');
 }
 
 function mediaToggleSources() {
