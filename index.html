@@ -1250,7 +1250,28 @@
 
     <!-- Section 1: Daily gap analysis (OHLC-derived) -->
     <div id="gapOHLCSection" style="margin-bottom:16px;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">⬡ DAILY GAP ANALYSIS — OHLC DERIVED</div>
+      <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);">⬡ DAILY GAP ANALYSIS — OHLC DERIVED</div>
+      <!-- Filter bar: period + DOW -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:5px;overflow:hidden;">
+          <button class="ph-fb active" id="gapOhlcFbAll"  onclick="gapOhlcSetPeriod('all',this)">ALL HISTORY</button>
+          <button class="ph-fb"        id="gapOhlcFb2020" onclick="gapOhlcSetPeriod('2020',this)">SINCE 2020</button>
+          <button class="ph-fb"        id="gapOhlcFbYtd"  onclick="gapOhlcSetPeriod('ytd',this)">2026 YTD</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);flex-shrink:0;">DAY:</span>
+          <div style="display:flex;gap:3px;" id="gapOhlcDowBtns">
+            <button class="ph-dow active" data-dow="1" onclick="gapOhlcToggleDow(1,this)">MON</button>
+            <button class="ph-dow active" data-dow="2" onclick="gapOhlcToggleDow(2,this)">TUE</button>
+            <button class="ph-dow active" data-dow="3" onclick="gapOhlcToggleDow(3,this)">WED</button>
+            <button class="ph-dow active" data-dow="4" onclick="gapOhlcToggleDow(4,this)">THU</button>
+            <button class="ph-dow active" data-dow="5" onclick="gapOhlcToggleDow(5,this)">FRI</button>
+            <button class="ph-dow" data-dow="all"  onclick="gapOhlcDowAll()"  style="margin-left:4px;border-color:var(--border);color:var(--text3);">ALL</button>
+            <button class="ph-dow" data-dow="none" onclick="gapOhlcDowNone()" style="border-color:var(--border);color:var(--text3);">NONE</button>
+          </div>
+        </div>
+        <div id="gapOhlcMeta" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);margin-left:auto;"></div>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;min-width:0;" id="gapStatCards"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;min-width:0;">
         <div style="min-width:0;overflow:hidden;">
