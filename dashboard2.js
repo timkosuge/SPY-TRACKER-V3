@@ -1542,46 +1542,18 @@ function loadMediaUrl() {
 }
 
 function renderMediaSources() {
-  const el = $('mediaSourceList');
-  if(!el) return;
-
-  el.innerHTML = MEDIA_SOURCES.map(group => `
-    <div style="margin-bottom:14px;">
-      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:2px;color:var(--text3);margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid var(--border);">
-        ${group.items[0]?.live ? '🔴 ' : ''}${group.group}
-      </div>
-      ${group.items.map(item => {
-        const canEmbed = !!(item.channelId || item.videoId);
-        const badge = canEmbed
-          ? `<span style="font-family:'Orbitron',monospace;font-size:7px;color:${item.live?'#ff3355':'var(--cyan)'};background:${item.live?'rgba(255,51,85,0.15)':'rgba(0,204,255,0.12)'};padding:2px 6px;border-radius:2px;flex-shrink:0;">${item.live?'LIVE':'EMBED'}</span>`
-          : `<span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:2px;flex-shrink:0;">↗ TAB</span>`;
-        return `
-          <div onclick="playItem(${JSON.stringify(item).replace(/"/g,'&quot;')})"
-            style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-bottom:4px;background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${item.color};border-radius:3px;cursor:pointer;transition:background 0.15s;"
-            onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='var(--bg3)'">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.name}</div>
-              <div style="font-size:10px;color:var(--text3);margin-top:1px;">${item.desc||''}</div>
-            </div>
-            ${badge}
-          </div>`;
-      }).join('')}
-    </div>
-  `).join('');
+  // Sources moved to quick-bar pills in HTML — no sidebar list needed
 }
 
 function initMediaTab() {
-  renderMediaSources();
   videoLibInit();
   // Restore drawer state
   const drawerCollapsed = localStorage.getItem('mediaDrawerCollapsed') === 'true';
-  const sourcesCollapsed = localStorage.getItem('mediaSourcesCollapsed') === 'true';
   if (drawerCollapsed) {
     document.getElementById('mediaDrawerInner')?.classList.add('hidden');
     const t = document.getElementById('mediaDrawerToggle');
     if (t) { t.classList.remove('open'); t.classList.add('closed'); }
   }
-  if (sourcesCollapsed) document.getElementById('mediaSourcesSection')?.classList.add('sources-collapsed');
 }
 
 function mediaToggleDrawer() {
@@ -1636,27 +1608,40 @@ async function videoLibInit() {
 }
 
 function videoLibRenderTopicBar() {
-  const bar = document.getElementById('videoLibTopicBar');
-  if (!bar) return;
-  const all   = ['ALL', ...VL.topics];
-  bar.innerHTML = all.map(t => {
-    const active = VL.activeTopic === t;
-    return `<button onclick="videoLibSetTopic('${t.replace(/'/g,"\'")}')"
-      style="font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 8px;border-radius:2px;cursor:pointer;border:1px solid ${active ? 'var(--cyan)' : 'var(--border)'};background:${active ? 'rgba(0,204,255,0.1)' : 'transparent'};color:${active ? 'var(--cyan)' : 'var(--text3)'};">${t}</button>`;
-  }).join('');
+  // Populate the dropdown select
+  const sel = document.getElementById('videoLibTopicSel');
+  if (!sel) return;
+  const prev = sel.value || 'ALL';
+  sel.innerHTML = '<option value="ALL">— ALL TOPICS —</option>' +
+    VL.topics.map(t => `<option value="${videoLibEsc(t)}">${videoLibEsc(t)}</option>`).join('');
+  // Restore selection if still valid
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  else sel.value = 'ALL';
+}
+
+function videoLibSetTopicFromSel(t) {
+  VL.activeTopic = t || 'ALL';
+  videoLibRender();
 }
 
 function videoLibSetTopic(t) {
   VL.activeTopic = t;
-  videoLibRenderTopicBar();
+  const sel = document.getElementById('videoLibTopicSel');
+  if (sel) sel.value = t;
   videoLibRender();
 }
 
 function videoLibRender() {
   const el = document.getElementById('videoLibList');
   if (!el) return;
+  // Sync dropdown active topic
+  const sel = document.getElementById('videoLibTopicSel');
+  if (sel && sel.value !== VL.activeTopic) VL.activeTopic = sel.value || 'ALL';
   let list = VL.videos;
   if (VL.activeTopic !== 'ALL') list = list.filter(v => v.topic === VL.activeTopic);
+  // Update count badge
+  const cnt = document.getElementById('vLibCount');
+  if (cnt) cnt.textContent = list.length + ' video' + (list.length !== 1 ? 's' : '');
   if (!list.length) {
     el.innerHTML = '<div style="color:var(--text3);font-size:11px;text-align:center;padding:20px;">No videos yet' + (VL.activeTopic !== 'ALL' ? ' in this topic' : '') + '.</div>';
     return;
@@ -1721,7 +1706,7 @@ async function videoLibDelete(id) {
 function videoLibOpenAdd() {
   // Pre-populate existing topics dropdown
   const sel = document.getElementById('vlTopicSel');
-  if (sel && VL.topics.length) {
+  if (sel) {
     sel.innerHTML = '<option value="">existing...</option>' + VL.topics.map(t => `<option value="${videoLibEsc(t)}">${videoLibEsc(t)}</option>`).join('');
   }
   document.getElementById('vlError').textContent = '';
