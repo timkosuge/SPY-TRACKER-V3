@@ -5811,6 +5811,104 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
   font-size:11px;padding:3px 7px;outline:none;
 }
 #chat-ban-btn{background:rgba(255,51,85,0.15);border:1px solid #ff3355;border-radius:3px;color:#ff3355;cursor:pointer;padding:3px 8px;font-family:'Orbitron',monospace;font-size:8px;}
+
+  /* ═══════════════ MUSIC PLAYER ═══════════════ */
+  #spyPlayer {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 9999;
+    background: rgba(8,8,18,0.97);
+    border-top: 1px solid rgba(0,204,255,0.2);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 14px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    transform: translateY(100%);
+    transition: transform 0.35s ease;
+    user-select: none;
+  }
+  #spyPlayer.visible { transform: translateY(0); }
+  #spyPlayerTrigger {
+    position: fixed;
+    bottom: 10px; right: 16px;
+    z-index: 9998;
+    background: rgba(0,204,255,0.12);
+    border: 1px solid rgba(0,204,255,0.4);
+    border-radius: 50%;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    transition: opacity 0.3s;
+    color: var(--cyan);
+  }
+  #spyPlayerTrigger:hover { background: rgba(0,204,255,0.25); }
+  #spyPlayerTrigger.hidden { opacity: 0; pointer-events: none; }
+  .spy-player-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--cyan); font-size: 14px; padding: 2px 4px;
+    opacity: 0.8; transition: opacity 0.15s;
+  }
+  .spy-player-btn:hover { opacity: 1; }
+  #spyTrackTitle {
+    flex: 1; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; color: var(--text2);
+    font-size: 11px; min-width: 0;
+  }
+  #spyProgress {
+    flex: 2; height: 3px; background: rgba(255,255,255,0.1);
+    border-radius: 2px; cursor: pointer; min-width: 60px;
+    position: relative;
+  }
+  #spyProgressFill {
+    height: 100%; background: var(--cyan);
+    border-radius: 2px; width: 0%; transition: width 0.5s linear;
+    pointer-events: none;
+  }
+  #spyVolSlider {
+    width: 60px; accent-color: var(--cyan);
+    cursor: pointer;
+  }
+  #spyPlayerClose {
+    background: none; border: none; cursor: pointer;
+    color: var(--text3); font-size: 14px; padding: 2px 4px;
+  }
+  #spyPlayerClose:hover { color: #ff3355; }
+  /* Admin panel */
+  #spyAdminPanel {
+    display: none;
+    position: fixed;
+    bottom: 52px; right: 16px;
+    width: 320px;
+    background: rgba(8,8,18,0.98);
+    border: 1px solid rgba(0,204,255,0.3);
+    border-radius: 6px;
+    z-index: 10000;
+    padding: 14px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+  }
+  #spyAdminPanel.open { display: block; }
+  .spy-admin-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 9px; letter-spacing: 2px;
+    color: var(--cyan); margin-bottom: 10px;
+  }
+  .spy-song-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+  }
+  .spy-song-row:hover { color: var(--cyan); }
+  .spy-song-row.playing { color: var(--cyan); }
+  .spy-song-row .spy-song-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .spy-song-remove { background: none; border: none; color: #ff3355; cursor: pointer; font-size: 12px; padding: 0 2px; }
+  #spyAdminLogin { margin-bottom: 8px; }
+  #spyAdminPw { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); padding: 4px 8px; border-radius: 3px; width: 100%; font-family: inherit; font-size: 11px; }
 </style>
 
 <!-- Lightbox -->
@@ -6422,16 +6520,20 @@ function blogEsc(s) {
 // ── Load post list ─────────────────────────────────────────────────────────
 async function blogLoad() {
   if (BLOG.loaded) { blogRenderList(); return; }
+  const grid = document.getElementById('blogGrid');
+  if (grid) grid.innerHTML = '<div class="blog-no-posts">Loading...</div>';
   try {
     const r = await fetch('/blog?action=list&t=' + Date.now());
     const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
     BLOG.posts  = d.posts || [];
     BLOG.loaded = true;
     blogRenderTagBar();
     blogRenderList();
   } catch(e) {
-    document.getElementById('blogGrid').innerHTML =
-      '<div class="blog-no-posts">Failed to load posts.</div>';
+    if (grid) grid.innerHTML =
+      '<div class="blog-no-posts">Could not load posts: ' + blogEsc(String(e.message)) + '.<br><br>'
+      + '<span style="font-size:11px;color:var(--text3);">Check that the /blog Cloudflare function is deployed and the DB binding is set in Pages settings.</span></div>';
   }
 }
 
@@ -6737,4 +6839,301 @@ setInterval(() => {
 }, 1000);
 </script>
 
+
+<!-- ════════════ MUSIC PLAYER ════════════ -->
+<audio id="spyAudio" preload="metadata"></audio>
+
+<!-- Floating trigger (shows when player is hidden) -->
+<div id="spyPlayerTrigger" onclick="spyPlayerShow()" title="Open player">♪</div>
+
+<!-- Main player bar -->
+<div id="spyPlayer">
+  <button class="spy-player-btn" onclick="spyPrev()" title="Previous">⏮</button>
+  <button class="spy-player-btn" id="spyPlayBtn" onclick="spyTogglePlay()" title="Play/Pause">▶</button>
+  <button class="spy-player-btn" onclick="spyNext()" title="Next">⏭</button>
+  <span id="spyTrackTitle">— no track —</span>
+  <div id="spyProgress" onclick="spySeek(event)" title="Seek">
+    <div id="spyProgressFill"></div>
+  </div>
+  <input id="spyVolSlider" type="range" min="0" max="1" step="0.02" value="0.7"
+         oninput="spySetVol(this.value)" title="Volume">
+  <button class="spy-player-btn" onclick="spyMute()" id="spyMuteBtn" title="Mute">🔊</button>
+  <button class="spy-player-btn" id="spyAdminBtn" onclick="spyAdminToggle()" title="Admin" style="display:none;">⚙</button>
+  <button id="spyPlayerClose" onclick="spyPlayerHide()" title="Minimize">╲╱</button>
+</div>
+
+<!-- Admin panel -->
+<div id="spyAdminPanel">
+  <div class="spy-admin-title">⬡ PLAYER ADMIN</div>
+  <div id="spyAdminLogin" style="display:none;">
+    <input id="spyAdminPw" type="password" placeholder="admin password" autocomplete="current-password">
+    <button onclick="spyAdminAuth()" style="margin-top:6px;background:var(--bg3);border:1px solid var(--border);color:var(--cyan);padding:3px 10px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;width:100%;">UNLOCK</button>
+  </div>
+  <div id="spyAdminControls" style="display:none;">
+    <div id="spyAdminPlaylist"></div>
+    <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+      <button onclick="spyAdminAddPrompt()" style="background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);color:var(--cyan);padding:3px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;">+ Add Song</button>
+      <button onclick="spyAdminClose()" style="background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:#ff3355;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════ SPY TRACKER MUSIC PLAYER ════════════
+const SPY_PLAYER = {
+  playlist:    [],
+  current:     0,
+  authed:      false,
+  muted:       false,
+  initiated:   false,   // true after first user gesture
+  visible:     false,
+};
+
+// ── Init: fetch playlist, attach audio events ──────────────────────────────
+async function spyPlayerInit() {
+  try {
+    const r = await fetch('/music?t=' + Date.now());
+    const d = await r.json();
+    SPY_PLAYER.playlist = d.playlist || [];
+  } catch(e) {
+    // If /music function not deployed yet, use empty playlist silently
+    SPY_PLAYER.playlist = [];
+  }
+  const audio = document.getElementById('spyAudio');
+  audio.volume = 0.7;
+  audio.addEventListener('ended', spyNext);
+  audio.addEventListener('timeupdate', spyUpdateProgress);
+  audio.addEventListener('loadedmetadata', spyUpdateProgress);
+
+  // Show admin gear if session-stored auth
+  if (sessionStorage.getItem('spyMusicAuth') === '1') {
+    SPY_PLAYER.authed = true;
+    document.getElementById('spyAdminBtn').style.display = '';
+  }
+
+  // First user interaction → start playback if playlist has songs
+  const startOnInteraction = () => {
+    if (!SPY_PLAYER.initiated && SPY_PLAYER.playlist.length) {
+      SPY_PLAYER.initiated = true;
+      spyLoadTrack(0);
+      document.getElementById('spyPlayer').classList.add('visible');
+      SPY_PLAYER.visible = true;
+      document.getElementById('spyPlayerTrigger').classList.add('hidden');
+      // Play after a short delay so user gesture is still valid
+      setTimeout(() => {
+        document.getElementById('spyAudio').play().catch(() => {});
+        document.getElementById('spyPlayBtn').textContent = '⏸';
+      }, 300);
+    }
+    ['click','keydown','touchstart'].forEach(e => document.removeEventListener(e, startOnInteraction));
+  };
+  ['click','keydown','touchstart'].forEach(e => document.addEventListener(e, startOnInteraction, { once: false, passive: true }));
+}
+
+// ── Track loading ──────────────────────────────────────────────────────────
+function spyLoadTrack(idx) {
+  const list = SPY_PLAYER.playlist;
+  if (!list.length) return;
+  idx = ((idx % list.length) + list.length) % list.length;
+  SPY_PLAYER.current = idx;
+  const song = list[idx];
+  const audio = document.getElementById('spyAudio');
+  audio.src = '/music/' + song.file;
+  audio.load();
+  document.getElementById('spyTrackTitle').textContent = song.title || song.file;
+  document.getElementById('spyProgressFill').style.width = '0%';
+  spyAdminRenderPlaylist();
+}
+
+function spyTogglePlay() {
+  const audio = document.getElementById('spyAudio');
+  if (!SPY_PLAYER.initiated) { spyPlayerInit(); return; }
+  if (audio.paused) {
+    if (!audio.src || audio.src === window.location.href) { spyLoadTrack(SPY_PLAYER.current); }
+    audio.play().catch(() => {});
+    document.getElementById('spyPlayBtn').textContent = '⏸';
+  } else {
+    audio.pause();
+    document.getElementById('spyPlayBtn').textContent = '▶';
+  }
+}
+
+function spyNext() {
+  const audio = document.getElementById('spyAudio');
+  spyLoadTrack(SPY_PLAYER.current + 1);
+  if (!audio.paused || SPY_PLAYER.initiated) {
+    audio.play().catch(() => {});
+    document.getElementById('spyPlayBtn').textContent = '⏸';
+  }
+}
+
+function spyPrev() {
+  const audio = document.getElementById('spyAudio');
+  // If more than 3s in, restart current; otherwise go back
+  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  spyLoadTrack(SPY_PLAYER.current - 1);
+  if (!audio.paused || SPY_PLAYER.initiated) {
+    audio.play().catch(() => {});
+    document.getElementById('spyPlayBtn').textContent = '⏸';
+  }
+}
+
+function spyUpdateProgress() {
+  const audio = document.getElementById('spyAudio');
+  if (!audio.duration) return;
+  const pct = (audio.currentTime / audio.duration) * 100;
+  document.getElementById('spyProgressFill').style.width = pct + '%';
+  if (!audio.paused) {
+    document.getElementById('spyPlayBtn').textContent = '⏸';
+  }
+}
+
+function spySeek(e) {
+  const bar = document.getElementById('spyProgress');
+  const audio = document.getElementById('spyAudio');
+  if (!audio.duration) return;
+  const rect = bar.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  audio.currentTime = pct * audio.duration;
+}
+
+function spySetVol(v) {
+  const audio = document.getElementById('spyAudio');
+  audio.volume = parseFloat(v);
+  SPY_PLAYER.muted = false;
+  audio.muted = false;
+  document.getElementById('spyMuteBtn').textContent = v > 0.5 ? '🔊' : v > 0 ? '🔉' : '🔇';
+}
+
+function spyMute() {
+  const audio = document.getElementById('spyAudio');
+  SPY_PLAYER.muted = !SPY_PLAYER.muted;
+  audio.muted = SPY_PLAYER.muted;
+  document.getElementById('spyMuteBtn').textContent = SPY_PLAYER.muted ? '🔇' : '🔊';
+}
+
+// ── Show / hide ────────────────────────────────────────────────────────────
+function spyPlayerShow() {
+  document.getElementById('spyPlayer').classList.add('visible');
+  document.getElementById('spyPlayerTrigger').classList.add('hidden');
+  SPY_PLAYER.visible = true;
+}
+function spyPlayerHide() {
+  document.getElementById('spyPlayer').classList.remove('visible');
+  document.getElementById('spyPlayerTrigger').classList.remove('hidden');
+  document.getElementById('spyAdminPanel').classList.remove('open');
+  SPY_PLAYER.visible = false;
+}
+
+// ── Admin ──────────────────────────────────────────────────────────────────
+function spyAdminToggle() {
+  const panel = document.getElementById('spyAdminPanel');
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    return;
+  }
+  panel.classList.add('open');
+  if (SPY_PLAYER.authed) {
+    document.getElementById('spyAdminLogin').style.display = 'none';
+    document.getElementById('spyAdminControls').style.display = '';
+    spyAdminRenderPlaylist();
+  } else {
+    document.getElementById('spyAdminLogin').style.display = '';
+    document.getElementById('spyAdminControls').style.display = 'none';
+    setTimeout(() => document.getElementById('spyAdminPw').focus(), 50);
+  }
+}
+
+function spyAdminClose() {
+  document.getElementById('spyAdminPanel').classList.remove('open');
+}
+
+async function spyAdminAuth() {
+  const pw = document.getElementById('spyAdminPw').value;
+  try {
+    const r = await fetch('/music', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'admin', password: pw, cmd: 'set_autoplay', autoplay: true })
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) { alert('Wrong password'); return; }
+    SPY_PLAYER.authed = true;
+    sessionStorage.setItem('spyMusicAuth', '1');
+    document.getElementById('spyAdminBtn').style.display = '';
+    document.getElementById('spyAdminLogin').style.display = 'none';
+    document.getElementById('spyAdminControls').style.display = '';
+    spyAdminRenderPlaylist();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+function spyAdminRenderPlaylist() {
+  if (!SPY_PLAYER.authed) return;
+  const el = document.getElementById('spyAdminPlaylist');
+  if (!el) return;
+  const list = SPY_PLAYER.playlist;
+  if (!list.length) { el.innerHTML = '<div style="color:var(--text3);font-size:10px;">No songs in playlist.</div>'; return; }
+  el.innerHTML = list.map((s, i) => {
+    const playing = i === SPY_PLAYER.current;
+    return '<div class="spy-song-row' + (playing ? ' playing' : '') + '" onclick="spyAdminPlay(' + i + ')">'
+      + '<span style="color:var(--text3);min-width:16px;">' + (playing ? '▶' : (i+1)) + '</span>'
+      + '<span class="spy-song-name">' + s.title + '</span>'
+      + '<button class="spy-song-remove" onclick="event.stopPropagation();spyAdminRemove('' + s.id + '')" title="Remove">✕</button>'
+      + '</div>';
+  }).join('');
+}
+
+function spyAdminPlay(idx) {
+  spyLoadTrack(idx);
+  const audio = document.getElementById('spyAudio');
+  audio.play().catch(() => {});
+  document.getElementById('spyPlayBtn').textContent = '⏸';
+  SPY_PLAYER.initiated = true;
+}
+
+async function spyAdminRemove(id) {
+  if (!SPY_PLAYER.authed) return;
+  const pw = sessionStorage.getItem('spyMusicAuth') === '1' ? '_authed_' : '';
+  // Re-auth if needed
+  const storedPw = sessionStorage.getItem('spyMusicPw') || prompt('Password:');
+  if (!storedPw) return;
+  sessionStorage.setItem('spyMusicPw', storedPw);
+  try {
+    const r = await fetch('/music', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'admin', password: storedPw, cmd: 'remove_song', id })
+    });
+    const d = await r.json();
+    if (d.error) { alert(d.error); return; }
+    SPY_PLAYER.playlist = d.playlist;
+    spyAdminRenderPlaylist();
+  } catch(e) { alert(e.message); }
+}
+
+async function spyAdminAddPrompt() {
+  if (!SPY_PLAYER.authed) return;
+  const storedPw = sessionStorage.getItem('spyMusicPw') || prompt('Password:');
+  if (!storedPw) return;
+  sessionStorage.setItem('spyMusicPw', storedPw);
+  const file = prompt('MP3 filename (in /music/ folder):\ne.g. my_track.mp3');
+  if (!file) return;
+  const title = prompt('Display title:', file.replace('.mp3','').replace(/_/g,' '));
+  if (!title) return;
+  try {
+    const r = await fetch('/music', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'admin', password: storedPw, cmd: 'add_song', song: { file, title, id: file.replace(/[^a-zA-Z0-9]/g,'_') } })
+    });
+    const d = await r.json();
+    if (d.error) { alert(d.error); return; }
+    SPY_PLAYER.playlist = d.playlist;
+    spyAdminRenderPlaylist();
+  } catch(e) { alert(e.message); }
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', spyPlayerInit);
+</script>
 </body></html>
