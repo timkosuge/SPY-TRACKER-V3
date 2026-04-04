@@ -1573,6 +1573,25 @@ function renderMediaSources() {
 function initMediaTab() {
   renderMediaSources();
   videoLibInit();
+  // Restore drawer state
+  const drawerCollapsed = localStorage.getItem('mediaDrawerCollapsed') === 'true';
+  const sourcesCollapsed = localStorage.getItem('mediaSourcesCollapsed') === 'true';
+  if (drawerCollapsed) document.getElementById('mediaDrawer')?.classList.add('collapsed');
+  if (sourcesCollapsed) document.getElementById('mediaSourcesSection')?.classList.add('sources-collapsed');
+}
+
+function mediaToggleDrawer() {
+  const drawer = document.getElementById('mediaDrawer');
+  if (!drawer) return;
+  drawer.classList.toggle('collapsed');
+  localStorage.setItem('mediaDrawerCollapsed', drawer.classList.contains('collapsed'));
+}
+
+function mediaToggleSources() {
+  const sec = document.getElementById('mediaSourcesSection');
+  if (!sec) return;
+  sec.classList.toggle('sources-collapsed');
+  localStorage.setItem('mediaSourcesCollapsed', sec.classList.contains('sources-collapsed'));
 }
 
 // ─── VIDEO LIBRARY ─────────────────────────────────────────────────────────────
