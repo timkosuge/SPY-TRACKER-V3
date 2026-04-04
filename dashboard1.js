@@ -1337,10 +1337,11 @@ function renderDesk(md,sd){
         const midP  = wem.wem_mid||cur||700;
         const iv    = (wem.atm_iv&&wem.atm_iv>0)?wem.atm_iv:(wem.wem_range/2)/(midP*Math.sqrt(6/365)*0.70);
         const em    = midP*iv*Math.sqrt(1/365)*0.70;
-        // When market is closed, anchor to previous close (last known price)
-        // todayHL = today's high - low; if zero, market hasn't traded yet
-        const todayHL = (spy.high||0) - (spy.low||0);
-        const mktOpen = todayHL > 0.01;
+        // Detect if market is currently open using ET time
+        const _etNow = new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}));
+        const _etDow = _etNow.getDay(); // 0=Sun,6=Sat
+        const _etMins = _etNow.getHours()*60+_etNow.getMinutes();
+        const mktOpen = _etDow>=1 && _etDow<=5 && _etMins>=570 && _etMins<960; // 9:30am-4:00pm ET weekdays
         const price = mktOpen ? (cur||midP) : (prevClose||cur||midP);
         const histRanges = sd.filter(r=>r.measurements?.day_range>0).map(r=>r.measurements.day_range);
         const avgR  = histRanges.length ? histRanges.reduce((a,b)=>a+b,0)/histRanges.length : em;
