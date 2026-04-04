@@ -6648,13 +6648,63 @@ function renderWindowStats() {
 let _gsLookback = 'all';
 let _gsDow      = 'all';
 
+// ── Gap OHLC filter state ────────────────────────────────────────────────────
+let _gapOhlcPeriod  = 'all';
+let _gapOhlcDows    = new Set([1,2,3,4,5]);
+
+function gapOhlcSetPeriod(mode, btn) {
+  document.querySelectorAll('#gapOHLCSection .ph-fb').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  _gapOhlcPeriod = mode;
+  renderGapOHLCSections();
+}
+
+function gapOhlcToggleDow(dow, btn) {
+  if (_gapOhlcDows.has(dow)) { _gapOhlcDows.delete(dow); btn.classList.remove('active'); }
+  else                        { _gapOhlcDows.add(dow);    btn.classList.add('active');    }
+  renderGapOHLCSections();
+}
+
+function gapOhlcDowAll() {
+  _gapOhlcDows = new Set([1,2,3,4,5]);
+  document.querySelectorAll('#gapOhlcDowBtns .ph-dow[data-dow]').forEach(b => {
+    if (!isNaN(Number(b.dataset.dow))) b.classList.add('active');
+    else b.classList.remove('active');
+  });
+  renderGapOHLCSections();
+}
+
+function gapOhlcDowNone() {
+  _gapOhlcDows = new Set();
+  document.querySelectorAll('#gapOhlcDowBtns .ph-dow[data-dow]').forEach(b => b.classList.remove('active'));
+  renderGapOHLCSections();
+}
+
 function renderGapOHLCSections() {
-  // Render the OHLC-derived gap analysis sections that now live in panel-gap-stats
-  // Reuses _phAllData (set by renderPriceHistory) and the rendering code in dashboard2
-  if (typeof _phAllData !== 'undefined' && _phAllData && _phAllData.length > 1) {
-    // Trigger the gap OHLC sections by calling the shared gap renderer
-    _renderGapOHLCBlocks(_phAllData);
+  if (typeof _phAllData === 'undefined' || !_phAllData || _phAllData.length <= 1) return;
+
+  const curYear = new Date().getFullYear();
+  let sd = _phAllData;
+
+  // Period filter
+  if (_gapOhlcPeriod === '2020')     sd = sd.filter(d => d.date && d.date >= '2020-01-01');
+  else if (_gapOhlcPeriod === 'ytd') sd = sd.filter(d => d.date && d.date.startsWith(String(curYear)));
+
+  // DOW filter
+  if (_gapOhlcDows.size > 0 && _gapOhlcDows.size < 5) {
+    sd = sd.filter(d => d.date && _gapOhlcDows.has(new Date(d.date + 'T12:00:00').getDay()));
+  } else if (_gapOhlcDows.size === 0) {
+    sd = [];
   }
+
+  // Update meta count
+  const meta = document.getElementById('gapOhlcMeta');
+  if (meta) {
+    const dowNote = _gapOhlcDows.size < 5 ? ` · ${_gapOhlcDows.size} day${_gapOhlcDows.size !== 1 ? 's' : ''} selected` : '';
+    meta.textContent = sd.length.toLocaleString() + ' sessions' + dowNote;
+  }
+
+  _renderGapOHLCBlocks(sd);
 }
 
 window._gsSetLookback = function(v){ _gsLookback=v; renderGapStats(); };
