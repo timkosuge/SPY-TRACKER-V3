@@ -113,6 +113,7 @@ function switchTab(id){
   }
   if(id==='analog') { renderAnalog(); }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
+  if(id==='blog') { if(typeof blogLoad==='function') blogLoad(); }
 }
 
 // ── VIX bar marker ──
