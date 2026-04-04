@@ -53,6 +53,7 @@ function _switchPanelOnly(id) {
   if(p) p.classList.add('active');
   // Tab-specific renders
   if(id==='blog') { if(typeof blogLoad==='function') blogLoad(); }
+  if(id==='analog') { if(typeof renderAnalog==='function') renderAnalog(); }
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
   if(id==='floor') {
