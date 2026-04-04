@@ -3685,7 +3685,7 @@ window.renderEvReleases();
 
 <!-- Chat window -->
 <div id="aiPanelBackdrop" style="display:none;position:fixed;inset:0;z-index:99998;background:transparent;"></div>
-<div id="aiPanel" style="position:fixed;bottom:64px;right:66px;z-index:99999;width:420px;height:600px;background:#0c0c14;border:1px solid rgba(0,204,255,0.2);border-radius:8px;display:none;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.95);overflow:hidden;isolation:isolate;">
+<div id="aiPanel" style="position:fixed;bottom:64px;right:66px;z-index:99999;width:min(420px,calc(100vw - 70px));max-width:calc(100vw - 70px);height:600px;background:#0c0c14;border:1px solid rgba(0,204,255,0.2);border-radius:8px;display:none;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.95);overflow:hidden;isolation:isolate;">
 
   <!-- Header -->
   <div id="aiPanelHeader" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.08);background:#0f0f1a;flex-shrink:0;">
