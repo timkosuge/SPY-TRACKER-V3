@@ -7151,11 +7151,20 @@ function renderTimeOfDay() {
     fbtn(d==='all'?'ALL DAYS':d.toUpperCase(), _todDow===d, `_todSetDow('${d}')`)
   ).join(' ');
 
-  const section = (title, color, body) =>
-    `<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;padding:16px;margin-bottom:14px;">
-      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};margin-bottom:12px;">${title}</div>
-      ${body}
+  const _gsCollapsed = window._gsCollapsed || {};
+  window._gsCollapsed = _gsCollapsed;
+  const section = (title, color, body) => {
+    const sid = 'gs_' + title.replace(/[^a-z0-9]/gi,'_').slice(0,20);
+    const isOpen = _gsCollapsed[sid] !== true;
+    return `<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;margin-bottom:10px;overflow:hidden;">
+      <div onclick="window._gsCollapsed['${sid}']=!window._gsCollapsed['${sid}'];this.parentElement.querySelector('.gs-body').style.display=window._gsCollapsed['${sid}']?'none':'block';this.querySelector('.gs-chevron').textContent=window._gsCollapsed['${sid}']?'▶':'▼';"
+        style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;user-select:none;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};">${title}</div>
+        <span class="gs-chevron" style="font-size:9px;color:${color};">${isOpen?'▼':'▶'}</span>
+      </div>
+      <div class="gs-body" style="padding:0 16px 16px;display:${isOpen?'block':'none'};">${body}</div>
     </div>`;
+  };
 
   const explain = t =>
     `<div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:14px;">${t}</div>`;
@@ -7665,11 +7674,20 @@ function renderSessionVolStats() {
     return '#00cc88';
   }
 
-  const section = (title, color, body) =>
-    `<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;padding:16px;margin-bottom:14px;">
-      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};margin-bottom:12px;">${title}</div>
-      ${body}
+  const _gsCollapsed = window._gsCollapsed || {};
+  window._gsCollapsed = _gsCollapsed;
+  const section = (title, color, body) => {
+    const sid = 'gs_' + title.replace(/[^a-z0-9]/gi,'_').slice(0,20);
+    const isOpen = _gsCollapsed[sid] !== true;
+    return `<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;margin-bottom:10px;overflow:hidden;">
+      <div onclick="window._gsCollapsed['${sid}']=!window._gsCollapsed['${sid}'];this.parentElement.querySelector('.gs-body').style.display=window._gsCollapsed['${sid}']?'none':'block';this.querySelector('.gs-chevron').textContent=window._gsCollapsed['${sid}']?'▶':'▼';"
+        style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;user-select:none;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};">${title}</div>
+        <span class="gs-chevron" style="font-size:9px;color:${color};">${isOpen?'▼':'▶'}</span>
+      </div>
+      <div class="gs-body" style="padding:0 16px 16px;display:${isOpen?'block':'none'};">${body}</div>
     </div>`;
+  };
 
   const explain = text =>
     `<div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:14px;">${text}</div>`;
