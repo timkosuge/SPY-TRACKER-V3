@@ -1634,6 +1634,19 @@
       <button class="ph-fb" onclick="phSetFilter('ytd',this)">2026 YTD</button>
     </div>
     <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);" id="phFilterMeta"></div>
+    <!-- DOW filter row -->
+    <div style="display:flex;align-items:center;gap:6px;margin-top:6px;width:100%;">
+      <span style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);flex-shrink:0;">DAY OF WEEK:</span>
+      <div style="display:flex;gap:3px;" id="phDowBtns">
+        <button class="ph-dow active" data-dow="1" onclick="phToggleDow(1,this)">MON</button>
+        <button class="ph-dow active" data-dow="2" onclick="phToggleDow(2,this)">TUE</button>
+        <button class="ph-dow active" data-dow="3" onclick="phToggleDow(3,this)">WED</button>
+        <button class="ph-dow active" data-dow="4" onclick="phToggleDow(4,this)">THU</button>
+        <button class="ph-dow active" data-dow="5" onclick="phToggleDow(5,this)">FRI</button>
+        <button class="ph-dow" data-dow="all" onclick="phDowAll()" style="margin-left:4px;border-color:var(--border);color:var(--text3);">ALL</button>
+        <button class="ph-dow" data-dow="none" onclick="phDowNone()" style="border-color:var(--border);color:var(--text3);">NONE</button>
+      </div>
+    </div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
       <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);">SORT TABLE BY:</span>
       <select id="phSortCol" onchange="phApplyFilter()" style="background:var(--bg2);color:var(--text2);border:1px solid var(--border);border-radius:3px;padding:4px 8px;font-family:'Share Tech Mono',monospace;font-size:12px;cursor:pointer;">
@@ -1654,6 +1667,9 @@
     .ph-fb:last-child{border-right:none;}
     .ph-fb:hover{color:var(--text2);background:rgba(255,255,255,0.03);}
     .ph-fb.active{background:rgba(0,255,136,0.12);color:var(--green);}
+    .ph-dow{padding:4px 9px;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:3px;transition:all 0.15s;}
+    .ph-dow:hover{color:var(--text2);border-color:var(--text3);}
+    .ph-dow.active{background:rgba(0,204,255,0.12);color:var(--cyan);border-color:var(--cyan);}
   </style>
   <!-- Analytics row: All History summary cards -->
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;" id="priceAnalyticsRow"></div>
@@ -1713,6 +1729,27 @@
      VOLUME HISTORY
 ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-volhistory">
+  <!-- Filter bar -->
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:5px;overflow:hidden;" id="vhFilterBtns">
+      <button class="ph-fb active" onclick="vhSetFilter('all',this)">ALL HISTORY</button>
+      <button class="ph-fb" onclick="vhSetFilter('2020',this)">SINCE 2020</button>
+      <button class="ph-fb" onclick="vhSetFilter('ytd',this)">2026 YTD</button>
+    </div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);" id="vhFilterMeta"></div>
+    <div style="display:flex;align-items:center;gap:6px;margin-top:4px;width:100%;">
+      <span style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);flex-shrink:0;">DAY OF WEEK:</span>
+      <div style="display:flex;gap:3px;" id="vhDowBtns">
+        <button class="ph-dow active" data-dow="1" onclick="vhToggleDow(1,this)">MON</button>
+        <button class="ph-dow active" data-dow="2" onclick="vhToggleDow(2,this)">TUE</button>
+        <button class="ph-dow active" data-dow="3" onclick="vhToggleDow(3,this)">WED</button>
+        <button class="ph-dow active" data-dow="4" onclick="vhToggleDow(4,this)">THU</button>
+        <button class="ph-dow active" data-dow="5" onclick="vhToggleDow(5,this)">FRI</button>
+        <button class="ph-dow" data-dow="all" onclick="vhDowAll()" style="margin-left:4px;border-color:var(--border);color:var(--text3);">ALL</button>
+        <button class="ph-dow" data-dow="none" onclick="vhDowNone()" style="border-color:var(--border);color:var(--text3);">NONE</button>
+      </div>
+    </div>
+  </div>
   <!-- Volume analytics -->
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px;" id="volAnalyticsRow"></div>
   <!-- Charts -->
