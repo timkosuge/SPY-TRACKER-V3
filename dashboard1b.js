@@ -1,3 +1,4 @@
+
 function renderBreadth(md, sd){
   const q=md.quotes||{};
   const tnx=q['^TNX'], irx=q['^IRX'];
