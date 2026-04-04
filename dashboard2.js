@@ -1209,9 +1209,8 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
         <!-- BELL CURVE -->
         <text x="${bX}" y="${bY-8}" fill="rgba(255,255,255,0.25)"
           font-size="9" font-family="Orbitron,monospace">Z-SCORE DISTRIBUTION${isStatic2?' (STATIC)':''}</text>
-        <path d="${bFill}" fill="${zColor}" opacity="0.07"/>
-        ${shade?`<path d="${shade}" fill="${zColor}" opacity="0.2"/>`:''}
-        <path d="${bLine}" fill="none" stroke="${zColor}" stroke-width="1.5" opacity="0.5"/>
+        ${shade?`<path d="${shade}" fill="${zColor}" opacity="0.25"/>`:''}
+        <path d="${bLine}" fill="none" stroke="${zColor}" stroke-width="1.5" opacity="0.6"/>
         <line x1="${bX}" y1="${bY+bH}" x2="${bX+bW}" y2="${bY+bH}"
           stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
         ${[-1.5,-1,0,1,1.5].map(v=>{
