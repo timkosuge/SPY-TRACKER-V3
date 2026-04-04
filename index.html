@@ -7076,9 +7076,9 @@ function spyAdminRenderPlaylist() {
   el.innerHTML = list.map((s, i) => {
     const playing = i === SPY_PLAYER.current;
     return '<div class="spy-song-row' + (playing ? ' playing' : '') + '" onclick="spyAdminPlay(' + i + ')">'
-      + '<span style="color:var(--text3);min-width:16px;">' + (playing ? '▶' : (i+1)) + '</span>'
+      + '<span style="color:var(--text3);min-width:16px;">' + (playing ? '&#9654;' : (i+1)) + '</span>'
       + '<span class="spy-song-name">' + s.title + '</span>'
-      + '<button class="spy-song-remove" onclick="event.stopPropagation();spyAdminRemove('' + s.id + '')" title="Remove">✕</button>'
+      + '<button class="spy-song-remove" onclick="event.stopPropagation();spyAdminRemove(&quot;' + s.id + '&quot;)" title="Remove">&#10005;</button>'
       + '</div>';
   }).join('');
 }
