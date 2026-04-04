@@ -52,7 +52,7 @@ function _switchPanelOnly(id) {
   const p = $('panel-'+id);
   if(p) p.classList.add('active');
   // Tab-specific renders
-  if(id==='blog') { if(typeof blogLoad==='function') blogLoad(); }
+  if(id==='blog') { if(typeof BLOG!=='undefined') BLOG.loaded=false; if(typeof blogLoad==='function') setTimeout(blogLoad, 100); }
   if(id==='analog') { if(typeof renderAnalog==='function') renderAnalog(); }
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
