@@ -5831,6 +5831,7 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
     user-select: none;
   }
   #spyPlayer.visible { transform: translateY(0); }
+  body.player-visible .tab-panel { padding-bottom: 56px !important; }
   #spyPlayerTrigger {
     position: fixed;
     bottom: 10px; right: 16px;
@@ -6522,18 +6523,27 @@ async function blogLoad() {
   if (BLOG.loaded) { blogRenderList(); return; }
   const grid = document.getElementById('blogGrid');
   if (grid) grid.innerHTML = '<div class="blog-no-posts">Loading...</div>';
-  try {
-    const r = await fetch('/blog?action=list&t=' + Date.now());
-    const d = await r.json();
-    if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
-    BLOG.posts  = d.posts || [];
-    BLOG.loaded = true;
-    blogRenderTagBar();
-    blogRenderList();
-  } catch(e) {
-    if (grid) grid.innerHTML =
-      '<div class="blog-no-posts">Could not load posts: ' + blogEsc(String(e.message)) + '.<br><br>'
-      + '<span style="font-size:11px;color:var(--text3);">Check that the /blog Cloudflare function is deployed and the DB binding is set in Pages settings.</span></div>';
+  let attempts = 0;
+  while (attempts < 3) {
+    try {
+      attempts++;
+      const r = await fetch('/blog?action=list&t=' + Date.now());
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
+      BLOG.posts  = d.posts || [];
+      BLOG.loaded = true;
+      blogRenderTagBar();
+      blogRenderList();
+      return;
+    } catch(e) {
+      if (attempts >= 3) {
+        if (grid) grid.innerHTML =
+          '<div class="blog-no-posts">Could not load posts: ' + blogEsc(String(e.message)) + '.<br><br>'
+          + '<span style="font-size:11px;color:var(--text3);">Check that the /blog Cloudflare function is deployed and the DB binding is set in Pages settings.</span></div>';
+        return;
+      }
+      await new Promise(res => setTimeout(res, 600));
+    }
   }
 }
 
@@ -6917,6 +6927,7 @@ async function spyPlayerInit() {
       SPY_PLAYER.initiated = true;
       spyLoadTrack(0);
       document.getElementById('spyPlayer').classList.add('visible');
+      document.body.classList.add('player-visible');
       SPY_PLAYER.visible = true;
       document.getElementById('spyPlayerTrigger').classList.add('hidden');
       // Play after a short delay so user gesture is still valid
@@ -7016,12 +7027,14 @@ function spyMute() {
 function spyPlayerShow() {
   document.getElementById('spyPlayer').classList.add('visible');
   document.getElementById('spyPlayerTrigger').classList.add('hidden');
+  document.body.classList.add('player-visible');
   SPY_PLAYER.visible = true;
 }
 function spyPlayerHide() {
   document.getElementById('spyPlayer').classList.remove('visible');
   document.getElementById('spyPlayerTrigger').classList.remove('hidden');
   document.getElementById('spyAdminPanel').classList.remove('open');
+  document.body.classList.remove('player-visible');
   SPY_PLAYER.visible = false;
 }
 
