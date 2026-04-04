@@ -1341,15 +1341,13 @@ function renderDesk(md,sd){
         const histRanges = sd.filter(r=>r.measurements?.day_range>0).map(r=>r.measurements.day_range);
         const avgR = histRanges.length ? histRanges.reduce((a,b)=>a+b,0)/histRanges.length : em;
         const stdR = histRanges.length>1 ? Math.sqrt(histRanges.reduce((a,b)=>a+(b-avgR)**2,0)/histRanges.length) : avgR*0.3;
-        // If today's actual H-L range is 0 (market closed / pre-market), the
-        // IV-derived em is a forecast — not a realized range. Force visuals to
-        // neutral (0σ) so the bell cursor and thermometer stay centered.
-        const todayActualRange = (spy?.high && spy?.low) ? spy.high - spy.low : 0;
-        const marketClosed = todayActualRange === 0;
-        const z    = marketClosed ? 0 : (stdR>0 ? (em-avgR)/stdR : 0);
+        // When market is closed, H-L range is 0 -- force z to 0 so bell and thermometer stay centered
+        const todayHL = (spy.high && spy.low) ? spy.high - spy.low : 0;
+        const mktClosed = todayHL === 0;
+        const z    = mktClosed ? 0 : (stdR>0 ? (em-avgR)/stdR : 0);
         const zCl  = Math.max(-2,Math.min(2,z));
-        const zCol = marketClosed ? '#888888' : (Math.abs(z)>1.2?'#ff3355':Math.abs(z)>0.7?'#ff8800':Math.abs(z)>0.3?'#ffcc00':'#00ff88');
-        const zLbl = marketClosed ? 'MKT CLOSED' : (Math.abs(z)>1.5?'EXTREME':Math.abs(z)>1?'HIGH':Math.abs(z)>0.5?'ELEVATED':'NORMAL');
+        const zCol = mktClosed ? '#888888' : (Math.abs(z)>1.2?'#ff3355':Math.abs(z)>0.7?'#ff8800':Math.abs(z)>0.3?'#ffcc00':'#00ff88');
+        const zLbl = mktClosed ? 'MKT CLOSED' : (Math.abs(z)>1.5?'EXTREME':Math.abs(z)>1?'HIGH':Math.abs(z)>0.5?'ELEVATED':'NORMAL');
         const pctBeyond = histRanges.filter(r=>r>em).length/Math.max(histRanges.length,1)*100;
         const W=340,H=160,tX=18,tW=28,tH=H-40,tY=16;
         const toY=v=>tY+tH-(v+2)/4*tH;
@@ -6378,4 +6376,8 @@ function renderWindowStats() {
   const statRow = (lbl, val, color) =>
     `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
       <span style="font-size:11px;color:var(--text3);">${lbl}</span>
-      <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${color||'var(-
+      <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${color||'var(--text2)'};">${val}</span>
+    </div>`;
+
+  // ── Summary cards for a window ─────────────────────────────────────────────
+  const summaryCards = (ws, label, accen
