@@ -50,7 +50,7 @@ const SERIES = {
   PSAVERT:   { name: 'Personal Savings Rate',  cat: 'consumer', unit: '%',         freq: 'monthly', good_direction: 'stable' },
 };
 
-async function fetchSeries(apiKey, seriesId, limit = 24) {
+async function fetchSeries(apiKey, seriesId, limit = 48) {
   try {
     const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=${limit}&observation_start=2020-01-01`;
     const r = await fetch(url, { headers: { 'User-Agent': 'SPY-Tracker/1.0' } });
@@ -100,7 +100,7 @@ function calcStats(obs) {
     change_yoy: changeYoy,
     change_yoy_pct: changeYoyPct,
     trend,
-    history: obs.slice(-24).map(o => ({ d: o.date.slice(0,7), v: o.value })),
+    history: obs.slice(-36).map(o => ({ d: o.date.slice(0,7), v: o.value })),
   };
 }
 
