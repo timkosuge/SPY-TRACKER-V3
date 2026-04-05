@@ -33,17 +33,8 @@ const DEFAULT_SONGS = [
   { id: 'I Miss You', file: 'SITE PLAYLIST i miss you.mp3', title: 'I Miss You' },
   { id: 'One Day', file: 'SITE PLAYLIST one day.mp3', title: 'One Day' },
   { id: 'all_those_times', file: 'SITE PLAYLIST All Those Times Reminisce.mp3', title: 'All Those Times Reminisce' },
-  { id: 'default_aggressive', file: 'SITE PLAYLIST DEFAULT AGGRESSIVE.mp3', title: 'Default Aggressive' },
-  { id: 'discipline_freedom', file: 'SITE PLAYLIST Discipline Equals FREEDOM.mp3', title: 'Discipline Equals Freedom' },
-  { id: 'do_what_others_dont', file: 'SITE PLAYLIST Do What Others Don\'t.mp3', title: 'Do What Others Don\'t' },
-  { id: 'every_second_counts', file: 'SITE PLAYLIST EVERY SECOND COUNTS.mp3', title: 'Every Second Counts' },
-  { id: 'i_feel_fine', file: 'SITE PLAYLIST I FEEL FINE.mp3', title: 'I Feel Fine' },
-  { id: 'i_wake_up_early', file: 'SITE PLAYLIST I Wake Up Early.mp3', title: 'I Wake Up Early' },
   { id: 'im_a_dude', file: 'SITE PLAYLIST I\'m a Dude.mp3', title: 'I\'m a Dude' },
   { id: 'the_way_she_moves', file: 'SITE PLAYLIST The Way She Moves.mp3', title: 'The Way She Moves' },
-  { id: 'time', file: 'SITE PLAYLIST Time.mp3', title: 'Time' },
-  { id: 'what_are_you_doing', file: 'SITE PLAYLIST WHAT ARE YOU GOING TO DO.mp3', title: 'What Are You Going To Do' },
-  { id: 'you_should_be', file: 'SITE PLAYLIST You Should Be A Monster.mp3', title: 'You Should Be A Monster' },
   { id: 'longest_road', file: 'SITE PLAYLIST longest road.mp3', title: 'Longest Road' },
 ];
 
