@@ -114,6 +114,7 @@ function switchTab(id){
   }
   if(id==='analog') { renderAnalog(); }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
+  if(id==='macro') { try { if(typeof renderMacro==='function') renderMacro(); } catch(e){ console.warn('macro:',e); } }
 }
 
 // ── VIX bar marker ──
