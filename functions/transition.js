@@ -1,4 +1,4 @@
-// functions/transition.js — Civilizational Transition Dashboard
+l// functions/transition.js — Civilizational Transition Dashboard
 // Combines FRED data with hardcoded AI capex trajectory and computed composite indicators
 // All indicators are FORWARD-LOOKING composites, not backward-looking measures
 
@@ -25,8 +25,8 @@ const AI_CAPEX_TRAJECTORY = [
   { y: 2023, b: 168, pct: 0.65 },
   { y: 2024, b: 285, pct: 1.05 },
   { y: 2025, b: 427, pct: 1.52, est: true },
-  { y: 2026, b: 562, pct: 1.89, est: true },
-  { y: 2027, b: 637, pct: 2.02, est: true },
+  { y: 2026, b: 700, pct: 2.35, est: true },
+  { y: 2027, b: 850, pct: 2.69, est: true },
 ];
 
 // ─── HISTORICAL INFRASTRUCTURE TRANSITIONS ───────────────────────────────────
@@ -164,7 +164,18 @@ export async function onRequestGet(context) {
     fetchFRED(apiKey, 'MANEMP', 48),    // Manufacturing employment — structural decline = automation
     fetchFRED(apiKey, 'IPMAN', 48),     // Industrial production: manufacturing
     fetchFRED(apiKey, 'OPHMFG', 36),    // Output per hour: manufacturing (direct automation signal)
-    fetchFRED(apiKey, 'AWHMAN', 48),    // Avg weekly hours: manufacturing (falling = fewer labor hours needed)
+    fetchFRED(apiKey, 'AWHMAN', 48),    // Avg weekly hours: manufacturing
+  ]);
+
+  // Batch 4: Winners & losers signals
+  const [
+    bizFormation, ipInvestment, ecommerceRetail, totalRetail, commercialLoans,
+  ] = await Promise.all([
+    fetchFRED(apiKey, 'BUSTHIRTY', 52), // New business applications (Census/weekly) — startup formation
+    fetchFRED(apiKey, 'A465RC1Q027SBEA', 24), // Intellectual property investment (BEA) — winners invest in IP
+    fetchFRED(apiKey, 'ECOMPCTSA', 20), // E-commerce as % of total retail (Census) — new commerce share
+    fetchFRED(apiKey, 'RETAILSMNSA', 24), // Total retail sales — old commerce baseline
+    fetchFRED(apiKey, 'CORBLACBW027SBOG', 24), // Commercial & industrial loans — old economy stress signal
   ]);
 
   // ── LABOR SUBSTITUTION RATE ────────────────────────────────────────────────
@@ -294,6 +305,86 @@ export async function onRequestGet(context) {
     };
   }
 
+  // ── WINNER / LOSER SIGNAL ─────────────────────────────────────────────────
+  // Winners: capturing disproportionate value as transition accelerates
+  // Losers: structurally displaced, borrowing to survive not to grow
+  let winnersLosersSignal = null;
+  try {
+    // New business formation — AI-native startups entering
+    let bizFormationSignal = null;
+    if (bizFormation && bizFormation.length >= 4) {
+      const recent = bizFormation.slice(-4);
+      const avg4 = recent.reduce((a,b) => a+b.v, 0) / recent.length;
+      const yearAgo = bizFormation.slice(-56, -52);
+      const avg4_yr = yearAgo.length ? yearAgo.reduce((a,b) => a+b.v, 0) / yearAgo.length : avg4;
+      bizFormationSignal = {
+        current: Math.round(avg4),
+        yoy_change_pct: Math.round(((avg4 - avg4_yr) / avg4_yr) * 100 * 10) / 10,
+        history: bizFormation.slice(-52).filter((_,i) => i % 4 === 0).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+      };
+    }
+
+    // Intellectual property investment — winners deploy capital into knowledge assets
+    let ipSignal = null;
+    if (ipInvestment && ipInvestment.length >= 4) {
+      const latest = ipInvestment[ipInvestment.length-1];
+      const base = ipInvestment[0];
+      ipSignal = {
+        current: latest.v,
+        growth_pct: Math.round(((latest.v - base.v) / base.v) * 100 * 10) / 10,
+        trend: ipInvestment[ipInvestment.length-1].v > ipInvestment[ipInvestment.length-4].v ? 'rising' : 'flat',
+        history: ipInvestment.slice(-16).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+      };
+    }
+
+    // E-commerce share of retail — new commerce capturing old commerce's market
+    let ecomSignal = null;
+    if (ecommerceRetail && ecommerceRetail.length >= 4) {
+      const latest = ecommerceRetail[ecommerceRetail.length-1];
+      const fiveYrsAgo = ecommerceRetail[Math.max(0, ecommerceRetail.length - 21)];
+      ecomSignal = {
+        current: latest.v,           // % of total retail
+        five_yr_ago: fiveYrsAgo.v,
+        share_gained: Math.round((latest.v - fiveYrsAgo.v) * 10) / 10,
+        history: ecommerceRetail.slice(-20).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+      };
+    }
+
+    // Commercial & industrial loans — rising = old economy borrowing to survive (not invest)
+    let loanSignal = null;
+    if (commercialLoans && commercialLoans.length >= 4) {
+      const latest = commercialLoans[commercialLoans.length-1];
+      const prev = commercialLoans[commercialLoans.length-5] || commercialLoans[0];
+      loanSignal = {
+        current: latest.v,
+        trend: latest.v > prev.v ? 'rising' : 'falling',
+        change_pct: Math.round(((latest.v - prev.v) / prev.v) * 100 * 10) / 10,
+        history: commercialLoans.slice(-20).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+      };
+    }
+
+    // Corporate profits after tax — are profits concentrating?
+    let profitSignal = null;
+    if (corpProfits && corpProfits.length >= 4) {
+      const latest = corpProfits[corpProfits.length-1];
+      const yearAgo = corpProfits[corpProfits.length-5] || corpProfits[0];
+      profitSignal = {
+        current: latest.v,
+        yoy_change_pct: Math.round(((latest.v - yearAgo.v) / Math.abs(yearAgo.v)) * 100 * 10) / 10,
+        trend: latest.v > yearAgo.v ? 'rising' : 'falling',
+        history: corpProfits.slice(-20).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+      };
+    }
+
+    winnersLosersSignal = {
+      biz_formation: bizFormationSignal,
+      ip_investment: ipSignal,
+      ecommerce:     ecomSignal,
+      corp_profits:  profitSignal,
+      commercial_loans: loanSignal,
+    };
+  } catch(e) { /* non-fatal */ }
+
   // ── BRIDGE PHASE SCORE (0-100) ────────────────────────────────────────────
   // 0-30: Early bridge | 30-60: Mid bridge (building) | 60-80: Late bridge
   // 80-95: Pre-pop (infrastructure sufficient, survivors hardening)
@@ -363,6 +454,9 @@ export async function onRequestGet(context) {
 
     // Automation & robotics adoption
     automation_signal: automationSignal,
+
+    // Winners & losers
+    winners_losers: winnersLosersSignal,
 
     updated: new Date().toISOString()
   });
