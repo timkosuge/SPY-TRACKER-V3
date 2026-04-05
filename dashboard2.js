@@ -3998,6 +3998,10 @@ async function loadData(){
     // Patch GEX + max pain with live CBOE data (overrides stale workflow data)
     if (liveGEX?.gex?.flip_point) {
       md.gex = liveGEX.gex;
+      // Patch atm_straddle into md.gex so daily EM can use real straddle price
+      if (liveGEX.atm_straddle) md.gex.atm_straddle = liveGEX.atm_straddle;
+      if (liveGEX.atm_call_mid) md.gex.atm_call_mid = liveGEX.atm_call_mid;
+      if (liveGEX.atm_put_mid)  md.gex.atm_put_mid  = liveGEX.atm_put_mid;
       if (liveGEX.max_pain?.length) md.max_pain = liveGEX.max_pain;
       if (liveGEX.walls_by_expiry?.length) md.walls_by_expiry = liveGEX.walls_by_expiry;
       if (liveGEX.atm_iv && md.weekly_em?.[0]) md.weekly_em[0].atm_iv = liveGEX.atm_iv;
