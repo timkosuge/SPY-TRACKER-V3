@@ -4641,7 +4641,7 @@ async function renderLiveChart() {
   const el = document.getElementById('liveChartContent');
   if (!el) return;
 
-  el.innerHTML = _svIntro + `
+  el.innerHTML = `
     <div id="lcWrap" style="padding:14px 16px;max-width:1400px;margin:0 auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);">⬡ SPY CHART</div>
