@@ -2360,11 +2360,11 @@ function toggleTheme() {
 // ════════════ SPY TRACKER MUSIC PLAYER ════════════
 const SPY_PLAYER = {
   playlist:    [],
-  shuffled:    [],      // shuffled order of indices
+  shuffled:    [],
   current:     0,
   authed:      false,
   muted:       false,
-  initiated:   false,   // true after first user gesture
+  initiated:   false,
   visible:     false,
 };
 
@@ -2378,7 +2378,35 @@ function spyShuffle() {
   SPY_PLAYER.shuffled = arr;
 }
 
-// ── Init: fetch playlist, attach audio events ──────────────────────────────
+function spyMusicToggle() {
+  const panel = document.getElementById('spyMusicPanel');
+  const btn   = document.getElementById('spyMusicBtn');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+    btn.classList.remove('active');
+  } else {
+    panel.classList.add('open');
+    btn.classList.add('active');
+    if (!SPY_PLAYER.initiated && SPY_PLAYER.playlist.length) {
+      spyPlayerStart();
+    }
+  }
+}
+
+function spyPlayerStart() {
+  if (SPY_PLAYER.initiated) return;
+  SPY_PLAYER.initiated = true;
+  spyShuffle();
+  const startIdx = Math.floor(Math.random() * SPY_PLAYER.shuffled.length);
+  spyLoadTrack(SPY_PLAYER.shuffled[startIdx]);
+  setTimeout(() => {
+    document.getElementById('spyAudio').play().catch(() => {});
+    document.getElementById('spyPlayBtn').textContent = '⏸';
+    document.getElementById('spyMusicViz')?.classList.remove('paused');
+  }, 300);
+}
+
 async function spyPlayerInit() {
   try {
     const r = await fetch('/music?t=' + Date.now());
@@ -2386,7 +2414,6 @@ async function spyPlayerInit() {
     SPY_PLAYER.playlist = d.playlist || [];
     spyShuffle();
   } catch(e) {
-    // If /music function not deployed yet, use empty playlist silently
     SPY_PLAYER.playlist = [];
   }
   const audio = document.getElementById('spyAudio');
@@ -2395,35 +2422,12 @@ async function spyPlayerInit() {
   audio.addEventListener('timeupdate', spyUpdateProgress);
   audio.addEventListener('loadedmetadata', spyUpdateProgress);
 
-  // Show admin gear if session-stored auth
   if (sessionStorage.getItem('spyMusicAuth') === '1') {
     SPY_PLAYER.authed = true;
     document.getElementById('spyAdminBtn').style.display = '';
   }
-
-  // First user interaction → start playback if playlist has songs
-  const startOnInteraction = () => {
-    if (!SPY_PLAYER.initiated && SPY_PLAYER.playlist.length) {
-      SPY_PLAYER.initiated = true;
-      spyShuffle();
-      const startIdx = Math.floor(Math.random() * SPY_PLAYER.shuffled.length);
-      spyLoadTrack(SPY_PLAYER.shuffled[startIdx]);
-      document.getElementById('spyPlayer').classList.add('visible');
-      document.body.classList.add('player-visible');
-      SPY_PLAYER.visible = true;
-      document.getElementById('spyPlayerTrigger').classList.add('hidden');
-      // Play after a short delay so user gesture is still valid
-      setTimeout(() => {
-        document.getElementById('spyAudio').play().catch(() => {});
-        document.getElementById('spyPlayBtn').textContent = '⏸';
-      }, 300);
-    }
-    ['click','keydown','touchstart'].forEach(e => document.removeEventListener(e, startOnInteraction));
-  };
-  ['click','keydown','touchstart'].forEach(e => document.addEventListener(e, startOnInteraction, { once: false, passive: true }));
 }
 
-// ── Track loading ──────────────────────────────────────────────────────────
 function spyLoadTrack(idx) {
   const list = SPY_PLAYER.playlist;
   if (!list.length) return;
@@ -2431,23 +2435,47 @@ function spyLoadTrack(idx) {
   SPY_PLAYER.current = idx;
   const song = list[idx];
   const audio = document.getElementById('spyAudio');
-  audio.src = '/music/' + song.file;
+  audio.src = '/music/' + encodeURIComponent(song.file);
   audio.load();
-  document.getElementById('spyTrackTitle').textContent = song.title || song.file;
-  document.getElementById('spyProgressFill').style.width = '0%';
-  spyAdminRenderPlaylist();
+  // Update new UI
+  const nameEl = document.getElementById('spyMusicTrackName');
+  const numEl  = document.getElementById('spyMusicTrackNum');
+  if (nameEl) nameEl.textContent = song.title || song.file;
+  const pos = SPY_PLAYER.shuffled.indexOf(idx);
+  if (numEl) numEl.textContent = (pos+1) + ' / ' + list.length + ' · shuffled';
+  // Update legacy hidden el for any other references
+  const legacyTitle = document.getElementById('spyTrackTitle');
+  if (legacyTitle) legacyTitle.textContent = song.title || song.file;
+}
+
+function spyUpdateProgress() {
+  const audio = document.getElementById('spyAudio');
+  const fill  = document.getElementById('spyMusicProgressFill');
+  const cur   = document.getElementById('spyTimeCur');
+  const tot   = document.getElementById('spyTimeTot');
+  if (!audio || !fill) return;
+  const pct = audio.duration ? (audio.currentTime / audio.duration * 100) : 0;
+  fill.style.width = pct + '%';
+  const fmt = s => { const m=Math.floor(s/60), sec=Math.floor(s%60); return m+':'+(sec<10?'0':'')+sec; };
+  if (cur) cur.textContent = fmt(audio.currentTime);
+  if (tot && audio.duration) tot.textContent = fmt(audio.duration);
 }
 
 function spyTogglePlay() {
   const audio = document.getElementById('spyAudio');
-  if (!SPY_PLAYER.initiated) { spyPlayerInit(); return; }
+  if (!SPY_PLAYER.initiated) {
+    spyPlayerStart();
+    return;
+  }
   if (audio.paused) {
-    if (!audio.src || audio.src === window.location.href) { spyLoadTrack(SPY_PLAYER.current); }
+    if (!audio.src || audio.src === window.location.href) spyLoadTrack(SPY_PLAYER.shuffled[0]||0);
     audio.play().catch(() => {});
     document.getElementById('spyPlayBtn').textContent = '⏸';
+    document.getElementById('spyMusicViz')?.classList.remove('paused');
   } else {
     audio.pause();
     document.getElementById('spyPlayBtn').textContent = '▶';
+    document.getElementById('spyMusicViz')?.classList.add('paused');
   }
 }
 
@@ -2456,15 +2484,12 @@ function spyNext() {
   const pos = SPY_PLAYER.shuffled.indexOf(SPY_PLAYER.current);
   const nextPos = pos + 1;
   if (nextPos >= SPY_PLAYER.shuffled.length) {
-    spyShuffle(); // reshuffle when reaching end
+    spyShuffle();
     spyLoadTrack(SPY_PLAYER.shuffled[0]);
   } else {
     spyLoadTrack(SPY_PLAYER.shuffled[nextPos]);
   }
-  if (!audio.paused || SPY_PLAYER.initiated) {
-    audio.play().catch(() => {});
-    document.getElementById('spyPlayBtn').textContent = '⏸';
-  }
+  if (!audio.paused || SPY_PLAYER.initiated) audio.play().catch(() => {});
 }
 
 function spyPrev() {
@@ -2475,164 +2500,76 @@ function spyPrev() {
   if (!audio.paused) audio.play().catch(() => {});
 }
 
-function spyUpdateProgress() {
-  const audio = document.getElementById('spyAudio');
-  if (!audio.duration) return;
-  const pct = (audio.currentTime / audio.duration) * 100;
-  document.getElementById('spyProgressFill').style.width = pct + '%';
-  if (!audio.paused) {
-    document.getElementById('spyPlayBtn').textContent = '⏸';
-  }
-}
-
 function spySeek(e) {
-  const bar = document.getElementById('spyProgress');
   const audio = document.getElementById('spyAudio');
-  if (!audio.duration) return;
+  const bar = document.getElementById('spyMusicProgress');
+  if (!audio || !bar || !audio.duration) return;
   const rect = bar.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const pct = (e.clientX - rect.left) / rect.width;
   audio.currentTime = pct * audio.duration;
 }
 
 function spySetVol(v) {
   const audio = document.getElementById('spyAudio');
-  audio.volume = parseFloat(v);
-  SPY_PLAYER.muted = false;
-  audio.muted = false;
-  document.getElementById('spyMuteBtn').textContent = v > 0.5 ? '🔊' : v > 0 ? '🔉' : '🔇';
+  if (audio) { audio.volume = v; SPY_PLAYER.muted = (v == 0); }
+  const icon = document.getElementById('spyMusicVolIcon');
+  if (icon) icon.textContent = v == 0 ? '🔇' : v < 0.4 ? '🔉' : '🔊';
 }
 
 function spyMute() {
   const audio = document.getElementById('spyAudio');
-  SPY_PLAYER.muted = !SPY_PLAYER.muted;
-  audio.muted = SPY_PLAYER.muted;
-  document.getElementById('spyMuteBtn').textContent = SPY_PLAYER.muted ? '🔇' : '🔊';
-}
-
-// ── Show / hide ────────────────────────────────────────────────────────────
-function spyPlayerShow() {
-  document.getElementById('spyPlayer').classList.add('visible');
-  document.getElementById('spyPlayerTrigger').classList.add('hidden');
-  document.body.classList.add('player-visible');
-  SPY_PLAYER.visible = true;
-}
-function spyPlayerHide() {
-  document.getElementById('spyPlayer').classList.remove('visible');
-  document.getElementById('spyPlayerTrigger').classList.remove('hidden');
-  document.getElementById('spyAdminPanel').classList.remove('open');
-  document.body.classList.remove('player-visible');
-  SPY_PLAYER.visible = false;
-}
-
-// ── Admin ──────────────────────────────────────────────────────────────────
-function spyAdminToggle() {
-  const panel = document.getElementById('spyAdminPanel');
-  if (panel.classList.contains('open')) {
-    panel.classList.remove('open');
-    return;
-  }
-  panel.classList.add('open');
-  if (SPY_PLAYER.authed) {
-    document.getElementById('spyAdminLogin').style.display = 'none';
-    document.getElementById('spyAdminControls').style.display = '';
-    spyAdminRenderPlaylist();
+  const slider = document.getElementById('spyVolSlider');
+  const icon = document.getElementById('spyMusicVolIcon');
+  if (!audio) return;
+  if (audio.volume > 0) {
+    SPY_PLAYER._prevVol = audio.volume;
+    audio.volume = 0;
+    if (slider) slider.value = 0;
+    if (icon) icon.textContent = '🔇';
   } else {
-    document.getElementById('spyAdminLogin').style.display = '';
-    document.getElementById('spyAdminControls').style.display = 'none';
-    setTimeout(() => document.getElementById('spyAdminPw').focus(), 50);
+    audio.volume = SPY_PLAYER._prevVol || 0.7;
+    if (slider) slider.value = audio.volume;
+    if (icon) icon.textContent = '🔊';
   }
 }
 
-function spyAdminClose() {
-  document.getElementById('spyAdminPanel').classList.remove('open');
-}
+// Legacy functions for compatibility
+function spyPlayerShow() { spyMusicToggle(); }
+function spyPlayerHide() { spyMusicToggle(); }
 
-async function spyAdminAuth() {
-  const pw = document.getElementById('spyAdminPw').value;
-  try {
-    const r = await fetch('/music', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'admin', password: pw, cmd: 'set_autoplay', autoplay: true })
-    });
-    const d = await r.json();
-    if (!r.ok || d.error) { alert('Wrong password'); return; }
-    SPY_PLAYER.authed = true;
-    sessionStorage.setItem('spyMusicAuth', '1');
-    document.getElementById('spyAdminBtn').style.display = '';
-    document.getElementById('spyAdminLogin').style.display = 'none';
-    document.getElementById('spyAdminControls').style.display = '';
-    spyAdminRenderPlaylist();
-  } catch(e) { alert('Error: ' + e.message); }
+// Admin
+function spyAdminToggle() {
+  const p = document.getElementById('spyAdminPanel');
+  if (p) p.classList.toggle('open');
 }
-
+function spyAdminAuth(pw) {
+  fetch('/music', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action:'admin', password:pw, cmd:'auth'}) })
+  .then(r=>r.json()).then(d=>{
+    if (d.ok) {
+      SPY_PLAYER.authed = true;
+      sessionStorage.setItem('spyMusicAuth','1');
+      document.getElementById('spyAdminBtn').style.display = '';
+      spyAdminRenderPlaylist();
+    }
+  }).catch(()=>{});
+}
 function spyAdminRenderPlaylist() {
-  if (!SPY_PLAYER.authed) return;
   const el = document.getElementById('spyAdminPlaylist');
   if (!el) return;
-  const list = SPY_PLAYER.playlist;
-  if (!list.length) { el.innerHTML = '<div style="color:var(--text3);font-size:10px;">No songs in playlist.</div>'; return; }
-  el.innerHTML = list.map((s, i) => {
-    const playing = i === SPY_PLAYER.current;
-    return '<div class="spy-song-row' + (playing ? ' playing' : '') + '" onclick="spyAdminPlay(' + i + ')">'
-      + '<span style="color:var(--text3);min-width:16px;">' + (playing ? '&#9654;' : (i+1)) + '</span>'
-      + '<span class="spy-song-name">' + s.title + '</span>'
-      + '<button class="spy-song-remove" onclick="event.stopPropagation();spyAdminRemove(&quot;' + s.id + '&quot;)" title="Remove">&#10005;</button>'
-      + '</div>';
-  }).join('');
+  el.innerHTML = SPY_PLAYER.playlist.map((s,i) =>
+    '<div class="spy-song-row' + (i===SPY_PLAYER.current?' playing':'') + '" onclick="spyAdminPlay(' + i + ')">'
+    + '<span style="color:var(--text3);min-width:16px;">' + (i+1) + '</span>'
+    + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 8px;">' + s.title + '</span>'
+    + '</div>'
+  ).join('');
 }
-
-function spyAdminPlay(idx) {
-  spyLoadTrack(idx);
-  const audio = document.getElementById('spyAudio');
-  audio.play().catch(() => {});
+function spyAdminPlay(i) {
+  spyLoadTrack(i);
+  document.getElementById('spyAudio').play().catch(()=>{});
   document.getElementById('spyPlayBtn').textContent = '⏸';
-  SPY_PLAYER.initiated = true;
 }
 
-async function spyAdminRemove(id) {
-  if (!SPY_PLAYER.authed) return;
-  const pw = sessionStorage.getItem('spyMusicAuth') === '1' ? '_authed_' : '';
-  // Re-auth if needed
-  const storedPw = sessionStorage.getItem('spyMusicPw') || prompt('Password:');
-  if (!storedPw) return;
-  sessionStorage.setItem('spyMusicPw', storedPw);
-  try {
-    const r = await fetch('/music', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'admin', password: storedPw, cmd: 'remove_song', id })
-    });
-    const d = await r.json();
-    if (d.error) { alert(d.error); return; }
-    SPY_PLAYER.playlist = d.playlist;
-    spyAdminRenderPlaylist();
-  } catch(e) { alert(e.message); }
-}
-
-async function spyAdminAddPrompt() {
-  if (!SPY_PLAYER.authed) return;
-  const storedPw = sessionStorage.getItem('spyMusicPw') || prompt('Password:');
-  if (!storedPw) return;
-  sessionStorage.setItem('spyMusicPw', storedPw);
-  const file = prompt('MP3 filename (in /music/ folder):\ne.g. my_track.mp3');
-  if (!file) return;
-  const title = prompt('Display title:', file.replace('.mp3','').replace(/_/g,' '));
-  if (!title) return;
-  try {
-    const r = await fetch('/music', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'admin', password: storedPw, cmd: 'add_song', song: { file, title, id: file.replace(/[^a-zA-Z0-9]/g,'_') } })
-    });
-    const d = await r.json();
-    if (d.error) { alert(d.error); return; }
-    SPY_PLAYER.playlist = d.playlist;
-    spyAdminRenderPlaylist();
-  } catch(e) { alert(e.message); }
-}
-
-// ── Boot ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', spyPlayerInit);
 </script>
   <script src="dashboard1.js"></script>
@@ -4545,86 +4482,150 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
 #chat-ban-btn{background:rgba(255,51,85,0.15);border:1px solid #ff3355;border-radius:3px;color:#ff3355;cursor:pointer;padding:3px 8px;font-family:'Orbitron',monospace;font-size:8px;}
 
   /* ═══════════════ MUSIC PLAYER ═══════════════ */
-  #spyPlayer {
+  #spyMusicBtn {
     position: fixed;
-    bottom: 0; left: 0; right: 0;
-    z-index: 9999;
-    background: rgba(8,8,18,0.97);
-    border-top: 1px solid rgba(0,204,255,0.2);
-    backdrop-filter: blur(12px);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 14px;
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 12px;
-    transform: translateY(100%);
-    transition: transform 0.35s ease;
-    user-select: none;
-  }
-  #spyPlayer.visible { transform: translateY(0); }
-  body.player-visible .tab-panel { padding-bottom: 56px !important; }
-  #spyPlayerTrigger {
-    position: fixed;
-    bottom: 10px; right: 16px;
-    z-index: 9998;
-    background: rgba(0,204,255,0.12);
-    border: 1px solid rgba(0,204,255,0.4);
-    border-radius: 50%;
-    width: 36px; height: 36px;
+    bottom: 80px; right: 0;
+    z-index: 8001;
+    width: 54px; height: 44px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-right: none;
+    border-radius: 6px 0 0 6px;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer;
+    color: var(--cyan);
     font-size: 16px;
-    transition: opacity 0.3s;
+    transition: background 0.15s, color 0.15s;
+  }
+  #spyMusicBtn:hover { background: rgba(0,204,255,0.1); }
+  #spyMusicBtn.active { color: #00ff88; background: rgba(0,255,136,0.08); }
+
+  #spyMusicPanel {
+    position: fixed;
+    bottom: 70px; right: 70px;
+    z-index: 9002;
+    width: 320px;
+    background: #0c0c14;
+    border: 1px solid rgba(0,204,255,0.2);
+    border-radius: 10px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.9), 0 0 0 1px rgba(0,204,255,0.05);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  #spyMusicPanel.open { display: flex; }
+
+  #spyMusicHeader {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    background: #0f0f1a;
+  }
+  #spyMusicHeaderTitle {
+    font-family: 'Orbitron', monospace;
+    font-size: 9px; letter-spacing: 2px;
     color: var(--cyan);
   }
-  #spyPlayerTrigger:hover { background: rgba(0,204,255,0.25); }
-  #spyPlayerTrigger.hidden { opacity: 0; pointer-events: none; }
-  .spy-player-btn {
+  #spyMusicClose {
+    background: none; border: none; color: var(--text3);
+    cursor: pointer; font-size: 16px; padding: 0 4px;
+    line-height: 1;
+  }
+  #spyMusicClose:hover { color: #ff3355; }
+
+  /* Album art / visualizer area */
+  #spyMusicViz {
+    height: 80px;
+    background: linear-gradient(135deg, rgba(0,204,255,0.05), rgba(0,255,136,0.03));
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  #spyMusicVizBars {
+    display: flex; align-items: flex-end; gap: 2px; height: 40px;
+  }
+  .viz-bar {
+    width: 3px; background: var(--cyan);
+    border-radius: 2px 2px 0 0;
+    opacity: 0.6;
+    animation: vizPulse 0.8s ease-in-out infinite alternate;
+  }
+  .viz-bar:nth-child(odd) { animation-delay: 0.1s; background: #00ff88; }
+  .viz-bar:nth-child(3n) { animation-delay: 0.3s; }
+  .viz-bar:nth-child(4n) { animation-delay: 0.5s; background: #8855ff; }
+  @keyframes vizPulse {
+    from { transform: scaleY(0.2); }
+    to   { transform: scaleY(1); }
+  }
+  #spyMusicViz.paused .viz-bar { animation-play-state: paused; opacity: 0.25; }
+
+  /* Track info */
+  #spyMusicInfo {
+    padding: 10px 14px 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  #spyMusicTrackName {
+    font-size: 12px; color: var(--text1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+  #spyMusicTrackNum {
+    font-size: 10px; color: var(--text3);
+  }
+
+  /* Progress */
+  #spyMusicProgressWrap {
+    padding: 6px 14px 4px;
+  }
+  #spyMusicProgress {
+    height: 3px; background: rgba(255,255,255,0.08);
+    border-radius: 2px; cursor: pointer; position: relative;
+  }
+  #spyMusicProgressFill {
+    height: 100%; background: linear-gradient(90deg, var(--cyan), #00ff88);
+    border-radius: 2px; width: 0%;
+    transition: width 0.5s linear; pointer-events: none;
+  }
+  #spyMusicTimes {
+    display: flex; justify-content: space-between;
+    font-size: 9px; color: var(--text3); margin-top: 3px;
+  }
+
+  /* Controls */
+  #spyMusicControls {
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px; padding: 8px 14px 10px;
+  }
+  .mc-btn {
     background: none; border: none; cursor: pointer;
-    color: var(--cyan); font-size: 14px; padding: 2px 4px;
-    opacity: 0.8; transition: opacity 0.15s;
+    color: var(--text2); font-size: 16px; padding: 6px;
+    border-radius: 50%; transition: color 0.15s, background 0.15s;
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
   }
-  .spy-player-btn:hover { opacity: 1; }
-  #spyTrackTitle {
-    flex: 1; white-space: nowrap; overflow: hidden;
-    text-overflow: ellipsis; color: var(--text2);
-    font-size: 11px; min-width: 0;
-  }
-  #spyProgress {
-    flex: 2; height: 3px; background: rgba(255,255,255,0.1);
-    border-radius: 2px; cursor: pointer; min-width: 60px;
-    position: relative;
-  }
-  #spyProgressFill {
-    height: 100%; background: var(--cyan);
-    border-radius: 2px; width: 0%; transition: width 0.5s linear;
-    pointer-events: none;
-  }
-  #spyVolSlider {
-    width: 60px; accent-color: var(--cyan);
-    cursor: pointer;
-  }
-  #spyPlayerClose {
-    background: none; border: none; cursor: pointer;
-    color: var(--text3); font-size: 14px; padding: 2px 4px;
-  }
-  #spyPlayerClose:hover { color: #ff3355; }
-  /* Admin panel */
-  #spyAdminPanel {
-    display: none;
-    position: fixed;
-    bottom: 52px; right: 16px;
-    width: 320px;
-    background: rgba(8,8,18,0.98);
+  .mc-btn:hover { color: var(--cyan); background: rgba(0,204,255,0.08); }
+  .mc-btn.play-btn {
+    width: 42px; height: 42px;
+    background: rgba(0,204,255,0.1);
     border: 1px solid rgba(0,204,255,0.3);
-    border-radius: 6px;
-    z-index: 10000;
-    padding: 14px;
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 11px;
-    color: var(--text2);
+    color: var(--cyan); font-size: 18px;
   }
+  .mc-btn.play-btn:hover { background: rgba(0,204,255,0.2); }
+
+  /* Volume */
+  #spyMusicVolRow {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 14px 10px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    padding-top: 8px;
+  }
+  #spyMusicVolIcon { font-size: 12px; color: var(--text3); cursor: pointer; }
+  #spyMusicVol {
+    flex: 1; accent-color: var(--cyan); cursor: pointer;
+    height: 3px;
+  }
+
   #spyAdminPanel.open { display: block; }
   .spy-admin-title {
     font-family: 'Orbitron', monospace;
@@ -5346,40 +5347,59 @@ setInterval(() => {
 <!-- ════════════ MUSIC PLAYER ════════════ -->
 <audio id="spyAudio" preload="metadata"></audio>
 
-<!-- Floating trigger (shows when player is hidden) -->
-<div id="spyPlayerTrigger" onclick="spyPlayerShow()" title="Open player">♪</div>
+<!-- Music trigger (sidebar-style button) -->
+<div id="spyMusicBtn" onclick="spyMusicToggle()" title="Music Player">♪</div>
 
-<!-- Main player bar -->
-<div id="spyPlayer">
-  <button class="spy-player-btn" onclick="spyPrev()" title="Previous">⏮</button>
-  <button class="spy-player-btn" id="spyPlayBtn" onclick="spyTogglePlay()" title="Play/Pause">▶</button>
-  <button class="spy-player-btn" onclick="spyNext()" title="Next">⏭</button>
-  <span id="spyTrackTitle">— no track —</span>
-  <div id="spyProgress" onclick="spySeek(event)" title="Seek">
-    <div id="spyProgressFill"></div>
+<!-- Floating music panel -->
+<div id="spyMusicPanel">
+  <div id="spyMusicHeader">
+    <span id="spyMusicHeaderTitle">⬡ NOW PLAYING</span>
+    <button id="spyMusicClose" onclick="spyMusicToggle()">×</button>
   </div>
-  <input id="spyVolSlider" type="range" min="0" max="1" step="0.02" value="0.7"
-         oninput="spySetVol(this.value)" title="Volume">
-  <button class="spy-player-btn" onclick="spyMute()" id="spyMuteBtn" title="Mute">🔊</button>
-  <button class="spy-player-btn" id="spyAdminBtn" onclick="spyAdminToggle()" title="Admin" style="display:none;">⚙</button>
-  <button id="spyPlayerClose" onclick="spyPlayerHide()" title="Minimize">╲╱</button>
-</div>
-
-<!-- Admin panel -->
-<div id="spyAdminPanel">
-  <div class="spy-admin-title">⬡ PLAYER ADMIN</div>
-  <div id="spyAdminLogin" style="display:none;">
-    <input id="spyAdminPw" type="password" placeholder="admin password" autocomplete="current-password">
-    <button onclick="spyAdminAuth()" style="margin-top:6px;background:var(--bg3);border:1px solid var(--border);color:var(--cyan);padding:3px 10px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;width:100%;">UNLOCK</button>
-  </div>
-  <div id="spyAdminControls" style="display:none;">
-    <div id="spyAdminPlaylist"></div>
-    <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
-      <button onclick="spyAdminAddPrompt()" style="background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);color:var(--cyan);padding:3px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;">+ Add Song</button>
-      <button onclick="spyAdminClose()" style="background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.3);color:#ff3355;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;">Close</button>
+  <div id="spyMusicViz" class="paused">
+    <div id="spyMusicVizBars">
+      <div class="viz-bar" style="height:12px"></div><div class="viz-bar" style="height:28px"></div>
+      <div class="viz-bar" style="height:20px"></div><div class="viz-bar" style="height:36px"></div>
+      <div class="viz-bar" style="height:16px"></div><div class="viz-bar" style="height:32px"></div>
+      <div class="viz-bar" style="height:24px"></div><div class="viz-bar" style="height:14px"></div>
+      <div class="viz-bar" style="height:38px"></div><div class="viz-bar" style="height:22px"></div>
+      <div class="viz-bar" style="height:18px"></div><div class="viz-bar" style="height:30px"></div>
+      <div class="viz-bar" style="height:26px"></div><div class="viz-bar" style="height:10px"></div>
+      <div class="viz-bar" style="height:34px"></div><div class="viz-bar" style="height:20px"></div>
+      <div class="viz-bar" style="height:28px"></div><div class="viz-bar" style="height:16px"></div>
     </div>
   </div>
+  <div id="spyMusicInfo">
+    <div id="spyMusicTrackName">— no track —</div>
+    <div id="spyMusicTrackNum"></div>
+  </div>
+  <div id="spyMusicProgressWrap">
+    <div id="spyMusicProgress" onclick="spySeek(event)">
+      <div id="spyMusicProgressFill"></div>
+    </div>
+    <div id="spyMusicTimes">
+      <span id="spyTimeCur">0:00</span>
+      <span id="spyTimeTot">0:00</span>
+    </div>
+  </div>
+  <div id="spyMusicControls">
+    <button class="mc-btn" onclick="spyPrev()" title="Previous">⏮</button>
+    <button class="mc-btn play-btn" id="spyPlayBtn" onclick="spyTogglePlay()" title="Play/Pause">▶</button>
+    <button class="mc-btn" onclick="spyNext()" title="Next">⏭</button>
+  </div>
+  <div id="spyMusicVolRow">
+    <span id="spyMusicVolIcon" onclick="spyMute()">🔊</span>
+    <input id="spyVolSlider" type="range" min="0" max="1" step="0.02" value="0.7" oninput="spySetVol(this.value)">
+    <button id="spyAdminBtn" onclick="spyAdminToggle()" style="display:none;background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;">⚙</button>
+  </div>
 </div>
 
-
-</body></html>
+<!-- Legacy IDs for JS compatibility -->
+<div style="display:none">
+  <span id="spyTrackTitle"></span>
+  <div id="spyProgress"><div id="spyProgressFill"></div></div>
+  <span id="spyTimeDisplay"></span>
+  <button id="spyMuteBtn"></button>
+  <div id="spyPlayer"></div>
+  <div id="spyPlayerTrigger"></div>
+</div>
