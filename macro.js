@@ -565,7 +565,7 @@ window._M = (() => {
           <span style="font-family:'Orbitron',monospace;font-size:9px;color:${m.color};">SIGNAL: </span>
           <span style="font-size:11px;color:var(--text2);">${m.signal}</span>
         </div>
-      </div>`).join('');
+      </div>`);
 
     return `
     ${sectionHeader('🌍', 'TRANSITION INTELLIGENCE', 'The Old Metrics Are Breaking Down — Here\'s the New Framework')}
@@ -1231,9 +1231,15 @@ function loadAINarrativeTransition(){ window._M && window._M.aiTransition(); }
 })();
 
 function renderMacroTransition() {
-  const el = document.getElementById('macroTransitionContent');
-  if (!el) return;
-  if (window._M && window._M.reloadTransition) {
-    window._M.reloadTransition();
+  try {
+    const el = document.getElementById('macroTransitionContent');
+    if (!el) { console.warn('macroTransitionContent element not found'); return; }
+    if (window._M && window._M.reloadTransition) {
+      window._M.reloadTransition();
+    } else {
+      console.warn('_M or _M.reloadTransition not available', window._M);
+    }
+  } catch(e) {
+    console.error('renderMacroTransition error:', e);
   }
 }
