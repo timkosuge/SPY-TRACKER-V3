@@ -14,9 +14,9 @@ const json = (d, s = 200) => new Response(JSON.stringify(d), { status: s, header
 const SERIES = {
   // INFLATION
   CPIAUCSL:  { name: 'CPI (All Items)',        cat: 'inflation', unit: 'Index',    freq: 'monthly', good_direction: 'down' },
-  CPILFESL:  { name: 'Core CPI (ex Food/Energy)', cat: 'inflation', unit: 'Index', freq: 'monthly', good_direction: 'down' },
-  PCEPI:     { name: 'PCE Price Index',        cat: 'inflation', unit: 'Index',    freq: 'monthly', good_direction: 'down' },
-  PCEPILFE:  { name: 'Core PCE (Fed target)',  cat: 'inflation', unit: 'Index',    freq: 'monthly', good_direction: 'down' },
+  CPILFESL:  { name: 'Core CPI (ex Food/Energy)', cat: 'inflation', unit: 'Index', freq: 'monthly', good_direction: 'down', show_yoy: true },
+  PCEPI:     { name: 'PCE Price Index',        cat: 'inflation', unit: 'Index',    freq: 'monthly', good_direction: 'down', show_yoy: true },
+  PCEPILFE:  { name: 'Core PCE (Fed target)',  cat: 'inflation', unit: 'Index',    freq: 'monthly', good_direction: 'down', show_yoy: true },
   T10YIE:    { name: '10Y Breakeven Inflation',cat: 'inflation', unit: '%',        freq: 'daily',   good_direction: 'stable' },
 
   // EMPLOYMENT
@@ -185,24 +185,16 @@ export async function onRequestGet(context) {
   const apiKey = context.env?.FRED_API_KEY;
   if (!apiKey) return json({ error: 'FRED_API_KEY not configured' }, 500);
 
-  // Fetch all series in parallel (batched to avoid rate limits)
+  // Fetch all series in parallel — avoids sequential timeout on Cloudflare Functions
+  // FRED allows 120 req/min; 24 simultaneous requests is well within limits (~2s vs ~12s sequential)
   const seriesIds = Object.keys(SERIES);
+  const fetched = await Promise.all(seriesIds.map(id => fetchSeries(apiKey, id, 36)));
+
   const results = {};
-
-  const batches = [];
-  for (let i = 0; i < seriesIds.length; i += 5) {
-    batches.push(seriesIds.slice(i, i + 5));
-  }
-
-  for (const batch of batches) {
-    const fetched = await Promise.all(batch.map(id => fetchSeries(apiKey, id, 36)));
-    batch.forEach((id, i) => {
-      const obs = fetched[i];
-      if (obs) {
-        results[id] = { ...calcStats(obs), ...SERIES[id] };
-      }
-    });
-  }
+  seriesIds.forEach((id, i) => {
+    const obs = fetched[i];
+    if (obs) results[id] = { ...calcStats(obs), ...SERIES[id] };
+  });
 
   const regime = computeRegime(results);
 
