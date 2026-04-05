@@ -539,121 +539,9 @@ window._M = (() => {
   /* ── 5b. Transition intelligence section ────────────── */
   function buildTransitionSection() {
     const t = TRANSITION;
-    const d = STATIC;
     const ringR = 36;
     const circumf = 2 * Math.PI * ringR;
     const dash = (t.score / 100) * circumf;
-
-    // ── Per-metric data panels ──────────────────────────
-    // Job Losses card: unemployment sparkline + U-6 gauge
-    const uVals = d.unemployment.series.map(s => s.v);
-    const jobsData = `
-      <div style="margin-top:10px;border-top:1px solid var(--border)33;padding-top:10px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;">
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">UNEMPLOYMENT TREND</div>
-            ${sparkline(uVals,{width:160,height:40,color:colorOrng})}
-            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-top:2px;"><span>Jan-22</span><span>Jan-26</span></div>
-          </div>
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:6px;">CURRENT READINGS</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:${colorOrng};">${d.unemployment.current}%</div>
-            <div style="font-size:10px;color:var(--text3);">U-3 rate</div>
-            ${gauge(d.unemployment.u6, 2, 14, colorPurp, `U-6 Broad: ${d.unemployment.u6}%`)}
-          </div>
-        </div>
-      </div>`;
-
-    // Debt/GDP card: debt sparkline + ratio
-    const debtVals = [...d.debt.series, ...d.debt.projections].map(s => s.v);
-    const debtData = `
-      <div style="margin-top:10px;border-top:1px solid var(--border)33;padding-top:10px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;">
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">DEBT/GDP TREND</div>
-            ${sparkline(debtVals,{width:160,height:40,color:colorPurp})}
-            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-top:2px;"><span>2000</span><span>2030E</span></div>
-          </div>
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:6px;">CURRENT READINGS</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:${colorPurp};">${d.debt.ratio}%</div>
-            <div style="font-size:10px;color:var(--text3);">Debt / GDP</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:4px;">Total: <span style="color:var(--text2);">$${(d.debt.total/1e12).toFixed(1)}T</span></div>
-            ${gauge(d.debt.ratio, 50, 160, colorPurp, `vs 2000 low: 54%`)}
-          </div>
-        </div>
-      </div>`;
-
-    // Inflation card: CPI sparkline + core readings
-    const cpiVals = d.cpi.series.map(s => s.v);
-    const inflData = `
-      <div style="margin-top:10px;border-top:1px solid var(--border)33;padding-top:10px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;">
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">CPI YoY TREND</div>
-            ${sparkline(cpiVals,{width:160,height:40,color:colorNeu})}
-            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-top:2px;"><span>Jan-23</span><span>Feb-26</span></div>
-          </div>
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:6px;">CURRENT READINGS</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:${colorNeu};">${d.cpi.current}%</div>
-            <div style="font-size:10px;color:var(--text3);">Headline CPI YoY</div>
-            ${gauge(d.cpi.current,  0, 10, colorNeu,   `Headline: ${d.cpi.current}%`)}
-            ${gauge(d.cpi.core,     0, 10, colorOrng,  `Core CPI: ${d.cpi.core}%`)}
-            ${gauge(d.cpi.corePce,  0, 10, colorPurp,  `Core PCE: ${d.cpi.corePce}%`)}
-          </div>
-        </div>
-      </div>`;
-
-    // Productivity card: sparkline + AI projection
-    const prodVals = d.productivity.series.map(s => s.v);
-    const projVals = [1.9,2.1,2.4,2.8,3.2,3.8,4.2,4.6,4.8,5.0];
-    const prodData = `
-      <div style="margin-top:10px;border-top:1px solid var(--border)33;padding-top:10px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;">
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">HISTORICAL (YoY %)</div>
-            ${sparkline(prodVals,{width:160,height:40,color:colorUp})}
-            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-top:2px;"><span>2015</span><span>2025</span></div>
-          </div>
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:${colorUp};margin-bottom:4px;">AI-ERA PROJECTION</div>
-            ${sparkline(projVals,{width:160,height:40,color:colorUp})}
-            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-top:2px;"><span>2025</span><span style="color:${colorUp};">2034</span></div>
-          </div>
-        </div>
-        <div style="margin-top:8px;">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:${colorUp};">${d.productivity.current}%</div>
-          <div style="font-size:10px;color:var(--text3);">Current YoY · Pre-AI avg: ~1.5%</div>
-          ${gauge(d.productivity.current, 0, 6, colorUp, `vs AI-era target: 3–6%`)}
-        </div>
-      </div>`;
-
-    // UBI card: pilot programs + displacement context
-    const ubiData = `
-      <div style="margin-top:10px;border-top:1px solid var(--border)33;padding-top:10px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:8px;">AI JOB DISPLACEMENT — SECTOR RISK</div>
-        ${d.unemployment.aiDisplacement.slice(0,4).map(item => {
-          const rc = item.risk==='HIGH' ? colorDn : item.risk==='MED' ? colorOrng : colorUp;
-          return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;padding:3px 0;">
-            <div style="font-size:10px;color:var(--text2);">${item.sector}</div>
-            <div style="width:60px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-              <div style="width:${item.pct}%;height:100%;background:${rc};border-radius:2px;"></div>
-            </div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${rc};min-width:32px;text-align:right;">${item.pct}%</div>
-          </div>`;
-        }).join('')}
-        <div style="margin-top:8px;font-size:10px;color:var(--text3);">Automation risk within 5–10 yrs (McKinsey/GS)</div>
-      </div>`;
-
-    // Map data to each metric card
-    const metricData = {
-      jobs: jobsData,
-      debt: debtData,
-      inflation: inflData,
-      productivity: prodData,
-      ubi: ubiData
-    };
 
     const cards = t.metrics.map(m => `
       <div class="panel" style="border-top:3px solid ${m.color}88;">
@@ -673,7 +561,6 @@ window._M = (() => {
             <div style="font-size:12px;color:var(--text2);line-height:1.5;">${m.newRead}</div>
           </div>
         </div>
-        ${metricData[m.id] || ''}
         <div style="margin-top:8px;padding:6px 10px;background:var(--bg3);border-radius:3px;border-left:2px solid ${m.color};">
           <span style="font-family:'Orbitron',monospace;font-size:9px;color:${m.color};">SIGNAL: </span>
           <span style="font-size:11px;color:var(--text2);">${m.signal}</span>
@@ -725,16 +612,12 @@ window._M = (() => {
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;min-width:0;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       ${cards.slice(0,2).join('')}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;min-width:0;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
       ${cards.slice(2).join('')}
-    </div>
-
-    ${buildCycleSection()}
-
-    ${buildNarrativeSection()}`;
+    </div>`;
   }
 
 
