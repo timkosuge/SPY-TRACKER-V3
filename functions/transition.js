@@ -1,4 +1,4 @@
-l// functions/transition.js — Civilizational Transition Dashboard
+// functions/transition.js — Civilizational Transition Dashboard
 // Combines FRED data with hardcoded AI capex trajectory and computed composite indicators
 // All indicators are FORWARD-LOOKING composites, not backward-looking measures
 
@@ -310,77 +310,58 @@ export async function onRequestGet(context) {
   // Losers: structurally displaced, borrowing to survive not to grow
   let winnersLosersSignal = null;
   try {
-    // New business formation — AI-native startups entering
-    let bizFormationSignal = null;
-    if (bizFormation && bizFormation.length >= 4) {
-      const recent = bizFormation.slice(-4);
-      const avg4 = recent.reduce((a,b) => a+b.v, 0) / recent.length;
-      const yearAgo = bizFormation.slice(-56, -52);
-      const avg4_yr = yearAgo.length ? yearAgo.reduce((a,b) => a+b.v, 0) / yearAgo.length : avg4;
-      bizFormationSignal = {
-        current: Math.round(avg4),
-        yoy_change_pct: Math.round(((avg4 - avg4_yr) / avg4_yr) * 100 * 10) / 10,
-        history: bizFormation.slice(-52).filter((_,i) => i % 4 === 0).map(p => ({ d: p.d.slice(0,7), v: p.v })),
-      };
-    }
+    // Use unique variable names per block to avoid esbuild minification conflicts
+    const bizRecent4 = bizFormation && bizFormation.length >= 4 ? bizFormation.slice(-4) : null;
+    const bizAvg4    = bizRecent4 ? bizRecent4.reduce((a,b) => a+b.v, 0) / bizRecent4.length : 0;
+    const bizYrAgo   = bizFormation ? bizFormation.slice(-56, -52) : [];
+    const bizAvgYr   = bizYrAgo.length ? bizYrAgo.reduce((a,b) => a+b.v, 0) / bizYrAgo.length : bizAvg4;
+    const bizFormationSignal = bizRecent4 ? {
+      current: Math.round(bizAvg4),
+      yoy_change_pct: Math.round(((bizAvg4 - bizAvgYr) / bizAvgYr) * 100 * 10) / 10,
+      history: (bizFormation || []).slice(-52).filter((_,i) => i % 4 === 0).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+    } : null;
 
-    // Intellectual property investment — winners deploy capital into knowledge assets
-    let ipSignal = null;
-    if (ipInvestment && ipInvestment.length >= 4) {
-      const latest = ipInvestment[ipInvestment.length-1];
-      const base = ipInvestment[0];
-      ipSignal = {
-        current: latest.v,
-        growth_pct: Math.round(((latest.v - base.v) / base.v) * 100 * 10) / 10,
-        trend: ipInvestment[ipInvestment.length-1].v > ipInvestment[ipInvestment.length-4].v ? 'rising' : 'flat',
-        history: ipInvestment.slice(-16).map(p => ({ d: p.d.slice(0,7), v: p.v })),
-      };
-    }
+    const ipLatest = ipInvestment && ipInvestment.length >= 4 ? ipInvestment[ipInvestment.length-1] : null;
+    const ipBase   = ipInvestment ? ipInvestment[0] : null;
+    const ipSignal = ipLatest ? {
+      current: ipLatest.v,
+      growth_pct: Math.round(((ipLatest.v - ipBase.v) / ipBase.v) * 100 * 10) / 10,
+      trend: ipInvestment[ipInvestment.length-1].v > ipInvestment[ipInvestment.length-4].v ? 'rising' : 'flat',
+      history: ipInvestment.slice(-16).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+    } : null;
 
-    // E-commerce share of retail — new commerce capturing old commerce's market
-    let ecomSignal = null;
-    if (ecommerceRetail && ecommerceRetail.length >= 4) {
-      const latest = ecommerceRetail[ecommerceRetail.length-1];
-      const fiveYrsAgo = ecommerceRetail[Math.max(0, ecommerceRetail.length - 21)];
-      ecomSignal = {
-        current: latest.v,           // % of total retail
-        five_yr_ago: fiveYrsAgo.v,
-        share_gained: Math.round((latest.v - fiveYrsAgo.v) * 10) / 10,
-        history: ecommerceRetail.slice(-20).map(p => ({ d: p.d.slice(0,7), v: p.v })),
-      };
-    }
+    const ecomLatest   = ecommerceRetail && ecommerceRetail.length >= 4 ? ecommerceRetail[ecommerceRetail.length-1] : null;
+    const ecomFiveYr   = ecommerceRetail ? ecommerceRetail[Math.max(0, ecommerceRetail.length - 21)] : null;
+    const ecomSignal   = ecomLatest ? {
+      current: ecomLatest.v,
+      five_yr_ago: ecomFiveYr ? ecomFiveYr.v : ecomLatest.v,
+      share_gained: ecomFiveYr ? Math.round((ecomLatest.v - ecomFiveYr.v) * 10) / 10 : 0,
+      history: ecommerceRetail.slice(-20).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+    } : null;
 
-    // Commercial & industrial loans — rising = old economy borrowing to survive (not invest)
-    let loanSignal = null;
-    if (commercialLoans && commercialLoans.length >= 4) {
-      const latest = commercialLoans[commercialLoans.length-1];
-      const prev = commercialLoans[commercialLoans.length-5] || commercialLoans[0];
-      loanSignal = {
-        current: latest.v,
-        trend: latest.v > prev.v ? 'rising' : 'falling',
-        change_pct: Math.round(((latest.v - prev.v) / prev.v) * 100 * 10) / 10,
-        history: commercialLoans.slice(-20).map(p => ({ d: p.d.slice(0,7), v: p.v })),
-      };
-    }
+    const loanLatest = commercialLoans && commercialLoans.length >= 4 ? commercialLoans[commercialLoans.length-1] : null;
+    const loanPrev   = commercialLoans ? (commercialLoans[commercialLoans.length-5] || commercialLoans[0]) : null;
+    const loanSignal = loanLatest ? {
+      current: loanLatest.v,
+      trend: loanLatest.v > loanPrev.v ? 'rising' : 'falling',
+      change_pct: Math.round(((loanLatest.v - loanPrev.v) / loanPrev.v) * 100 * 10) / 10,
+      history: commercialLoans.slice(-20).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+    } : null;
 
-    // Corporate profits after tax — are profits concentrating?
-    let profitSignal = null;
-    if (corpProfits && corpProfits.length >= 4) {
-      const latest = corpProfits[corpProfits.length-1];
-      const yearAgo = corpProfits[corpProfits.length-5] || corpProfits[0];
-      profitSignal = {
-        current: latest.v,
-        yoy_change_pct: Math.round(((latest.v - yearAgo.v) / Math.abs(yearAgo.v)) * 100 * 10) / 10,
-        trend: latest.v > yearAgo.v ? 'rising' : 'falling',
-        history: corpProfits.slice(-20).map(p => ({ d: p.d.slice(0,7), v: p.v })),
-      };
-    }
+    const profitLatest  = corpProfits && corpProfits.length >= 4 ? corpProfits[corpProfits.length-1] : null;
+    const profitYearAgo = corpProfits ? (corpProfits[corpProfits.length-5] || corpProfits[0]) : null;
+    const profitSignal  = profitLatest ? {
+      current: profitLatest.v,
+      yoy_change_pct: Math.round(((profitLatest.v - profitYearAgo.v) / Math.abs(profitYearAgo.v)) * 100 * 10) / 10,
+      trend: profitLatest.v > profitYearAgo.v ? 'rising' : 'falling',
+      history: corpProfits.slice(-20).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+    } : null;
 
     winnersLosersSignal = {
-      biz_formation: bizFormationSignal,
-      ip_investment: ipSignal,
-      ecommerce:     ecomSignal,
-      corp_profits:  profitSignal,
+      biz_formation:   bizFormationSignal,
+      ip_investment:   ipSignal,
+      ecommerce:       ecomSignal,
+      corp_profits:    profitSignal,
       commercial_loans: loanSignal,
     };
   } catch(e) { /* non-fatal */ }
@@ -394,7 +375,7 @@ export async function onRequestGet(context) {
 
   // Factor 1: Capex trajectory (where are we relative to historical peaks?)
   const latestCapexPct = AI_CAPEX_TRAJECTORY.filter(d => !d.est).slice(-1)[0]?.pct || 1.05;
-  const railwayPeak = 6.0, internetPeak = 1.8;
+  const internetPeak = 1.8;
   const capexProgress = (latestCapexPct / internetPeak) * 100; // vs internet analog
   if (capexProgress > 80) { bridgeScore += 15; scoreFactors.push({ f: 'Capex vs Internet Peak', v: capexProgress.toFixed(0)+'%', signal: 'LATE BRIDGE' }); }
   else if (capexProgress > 50) { bridgeScore += 8; scoreFactors.push({ f: 'Capex vs Internet Peak', v: capexProgress.toFixed(0)+'%', signal: 'MID BRIDGE' }); }
