@@ -2110,7 +2110,7 @@ CRITICAL OPTIONS RULES:
     el.classList.remove('loading');
 
     // Render paragraphs with spacing
-    const paras = reply.split(/\n\n+/).filter(p => p.trim());
+    const paras = reply.split('\n\n').filter(p => p.trim());
     if (paras.length > 1) {
       el.innerHTML = paras.map(p => `<div class="ov-para">${p.trim().replace(/\n/g, '<br>')}</div>`).join('');
     } else {
@@ -4682,6 +4682,96 @@ async function renderMacro() {
   }
 }
 
+async function generateMacroAI(data) {
+  const el = document.getElementById('macroAIText');
+  if (!el) return;
+
+  const S = data.series || {};
+  const regime = data.regime || {};
+
+  // Build a rich data summary for the AI
+  const fmt1 = v => v == null ? 'N/A' : Number(v).toFixed(1);
+  const fmt2 = v => v == null ? 'N/A' : Number(v).toFixed(2);
+  const trend = id => S[id]?.trend || 'unknown';
+  const val = id => S[id]?.latest;
+  const yoy = id => S[id]?.change_yoy_pct;
+
+  const dataContext = `
+MACRO REGIME: ${regime.regime} (score: ${regime.score}/100)
+Signal breakdown: ${(regime.signals||[]).map(s => `${s.label}: ${s.val}`).join(', ')}
+
+INFLATION:
+- Core PCE (Fed target): ${fmt1(val('PCEPILFE'))}% | YoY change: ${fmt1(yoy('PCEPILFE'))}pp | Trend: ${trend('PCEPILFE')}
+- Core CPI: ${fmt1(val('CPILFESL'))}% | YoY: ${fmt1(yoy('CPILFESL'))}pp | Trend: ${trend('CPILFESL')}
+- 10Y Breakeven Inflation (market expectation): ${fmt1(val('T10YIE'))}%
+
+EMPLOYMENT:
+- Unemployment Rate: ${fmt1(val('UNRATE'))}% | Trend: ${trend('UNRATE')}
+- Initial Jobless Claims: ${fmt1(val('ICSA'))}K/week | Trend: ${trend('ICSA')}
+- Job Openings (JOLTS): ${fmt1(val('JTSJOL'))}M | Trend: ${trend('JTSJOL')}
+- U-6 Underemployment: ${fmt1(val('U6RATE'))}%
+
+GROWTH:
+- Real GDP Growth: ${fmt1(val('A191RL1Q225SBEA'))}% annualized | Trend: ${trend('A191RL1Q225SBEA')}
+- Industrial Production trend: ${trend('INDPRO')}
+
+MONETARY POLICY:
+- Fed Funds Rate: ${fmt1(val('FEDFUNDS'))}%
+- Fed Balance Sheet: $${fmt1(val('WALCL'))}B | Trend: ${trend('WALCL')}
+- M2 Money Supply trend: ${trend('M2SL')}
+- Reverse Repo (RRP): $${fmt1(val('RRPONTSYD'))}B | Trend: ${trend('RRPONTSYD')}
+
+RATES & CREDIT:
+- Yield Curve (10Y-2Y): ${fmt2(val('T10Y2Y'))}% | Trend: ${trend('T10Y2Y')}
+- 10Y Treasury: ${fmt2(val('DGS10'))}%
+- High Yield Credit Spread: ${fmt2(val('BAMLH0A0HYM2'))}% | Trend: ${trend('BAMLH0A0HYM2')}
+
+CONSUMER:
+- Michigan Consumer Sentiment: ${fmt1(val('UMCSENT'))} | Trend: ${trend('UMCSENT')}
+- Personal Savings Rate: ${fmt1(val('PSAVERT'))}%`;
+
+  const systemPrompt = `You are a world-class macroeconomic analyst writing for a sophisticated trading dashboard. Your audience ranges from professional traders to curious retail investors. Your job is to take the economic data provided and write a clear, intelligent, and compelling narrative about the current macroeconomic environment and what it means for markets.
+
+STYLE GUIDELINES:
+- Write in flowing prose, not bullet points or headers
+- 4-6 paragraphs, each focused on a distinct theme
+- Start with the big picture regime and what defines it right now
+- Weave the data points naturally into the narrative — do NOT just list numbers. Use numbers only when they add real meaning
+- Connect the dots between different indicators — how inflation affects Fed policy, which affects rates, which affects stocks
+- Reference historical parallels where genuinely relevant
+- End with what to watch going forward — the key risks and the scenarios that could change the picture
+- Be intellectually honest — acknowledge uncertainty and conflicting signals
+- Write as if explaining to a smart friend who understands markets but is not an economist
+- Do not use phrases like "it is worth noting" or "it is important to remember" — just say it directly
+- Tone: confident, analytical, clear, slightly conversational but never dumbed down`;
+
+  const userMsg = `Here is the current macroeconomic data:
+${dataContext}
+
+Write your macro analysis. Be thorough and tell the complete story of where we are in the economic cycle, what is driving markets, and what risks and opportunities lie ahead. Aim for 5-6 substantive paragraphs.`;
+
+  try {
+    const reply = await callAI([{ role: 'user', content: userMsg }], systemPrompt, 1200);
+    if (el) {
+      // Format paragraphs with proper spacing
+      const paras = reply.split('\n\n').filter(p => p.trim());
+
+
+      el.innerHTML = paras.map(p =>
+        `<p style="margin:0 0 14px;line-height:1.9;">${p.trim()}</p>`
+      ).join('');
+    }
+  } catch(e) {
+    if (el) el.innerHTML = `<span style="color:var(--text3);font-style:italic;">AI analysis unavailable: ${e.message}</span>`;
+  }
+}
+
+async function refreshMacroAI() {
+  const el = document.getElementById('macroAIText');
+  if (el) el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Regenerating analysis...</span>';
+  if (_macroData) await generateMacroAI(_macroData);
+}
+
 function _renderMacroHTML(data) {
   const el = document.getElementById('macroContent');
   if (!el || !data) return;
@@ -4808,6 +4898,9 @@ function _renderMacroHTML(data) {
     </div>`
   ).join('');
 
+  // Trigger AI analysis after data loads
+  setTimeout(() => generateMacroAI(data), 100);
+
   el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
 
     <!-- MACRO REGIME GAUGE -->
@@ -4836,6 +4929,20 @@ function _renderMacroHTML(data) {
       <div style="border-top:1px solid var(--border);padding-top:10px;">
         <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">SIGNAL BREAKDOWN</div>
         ${signalsHTML}
+      </div>
+    </div>
+
+    <!-- AI MACRO OVERVIEW -->
+    <div class="panel" id="macroAIOverview" style="margin-bottom:16px;border-left:4px solid #8855ff;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#8855ff;">⬡ AI MACRO ANALYSIS</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Generated from live FRED data · Powered by Grok</div>
+        </div>
+        <button onclick="refreshMacroAI()" style="background:rgba(136,85,255,0.1);border:1px solid rgba(136,85,255,0.3);color:#8855ff;padding:5px 12px;border-radius:3px;cursor:pointer;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH</button>
+      </div>
+      <div id="macroAIText" style="font-size:13px;color:var(--text2);line-height:1.9;">
+        <span style="color:var(--text3);font-style:italic;">Generating analysis...</span>
       </div>
     </div>
 
