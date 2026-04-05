@@ -619,6 +619,10 @@ window._M = (() => {
       ${cards.slice(2).join('')}
     </div>
 
+    ${buildLaborSection(STATIC)}
+
+    ${buildProductivitySection(STATIC)}
+
     ${buildCycleSection()}
 
     ${buildNarrativeSection()}`;
