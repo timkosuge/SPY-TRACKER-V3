@@ -5587,3 +5587,4 @@ async function refreshTransitionAI() {
   if (el) el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Regenerating...</span>';
   if (_transitionData) await generateTransitionAI(_transitionData);
 }
+
