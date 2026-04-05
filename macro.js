@@ -612,12 +612,16 @@ window._M = (() => {
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;min-width:0;">
       ${cards.slice(0,2).join('')}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;min-width:0;">
       ${cards.slice(2).join('')}
-    </div>`;
+    </div>
+
+    ${buildCycleSection()}
+
+    ${buildNarrativeSection()}`;
   }
 
   /* ── 5c. Fed / Interest Rates ───────────────────────── */
