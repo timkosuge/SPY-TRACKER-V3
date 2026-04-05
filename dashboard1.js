@@ -1412,19 +1412,11 @@ function renderDesk(md,sd){
       })():'<div class="panel"><div class="no-data">IV needed</div></div>'}
       ${wem?`<div class="panel">
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ WEEKLY EXPECTED MOVE</div>
-        ${(()=>{
-          const wA=wem.wem_mid||(sd&&sd[0]?.close)||wem.friday_close||cur||0;
-          const wIv=wem.atm_iv||wem.static_wem_iv||null;
-          const wRng=wem.wem_range||(wIv?wA*wIv*Math.sqrt(6/365)*0.70*2:null);
-          const wLo=wem.wem_low||(wRng?wA-wRng/2:null);
-          const wHi=wem.wem_high||(wRng?wA+wRng/2:null);
-          const note=(!wem.wem_low&&wLo)?'<div style="font-size:10px;color:var(--text3);text-align:center;margin-bottom:6px;">estimated · live levels update Mon open</div>':'';
-          return "<div style=\"display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;\">"
-            +"<div style=\"text-align:center;\"><div style=\"font-family:Orbitron,monospace;font-size:8px;color:#ff3355;\">LOW</div><div style=\"font-family:Share Tech Mono,monospace;font-size:18px;color:#ff3355;\">"+(wLo?"$"+fmt(wLo,2):"—")+"</div></div>"
-            +"<div style=\"text-align:center;\"><div style=\"font-family:Orbitron,monospace;font-size:8px;color:var(--text3);\">ANCHOR</div><div style=\"font-family:Share Tech Mono,monospace;font-size:18px;\">"+(wA?"$"+fmt(wA,2):"—")+"</div></div>"
-            +"<div style=\"text-align:center;\"><div style=\"font-family:Orbitron,monospace;font-size:8px;color:#00ff88;\">HIGH</div><div style=\"font-family:Share Tech Mono,monospace;font-size:18px;color:#00ff88;\">"+(wHi?"$"+fmt(wHi,2):"—")+"</div></div>"
-            +"</div>"+note;
-        })()}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;">LOW</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#ff3355;">$${fmt(wem.wem_low,2)}</div></div>
+          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">ANCHOR</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;">$${fmt(wem.wem_mid,2)}</div></div>
+          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;">HIGH</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#00ff88;">$${fmt(wem.wem_high,2)}</div></div>
+        </div>
         ${(()=>{
           const lo=wem.wem_low, hi=wem.wem_high, mid2=wem.wem_mid;
           const p=cur||mid2||0;
