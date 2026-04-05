@@ -225,6 +225,7 @@ window._M = (() => {
       current: 2.8,
       prev: 3.0,
       core: 3.1,
+      corePce: 2.8,   // Core PCE YoY % — Fed's preferred measure
       peak: 9.1,    // Jun 2022
       target: 2.0,
       series: [
@@ -762,8 +763,9 @@ window._M = (() => {
             🔺 <strong>Inflationary:</strong> UBI pilots, services wages, housing supply constraints
           </div>
         </div>
-        ${gauge(c.current, 0, 10, c.current>3?colorDn:colorNeu, 'CPI vs 0–10% range')}
-        ${gauge(c.core, 0, 10, colorOrng, 'Core CPI')}
+        ${gauge(c.current,  0, 10, c.current>3?colorDn:colorNeu, `CPI YoY: ${c.current}%`)}
+        ${gauge(c.core,     0, 10, colorOrng,                    `Core CPI YoY: ${c.core}%`)}
+        ${gauge(c.corePce,  0, 10, colorPurp,                    `Core PCE YoY: ${c.corePce}%`)}
         <div style="margin-top:8px;font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">
           TARGET ZONE: <span style="color:${colorUp};">1.8% – 2.2%</span>
         </div>
