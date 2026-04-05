@@ -67,7 +67,6 @@ function _switchPanelOnly(id) {
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='macro') { try { if(typeof renderMacro==='function') renderMacro(); } catch(e){ console.warn('macro:',e); } }
   if(id==='macro-transition') { try { if(typeof renderMacroTransition==='function') renderMacroTransition(); } catch(e){ console.warn('macro-transition:',e); } }
-  if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
   if(id==='gex' && _md) { try { renderGEX(_md); renderGEXAdditions(_md); renderGEXDailyHistory(); } catch(e){ console.warn('gex:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
