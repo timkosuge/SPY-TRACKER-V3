@@ -2360,6 +2360,7 @@ function toggleTheme() {
 // ════════════ SPY TRACKER MUSIC PLAYER ════════════
 const SPY_PLAYER = {
   playlist:    [],
+  shuffled:    [],      // shuffled order of indices
   current:     0,
   authed:      false,
   muted:       false,
@@ -2367,12 +2368,23 @@ const SPY_PLAYER = {
   visible:     false,
 };
 
+function spyShuffle() {
+  const n = SPY_PLAYER.playlist.length;
+  const arr = Array.from({length: n}, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  SPY_PLAYER.shuffled = arr;
+}
+
 // ── Init: fetch playlist, attach audio events ──────────────────────────────
 async function spyPlayerInit() {
   try {
     const r = await fetch('/music?t=' + Date.now());
     const d = await r.json();
     SPY_PLAYER.playlist = d.playlist || [];
+    spyShuffle();
   } catch(e) {
     // If /music function not deployed yet, use empty playlist silently
     SPY_PLAYER.playlist = [];
@@ -2393,7 +2405,9 @@ async function spyPlayerInit() {
   const startOnInteraction = () => {
     if (!SPY_PLAYER.initiated && SPY_PLAYER.playlist.length) {
       SPY_PLAYER.initiated = true;
-      spyLoadTrack(0);
+      spyShuffle();
+      const startIdx = Math.floor(Math.random() * SPY_PLAYER.shuffled.length);
+      spyLoadTrack(SPY_PLAYER.shuffled[startIdx]);
       document.getElementById('spyPlayer').classList.add('visible');
       document.body.classList.add('player-visible');
       SPY_PLAYER.visible = true;
@@ -2439,7 +2453,14 @@ function spyTogglePlay() {
 
 function spyNext() {
   const audio = document.getElementById('spyAudio');
-  spyLoadTrack(SPY_PLAYER.current + 1);
+  const pos = SPY_PLAYER.shuffled.indexOf(SPY_PLAYER.current);
+  const nextPos = pos + 1;
+  if (nextPos >= SPY_PLAYER.shuffled.length) {
+    spyShuffle(); // reshuffle when reaching end
+    spyLoadTrack(SPY_PLAYER.shuffled[0]);
+  } else {
+    spyLoadTrack(SPY_PLAYER.shuffled[nextPos]);
+  }
   if (!audio.paused || SPY_PLAYER.initiated) {
     audio.play().catch(() => {});
     document.getElementById('spyPlayBtn').textContent = '⏸';
@@ -2448,13 +2469,10 @@ function spyNext() {
 
 function spyPrev() {
   const audio = document.getElementById('spyAudio');
-  // If more than 3s in, restart current; otherwise go back
-  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
-  spyLoadTrack(SPY_PLAYER.current - 1);
-  if (!audio.paused || SPY_PLAYER.initiated) {
-    audio.play().catch(() => {});
-    document.getElementById('spyPlayBtn').textContent = '⏸';
-  }
+  const pos = SPY_PLAYER.shuffled.indexOf(SPY_PLAYER.current);
+  const prevPos = (pos - 1 + SPY_PLAYER.shuffled.length) % SPY_PLAYER.shuffled.length;
+  spyLoadTrack(SPY_PLAYER.shuffled[prevPos]);
+  if (!audio.paused) audio.play().catch(() => {});
 }
 
 function spyUpdateProgress() {
