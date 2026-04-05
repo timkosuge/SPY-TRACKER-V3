@@ -4706,19 +4706,40 @@ function _renderMacroHTML(data) {
     return '#ffcc00';
   };
 
-  // Mini spark line using CSS bars
-  const spark = (history, color) => {
+  // SVG line chart
+  const lineChart = (history, color, unit, height=80) => {
     if (!history || history.length < 2) return '';
     const vals = history.map(h => h.v).filter(v => v != null);
-    if (!vals.length) return '';
+    const dates = history.filter(h => h.v != null).map(h => h.d);
+    if (vals.length < 2) return '';
     const min = Math.min(...vals), max = Math.max(...vals);
-    const range = max - min || 1;
-    const bars = vals.slice(-16).map(v => {
-      const h = Math.max(4, Math.round(((v - min) / range) * 32));
-      return `<div style="width:3px;height:${h}px;background:${color};border-radius:1px;opacity:0.7;flex-shrink:0;"></div>`;
+    const range = max - min || Math.abs(min) * 0.1 || 1;
+    const W = 400, H = height, PAD = 4;
+    const x = i => PAD + (i / (vals.length - 1)) * (W - PAD*2);
+    const y = v => H - PAD - ((v - min) / range) * (H - PAD*2);
+    const pts = vals.map((v,i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    const fillPts = `${x(0).toFixed(1)},${H} ` + pts + ` ${x(vals.length-1).toFixed(1)},${H}`;
+    // X-axis labels - first, middle, last
+    const labelIdxs = [0, Math.floor(vals.length/2), vals.length-1];
+    const xLabels = labelIdxs.map(i =>
+      `<text x="${x(i).toFixed(1)}" y="${H+12}" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8" font-family="Share Tech Mono,monospace">${dates[i]||''}</text>`
+    ).join('');
+    // Y-axis labels
+    const yLabels = [min, (min+max)/2, max].map((v,i) => {
+      const yp = [H-PAD, H/2, PAD][i];
+      const label = unit==='%' ? v.toFixed(1)+'%' : Math.abs(v)>=1000 ? (v/1000).toFixed(1)+'K' : v.toFixed(1);
+      return `<text x="${W+4}" y="${yp+3}" fill="rgba(255,255,255,0.3)" font-size="8" font-family="Share Tech Mono,monospace">${label}</text>`;
     }).join('');
-    return `<div style="display:flex;align-items:flex-end;gap:1px;height:36px;margin-top:8px;">${bars}</div>`;
+    return `<svg width="100%" viewBox="0 0 ${W+40} ${H+18}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:10px;overflow:visible;">
+      <defs><linearGradient id="cg${color.replace('#','')}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.3"/><stop offset="100%" stop-color="${color}" stop-opacity="0.02"/></linearGradient></defs>
+      <polygon points="${fillPts}" fill="url(#cg${color.replace('#','')})" />
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="${x(vals.length-1).toFixed(1)}" cy="${y(vals[vals.length-1]).toFixed(1)}" r="3" fill="${color}"/>
+      ${xLabels}${yLabels}
+    </svg>`;
   };
+  // Keep spark as alias for small inline use
+  const spark = lineChart;
 
   const seriesCard = (id, desc, explain, historicalNote) => {
     const s = S[id];
@@ -4726,17 +4747,28 @@ function _renderMacroHTML(data) {
     const isGood = s.good_direction;
     const tc = trendColor(s.trend, isGood);
     const yoyStr = s.change_yoy != null ? ` · ${s.change_yoy > 0 ? '+' : ''}${fmt1(s.change_yoy)}${s.unit === '%' ? 'pp' : ''} YoY` : '';
+    const chgStr = s.change != null ? ` ${s.change > 0 ? '+' : ''}${fmt2(s.change)} vs prior` : '';
     const color = tc;
+    const fredUrl = `https://fred.stlouisfed.org/series/${id}`;
     return `<div class="panel" style="border-top:3px solid ${color};">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${color};">${desc}</div>
-        <div style="font-size:18px;color:${color};">${trendIcon(s.trend)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${color};margin-bottom:3px;">${desc}</div>
+          <div style="font-size:10px;color:var(--text3);">FRED: <a href="${fredUrl}" target="_blank" style="color:var(--text3);text-decoration:none;">${id}</a> · ${s.freq} · ${s.latest_date}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:20px;color:${color};">${trendIcon(s.trend)}</div>
+          <div style="font-size:9px;color:${color};">${s.trend.toUpperCase()}</div>
+        </div>
       </div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:26px;font-weight:900;color:var(--text);">${fmt1(s.latest)}${s.unit === '%' ? '%' : ''}</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px;">${s.latest_date}${yoyStr}</div>
-      ${spark(s.history, color)}
-      ${explain ? `<div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">${explain}</div>` : ''}
-      ${historicalNote ? `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;line-height:1.5;">📚 ${historicalNote}</div>` : ''}
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${fmt1(s.latest)}${s.unit === '%' ? '%' : ''}</div>
+        ${s.change != null ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">${chgStr}</div>` : ''}
+      </div>
+      ${yoyStr ? `<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">${yoyStr}</div>` : ''}
+      ${lineChart(s.history, color, s.unit, 90)}
+      ${explain ? `<div style="font-size:12px;color:var(--text2);margin-top:10px;line-height:1.7;border-top:1px solid var(--border);padding-top:10px;">${explain}</div>` : ''}
+      ${historicalNote ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;line-height:1.6;padding:8px;background:rgba(255,255,255,0.03);border-radius:3px;">📚 ${historicalNote}</div>` : ''}
     </div>`;
   };
 
