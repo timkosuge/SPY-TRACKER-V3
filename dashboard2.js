@@ -4852,10 +4852,16 @@ function _renderMacroHTML(data) {
         </div>
       </div>
       <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${fmt1(s.latest)}${s.unit === '%' ? '%' : ''}</div>
-        ${s.change != null ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">${chgStr}</div>` : ''}
+        ${s.show_yoy && s.change_yoy_pct != null ? `
+          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${fmt1(s.change_yoy_pct)}%</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">YoY</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text3);">index: ${fmt1(s.latest)}</div>
+        ` : `
+          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${fmt1(s.latest)}${s.unit === '%' ? '%' : ''}</div>
+          ${s.change != null ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">${chgStr}</div>` : ''}
+        `}
       </div>
-      ${yoyStr ? `<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">${yoyStr}</div>` : ''}
+      ${!s.show_yoy && yoyStr ? `<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">${yoyStr}</div>` : ''}
       ${lineChart(s.history, color, s.unit, 90)}
       ${explain ? `<div style="font-size:12px;color:var(--text2);margin-top:10px;line-height:1.7;border-top:1px solid var(--border);padding-top:10px;">${explain}</div>` : ''}
       ${historicalNote ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;line-height:1.6;padding:8px;background:rgba(255,255,255,0.03);border-radius:3px;">📚 ${historicalNote}</div>` : ''}
@@ -4902,6 +4908,79 @@ function _renderMacroHTML(data) {
   setTimeout(() => generateMacroAI(data), 100);
 
   el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+
+    <!-- WELCOME PANEL -->
+    <div style="background:linear-gradient(135deg,rgba(0,204,255,0.06),rgba(136,85,255,0.04));border:1px solid rgba(0,204,255,0.15);border-radius:6px;padding:18px 20px;margin-bottom:16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:260px;">
+          <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ MACRO ECONOMICS DASHBOARD</div>
+          <div style="font-size:14px;color:var(--text1);font-weight:600;margin-bottom:8px;line-height:1.5;">What moves markets? It starts here.</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.8;">
+            This tab tracks the economic forces that professional investors, central banks, and hedge funds watch every day.
+            You do not need a finance degree to use it — every number has a plain-English explanation below it.
+            Start with the <strong style="color:var(--cyan);">Regime Gauge</strong> at the top to get the big picture, 
+            then scroll through each section to understand why markets are behaving the way they are.
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:240px;">
+          ${[
+            ['📡','Live Data','Pulled directly from the Federal Reserve every hour'],
+            ['📚','Plain English','Every metric explained so anyone can understand it'],
+            ['📈','Charts','Up to 3 years of history on every indicator'],
+            ['🔗','Sourced','Every number links back to its original FRED page'],
+          ].map(([icon,title,desc]) => `<div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:10px 12px;">
+            <div style="font-size:16px;margin-bottom:4px;">${icon}</div>
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);margin-bottom:3px;">${title}</div>
+            <div style="font-size:10px;color:var(--text3);line-height:1.4;">${desc}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+
+      <!-- Data source explanation -->
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.07);">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">WHERE DOES THIS DATA COME FROM?</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.8;">
+          All data is sourced from <strong style="color:var(--text1);">FRED</strong> — the Federal Reserve Economic Database maintained by the 
+          St. Louis Federal Reserve Bank. FRED is the gold standard source for US economic data, used by the Federal Reserve itself, 
+          the IMF, the World Bank, and every major financial institution. It aggregates data from the 
+          <strong style="color:var(--text1);">Bureau of Labor Statistics (BLS)</strong>, the 
+          <strong style="color:var(--text1);">Bureau of Economic Analysis (BEA)</strong>, the 
+          <strong style="color:var(--text1);">Federal Reserve Board</strong>, and other official sources.
+          Data updates on FRED's own schedule — inflation monthly, jobs weekly, GDP quarterly.
+          This dashboard fetches fresh data every time you open the tab.
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+          ${[
+            ['FRED','fred.stlouisfed.org','Federal Reserve Economic Database — primary source'],
+            ['BLS','bls.gov','Bureau of Labor Statistics — jobs, inflation, wages'],
+            ['BEA','bea.gov','Bureau of Economic Analysis — GDP, trade, investment'],
+            ['Federal Reserve','federalreserve.gov','Fed balance sheet, rates, monetary policy'],
+          ].map(([name,url,desc]) => `<div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.07);border-radius:3px;padding:7px 10px;flex:1;min-width:160px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);margin-bottom:2px;">${name}</div>
+            <div style="font-size:9px;color:var(--text3);margin-bottom:3px;">${url}</div>
+            <div style="font-size:10px;color:var(--text2);">${desc}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+
+      <!-- Section guide -->
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.07);">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">WHAT EACH SECTION COVERS</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;">
+          ${[
+            ['#ff8800','INFLATION','Are prices rising too fast? The Fed targets 2%. Above that, rates go up and stocks face headwinds.'],
+            ['#00ff88','EMPLOYMENT','Are people working? Jobs drive spending, spending drives growth. The Fed watches this as closely as inflation.'],
+            ['#00ccff','GROWTH','How fast is the economy actually expanding? GDP, spending, and industrial output tell the story.'],
+            ['#8855ff','MONETARY','What is the Fed doing with money supply and its balance sheet? This directly moves asset prices.'],
+            ['#ffcc00','RATES & CREDIT','The price of money. Yield curve shape predicts recessions. Credit spreads measure fear.'],
+            ['#ff8800','CONSUMER','Are people confident? Consumer spending is 70% of GDP — sentiment leads actual spending.'],
+          ].map(([c,t,d]) => `<div style="border-left:2px solid ${c};padding:6px 10px;background:rgba(0,0,0,0.15);border-radius:0 3px 3px 0;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:${c};margin-bottom:3px;">${t}</div>
+            <div style="font-size:10px;color:var(--text2);line-height:1.4;">${d}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
 
     <!-- MACRO REGIME GAUGE -->
     <div class="panel" style="margin-bottom:16px;border-left:4px solid ${regColor};">
@@ -5085,3 +5164,426 @@ function _renderMacroHTML(data) {
   </div>`;
 }
 
+// ─── CIVILIZATIONAL TRANSITION DASHBOARD ─────────────────────────────────────
+let _transitionData = null;
+let _transitionLoading = false;
+
+async function renderTransition() {
+  const el = document.getElementById('transitionContent');
+  if (!el) return;
+  if (_transitionLoading) return;
+  if (_transitionData) { _renderTransitionHTML(_transitionData); return; }
+
+  _transitionLoading = true;
+  el.innerHTML = `<div style="padding:60px;text-align:center;">
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;color:#8855ff;margin-bottom:12px;">⬡ LOADING TRANSITION DATA</div>
+    <div style="font-size:12px;color:var(--text3);">Fetching FRED productivity, labor, investment, and debt data...</div>
+  </div>`;
+
+  try {
+    const r = await fetch('/transition?t=' + Date.now());
+    if (!r.ok) throw new Error('Endpoint returned ' + r.status);
+    _transitionData = await r.json();
+    _transitionLoading = false;
+    _renderTransitionHTML(_transitionData);
+  } catch(e) {
+    _transitionLoading = false;
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:#ff3355;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;margin-bottom:8px;">DATA UNAVAILABLE</div>
+      <div style="font-size:12px;color:var(--text3);">${e.message}</div>
+    </div>`;
+  }
+}
+
+function _renderTransitionHTML(data) {
+  const el = document.getElementById('transitionContent');
+  if (!el || !data) return;
+
+  const score = data.bridge_score || 35;
+  const outcomes = data.outcomes || {};
+  const prod = data.productivity_signal || {};
+  const ulc = data.ulc_signal || {};
+  const disp = data.displacement_signal || {};
+  const ls = data.labor_share || {};
+  const capex = data.ai_capex || [];
+  const hist = data.historical_transitions || [];
+  const debtScenarios = data.debt_scenarios || [];
+
+  const fmt1 = v => v == null ? '—' : Number(v).toFixed(1);
+  const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
+
+  // Bridge phase label and colors
+  const phaseInfo = score >= 95 ? { label: 'THE POP', sub: 'Transformation becoming visible. Field narrowing.', color: '#ff3355', glow: 'rgba(255,51,85,0.3)' }
+    : score >= 80 ? { label: 'PRE-POP', sub: 'Infrastructure sufficient. Survivors hardening.', color: '#ff8800', glow: 'rgba(255,136,0,0.3)' }
+    : score >= 60 ? { label: 'LATE BRIDGE', sub: 'Productivity beginning to show. Concentration narrowing.', color: '#ffcc00', glow: 'rgba(255,204,0,0.3)' }
+    : score >= 30 ? { label: 'MID BRIDGE', sub: 'Building at scale. Transformation not yet visible in data.', color: '#00ccff', glow: 'rgba(0,204,255,0.3)' }
+    : { label: 'EARLY BRIDGE', sub: 'Infrastructure deployment underway. Long runway ahead.', color: '#8855ff', glow: 'rgba(136,85,255,0.3)' };
+
+  // Outcome colors
+  const outColors = {
+    arrival:         { label: 'ARRIVAL',          color: '#00ff88', desc: 'Transformation completes. Bridge holds. Pop is clean.' },
+    bridge_collapse: { label: 'BRIDGE COLLAPSE',  color: '#ff3355', desc: 'Funding breaks before transformation completes. 1929 scenario.' },
+    false_dawn:      { label: 'FALSE DAWN',        color: '#ff8800', desc: 'Partial transformation. Not enough to justify debt carried.' },
+    dark_arrival:    { label: 'DARK ARRIVAL',      color: '#ffcc00', desc: 'Transformation succeeds. Distributional failure fractures society.' },
+    infinite_bridge: { label: 'INFINITE BRIDGE',  color: '#8855ff', desc: 'Bubble self-sustains indefinitely. Transformation always almost here.' },
+  };
+
+  // SVG line chart helper
+  const miniChart = (history, color, h=60) => {
+    if (!history || history.length < 2) return '';
+    const vals = history.map(p => p.v).filter(v => v != null);
+    if (vals.length < 2) return '';
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const range = max - min || Math.abs(min)*0.1 || 1;
+    const W = 300, H = h, P = 3;
+    const x = i => P + (i/(vals.length-1))*(W-P*2);
+    const y = v => H - P - ((v-min)/range)*(H-P*2);
+    const pts = vals.map((v,i) => x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
+    const fill = `${x(0).toFixed(1)},${H} ${pts} ${x(vals.length-1).toFixed(1)},${H}`;
+    return `<svg width="100%" viewBox="0 0 ${W+40} ${H+14}" style="display:block;margin-top:8px;overflow:visible;">
+      <defs><linearGradient id="tg${color.replace('#','')}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+      </linearGradient></defs>
+      <polygon points="${fill}" fill="url(#tg${color.replace('#','')})"/>
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="${x(vals.length-1).toFixed(1)}" cy="${y(vals[vals.length-1]).toFixed(1)}" r="3" fill="${color}"/>
+      <text x="${W+4}" y="${y(vals[vals.length-1]).toFixed(1)+3}" fill="${color}" font-size="9" font-family="Share Tech Mono,monospace">${fmt1(vals[vals.length-1])}</text>
+      <text x="${P}" y="${H+12}" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Share Tech Mono,monospace">${history[0]?.d||''}</text>
+      <text x="${W-20}" y="${H+12}" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Share Tech Mono,monospace">${history[history.length-1]?.d||''}</text>
+    </svg>`;
+  };
+
+  // AI Capex bar chart
+  const capexChart = () => {
+    const W = 420, H = 100, P = 8;
+    const vals = capex.map(d => d.b);
+    const max = Math.max(...vals);
+    const bW = (W - P*2) / capex.length - 2;
+    const bars = capex.map((d, i) => {
+      const bH = ((d.b / max) * (H - 20));
+      const bX = P + i * ((W-P*2)/capex.length);
+      const bY = H - bH - 4;
+      const color = d.est ? 'rgba(136,85,255,0.5)' : d.y >= 2023 ? '#00ccff' : 'rgba(0,204,255,0.35)';
+      const label = d.y >= 2020 ? String(d.y).slice(2) : '';
+      return `<rect x="${bX.toFixed(1)}" y="${bY.toFixed(1)}" width="${bW.toFixed(1)}" height="${bH.toFixed(1)}" fill="${color}" rx="1"/>
+        ${label ? `<text x="${(bX+bW/2).toFixed(1)}" y="${H}" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="7" font-family="Orbitron,monospace">${label}</text>` : ''}
+        ${d.est ? '' : (d.y >= 2024 ? `<text x="${(bX+bW/2).toFixed(1)}" y="${(bY-3).toFixed(1)}" text-anchor="middle" fill="#00ccff" font-size="7" font-family="Share Tech Mono,monospace">$${d.b}B</text>` : '')}`;
+    }).join('');
+    const estLine = `<text x="${W-2}" y="16" text-anchor="end" fill="rgba(136,85,255,0.7)" font-size="8" font-family="Orbitron,monospace">— EST</text>`;
+    return `<svg width="100%" viewBox="0 0 ${W} ${H+10}" style="display:block;margin-top:6px;">${bars}${estLine}</svg>`;
+  };
+
+  // Debt scenario chart
+  const debtChart = () => {
+    if (!debtScenarios.length) return '';
+    const W = 340, H = 100, P = 6;
+    const allVals = debtScenarios.flatMap(s => s.points.map(p => p.debt_gdp));
+    const min = Math.min(...allVals)*0.95, max = Math.max(...allVals)*1.02;
+    const years = debtScenarios[0].points.map(p => p.y);
+    const x = i => P + (i/(years.length-1))*(W-P*2);
+    const y = v => H - P - ((v-min)/(max-min))*(H-P*2);
+    const lines = debtScenarios.map(s => {
+      const pts = s.points.map((p,i) => x(i).toFixed(1)+','+y(p.debt_gdp).toFixed(1)).join(' ');
+      const last = s.points[s.points.length-1];
+      return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-linejoin="round" stroke-dasharray="${s.name==='Conservative'?'':''}"/>
+        <text x="${(x(s.points.length-1)+4).toFixed(1)}" y="${y(last.debt_gdp).toFixed(1)+3}" fill="${s.color}" font-size="8" font-family="Share Tech Mono,monospace">${last.debt_gdp}%</text>`;
+    }).join('');
+    const xLabels = [0, Math.floor(years.length/2), years.length-1].map(i =>
+      `<text x="${x(i).toFixed(1)}" y="${H+10}" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Share Tech Mono,monospace">${years[i]}</text>`
+    ).join('');
+    // Current line
+    const curY = y(data.debt_gdp_current?.v || 120);
+    const curLine = `<line x1="${P}" y1="${curY.toFixed(1)}" x2="${(W-P).toFixed(1)}" y2="${curY.toFixed(1)}" stroke="rgba(255,255,255,0.15)" stroke-dasharray="2,3" stroke-width="1"/>
+      <text x="${P+2}" y="${(curY-3).toFixed(1)}" fill="rgba(255,255,255,0.3)" font-size="7" font-family="Orbitron,monospace">NOW</text>`;
+    return `<svg width="100%" viewBox="0 0 ${W+50} ${H+16}" style="display:block;overflow:visible;">${curLine}${lines}${xLabels}</svg>`;
+  };
+
+  // Score factors
+  const factorsHTML = (data.score_factors||[]).map(f =>
+    `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);min-width:160px;">${f.f}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);min-width:80px;">${f.v}</div>
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:${f.signal.includes('ACCEL')||f.signal.includes('RESOLV')?'#00ff88':f.signal.includes('EARLY')?'#8855ff':'#ffcc00'};letter-spacing:1px;">${f.signal}</div>
+    </div>`
+  ).join('');
+
+  // Historical analogs
+  const histHTML = hist.map(h => {
+    const isCurrent = !h.peak_year;
+    const bg = isCurrent ? 'rgba(0,204,255,0.06)' : 'var(--bg2)';
+    const border = isCurrent ? '1px solid rgba(0,204,255,0.3)' : '1px solid var(--border)';
+    return `<div style="background:${bg};border:${border};border-radius:4px;padding:12px 14px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:9px;color:${isCurrent?'var(--cyan)':'var(--text2)'};letter-spacing:1px;">${h.name}</div>
+          <div style="font-size:10px;color:var(--text3);">${h.period}</div>
+        </div>
+        ${h.peak_pct_gdp ? `<div style="text-align:right;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:var(--text1);">${h.peak_pct_gdp}%</div>
+          <div style="font-size:9px;color:var(--text3);">peak capex/GDP</div>
+        </div>` : `<div style="text-align:right;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);">~1.05% now</div>
+          <div style="font-size:9px;color:var(--text3);">est. 2.5-3% peak</div>
+        </div>`}
+      </div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:6px;">${h.notes}</div>
+      <div style="font-size:10px;color:var(--text3);font-style:italic;">Survivors: ${h.survivors}</div>
+    </div>`;
+  }).join('');
+
+  setTimeout(() => generateTransitionAI(data), 200);
+
+  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+
+    <!-- PHASE HEADER -->
+    <div class="panel" style="margin-bottom:16px;background:linear-gradient(135deg,var(--bg2),${phaseInfo.glow} 200%);border-left:4px solid ${phaseInfo.color};position:relative;overflow:hidden;">
+      <div style="position:absolute;top:0;right:0;width:200px;height:100%;background:radial-gradient(ellipse at right,${phaseInfo.glow},transparent);pointer-events:none;"></div>
+      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:3px;color:var(--text3);margin-bottom:8px;">⬡ CIVILIZATIONAL TRANSITION MONITOR</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:${phaseInfo.color};margin-bottom:4px;">${phaseInfo.label}</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.6;">${phaseInfo.sub}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;">The bridge between the old economy and the new one. Every indicator here asks: are we still building, or approaching arrival?</div>
+        </div>
+        <div style="text-align:center;min-width:100px;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:48px;font-weight:900;color:${phaseInfo.color};line-height:1;">${score}</div>
+          <div style="font-size:9px;color:var(--text3);font-family:'Orbitron',monospace;letter-spacing:1px;">BRIDGE SCORE</div>
+          <div style="font-size:9px;color:var(--text3);">0 = early · 100 = pop</div>
+        </div>
+      </div>
+      <!-- Phase bar -->
+      <div style="position:relative;height:8px;background:linear-gradient(90deg,#8855ff,#00ccff,#ffcc00,#ff8800,#ff3355);border-radius:4px;margin:14px 0 8px;">
+        <div style="position:absolute;left:${score}%;top:-4px;transform:translateX(-50%);width:3px;height:16px;background:#fff;border-radius:2px;box-shadow:0 0 8px rgba(255,255,255,0.9);"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--text3);font-family:'Orbitron',monospace;margin-bottom:12px;">
+        <span>EARLY<br>BRIDGE</span><span>MID<br>BRIDGE</span><span>LATE<br>BRIDGE</span><span>PRE-<br>POP</span><span>THE<br>POP</span>
+      </div>
+      <!-- Signal breakdown -->
+      <div style="border-top:1px solid var(--border);padding-top:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">SCORE COMPONENTS</div>
+        ${factorsHTML}
+      </div>
+    </div>
+
+    <!-- AI NARRATIVE -->
+    <div class="panel" id="transitionAIPanel" style="margin-bottom:16px;border-left:4px solid #8855ff;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#8855ff;">⬡ AI TRANSITION ANALYSIS</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Generated from live transition indicators · Updated on load</div>
+        </div>
+        <button onclick="refreshTransitionAI()" style="background:rgba(136,85,255,0.1);border:1px solid rgba(136,85,255,0.3);color:#8855ff;padding:5px 12px;border-radius:3px;cursor:pointer;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH</button>
+      </div>
+      <div id="transitionAIText" style="font-size:13px;color:var(--text2);line-height:1.9;">
+        <span style="color:var(--text3);font-style:italic;">Generating analysis...</span>
+      </div>
+    </div>
+
+    <!-- OUTCOME PROBABILITIES -->
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#8855ff;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(136,85,255,0.3);">⬡ OUTCOME SCENARIOS — NOT FORECASTS, MODEL OUTPUTS</div>
+    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      The old vocabulary does not apply here. "Soft landing" and "hard landing" describe oscillations around a stable mean. We are not oscillating — we are transitioning between two fundamentally different economic regimes. These are the five actual scenarios.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:20px;">
+      ${Object.entries(outColors).map(([k, o]) => {
+        const pct = outcomes[k] || 0;
+        return `<div class="panel" style="border-top:3px solid ${o.color};">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${o.color};letter-spacing:1px;margin-bottom:6px;">${o.label}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);margin-bottom:4px;">${pct}%</div>
+          <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:8px;"><div style="width:${pct}%;height:100%;background:${o.color};border-radius:2px;transition:width 1s;"></div></div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.5;">${o.desc}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- AI CAPEX TRAJECTORY -->
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#00ccff;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(0,204,255,0.3);">⬡ AI INFRASTRUCTURE CAPEX — THE FUEL</div>
+    <div class="panel" style="margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div style="text-align:center;background:var(--bg3);border-radius:3px;padding:10px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">2024 ACTUAL</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#00ccff;">$285B</div>
+          <div style="font-size:10px;color:var(--text3);">1.05% of US GDP</div>
+        </div>
+        <div style="text-align:center;background:var(--bg3);border-radius:3px;padding:10px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">2025 ESTIMATE</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#8855ff;">$427B</div>
+          <div style="font-size:10px;color:var(--text3);">+50% YoY · 1.52% GDP</div>
+        </div>
+        <div style="text-align:center;background:var(--bg3);border-radius:3px;padding:10px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">RAILWAY PEAK (1840s)</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:var(--text3);">6.0%</div>
+          <div style="font-size:10px;color:var(--text3);">of GDP — we are early</div>
+        </div>
+      </div>
+      ${capexChart()}
+      <div style="font-size:11px;color:var(--text2);margin-top:12px;line-height:1.7;border-top:1px solid var(--border);padding-top:10px;">
+        <strong style="color:var(--text1);">What this measures:</strong> Annual capital expenditure by the 8 largest AI infrastructure companies (Amazon, Alphabet, Microsoft, Meta, Nvidia, Oracle, Apple, Broadcom). This is the primary funding mechanism of the transition — every dollar of elevated equity valuation is ultimately financing this buildout. Analyst estimates have undershot actual spending by 30%+ for two consecutive years. Consensus now projects $562B in 2026. Purple bars are estimates.
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Sources: Company filings, Goldman Sachs Research, RBC Wealth Management, Morgan Stanley Cloud Capex Tracker. Data through 2024 actual; 2025-2027 consensus estimates.</div>
+    </div>
+
+    <!-- LABOR SUBSTITUTION -->
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#00ff88;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(0,255,136,0.3);">⬡ LABOR SUBSTITUTION SIGNAL — IS AI DOING THE WORK YET?</div>
+    <div style="background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      The most important question in this transition is not whether AI will replace human labor — it is <strong style="color:var(--text1);">when that replacement becomes measurable in aggregate data</strong>. Output rising while hours worked stay flat means something other than humans did the marginal work. This is the Solow Paradox resolving in real time. It has not fully appeared yet. When it does, it will be the clearest confirmation that the bridge is working.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+      <div class="panel" style="border-top:3px solid #00ff88;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ff88;margin-bottom:4px;">NONFARM PRODUCTIVITY GROWTH</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: PRS85006092 · Quarterly</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${fmt1(prod.recent_avg)}%</div>
+        <div style="font-size:11px;color:${(prod.vs_longrun||0) > 0 ? '#00ff88' : 'var(--text3)'};">${(prod.vs_longrun||0) > 0 ? '+' : ''}${fmt1(prod.vs_longrun)}pp vs 1950-1999 avg (2.2%)</div>
+        ${miniChart(prod.history, '#00ff88')}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">The Solow Paradox: "You can see the computer age everywhere except in the productivity statistics." The paradox eventually resolved for the internet — productivity surged 1995-2005. We are watching for the same resolution with AI. <strong style="color:${prod.solow_resolved ? '#00ff88' : '#ffcc00'};">${prod.solow_resolved ? 'Signal: RESOLVING' : 'Signal: NOT YET VISIBLE'}</strong></div>
+      </div>
+      <div class="panel" style="border-top:3px solid ${ulc.trend === 'falling' ? '#00ff88' : '#ff8800'};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${ulc.trend === 'falling' ? '#00ff88' : '#ff8800'};margin-bottom:4px;">UNIT LABOR COSTS</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: ULCNFB · When falling, AI is doing marginal work</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${fmt1(ulc.current)}</div>
+        <div style="font-size:11px;color:${ulc.trend === 'falling' ? '#00ff88' : '#ff8800'};">${ulc.trend === 'falling' ? '▼ FALLING — AI leverage appearing' : '▲ RISING — human economy still dominant'}</div>
+        ${miniChart(ulc.history, ulc.trend === 'falling' ? '#00ff88' : '#ff8800')}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">When output grows faster than labor cost, something other than additional human labor is driving that output. Falling unit labor costs with rising output is the most direct measurable signal of AI doing productive work at scale.</div>
+      </div>
+      <div class="panel" style="border-top:3px solid ${disp.yoy_pct < -1 ? '#00ff88' : '#8855ff'};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${disp.yoy_pct < -1 ? '#00ff88' : '#8855ff'};margin-bottom:4px;">INFORMATION SECTOR EMPLOYMENT</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: CEU5000000001 · Knowledge worker displacement</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${disp.current ? (disp.current/1000).toFixed(1)+'M' : '—'}</div>
+        <div style="font-size:11px;color:${disp.yoy_pct < 0 ? '#00ff88' : 'var(--text3)'};">${fmt1(disp.yoy_pct)}% YoY · ${fmt1(disp.pct_below_peak)}% below peak</div>
+        ${miniChart(disp.history, '#8855ff')}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">The information sector is ground zero for AI displacement. When employment falls here while output per worker rises, the substitution is becoming real. This is not cyclical — these jobs do not come back in the same form.</div>
+      </div>
+      <div class="panel" style="border-top:3px solid ${ls.change_5yr < -1 ? '#00ff88' : '#ffcc00'};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${ls.change_5yr < -1 ? '#00ff88' : '#ffcc00'};margin-bottom:4px;">LABOR SHARE OF OUTPUT</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: PRS85006151 · Falling = capital replacing labor</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${fmt1(ls.current)}%</div>
+        <div style="font-size:11px;color:${ls.change_5yr < 0 ? '#00ff88' : 'var(--text3)'};">${ls.change_5yr > 0 ? '+' : ''}${fmt1(ls.change_5yr)}pp over 5 years</div>
+        ${miniChart(ls.history, ls.change_5yr < -1 ? '#00ff88' : '#ffcc00')}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">The share of total economic output that goes to workers as wages. A structural decline means capital — increasingly, AI — is capturing a larger share of value creation. This is the distributional signal. It measures who benefits from the transition.</div>
+      </div>
+    </div>
+
+    <!-- DEBT BRIDGE -->
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ffcc00;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,204,0,0.3);">⬡ THE DEBT BRIDGE — HOW LONG CAN IT HOLD?</div>
+    <div class="panel" style="margin-bottom:16px;">
+      <div style="font-size:12px;color:var(--text2);line-height:1.8;margin-bottom:12px;">
+        <strong style="color:var(--text1);">The paper's central insight reframed:</strong> Current US debt of ~$36T looks unsustainable against current GDP of ~$29.7T (121%). But debt sustainability is not a function of current GDP. It is a function of <em>future GDP</em>. If AI delivers the productivity gains it is being valued for, the denominator expands dramatically — and the debt, unchanged in nominal terms, becomes manageable. These three scenarios show what debt/GDP looks like in 2030 and 2035 under different AI productivity assumptions. The question is not whether the debt is sustainable today. It is whether the transformation arrives before the debt becomes binding.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+        ${debtScenarios.map(s => {
+          const end = s.points[s.points.length-1];
+          const mid = s.points[Math.floor(s.points.length/2)];
+          return `<div style="background:var(--bg3);border-radius:3px;padding:10px;border-top:2px solid ${s.color};">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:${s.color};margin-bottom:4px;">${s.name.toUpperCase()}</div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">${s.label}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:var(--text);">${mid.debt_gdp}% by ${mid.y}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${s.color};">${end.debt_gdp}% by ${end.y}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${debtChart()}
+      <div style="font-size:10px;color:var(--text3);margin-top:8px;font-style:italic;">Model assumptions: $36.2T current debt, ~5.5% annual deficit, productivity lag of ~2 years before AI gains appear in GDP. Conservative: +1.5%/yr extra productivity from 2027. Base: +3%/yr. Bull: +6%/yr. These are scenarios, not forecasts.</div>
+    </div>
+
+    <!-- HISTORICAL TRANSITIONS -->
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--text3);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);">⬡ HISTORICAL INFRASTRUCTURE TRANSITIONS — THE PRECEDENTS</div>
+    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      Every major infrastructure transition followed the same arc: capital floods in, most companies fail, the networks survive, productivity eventually vindicates the investment. The question for each was never whether the technology was real — it was whether the financing structure could survive the interval between commitment and delivery.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:16px;">
+      ${histHTML}
+    </div>
+
+    <!-- SURVIVOR FRAMEWORK -->
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ff8800;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,136,0,0.3);">⬡ THE SURVIVOR FRAMEWORK — WHO MAKES IT THROUGH THE POP</div>
+    <div class="panel" style="margin-bottom:16px;border-left:4px solid #ff8800;">
+      <div style="font-size:12px;color:var(--text2);line-height:1.8;margin-bottom:12px;">
+        The pop does not destroy the transformation. It destroys the vehicle. Cisco lost 80% in 2000 and never recovered — because Cisco was infrastructure for the internet, not the internet itself. The survivors of every transition are the companies that ended up owning the <strong style="color:var(--text1);">intelligence layer</strong> — the thing the entire economy ran on top of.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
+        ${[
+          { era: 'Railways (1840s)', died: 'Equipment makers, most railway cos', survived: 'Companies owning the actual rail networks', color: 'var(--text3)' },
+          { era: 'Electrification (1920s)', died: 'Utility speculators, most appliance cos', survived: 'GE, Westinghouse — companies that became electrical infrastructure', color: 'var(--text3)' },
+          { era: 'Internet (2000)', died: 'Cisco (-80%), Webvan, Pets.com, 4,000+ cos', survived: 'Amazon, Google — companies that became the layer everything runs on', color: 'var(--text3)' },
+          { era: 'AI (?)', died: 'GPU manufacturers? Cloud infrastructure? Most AI apps?', survived: 'Companies that own the model weights + universal distribution at scale', color: '#ff8800' },
+        ].map(r => `<div style="background:var(--bg3);border-radius:3px;padding:10px;border-top:2px solid ${r.color};">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${r.color};margin-bottom:6px;">${r.era}</div>
+          <div style="font-size:10px;color:#ff3355;margin-bottom:4px;line-height:1.4;">✕ ${r.died}</div>
+          <div style="font-size:10px;color:#00ff88;line-height:1.4;">✓ ${r.survived}</div>
+        </div>`).join('')}
+      </div>
+      <div style="margin-top:12px;padding:10px 12px;background:rgba(255,136,0,0.06);border-radius:3px;font-size:11px;color:var(--text2);line-height:1.7;">
+        <strong style="color:#ff8800;">The critical diagnostic:</strong> Watch for the moment when AI infrastructure companies (hyperscalers, GPU makers, data center builders) begin selling off while a small number of AI-native companies continue to appreciate. That spread — builders down, intelligence-layer up — is the pop beginning. The field is narrowing to its survivors.
+      </div>
+    </div>
+
+    <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;">
+      Productivity & labor data: BLS via FRED · Debt projections: model outputs only · AI capex: company filings + GS/RBC/MS research · Updated ${data.updated ? new Date(data.updated).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'recently'}
+    </div>
+  </div>`;
+}
+
+async function generateTransitionAI(data) {
+  const el = document.getElementById('transitionAIText');
+  if (!el) return;
+
+  const score = data.bridge_score || 35;
+  const outcomes = data.outcomes || {};
+  const prod = data.productivity_signal || {};
+  const ulc = data.ulc_signal || {};
+  const disp = data.displacement_signal || {};
+
+  const context = `
+BRIDGE PHASE: Score ${score}/100
+Current phase: ${score >= 80 ? 'Pre-Pop' : score >= 60 ? 'Late Bridge' : score >= 30 ? 'Mid Bridge' : 'Early Bridge'}
+
+OUTCOME PROBABILITIES:
+- Arrival (clean transition): ${outcomes.arrival}%
+- Bridge Collapse (1929 scenario): ${outcomes.bridge_collapse}%
+- False Dawn (partial transformation): ${outcomes.false_dawn}%
+- Dark Arrival (transformation succeeds, distribution fails): ${outcomes.dark_arrival}%
+- Infinite Bridge (perpetual anticipation): ${outcomes.infinite_bridge}%
+
+AI INFRASTRUCTURE CAPEX:
+- 2024 actual: $285B (1.05% of GDP)
+- 2025 estimate: $427B (1.52% of GDP)
+- Analyst estimates have undershot actual by 30%+ for 2 consecutive years
+- Railway peak was 6% of GDP — we are still early in the buildout
+
+PRODUCTIVITY SIGNAL:
+- Recent nonfarm productivity growth: ${prod.recent_avg}% (long-run avg 2.2%)
+- Above long-run average by: ${prod.vs_longrun}pp
+- Solow Paradox resolved: ${prod.solow_resolved ? 'YES — acceleration visible' : 'NOT YET — transformation not yet in data'}
+
+UNIT LABOR COSTS: ${ulc.trend} — ${ulc.trend === 'falling' ? 'AI leverage appearing in output' : 'Human economy still dominant'}
+
+INFORMATION SECTOR EMPLOYMENT: ${(disp.current/1000)?.toFixed(1)}M workers, ${disp.yoy_pct?.toFixed(1)}% YoY, ${disp.pct_below_peak?.toFixed(1)}% below peak`;
+
+  const system = `You are the most sophisticated macroeconomic analyst alive, deeply fluent in the Transitional Inflation Hypothesis — the idea that what appears to be a bubble may actually be a purposive bridge between two fundamentally different economic regimes. You understand that standard cyclical terminology (soft landing, hard landing, stagflation) does not apply here. We are not oscillating around a mean — we are transitioning between regimes.
+
+The five possible outcomes are: ARRIVAL (transformation completes, bridge holds, pop is clean), BRIDGE COLLAPSE (financing breaks before completion — the 1929 scenario), FALSE DAWN (partial transformation, not enough to justify debt carried), DARK ARRIVAL (transformation succeeds but distributional failure fractures society), INFINITE BRIDGE (perpetual anticipation, transformation always almost here).
+
+Write for an intelligent audience that understands markets but may not be economists. Be direct, insightful, intellectually honest about uncertainty. Write in flowing prose — no bullet points. 4-5 substantial paragraphs. Connect the data to the theory. Tell the story of where we are in the transition, what the signals are saying, and what the most important things to watch are. This is not financial advice — this is the most honest possible reading of a civilizational inflection point.`;
+
+  try {
+    const reply = await callAI([{ role: 'user', content: `Here is the current transition data:
+${context}
+
+Write your analysis of where we are in the civilizational transition. Be thorough, honest, and brilliant.` }], system, 1400);
+    if (el) {
+      const paras = reply.split('\n\n').filter(p => p.trim());
+
+
+      el.innerHTML = paras.map(p => `<p style="margin:0 0 14px;line-height:1.9;">${p.trim()}</p>`).join('');
+    }
+  } catch(e) {
+    if (el) el.innerHTML = `<span style="color:var(--text3);font-style:italic;">AI analysis unavailable: ${e.message}</span>`;
+  }
+}
+
+async function refreshTransitionAI() {
+  const el = document.getElementById('transitionAIText');
+  if (el) el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Regenerating...</span>';
+  if (_transitionData) await generateTransitionAI(_transitionData);
+}
