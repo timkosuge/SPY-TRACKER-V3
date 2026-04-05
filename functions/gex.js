@@ -196,6 +196,33 @@ export async function onRequest(context) {
       }
     }
 
+    // -- ATM Straddle price (nearest expiry) ------------------------------
+    // Use actual bid/ask mid prices for most accurate daily EM
+    let atmStraddle = null;
+    let atmStraddleExp = null;
+    let atmCallMid = null;
+    let atmPutMid = null;
+    for (const exp of expiries.slice(0, 3)) {
+      const expOpts = parsed.filter(o => o.exp === exp);
+      if (!expOpts.length) continue;
+      // Find ATM strike — closest to spot
+      const strikes = [...new Set(expOpts.map(o => o.strike))].sort((a,b) => Math.abs(a-spot)-Math.abs(b-spot));
+      const atmStrike = strikes[0];
+      if (!atmStrike) continue;
+      const atmCall = expOpts.find(o => o.strike === atmStrike && o.cp === 'C');
+      const atmPut  = expOpts.find(o => o.strike === atmStrike && o.cp === 'P');
+      if (!atmCall || !atmPut) continue;
+      const callMid = (atmCall.bid + atmCall.ask) / 2;
+      const putMid  = (atmPut.bid  + atmPut.ask)  / 2;
+      if (callMid > 0 && putMid > 0) {
+        atmCallMid = Math.round(callMid * 100) / 100;
+        atmPutMid  = Math.round(putMid  * 100) / 100;
+        atmStraddle = Math.round((callMid + putMid) * 100) / 100;
+        atmStraddleExp = exp;
+        break;
+      }
+    }
+
     // -- Max Pain per expiry ----------------------------------------------
     const maxPainList = [];
     for (const exp of nearExpiries) {
@@ -463,6 +490,10 @@ export async function onRequest(context) {
       pcr_vol: pcrVol,
       pcr_oi: pcrOI,
       atm_iv: atmIV,
+      atm_straddle: atmStraddle,
+      atm_straddle_exp: atmStraddleExp,
+      atm_call_mid: atmCallMid,
+      atm_put_mid: atmPutMid,
       total_call_vol: totalCallVol,
       total_put_vol: totalPutVol,
       total_call_oi: totalCallOI,
