@@ -5086,10 +5086,13 @@ async function renderLiveChart() {
     if (wem?.wem_low)  drawLvl(wem.wem_low,  'rgba(255,51,85,0.5)', 'WEM LO');
 
     // GEX key levels overlay
-    const gex2 = md2.gex || {};
-    if (gex2.flip_point) drawLvl(gex2.flip_point,  'rgba(255,204,0,0.75)',   'GEX FLIP');
-    if (gex2.resistance) drawLvl(gex2.resistance,   'rgba(255,51,85,0.6)',    'GEX RES');
-    if (gex2.support)    drawLvl(gex2.support,      'rgba(0,204,255,0.6)',    'GEX SUP');
+    try {
+      const gex2 = md2.gex || {};
+      if (gex2.flip_point) drawLvl(gex2.flip_point, 'rgba(255,204,0,0.75)', 'GEX FLIP');
+      if (gex2.resistance) drawLvl(gex2.resistance,  'rgba(255,51,85,0.6)',  'GEX RES');
+      if (gex2.support)    drawLvl(gex2.support,     'rgba(0,204,255,0.6)', 'GEX SUP');
+    } catch(e) {}
+    ctx.setLineDash([]); // reset dash state
 
     // VWAP line
     const lv = (typeof _spyIntraday !== 'undefined') ? _spyIntraday : null;
