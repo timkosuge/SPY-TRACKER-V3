@@ -1056,6 +1056,7 @@ def export_market_data(conn, options_data=None):
     try:
         import yfinance as yf
         symbols = [
+            # ── Core market ───────────────────────────────────────────────────
             "SPY","QQQ","IWM","DIA","VXX","RSP",
             "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA",
             "XLK","XLF","XLE","XLV","XLI","XLY","XLP","XLB","XLRE","XLU","XLC",
@@ -1067,7 +1068,42 @@ def export_market_data(conn, options_data=None):
             "^ADVN","^DECN","^UVOL","^DVOL",
             "^SP500MA50","^SP500MA200",
             "TLT","HYG","LQD","JNK",
-            "^GSPC","ES=F"
+            "^GSPC","ES=F",
+            # ── BUILDOUT: Power & Grid ────────────────────────────────────────
+            "VST","CEG","NRG","GEV","ETN","PWR","FIX","AGX",
+            # ── BUILDOUT: Nuclear ─────────────────────────────────────────────
+            "CCJ","LEU","SMR","OKLO","NNE","BWXT","UEC","DNN",
+            # ── BUILDOUT: Chips & Hardware ────────────────────────────────────
+            "AVGO","MRVL","ARM","TSM","ASML","LRCX","KLAC","AMAT",
+            # ── BUILDOUT: Cooling & Physical Infra ───────────────────────────
+            "VRT","SMCI","MOD","JCI",
+            # ── BUILDOUT: Data Centers / REITs ───────────────────────────────
+            "EQIX","DLR","IRON","AMT",
+            # ── BUILDOUT: Hyperscalers ────────────────────────────────────────
+            "ORCL",
+            # ── BUILDOUT: Monetization / Software ────────────────────────────
+            "CRM","NOW","PLTR","SNOW","PATH","AI",
+            # ── BUILDOUT: Picks & Shovels ─────────────────────────────────────
+            "CDNS","SNPS","KEYS","COHU","ONTO",
+            # ── BUILDOUT: Robotics & Automation ──────────────────────────────
+            "ISRG","TER","CGNX","SYM","ROK","EMR","FANUC.T","IRBT",
+            "NVEE","BRZE","ABB",
+            # ── BUILDOUT: Semiconductor Sovereignty ──────────────────────────
+            "INTC","GFS","ON","WOLF","SWKS","QCOM","TXN","MPWR",
+            # ── BUILDOUT: Energy Storage & Transition ────────────────────────
+            "FSLR","ENPH","NEE","FLNC","ARRY","BE","PLUG","RUN",
+            "SEDG","GNRC","AES","BEP",
+            # ── BUILDOUT: Raw Materials & Mining ─────────────────────────────
+            "FCX","SCCO","MP","LTHM","ALB","SQM","UUUU","NXE",
+            "VALE","RIO","BHP","AA",
+            # ── BUILDOUT: Quantum Computing ───────────────────────────────────
+            "IONQ","RGTI","QUBT","QTUM",
+            # ── BUILDOUT: Space & Connectivity ───────────────────────────────
+            "RKLB","ASTS","LUNR","SPIR","BA","LMT","NOC","RTX",
+            # ── BUILDOUT: Physical AI / Industrial Software ───────────────────
+            "PTC","ANSS","DDOG","SAIC","PEGA","AZPN",
+            # ── BUILDOUT: Sector ETFs for rotation ───────────────────────────
+            "BOTZ","ROBO","IRBO","IDRV","LIT","REMX","COPX","URA",
         ]
         print("Fetching market quotes...")
         quotes = {}
