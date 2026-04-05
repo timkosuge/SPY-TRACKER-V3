@@ -5625,6 +5625,8 @@ function _renderTransitionHTML(data) {
       </div>
     </div>
 
+    ` : '<div class="panel" style="opacity:0.4;font-size:11px;color:var(--text3);">Winners &amp; losers data loading...</div>'}
+
     <!-- SURVIVOR FRAMEWORK -->
     <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ff8800;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,136,0,0.3);">⬡ THE SURVIVOR FRAMEWORK — WHO MAKES IT THROUGH THE POP</div>
     <div class="panel" style="margin-bottom:16px;border-left:4px solid #ff8800;">
