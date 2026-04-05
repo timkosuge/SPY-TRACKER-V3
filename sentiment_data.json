@@ -1,11 +1,11 @@
 {
-  "updated": "2026-04-04T06:11:28Z",
+  "updated": "2026-04-05T02:49:13Z",
   "aaii": {
-    "date": "2026-04-04",
-    "bullish": 60.0,
+    "date": "2026-04-05",
+    "bullish": 20.0,
     "neutral": 20.0,
-    "bearish": 20.0,
-    "spread": 40.0,
+    "bearish": 55.6,
+    "spread": -35.6,
     "avg_bullish": 37.5,
     "avg_bearish": 31.0,
     "source": "aaii_html"
