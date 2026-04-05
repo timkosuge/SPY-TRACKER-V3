@@ -1,3 +1,417 @@
+function renderGEXAdditions(md) {
+  const gex = md.gex || {};
+  const q = md.quotes || {};
+  const spy = q['SPY'] || {};
+  const spot = spy.price || gex.spot || 0;
+  const opt = md.options_summary || {};
+  const maxPainArr = md.max_pain || [];
+  const vix = q['^VIX'] || {}, vix3m = q['^VIX3M'] || {}, vix6m = q['^VIX6M'] || {};
+  const vvix = q['^VVIX'] || {}, skew = q['^SKEW'] || {};
+  const fmtB = n => { const a=Math.abs(n||0),s=(n||0)>=0?'+':'-';if(a>=1e9)return s+'$'+(a/1e9).toFixed(2)+'B';if(a>=1e6)return s+'$'+(a/1e6).toFixed(0)+'M';return s+'$'+Math.round(a).toLocaleString(); };
+
+  // ── HOW TO READ GEX GUIDE ─────────────────────────────────────────────────
+  const guideEl = $('gexGuide');
+  if(guideEl) {
+    const isPos = (gex.net_gex||0) > 0;
+    const regime = gex.regime || '—';
+    const rc = isPos ? '#00ff88' : '#ff3355';
+    guideEl.innerHTML = `
+      <div style="margin-bottom:10px;padding:10px;background:${rc}11;border-left:3px solid ${rc};border-radius:3px;">
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:${rc};margin-bottom:4px;">CURRENT: ${regime}</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.6;">${isPos?'Dealers are <strong style="color:#00ff88">long gamma</strong> — they sell into rallies and buy into dips. This <strong style="color:#00ff88">suppresses volatility</strong> and creates mean-reversion behavior. Expect smaller moves, tighter ranges.':'Dealers are <strong style="color:#ff3355">short gamma</strong> — they must <strong style="color:#ff3355">amplify moves</strong> in whichever direction price goes. Rallies can run farther, selloffs can accelerate. Volatility expands.'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text2);">
+        <div><span style="color:var(--cyan);">⬡ FLIP POINT</span> — Where dealer gamma flips from positive to negative. Below flip = destabilizing environment.</div>
+        <div><span style="color:#00ff88;">⬡ GEX SUPPORT</span> — Strike with large positive GEX below spot. Dealers buy here, acts as price floor.</div>
+        <div><span style="color:#ff3355;">⬡ GEX RESISTANCE</span> — Strike with large positive GEX above spot. Dealers sell here, acts as price ceiling.</div>
+        <div><span style="color:#ffcc00;">⬡ NET GEX</span> — Sum of all dealer gamma. Positive = stabilizing. Negative = destabilizing. Current: <span style="font-family:'Share Tech Mono',monospace;color:${rc};">${fmtB(gex.net_gex)}</span></div>
+      </div>`;
+  }
+
+  // ── CALL / PUT WALLS BY EXPIRY ───────────────────────────────────────────
+  const wallsEl = $('gexWalls');
+  if(wallsEl) {
+    const wallsByExp = opt.walls_by_expiry || [];
+    let html = '';
+
+    if(wallsByExp.length) {
+      // Each expiry gets a card
+      wallsByExp.forEach(w => {
+        const isToday = w.dte === 0;
+        const borderCol = isToday ? '#ffcc00' : '#00ccff';
+        const cDist = w.callWall && spot ? w.callWall - spot : null;
+        const pDist = w.putWall  && spot ? w.putWall  - spot : null;
+        const range = w.callWall && w.putWall ? w.callWall - w.putWall : null;
+
+        html += `<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid ${borderCol};border-radius:3px;padding:10px;margin-bottom:8px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${borderCol};margin-bottom:8px;letter-spacing:1px;">
+            ${w.label?.toUpperCase()} ${w.exp?'· '+w.exp.slice(5):''} ${w.dte!=null?'· '+w.dte+'DTE':''}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+            <div style="text-align:center;padding:8px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.25);border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">CALL WALL</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:${isToday?'22':'18'}px;font-weight:bold;color:#00ff88;">$${w.callWall||'—'}</div>
+              ${cDist!=null?`<div style="font-size:10px;color:#00ff88;">+${fmt(cDist,1)} pts</div>`:''}
+              ${w.topCalls?.[0]?.oi?`<div style="font-size:10px;color:var(--text3);">${(w.topCalls[0].oi/1000).toFixed(0)}K OI</div>`:''}
+            </div>
+            <div style="text-align:center;padding:8px;background:rgba(255,51,85,0.06);border:1px solid rgba(255,51,85,0.25);border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">PUT WALL</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:${isToday?'22':'18'}px;font-weight:bold;color:#ff3355;">$${w.putWall||'—'}</div>
+              ${pDist!=null?`<div style="font-size:10px;color:${pDist>=0?'#00ff88':'#ff3355'};">${pDist>=0?'+':''}${fmt(pDist,1)} pts</div>`:''}
+              ${w.topPuts?.[0]?.oi?`<div style="font-size:10px;color:var(--text3);">${(w.topPuts[0].oi/1000).toFixed(0)}K OI</div>`:''}
+            </div>
+          </div>
+          ${range?`<div style="text-align:center;font-size:10px;color:var(--text3);">Range: $${w.putWall} — $${w.callWall} · ${fmt(range,0)} pts wide</div>`:''}
+          <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+            <div>
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">TOP CALLS (OI)</div>
+              ${(w.topCalls||[]).slice(0,5).map((s,i) => {
+                const bw = Math.round((s.oi/(w.topCalls[0]?.oi||1))*100);
+                return '<div style="display:flex;align-items:center;gap:4px;padding:2px 0;">'
+                  +'<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:#00ff88;width:48px;text-align:right;">$'+s.strike+'</span>'
+                  +'<div style="flex:1;height:7px;background:var(--bg2);border-radius:2px;overflow:hidden;">'
+                  +'<div style="width:'+bw+'%;height:100%;background:rgba(0,255,136,'+(i===0?'0.7':'0.4')+');border-radius:2px;"></div></div>'
+                  +'<span style="font-size:9px;color:var(--text3);width:36px;">'+Math.round(s.oi/1000)+'K</span>'
+                  +'</div>';
+              }).join('')}
+            </div>
+            <div>
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">TOP PUTS (OI)</div>
+              ${(w.topPuts||[]).slice(0,5).map((s,i) => {
+                const bw = Math.round((s.oi/(w.topPuts[0]?.oi||1))*100);
+                return '<div style="display:flex;align-items:center;gap:4px;padding:2px 0;">'
+                  +'<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:#ff3355;width:48px;text-align:right;">$'+s.strike+'</span>'
+                  +'<div style="flex:1;height:7px;background:var(--bg2);border-radius:2px;overflow:hidden;">'
+                  +'<div style="width:'+bw+'%;height:100%;background:rgba(255,51,85,'+(i===0?'0.7':'0.4')+');border-radius:2px;"></div></div>'
+                  +'<span style="font-size:9px;color:var(--text3);width:36px;">'+Math.round(s.oi/1000)+'K</span>'
+                  +'</div>';
+              }).join('')}
+            </div>
+          </div>
+        </div>`;
+      });
+    } else {
+      // Fallback to old single-expiry display from top_call/put_strikes
+      const callStrikes = opt.top_call_strikes || [];
+      const putStrikes  = opt.top_put_strikes  || [];
+      const callWall = callStrikes[0]?.strike, putWall = putStrikes[0]?.strike;
+      const range = callWall && putWall ? callWall - putWall : null;
+      if(callWall || putWall) {
+        html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+          <div style="text-align:center;padding:10px;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:4px;">CALL WALL</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#00ff88;">$${callWall||'—'}</div>
+            ${callStrikes[0]?.oi?`<div style="font-size:11px;color:var(--text3);">${(callStrikes[0].oi/1000).toFixed(0)}K OI</div>`:''}
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(255,51,85,0.08);border:1px solid rgba(255,51,85,0.3);border-radius:4px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;margin-bottom:4px;">PUT WALL</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#ff3355;">$${putWall||'—'}</div>
+            ${putStrikes[0]?.oi?`<div style="font-size:11px;color:var(--text3);">${(putStrikes[0].oi/1000).toFixed(0)}K OI</div>`:''}
+          </div>
+        </div>`;
+        if(range) html += `<div style="text-align:center;padding:6px;background:var(--bg3);border-radius:3px;margin-bottom:8px;">
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">PIN RANGE: </span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);">$${putWall} — $${callWall} (${fmt(range,0)} pts)</span></div>`;
+      }
+    }
+    wallsEl.innerHTML = html || '<div class="no-data">No wall data — refresh GEX</div>';
+  }
+
+  // ── MAX PAIN EXPIRY LADDER ────────────────────────────────────────────────
+  const mpEl = $('gexMaxPain');
+  if(mpEl && maxPainArr.length) {
+    const prices = maxPainArr.map(m=>m.max_pain).filter(Boolean);
+    const mn = Math.min(...prices, spot) * 0.998;
+    const mx = Math.max(...prices, spot) * 1.002;
+    const rng = mx - mn || 1;
+    let html = `<div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:8px;">MAX PAIN = price where most options expire worthless</div>`;
+    maxPainArr.slice(0,8).forEach(m => {
+      if(!m.max_pain) return;
+      const w = ((m.max_pain - mn) / rng * 80 + 10).toFixed(1);
+      const diff = m.max_pain - spot;
+      const dc = Math.abs(diff) < 2 ? '#00ff88' : Math.abs(diff) < 5 ? '#ffcc00' : '#ff8800';
+      const isNearest = Math.abs(diff) === Math.min(...maxPainArr.map(x=>Math.abs((x.max_pain||0)-spot)));
+      html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);">
+        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);width:52px;">${m.expiry?.slice(5)||m.expiry}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text3);width:24px;">${m.dte}d</span>
+        <div style="flex:1;height:8px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+          <div style="width:${w}%;height:100%;background:${isNearest?'var(--cyan)':dc};border-radius:2px;opacity:0.7;"></div></div>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${isNearest?'var(--cyan)':dc};width:52px;text-align:right;">$${m.max_pain}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${diff>=0?'#00ff88':'#ff3355'};width:46px;text-align:right;">${diff>=0?'+':''}${fmt(diff,1)}</span>
+      </div>`;
+    });
+    if(spot) html += `<div style="margin-top:8px;font-size:11px;color:var(--text3);text-align:right;">Current spot: $${fmt(spot,2)}</div>`;
+    mpEl.innerHTML = html;
+  } else if(mpEl) { mpEl.innerHTML = '<div class="no-data">No max pain data</div>'; }
+
+  // ── DEALER POSITIONING NARRATIVE ─────────────────────────────────────────
+  const dealerEl = $('gexDealer');
+  if(dealerEl) {
+    const isPos = (gex.net_gex||0) > 0;
+    const callGex = gex.call_gex || 0, putGex = gex.put_gex || 0;
+    const aboveFlip = spot > (gex.flip_point||0);
+    const distFlip = gex.flip_point ? spot - gex.flip_point : null;
+    const lines = [];
+    if(isPos) {
+      lines.push({c:'#00ff88',t:'Dealers are NET LONG GAMMA. As SPY moves up, dealers sell to hedge; as SPY moves down, dealers buy. This creates natural resistance to large moves — a volatility dampener.'});
+    } else {
+      lines.push({c:'#ff3355',t:'Dealers are NET SHORT GAMMA. As SPY moves up, dealers must BUY more to hedge (adding fuel); as SPY moves down, dealers must SELL (adding fuel down). Moves can become self-reinforcing.'});
+    }
+    if(distFlip !== null) {
+      if(aboveFlip) lines.push({c:'#00ff88',t:`SPY is $${fmt(distFlip,2)} ABOVE the gamma flip point ($${gex.flip_point}). Above flip = positive GEX environment = stabilizing. Watch for the flip to act as support.`});
+      else lines.push({c:'#ff3355',t:`SPY is $${fmt(Math.abs(distFlip),2)} BELOW the gamma flip point ($${gex.flip_point}). Below flip = negative GEX = destabilizing. Flip acts as resistance overhead.`});
+    }
+    if(callGex && putGex) {
+      const cRatio = Math.abs(callGex/(putGex||1));
+      if(Math.abs(putGex) > Math.abs(callGex)*2) lines.push({c:'#ff8800',t:`Put GEX (${fmtB(putGex)}) dominates call GEX (${fmtB(callGex)}). Heavy put open interest creating strong downside gamma pressure.`});
+      else if(Math.abs(callGex) > Math.abs(putGex)*2) lines.push({c:'#00ff88',t:`Call GEX (${fmtB(callGex)}) dominates. Heavy call open interest providing upside support from dealer hedging.`});
+    }
+    if(gex.support && gex.resistance) {
+      lines.push({c:'var(--cyan)',t:`Dealer-defined range: $${gex.support} (support) to $${gex.resistance} (resistance) — ${fmt(gex.resistance-gex.support,0)}-point corridor. High probability of mean reversion within this band when above flip.`});
+    }
+    dealerEl.innerHTML = lines.map(l=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);">
+      <div style="width:7px;height:7px;border-radius:50%;background:${l.c};flex-shrink:0;margin-top:4px;box-shadow:0 0 5px ${l.c}88;"></div>
+      <span style="font-size:12px;color:var(--text2);line-height:1.6;">${l.t}</span></div>`).join('');
+  }
+
+  // ── OPTIONS FLOW SUMMARY ──────────────────────────────────────────────────
+  const flowEl = $('gexFlow');
+  if(flowEl) {
+    const cv = opt.call_volume||0, pv = opt.put_volume||0;
+    const co = opt.call_oi||0, po = opt.put_oi||0;
+    const pcv = opt.pc_ratio_vol||0, pco = opt.pc_ratio_oi||0;
+    const tCV = opt.total_call_vol||0, tPV = opt.total_put_vol||0;
+    const tCO = opt.total_call_oi||0, tPO = opt.total_put_oi||0;
+    const pcvColor = pcv>1.5?'#ff3355':pcv>0.9?'#ffcc00':'#00ff88';
+    const pcoColor = pco>1.5?'#ff3355':pco>0.9?'#ffcc00':'#00ff88';
+    const flowBias = pcv < 0.7 ? 'CALL HEAVY — bullish flow dominates' : pcv > 1.5 ? 'PUT HEAVY — bearish/protective flow dominates' : 'BALANCED — mixed directional conviction';
+    const fbColor = pcv<0.7?'#00ff88':pcv>1.5?'#ff3355':'#ffcc00';
+    flowEl.innerHTML = `
+      <div style="padding:8px;background:${fbColor}11;border:1px solid ${fbColor}33;border-radius:4px;margin-bottom:10px;text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${fbColor};margin-bottom:2px;">FLOW BIAS (${opt.expiry||'today'})</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${fbColor};">${flowBias}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div style="text-align:center;padding:8px;background:var(--bg3);border-radius:3px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">P/C VOL RATIO</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${pcvColor};">${fmt(pcv,2)}</div>
+          <div style="font-size:10px;color:var(--text3);">${pcv>1.5?'Bearish':pcv<0.7?'Bullish':'Neutral'}</div>
+        </div>
+        <div style="text-align:center;padding:8px;background:var(--bg3);border-radius:3px;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">P/C OI RATIO</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${pcoColor};">${fmt(pco,2)}</div>
+          <div style="font-size:10px;color:var(--text3);">${pco>1.5?'Structural put hedge':pco<0.7?'Call heavy OI':'Mixed'}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;">
+        ${[['CALL VOL', cv,'#00ff88'],['PUT VOL',pv,'#ff3355'],['CALL OI',co,'#00ff88'],['PUT OI',po,'#ff3355']].map(([l,v,c])=>`
+          <div style="padding:5px 8px;background:var(--bg3);border-radius:2px;display:flex;justify-content:space-between;">
+            <span style="color:var(--text3);font-size:10px;">${l}</span>
+            <span style="font-family:'Share Tech Mono',monospace;color:${c};">${v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v}</span>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // ── VIX TERM STRUCTURE + SKEW ─────────────────────────────────────────────
+  const vtEl = $('gexVixTerm');
+  if(vtEl) {
+    const v1 = vix.price, v3 = vix3m.price, v6 = vix6m.price;
+    const contango = v1 && v3 ? v3 > v1 : null;
+    const termStructure = contango === null ? 'UNKNOWN' : contango ? 'CONTANGO' : 'BACKWARDATION';
+    const tsColor = contango === null ? 'var(--text3)' : contango ? '#00ff88' : '#ff3355';
+    const tsDesc = contango === null ? '' : contango ? 'Normal — near-term vol cheaper than future vol. Market calm, no immediate panic.' : 'Inverted — near-term vol more expensive. Acute fear or event risk today.';
+    const vvixVal = vvix.price, skewVal = skew.price;
+    const vvixColor = vvixVal > 130 ? '#ff3355' : vvixVal > 100 ? '#ff8800' : '#00ff88';
+    const skewColor = skewVal > 150 ? '#ff3355' : skewVal > 130 ? '#ff8800' : '#00ff88';
+    const pts = [v1&&{l:'VIX (1M)',p:v1,c:vix.change},v3&&{l:'VIX3M',p:v3,c:vix3m.change},v6&&{l:'VIX6M',p:v6,c:vix6m.change}].filter(Boolean);
+    const maxP = pts.length ? Math.max(...pts.map(p=>p.p)) : 30, minP = pts.length ? Math.min(...pts.map(p=>p.p)) : 15;
+    const cr = v => v > 0 ? '#ff3355' : v < 0 ? '#00ff88' : 'var(--text2)';
+    let html = `
+      <div style="padding:8px;background:${tsColor}11;border:1px solid ${tsColor}33;border-radius:4px;margin-bottom:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${tsColor};margin-bottom:3px;">VIX TERM STRUCTURE: ${termStructure}</div>
+        <div style="font-size:12px;color:var(--text2);">${tsDesc}</div>
+      </div>`;
+    pts.forEach(p => {
+      const w = ((p.p-minP)/(maxP-minP)*70+15).toFixed(1);
+      const pc = p.p > 30 ? '#ff3355' : p.p > 20 ? '#ff8800' : p.p > 15 ? '#ffcc00' : '#00ff88';
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);width:48px;">${p.l}</span>
+        <div style="flex:1;height:10px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+          <div style="width:${w}%;height:100%;background:${pc};opacity:0.7;border-radius:2px;"></div></div>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${pc};width:36px;text-align:right;">${fmt(p.p,1)}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${cr(p.c)};width:40px;text-align:right;">${p.c!=null?(p.c>=0?'+':'')+fmt(p.c,2):''}</span>
+      </div>`;
+    });
+    if(vvixVal) html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--border);margin-top:4px;">
+      <div><div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">VVIX <span style="color:var(--text3);font-size:9px;">(vol of vol)</span></div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${vvixColor};">${fmt(vvixVal,1)}</div>
+      <div style="font-size:10px;color:var(--text3);">${vvixVal>130?'EXTREME fear of fear':vvixVal>100?'Elevated':'Normal'}</div></div>
+      ${skewVal?`<div style="text-align:right;"><div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">SKEW</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${skewColor};">${fmt(skewVal,1)}</div>
+      <div style="font-size:10px;color:var(--text3);">${skewVal>150?'Extreme tail hedge':skewVal>130?'Heavy put demand':skewVal>110?'Normal':'Low protection'}</div></div>`:''}
+    </div>`;
+    vtEl.innerHTML = html;
+  }
+}
+
+
+// ─── BREADTH TAB ADDITIONS ────────────────────────────────────────────────────
+function renderBreadthAdditions(md, sd) {
+  const q = md.quotes || {};
+  const spy = q['SPY'] || {}, qqq = q['QQQ'] || {}, iwm = q['IWM'] || {};
+  const rsp = q['RSP'] || {}, dia = q['DIA'] || {};
+  const vix = q['^VIX'] || {}, vvix = q['^VVIX'] || {};
+  const vix3m = q['^VIX3M'] || {}, vix6m = q['^VIX6M'] || {};
+  const smh = q['SMH'] || {}, xbi = q['XBI'] || {}, kre = q['KRE'] || {};
+  const gdx = q['GDX'] || {}, arkk = q['ARKK'] || {}, xrt = q['XRT'] || {};
+  const tlt = q['TLT'] || {}, hyg = q['HYG'] || {}, lqd = q['LQD'] || {};
+  const xlk = q['XLK']||{}, xlf=q['XLF']||{}, xle=q['XLE']||{}, xlv=q['XLV']||{};
+  const xli=q['XLI']||{}, xly=q['XLY']||{}, xlp=q['XLP']||{}, xlb=q['XLB']||{};
+  const xlre=q['XLRE']||{}, xlu=q['XLU']||{}, xlc=q['XLC']||{};
+  const gc=q['GC=F']||{}, dxy=q['DX-Y.NYB']||{}, btc=q['BTC-USD']||{};
+  const oil=q['CL=F']||{};
+  const p = v => v?.pct_change || 0;
+  const clr = v => v > 0 ? '#00ff88' : v < 0 ? '#ff3355' : 'var(--text2)';
+  const sign = v => v >= 0 ? '+' : '';
+
+  // ── BREADTH COMPOSITE SCORE ───────────────────────────────────────────────
+  const compEl = $('breadthComposite');
+  if(compEl) {
+    let score = 0, maxScore = 0, items = [];
+    const add = (condition, pts, label, val) => {
+      maxScore += pts;
+      if(condition) { score += pts; items.push({c:'#00ff88',t:label+': '+val,pts}); }
+      else { items.push({c:'#ff3355',t:label+': '+val,pts:-pts}); }
+    };
+    if(spy.price) {
+      add(p(spy)>0, 2, 'SPY direction', (p(spy)>=0?'+':'')+fmt(p(spy),2)+'%');
+      add(p(rsp)>0, 1, 'Equal-weight RSP', (p(rsp)>=0?'+':'')+fmt(p(rsp),2)+'%');
+      add(p(rsp)>p(spy), 1, 'Breadth (RSP>SPY)', 'RSP '+sign(p(rsp)-p(spy))+fmt(p(rsp)-p(spy),2)+'%');
+      const sects = [xlk,xlf,xle,xlv,xli,xly,xlp,xlb,xlre,xlu,xlc].filter(x=>x.price);
+      const upSects = sects.filter(s=>p(s)>0).length;
+      add(upSects>=6, 2, 'Sectors up', upSects+'/'+sects.length);
+      add(p(hyg)>-0.2, 1, 'Credit (HYG)', (p(hyg)>=0?'+':'')+fmt(p(hyg),2)+'%');
+      if(vix.price) add(vix.price<25, 1, 'VIX regime', 'VIX '+fmt(vix.price,1));
+      add(p(iwm)>p(spy)-1, 1, 'Small caps (IWM)', (p(iwm)>=0?'+':'')+fmt(p(iwm),2)+'%');
+      const mag7 = ['AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA'];
+      const m7avg = mag7.map(s=>p(q[s]||{})).reduce((a,b)=>a+b,0)/7;
+      add(m7avg>p(spy)-0.5, 1, 'MAG7 vs SPY', sign(m7avg-p(spy))+fmt(m7avg-p(spy),2)+'%');
+    }
+    const pct = maxScore ? Math.round((score/maxScore)*100) : 0;
+    const bc = pct>=70?'#00ff88':pct>=50?'#88cc00':pct>=35?'#ff8800':'#ff3355';
+    const bl = pct>=70?'BROAD — healthy participation':pct>=50?'MIXED — uneven breadth':pct>=35?'NARROW — concentration risk':'WEAK — broad deterioration';
+    compEl.innerHTML = `<div style="display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center;">
+      <div style="text-align:center;padding:16px 24px;background:${bc}11;border:2px solid ${bc}44;border-radius:6px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">BREADTH SCORE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:42px;font-weight:900;color:${bc};line-height:1;">${pct}%</div>
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:${bc};margin-top:4px;">${bl.split('—')[0].trim()}</div>
+      </div>
+      <div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:10px;">${bl}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;">
+          ${items.map(it=>`<span style="font-family:'Share Tech Mono',monospace;font-size:11px;padding:2px 8px;background:${it.c}15;border:1px solid ${it.c}33;border-radius:3px;color:${it.c};">${it.t}</span>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── FACTOR PERFORMANCE ────────────────────────────────────────────────────
+  const factEl = $('breadthFactors');
+  if(factEl) {
+    const factors = [
+      {name:'GROWTH',subs:[{sym:'QQQ',d:qqq},{sym:'ARKK',d:arkk},{sym:'SMH',d:smh},{sym:'XBI',d:xbi}]},
+      {name:'VALUE',subs:[{sym:'XLF',d:xlf},{sym:'XLE',d:xle},{sym:'XLI',d:xli},{sym:'KRE',d:kre}]},
+      {name:'DEFENSIVE',subs:[{sym:'XLV',d:xlv},{sym:'XLP',d:xlp},{sym:'XLU',d:xlu},{sym:'TLT',d:tlt}]},
+      {name:'REAL ASSETS',subs:[{sym:'GDX',d:gdx},{sym:'GC=F',d:gc},{sym:'CL=F',d:oil},{sym:'XLE',d:xle}]},
+    ];
+    const maxAbs = 3;
+    let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+    factors.forEach(f => {
+      const valid = f.subs.filter(s=>s.d.pct_change!=null);
+      if(!valid.length) return;
+      const avg = valid.reduce((a,s)=>a+(s.d.pct_change||0),0)/valid.length;
+      const pct = Math.min(Math.abs(avg)/maxAbs*45,45);
+      const fc = avg > 0.3 ? '#00ff88' : avg < -0.3 ? '#ff3355' : '#ffcc00';
+      html += `<div style="padding:8px;background:var(--bg3);border-radius:4px;border-left:3px solid ${fc};">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <span style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);">${f.name}</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${fc};">${sign(avg)}${fmt(avg,2)}%</span>
+        </div>
+        <div style="height:6px;background:var(--bg2);border-radius:3px;overflow:hidden;position:relative;">
+          <div style="position:absolute;${avg>=0?'left:50%':'right:50%'};width:${pct}%;height:100%;background:${fc};opacity:0.7;border-radius:3px;"></div>
+          <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border2);"></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">
+          ${valid.map(s=>`<span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${clr(s.d.pct_change)};padding:1px 5px;background:var(--bg2);border-radius:2px;">${s.sym} ${sign(s.d.pct_change)}${fmt(s.d.pct_change,1)}%</span>`).join('')}
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+    factEl.innerHTML = html;
+  }
+
+  // ── RISK-ON / RISK-OFF PROXY MATRIX ──────────────────────────────────────
+  const riskEl = $('breadthRiskMatrix');
+  if(riskEl) {
+    const riskOn  = [{sym:'SPY',d:spy},{sym:'IWM',d:iwm},{sym:'QQQ',d:qqq},{sym:'HYG',d:hyg},{sym:'BTC',d:btc},{sym:'OIL',d:oil}];
+    const riskOff = [{sym:'TLT',d:tlt},{sym:'GLD',d:gc},{sym:'DXY',d:dxy},{sym:'XLP',d:xlp},{sym:'XLU',d:xlu},{sym:'XLV',d:xlv}];
+    const roAvg = riskOn.filter(x=>x.d.pct_change!=null).reduce((a,x)=>a+(x.d.pct_change||0),0) / Math.max(riskOn.filter(x=>x.d.pct_change!=null).length,1);
+    const rfAvg = riskOff.filter(x=>x.d.pct_change!=null).reduce((a,x)=>a+(x.d.pct_change||0),0) / Math.max(riskOff.filter(x=>x.d.pct_change!=null).length,1);
+    const signal = roAvg > rfAvg + 0.3 ? 'RISK-ON' : rfAvg > roAvg + 0.3 ? 'RISK-OFF' : 'MIXED';
+    const sc = signal==='RISK-ON'?'#00ff88':signal==='RISK-OFF'?'#ff3355':'#ffcc00';
+    const makeRow = (items, label, color) => `
+      <div style="margin-bottom:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${color};margin-bottom:5px;letter-spacing:1px;">${label} (avg ${sign(label==='RISK-ON'?roAvg:rfAvg)}${fmt(label==='RISK-ON'?roAvg:rfAvg,2)}%)</div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:3px;">
+          ${items.map(({sym,d})=>{ const pc=d.pct_change; if(pc==null) return ''; const c=clr(pc); return `<div style="background:${c}12;border:1px solid ${c}33;border-radius:3px;padding:4px 2px;text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${sym}</div><div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${c};">${sign(pc)}${fmt(pc,1)}%</div></div>`;}).join('')}
+        </div>
+      </div>`;
+    riskEl.innerHTML = `
+      <div style="text-align:center;padding:8px;background:${sc}11;border:1px solid ${sc}33;border-radius:4px;margin-bottom:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:${sc};margin-bottom:2px;">COMPOSITE SIGNAL</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:${sc};">${signal}</div>
+      </div>
+      ${makeRow(riskOn,'RISK-ON','#00ff88')}
+      ${makeRow(riskOff,'RISK-OFF','#ff3355')}`;
+  }
+
+  // ── VOLATILITY REGIME ─────────────────────────────────────────────────────
+  const volRegEl = $('breadthVolRegime');
+  if(volRegEl) {
+    const vv = vix.price||0, vx3 = vix3m.price||0, vvv = vvix.price||0;
+    const regime = vv < 15 ? 'COMPLACENT' : vv < 20 ? 'LOW' : vv < 25 ? 'NORMAL' : vv < 30 ? 'ELEVATED' : vv < 40 ? 'FEAR' : 'EXTREME FEAR';
+    const rc2 = vv < 15 ? '#ffcc00' : vv < 20 ? '#00ff88' : vv < 25 ? '#88cc00' : vv < 30 ? '#ff8800' : '#ff3355';
+    const contango = vx3 > vv;
+    const ts = contango ? 'CONTANGO (normal)' : 'BACKWARDATION (stressed)';
+    const tsc = contango ? '#00ff88' : '#ff3355';
+    volRegEl.innerHTML = `
+      <div style="text-align:center;padding:12px;background:${rc2}11;border:2px solid ${rc2}33;border-radius:5px;margin-bottom:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">VIX REGIME</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:${rc2};">${fmt(vv,1)}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:${rc2};margin-top:3px;">${regime}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text3);">VIX3M</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${vx3>vv?'#ff8800':'#00ff88'}">${fmt(vx3,1)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text3);">Term Structure</span>
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:${tsc}">${ts}</span>
+        </div>
+        ${vvv?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text3);">VVIX</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${vvv>130?'#ff3355':vvv>100?'#ff8800':'#00ff88'}">${fmt(vvv,1)}</span>
+        </div>`:''}
+        <div style="padding:6px 8px;background:var(--bg3);border-radius:3px;font-size:12px;color:var(--text2);">
+          ${vv>30?'High VIX: options expensive, mean reversion likely. Sell vol strategies favored.':vv<15?'Low VIX: options cheap, consider protection. Complacency warning.':'Normal vol regime — standard risk management.'}
+        </div>
+      </div>`;
+  }
+
+}
+
+// ─── BONDS TAB ADDITIONS ─────────────────────────────────────────────────────
 function renderBondsAdditions(md) {
   const q = md.quotes || {};
   const spy = q['SPY']||{}, tlt = q['TLT']||{}, hyg = q['HYG']||{};
