@@ -5208,6 +5208,7 @@ function _renderTransitionHTML(data) {
   const capex = data.ai_capex || [];
   const hist = data.historical_transitions || [];
   const debtScenarios = data.debt_scenarios || [];
+  const auto = data.automation_signal || null;
 
   const fmt1 = v => v == null ? '—' : Number(v).toFixed(1);
   const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
@@ -5463,6 +5464,55 @@ function _renderTransitionHTML(data) {
         <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">The share of total economic output that goes to workers as wages. A structural decline means capital — increasingly, AI — is capturing a larger share of value creation. This is the distributional signal. It measures who benefits from the transition.</div>
       </div>
     </div>
+
+    <!-- AUTOMATION & ROBOTICS -->
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#8855ff;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(136,85,255,0.3);">⬡ AUTOMATION & ROBOTICS ADOPTION — IS IT IN THE DATA YET?</div>
+    <div style="background:rgba(136,85,255,0.04);border:1px solid rgba(136,85,255,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      The clearest signal of physical automation is the <strong style="color:var(--text1);">manufacturing sector</strong> — it has been mechanizing for decades. Output rising while employment and hours worked fall means machines are doing the work. This is the template for what AI will do to knowledge work.
+    </div>
+    ${auto ? `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+
+      <div class="panel" style="border-top:3px solid #8855ff;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#8855ff;margin-bottom:4px;">MANUFACTURING OUTPUT/WORKER</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: IPMAN ÷ MANEMP · Automation proxy</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">+${fmt1(auto.output_per_worker_growth)}%</div>
+        <div style="font-size:11px;color:#8855ff;">vs ${auto.employ_history[0]?.d||'prior'} baseline</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">Output grew while headcount fell. The ratio measures how much more each remaining worker (+ machine) produces. This is the physical automation fingerprint.</div>
+      </div>
+
+      <div class="panel" style="border-top:3px solid ${auto.mfg_emp_change_pct < -10 ? '#00ff88' : '#ffcc00'};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${auto.mfg_emp_change_pct < -10 ? '#00ff88' : '#ffcc00'};margin-bottom:4px;">MANUFACTURING EMPLOYMENT</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: MANEMP · BLS · Structural displacement</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">${fmt1(auto.mfg_employ_current / 1000)}M</div>
+        <div style="font-size:11px;color:${auto.mfg_emp_change_pct < 0 ? '#00ff88' : '#ff8800'};">${fmt1(auto.mfg_employ_pct_below_peak)}% below ${auto.peak_year} peak</div>
+        ${miniChart(auto.employ_history, '#ffcc00')}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">US manufacturing employment peaked in 1979 and has fallen 35%+ since. Automation — not offshoring alone — is the structural driver. This is the 40-year preview of what AI will do to knowledge work.</div>
+      </div>
+
+      <div class="panel" style="border-top:3px solid #00ff88;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ff88;margin-bottom:4px;">OUTPUT PER HOUR: MANUFACTURING</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: OPHMFG · BLS · Direct automation signal</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">${fmt1(auto.oph_current)}</div>
+        <div style="font-size:11px;color:#00ff88;">Index · rising = machines doing more per hour</div>
+        ${miniChart(auto.oph_history, '#00ff88')}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">Output per labor-hour in manufacturing. Rising index = more goods produced per hour worked. The steepening of this curve since 2000 tracks robotics adoption in automotive, electronics, and logistics.</div>
+      </div>
+
+      <div class="panel" style="border-top:3px solid ${(auto.hours_current||40) < 40 ? '#00ff88' : '#ffcc00'};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${(auto.hours_current||40) < 40 ? '#00ff88' : '#ffcc00'};margin-bottom:4px;">AVG WEEKLY HOURS: MANUFACTURING</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: AWHMAN · BLS · Labor demand signal</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">${fmt1(auto.hours_current)}</div>
+        <div style="font-size:11px;color:var(--text3);">hrs/week · below 40 = reduced labor demand</div>
+        ${miniChart(auto.hours_history, '#ffcc00')}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">When factories need fewer human hours per week, it precedes headcount cuts. Hours worked is the leading indicator — companies reduce hours before they reduce headcount. Watch this before payrolls.</div>
+      </div>
+
+    </div>
+    <div style="padding:10px 14px;background:rgba(136,85,255,0.06);border:1px solid rgba(136,85,255,0.2);border-radius:4px;margin-bottom:16px;font-size:11px;color:var(--text2);line-height:1.7;">
+      <strong style="color:#8855ff;">Why manufacturing matters for AI:</strong> Manufacturing has been automating for 50 years with robots, CNC machines, and software. The pattern is always the same: output up, headcount down, output-per-worker up. AI in knowledge work will follow the identical curve — just faster, because software deploys in months, not the years it takes to retool a factory floor. Manufacturing is the proof of concept. Knowledge work is next.
+    </div>
+    ` : '<div class="panel" style="opacity:0.4;font-size:11px;color:var(--text3);">Automation data loading...</div>'}
 
     <!-- DEBT BRIDGE -->
     <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ffcc00;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,204,0,0.3);">⬡ THE DEBT BRIDGE — HOW LONG CAN IT HOLD?</div>
