@@ -5209,6 +5209,7 @@ function _renderTransitionHTML(data) {
   const hist = data.historical_transitions || [];
   const debtScenarios = data.debt_scenarios || [];
   const auto = data.automation_signal || null;
+  const wl = data.winners_losers || null;
 
   const fmt1 = v => v == null ? '—' : Number(v).toFixed(1);
   const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
@@ -5408,9 +5409,9 @@ function _renderTransitionHTML(data) {
           <div style="font-size:10px;color:var(--text3);">1.05% of US GDP</div>
         </div>
         <div style="text-align:center;background:var(--bg3);border-radius:3px;padding:10px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">2025 ESTIMATE</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#8855ff;">$427B</div>
-          <div style="font-size:10px;color:var(--text3);">+50% YoY · 1.52% GDP</div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">2026 CONSENSUS</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#8855ff;">$700B</div>
+          <div style="font-size:10px;color:var(--text3);">Hyperscalers alone · 2.35% GDP</div>
         </div>
         <div style="text-align:center;background:var(--bg3);border-radius:3px;padding:10px;">
           <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">RAILWAY PEAK (1840s)</div>
@@ -5420,7 +5421,7 @@ function _renderTransitionHTML(data) {
       </div>
       ${capexChart()}
       <div style="font-size:11px;color:var(--text2);margin-top:12px;line-height:1.7;border-top:1px solid var(--border);padding-top:10px;">
-        <strong style="color:var(--text1);">What this measures:</strong> Annual capital expenditure by the 8 largest AI infrastructure companies (Amazon, Alphabet, Microsoft, Meta, Nvidia, Oracle, Apple, Broadcom). This is the primary funding mechanism of the transition — every dollar of elevated equity valuation is ultimately financing this buildout. Analyst estimates have undershot actual spending by 30%+ for two consecutive years. Consensus now projects $562B in 2026. Purple bars are estimates.
+        <strong style="color:var(--text1);">What this measures:</strong> Annual capital expenditure by the 8 largest AI infrastructure companies (Amazon, Alphabet, Microsoft, Meta, Nvidia, Oracle, Apple, Broadcom). This is the primary funding mechanism of the transition — every dollar of elevated equity valuation is ultimately financing this buildout. Analyst estimates have undershot actual spending by 30%+ for two consecutive years. Consensus now projects $700B+ in 2026 from hyperscalers alone (Amazon, Alphabet, Microsoft, Meta). Purple bars are estimates.
       </div>
       <div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Sources: Company filings, Goldman Sachs Research, RBC Wealth Management, Morgan Stanley Cloud Capex Tracker. Data through 2024 actual; 2025-2027 consensus estimates.</div>
     </div>
@@ -5545,6 +5546,85 @@ function _renderTransitionHTML(data) {
       ${histHTML}
     </div>
 
+    <!-- WINNERS & LOSERS -->
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#00ff88;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(0,255,136,0.3);">⬡ WINNERS & LOSERS — WHAT THE DATA ACTUALLY SHOWS</div>
+    <div style="background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      Every major transition produces the same pattern: <strong style="color:var(--text1);">profit concentrates at the top of the new stack while the middle gets hollowed out.</strong> The internet made Amazon and Google extraordinarily profitable while destroying thousands of retailers, travel agents, and media companies. AI will do the same — but the sectors being hollowed out are knowledge-work industries that thought they were safe. These five signals measure the divergence as it happens.
+    </div>
+    ${wl ? `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px;">
+
+      <div class="panel" style="border-top:3px solid #00ff88;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ff88;margin-bottom:4px;">NEW BUSINESS FORMATION</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: BUSTHIRTY · Census · Weekly applications</div>
+        ${wl.biz_formation ? `
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">${Math.round(wl.biz_formation.current / 1000)}K</div>
+        <div style="font-size:11px;color:${wl.biz_formation.yoy_change_pct > 0 ? '#00ff88' : '#ff3355'};">${wl.biz_formation.yoy_change_pct > 0 ? '+' : ''}${fmt1(wl.biz_formation.yoy_change_pct)}% YoY · apps/week</div>
+        ${miniChart(wl.biz_formation.history, '#00ff88')}
+        ` : '<div style="font-size:12px;color:var(--text3);">— no data</div>'}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">New business applications to the IRS — the leading indicator of startup formation. A rising rate means AI-native companies are being born faster. This is the new-entrant side of the transition: the challengers forming up before they appear in any market share data.</div>
+      </div>
+
+      <div class="panel" style="border-top:3px solid #00ccff;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ccff;margin-bottom:4px;">INTELLECTUAL PROPERTY INVESTMENT</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: A465RC1Q027SBEA · BEA · Winners invest in IP not steel</div>
+        ${wl.ip_investment ? `
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">$${fmt1(wl.ip_investment.current / 1000)}T</div>
+        <div style="font-size:11px;color:${wl.ip_investment.growth_pct > 20 ? '#00ff88' : '#ffcc00'};">+${fmt1(wl.ip_investment.growth_pct)}% since baseline</div>
+        ${miniChart(wl.ip_investment.history, '#00ccff')}
+        ` : '<div style="font-size:12px;color:var(--text3);">— no data</div>'}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">Private investment in software, R&D, and intellectual property. In prior transitions, winners invested in the new infrastructure while losers invested in defending old capacity. A rising IP-to-physical-investment ratio means the economy's productive edge is shifting to knowledge assets.</div>
+      </div>
+
+      <div class="panel" style="border-top:3px solid #8855ff;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#8855ff;margin-bottom:4px;">E-COMMERCE SHARE OF RETAIL</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: ECOMPCTSA · Census · New commerce capturing old</div>
+        ${wl.ecommerce ? `
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">${fmt1(wl.ecommerce.current)}%</div>
+        <div style="font-size:11px;color:#8855ff;">+${fmt1(wl.ecommerce.share_gained)}pp gained in 5 years</div>
+        ${miniChart(wl.ecommerce.history, '#8855ff')}
+        ` : '<div style="font-size:12px;color:var(--text3);">— no data</div>'}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">The share of total retail sales happening online. This is the most direct measurement of an old-economy sector being structurally taken over by the new one. Every percentage point gained here represents physical retail permanently lost — stores, jobs, and supply chains that don't come back.</div>
+      </div>
+
+      <div class="panel" style="border-top:3px solid #ffcc00;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#ffcc00;margin-bottom:4px;">CORPORATE PROFITS AFTER TAX</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: CP · BEA · Is profit concentrating?</div>
+        ${wl.corp_profits ? `
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">$${fmt1(wl.corp_profits.current / 1000)}T</div>
+        <div style="font-size:11px;color:${wl.corp_profits.yoy_change_pct > 0 ? '#00ff88' : '#ff3355'};">${wl.corp_profits.yoy_change_pct > 0 ? '+' : ''}${fmt1(wl.corp_profits.yoy_change_pct)}% YoY</div>
+        ${miniChart(wl.corp_profits.history, '#ffcc00')}
+        ` : '<div style="font-size:12px;color:var(--text3);">— no data</div>'}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">Total after-tax corporate profits across the economy. In a healthy transition, aggregate profits rise as productivity gains flow to capital. But the distribution matters more than the aggregate — a small number of AI-era companies will capture an outsized share while legacy sector margins compress.</div>
+      </div>
+
+      <div class="panel" style="border-top:3px solid ${wl.commercial_loans?.trend === 'rising' ? '#ff8800' : '#00ff88'};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${wl.commercial_loans?.trend === 'rising' ? '#ff8800' : '#00ff88'};margin-bottom:4px;">COMMERCIAL & INDUSTRIAL LOANS</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: CORBLACBW027SBOG · Fed · Old economy stress signal</div>
+        ${wl.commercial_loans ? `
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">$${fmt1(wl.commercial_loans.current / 1000)}T</div>
+        <div style="font-size:11px;color:${wl.commercial_loans.trend === 'rising' ? '#ff8800' : '#00ff88'};">${wl.commercial_loans.trend === 'rising' ? '▲ RISING' : '▼ FALLING'} · ${wl.commercial_loans.change_pct > 0 ? '+' : ''}${fmt1(wl.commercial_loans.change_pct)}% recent</div>
+        ${miniChart(wl.commercial_loans.history, wl.commercial_loans.trend === 'rising' ? '#ff8800' : '#00ccff')}
+        ` : '<div style="font-size:12px;color:var(--text3);">— no data</div>'}
+        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">Bank loans to businesses for operations and investment. Rising commercial loans in a high-rate environment signal companies borrowing to survive — not to grow. Falling loans can mean either health (self-funding) or contraction (can't qualify). In a transition, losers borrow defensively while winners fund from profits.</div>
+      </div>
+
+    </div>
+
+    <div style="padding:10px 14px;background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.15);border-radius:4px;margin-bottom:16px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:8px;letter-spacing:1px;">WHAT TO WATCH: THE DIVERGENCE SIGNAL</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:4px;">✓ WINNER SIGNALS</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.7;">New business formation accelerating → AI-native challengers forming. IP investment rising faster than physical investment → capital flowing to knowledge assets. Corporate profits at record highs concentrated in fewer names.</div>
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;margin-bottom:4px;">✕ LOSER SIGNALS</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.7;">E-commerce share still taking points from physical retail. Commercial loan growth in mid-cycle suggests borrowing to stay afloat, not to invest. Manufacturing employment decline continuing — the template for what happens next to knowledge work.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- SURVIVOR FRAMEWORK -->
     <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ff8800;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,136,0,0.3);">⬡ THE SURVIVOR FRAMEWORK — WHO MAKES IT THROUGH THE POP</div>
     <div class="panel" style="margin-bottom:16px;border-left:4px solid #ff8800;">
@@ -5597,7 +5677,7 @@ OUTCOME PROBABILITIES:
 
 AI INFRASTRUCTURE CAPEX:
 - 2024 actual: $285B (1.05% of GDP)
-- 2025 estimate: $427B (1.52% of GDP)
+- 2026 consensus: $700B (2.35% of GDP, hyperscalers alone)
 - Analyst estimates have undershot actual by 30%+ for 2 consecutive years
 - Railway peak was 6% of GDP — we are still early in the buildout
 
