@@ -4004,7 +4004,8 @@ async function loadData(){
       if (liveGEX.atm_put_mid)  md.gex.atm_put_mid  = liveGEX.atm_put_mid;
       if (liveGEX.max_pain?.length) md.max_pain = liveGEX.max_pain;
       if (liveGEX.walls_by_expiry?.length) md.walls_by_expiry = liveGEX.walls_by_expiry;
-      if (liveGEX.atm_iv && md.weekly_em?.[0]) md.weekly_em[0].atm_iv = liveGEX.atm_iv;
+      // Note: intentionally NOT overriding weekly_em[0].atm_iv with GEX atm_iv
+      // GEX uses nearest expiry IV which can differ from weekly IV used for EM calc
       if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
     }
 
