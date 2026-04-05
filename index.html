@@ -2366,7 +2366,17 @@ const SPY_PLAYER = {
   muted:       false,
   initiated:   false,
   visible:     false,
+  loop:        false,   // loop single track
+  activeAudio: 'A',     // which audio element is playing
+  crossfading: false,
+  _crossfadeTimer: null,
 };
+
+// Get active and standby audio elements
+function spyAudioA() { return document.getElementById('spyAudio'); }
+function spyAudioB() { return document.getElementById('spyAudioB'); }
+function spyActiveAudio() { return SPY_PLAYER.activeAudio === 'A' ? spyAudioA() : spyAudioB(); }
+function spyStandbyAudio() { return SPY_PLAYER.activeAudio === 'A' ? spyAudioB() : spyAudioA(); }
 
 function spyShuffle() {
   const n = SPY_PLAYER.playlist.length;
@@ -2376,6 +2386,23 @@ function spyShuffle() {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   SPY_PLAYER.shuffled = arr;
+}
+
+function spyToggleLoop() {
+  SPY_PLAYER.loop = !SPY_PLAYER.loop;
+  const btn = document.getElementById('spyLoopBtn');
+  if (btn) {
+    btn.classList.toggle('loop-active', SPY_PLAYER.loop);
+    btn.title = SPY_PLAYER.loop ? 'Loop: ON' : 'Loop: OFF';
+  }
+  // When looping, set native loop on active audio
+  const audio = spyActiveAudio();
+  if (audio) audio.loop = SPY_PLAYER.loop;
+  // Cancel any pending crossfade
+  if (SPY_PLAYER.loop && SPY_PLAYER._crossfadeTimer) {
+    clearTimeout(SPY_PLAYER._crossfadeTimer);
+    SPY_PLAYER._crossfadeTimer = null;
+  }
 }
 
 function spyMusicToggle() {
@@ -2417,8 +2444,12 @@ async function spyPlayerInit() {
     SPY_PLAYER.playlist = [];
   }
   const audio = document.getElementById('spyAudio');
+  const audioB = document.getElementById('spyAudioB');
   audio.volume = 0.7;
-  audio.addEventListener('ended', spyNext);
+  audioB.volume = 0.7;
+  // ended handler - only fire if not crossfading (crossfade handles transition)
+  audio.addEventListener('ended', () => { if (!SPY_PLAYER.crossfading && !SPY_PLAYER.loop) spyNext(); });
+  audioB.addEventListener('ended', () => { if (!SPY_PLAYER.crossfading && !SPY_PLAYER.loop) spyNext(); });
   audio.addEventListener('timeupdate', spyUpdateProgress);
   audio.addEventListener('loadedmetadata', spyUpdateProgress);
 
@@ -2434,7 +2465,8 @@ function spyLoadTrack(idx) {
   idx = ((idx % list.length) + list.length) % list.length;
   SPY_PLAYER.current = idx;
   const song = list[idx];
-  const audio = document.getElementById('spyAudio');
+  const audio = spyActiveAudio();
+  audio.loop = SPY_PLAYER.loop;
   audio.src = '/music/' + encodeURIComponent(song.file);
   audio.load();
   // Update new UI
@@ -2449,7 +2481,7 @@ function spyLoadTrack(idx) {
 }
 
 function spyUpdateProgress() {
-  const audio = document.getElementById('spyAudio');
+  const audio = spyActiveAudio();
   const fill  = document.getElementById('spyMusicProgressFill');
   const cur   = document.getElementById('spyTimeCur');
   const tot   = document.getElementById('spyTimeTot');
@@ -2457,12 +2489,77 @@ function spyUpdateProgress() {
   const pct = audio.duration ? (audio.currentTime / audio.duration * 100) : 0;
   fill.style.width = pct + '%';
   const fmt = s => { const m=Math.floor(s/60), sec=Math.floor(s%60); return m+':'+(sec<10?'0':'')+sec; };
-  if (cur) cur.textContent = fmt(audio.currentTime);
+  if (cur) cur.textContent = fmt(audio.currentTime || 0);
   if (tot && audio.duration) tot.textContent = fmt(audio.duration);
+
+  // Crossfade trigger: 4 seconds before end, start fading in next track
+  if (!SPY_PLAYER.loop && !SPY_PLAYER.crossfading && audio.duration > 8) {
+    const remaining = audio.duration - audio.currentTime;
+    if (remaining <= 4 && remaining > 0) {
+      spyCrossfadeNext();
+    }
+  }
+}
+
+function spyCrossfadeNext() {
+  if (SPY_PLAYER.crossfading || SPY_PLAYER.loop) return;
+  SPY_PLAYER.crossfading = true;
+
+  // Figure out next track
+  const pos = SPY_PLAYER.shuffled.indexOf(SPY_PLAYER.current);
+  let nextIdx;
+  if (pos + 1 >= SPY_PLAYER.shuffled.length) {
+    spyShuffle();
+    nextIdx = SPY_PLAYER.shuffled[0];
+  } else {
+    nextIdx = SPY_PLAYER.shuffled[pos + 1];
+  }
+
+  const currentAudio = spyActiveAudio();
+  const nextAudio    = spyStandbyAudio();
+  const nextSong     = SPY_PLAYER.playlist[nextIdx];
+  if (!nextSong) return;
+
+  // Pre-load next track on standby audio
+  nextAudio.src = '/music/' + encodeURIComponent(nextSong.file);
+  nextAudio.volume = 0;
+  nextAudio.load();
+  nextAudio.play().catch(() => {});
+
+  // Fade out current, fade in next over 3 seconds
+  const FADE_MS = 3000;
+  const steps = 30;
+  const interval = FADE_MS / steps;
+  const startVol = currentAudio.volume;
+  let step = 0;
+
+  const fade = setInterval(() => {
+    step++;
+    const progress = step / steps;
+    currentAudio.volume = Math.max(0, startVol * (1 - progress));
+    nextAudio.volume    = Math.min(startVol, startVol * progress);
+    if (step >= steps) {
+      clearInterval(fade);
+      currentAudio.pause();
+      currentAudio.src = '';
+      // Switch active
+      SPY_PLAYER.activeAudio = SPY_PLAYER.activeAudio === 'A' ? 'B' : 'A';
+      SPY_PLAYER.current = nextIdx;
+      SPY_PLAYER.crossfading = false;
+      // Update track info
+      const nameEl = document.getElementById('spyMusicTrackName');
+      const numEl  = document.getElementById('spyMusicTrackNum');
+      if (nameEl) nameEl.textContent = nextSong.title || nextSong.file;
+      const newPos = SPY_PLAYER.shuffled.indexOf(nextIdx);
+      if (numEl) numEl.textContent = (newPos+1) + ' / ' + SPY_PLAYER.playlist.length + ' · shuffled';
+      // Reattach progress listener to new active audio
+      spyActiveAudio().addEventListener('timeupdate', spyUpdateProgress);
+    }
+  }, interval);
 }
 
 function spyTogglePlay() {
-  const audio = document.getElementById('spyAudio');
+  const audio = spyActiveAudio();
   if (!SPY_PLAYER.initiated) {
     spyPlayerStart();
     return;
@@ -2480,7 +2577,7 @@ function spyTogglePlay() {
 }
 
 function spyNext() {
-  const audio = document.getElementById('spyAudio');
+  const audio = spyActiveAudio();
   const pos = SPY_PLAYER.shuffled.indexOf(SPY_PLAYER.current);
   const nextPos = pos + 1;
   if (nextPos >= SPY_PLAYER.shuffled.length) {
@@ -2493,7 +2590,7 @@ function spyNext() {
 }
 
 function spyPrev() {
-  const audio = document.getElementById('spyAudio');
+  const audio = spyActiveAudio();
   const pos = SPY_PLAYER.shuffled.indexOf(SPY_PLAYER.current);
   const prevPos = (pos - 1 + SPY_PLAYER.shuffled.length) % SPY_PLAYER.shuffled.length;
   spyLoadTrack(SPY_PLAYER.shuffled[prevPos]);
@@ -4612,6 +4709,7 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
     color: var(--cyan); font-size: 18px;
   }
   .mc-btn.play-btn:hover { background: rgba(0,204,255,0.2); }
+  .mc-btn.loop-active { color: #00ff88; background: rgba(0,255,136,0.08); border: 1px solid rgba(0,255,136,0.3); border-radius: 50%; }
 
   /* Volume */
   #spyMusicVolRow {
@@ -5346,6 +5444,7 @@ setInterval(() => {
 
 <!-- ════════════ MUSIC PLAYER ════════════ -->
 <audio id="spyAudio" preload="metadata"></audio>
+<audio id="spyAudioB" preload="metadata"></audio>
 
 <!-- Music trigger (sidebar-style button) -->
 <div id="spyMusicBtn" onclick="spyMusicToggle()" title="Music Player">♪</div>
@@ -5386,6 +5485,7 @@ setInterval(() => {
     <button class="mc-btn" onclick="spyPrev()" title="Previous">⏮</button>
     <button class="mc-btn play-btn" id="spyPlayBtn" onclick="spyTogglePlay()" title="Play/Pause">▶</button>
     <button class="mc-btn" onclick="spyNext()" title="Next">⏭</button>
+    <button class="mc-btn" id="spyLoopBtn" onclick="spyToggleLoop()" title="Loop track">⟳</button>
   </div>
   <div id="spyMusicVolRow">
     <span id="spyMusicVolIcon" onclick="spyMute()">🔊</span>
