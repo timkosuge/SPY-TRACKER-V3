@@ -490,9 +490,9 @@
   background: var(--bg2);
   border: 1px solid var(--border);
   border-right: none;
-  border-radius: 8px 0 0 8px;
-  padding: 8px 0;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+  border-radius: 10px 0 0 10px;
+  padding: 10px 0;
+  box-shadow: -6px 0 32px rgba(0,0,0,0.5);
 }
 
 .rsb-btn {
@@ -500,59 +500,60 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  width: 54px;
-  padding: 9px 4px;
+  gap: 5px;
+  width: 72px;
+  padding: 13px 6px;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 7px;
   transition: background 0.15s, color 0.15s;
   color: var(--text3);
   position: relative;
   user-select: none;
 }
-.rsb-btn:hover { background: rgba(255,255,255,0.05); color: var(--text2); }
-.rsb-btn.active { background: rgba(0,204,255,0.1); color: var(--cyan); }
-.rsb-btn.ai-active { background: rgba(0,255,136,0.1); color: #00ff88; }
+.rsb-btn:hover { background: rgba(255,255,255,0.06); color: var(--text2); }
+.rsb-btn.active { background: rgba(0,204,255,0.12); color: var(--cyan); }
+.rsb-btn.ai-active { background: rgba(0,255,136,0.12); color: #00ff88; }
+.rsb-btn.music-active { background: rgba(255,136,0,0.12); color: #ff8800; }
 
 .rsb-icon {
-  font-size: 16px;
+  font-size: 20px;
   line-height: 1;
 }
 .rsb-label {
   font-family: 'Orbitron', monospace;
-  font-size: 7px;
-  letter-spacing: 1px;
+  font-size: 8px;
+  letter-spacing: 1.2px;
   white-space: nowrap;
 }
 
 .rsb-divider {
-  width: 32px;
+  width: 44px;
   height: 1px;
   background: var(--border);
-  margin: 3px 0;
+  margin: 4px 0;
 }
 
 /* Unread badge on FLOOR and MSG buttons */
 .rsb-badge {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  min-width: 14px;
-  height: 14px;
+  top: 6px;
+  right: 6px;
+  min-width: 15px;
+  height: 15px;
   background: #ff3355;
   color: #fff;
   font-family: 'Orbitron', monospace;
   font-size: 8px;
-  border-radius: 7px;
+  border-radius: 8px;
   padding: 0 3px;
   display: none;
   align-items: center;
   justify-content: center;
-  line-height: 14px;
+  line-height: 15px;
 }
 
 /* Adjust content area so nothing hides behind the sidebar */
-.content { padding-right: 70px !important; }
+.content { padding-right: 88px !important; }
 </style>
 </head>
 <body>
@@ -574,6 +575,13 @@
     <span class="rsb-icon">⬡</span>
     <span class="rsb-label">FLOOR</span>
     <span class="rsb-badge" id="rsb-floor-badge"></span>
+  </div>
+<div class="rsb-divider"></div>
+
+  <!-- Music -->
+  <div class="rsb-btn" id="rsb-music" onclick="sidebarToggleMusic()" title="Music Player">
+    <span class="rsb-icon" id="rsb-music-icon">♪</span>
+    <span class="rsb-label">MUSIC</span>
   </div>
 <div class="rsb-divider"></div>
 
@@ -4672,27 +4680,12 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
 #chat-ban-btn{background:rgba(255,51,85,0.15);border:1px solid #ff3355;border-radius:3px;color:#ff3355;cursor:pointer;padding:3px 8px;font-family:'Orbitron',monospace;font-size:8px;}
 
   /* ═══════════════ MUSIC PLAYER ═══════════════ */
-  #spyMusicBtn {
-    position: fixed;
-    bottom: 80px; right: 0;
-    z-index: 8001;
-    width: 54px; height: 44px;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-right: none;
-    border-radius: 6px 0 0 6px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    color: var(--cyan);
-    font-size: 16px;
-    transition: background 0.15s, color 0.15s;
-  }
-  #spyMusicBtn:hover { background: rgba(0,204,255,0.1); }
-  #spyMusicBtn.active { color: #00ff88; background: rgba(0,255,136,0.08); }
+  /* Old floating music trigger — replaced by sidebar button */
+  #spyMusicBtn { display: none !important; }
 
   #spyMusicPanel {
     position: fixed;
-    bottom: 70px; right: 70px;
+    bottom: 70px; right: 90px;
     z-index: 9002;
     width: 320px;
     background: #0c0c14;
@@ -5459,6 +5452,19 @@ function sidebarSwitch(id) {
   }
 }
 
+function sidebarToggleMusic() {
+  spyMusicToggle();
+  // Sync active state with panel visibility
+  setTimeout(() => {
+    const panel = document.getElementById('spyMusicPanel');
+    const btn = document.getElementById('rsb-music');
+    const icon = document.getElementById('rsb-music-icon');
+    const isOpen = panel && panel.style.display !== 'none' && panel.style.display !== '';
+    if (btn) btn.classList.toggle('music-active', isOpen);
+    if (icon) icon.textContent = isOpen ? '♫' : '♪';
+  }, 60);
+}
+
 function sidebarToggleAI() {
   toggleChat();
   const btn = document.getElementById('rsb-ai');
@@ -5524,6 +5530,14 @@ document.addEventListener('click', (e) => {
     const panel = document.getElementById('aiPanel');
     const btn   = document.getElementById('rsb-ai');
     if (btn) btn.classList.toggle('ai-active', panel && panel.classList.contains('open'));
+
+    // Sync music button state
+    const mPanel = document.getElementById('spyMusicPanel');
+    const mBtn   = document.getElementById('rsb-music');
+    const mIcon  = document.getElementById('rsb-music-icon');
+    const mOpen  = mPanel && mPanel.style.display !== 'none' && mPanel.style.display !== '';
+    if (mBtn)  mBtn.classList.toggle('music-active', mOpen);
+    if (mIcon) mIcon.textContent = mOpen ? '♫' : '♪';
   }, 60);
 });
 
