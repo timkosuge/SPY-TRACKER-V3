@@ -470,14 +470,17 @@ window._M = (() => {
     loadAINarrative(d, regime); // async Claude narrative
   }
 
+  function renderMacroTransition() {
+    const el = $('macroTransitionContent');
+    if (!el) return;
+    el.innerHTML = buildTransitionSection();
+  }
+
   /* ── main HTML builder ─────────────────────────────── */
   function buildHTML(d, regime) {
     return `
       <!-- ── MACRO HEADER STRIP ─────────────────────── -->
       ${buildRegimeHeader(regime)}
-
-      <!-- ── TRANSITION INTELLIGENCE ───────────────── -->
-      ${buildTransitionSection()}
 
       <!-- ── INTEREST RATES & FED ──────────────────── -->
       ${buildFedSection(d)}
@@ -1197,6 +1200,7 @@ End with one sentence on the primary risk to the base case.`);
   return {
     init: (function() { let _done=false; return function(){ if(!_done){ _done=true; renderMacro(); } }; })(),
     reload: renderMacro,
+    reloadTransition: renderMacroTransition,
     aiBase: () => loadAINarrative(STATIC, calcRegime(STATIC)),
     aiBull: async () => callClaude('Make the strongest possible BULL case for equities given the macro data. What tailwinds support continued market gains? Include the AI productivity story and transition upside.'),
     aiBear: async () => callClaude('Make the strongest possible BEAR case for equities given the macro data. What macro headwinds could derail markets? Include debt sustainability, sticky inflation, and displacement risk.'),
@@ -1223,3 +1227,11 @@ function loadAINarrativeTransition(){ window._M && window._M.aiTransition(); }
     setTimeout(() => window._M && window._M.init(), 200);
   }
 })();
+
+function renderMacroTransition() {
+  const el = document.getElementById('macroTransitionContent');
+  if (!el) return;
+  if (window._M && window._M.reloadTransition) {
+    window._M.reloadTransition();
+  }
+}
