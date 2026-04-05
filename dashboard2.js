@@ -693,7 +693,7 @@ function renderVolHistory(sd){
       // Clean and normalize the time
       let t = rawTime.trim();
       
-      // If it's a full timestamp, extract HH:MM
+      // If it is a full timestamp, extract HH:MM
       if (t.includes('T') || t.includes(' ')) {
         const match = t.match(/(\d{1,2}):(\d{2})/);
         if (match) t = `${match[1].padStart(2,'0')}:${match[2]}`;
@@ -782,7 +782,7 @@ function renderWEM(md){
   if(cur){
     // ── STATIC WEM — locked at prior Friday close via TheoTrade formula ─────
     // set_next_week_static_wem() writes these on Friday and never overwrites them.
-    // Falls back to dynamic values if static hasn't been computed yet.
+    // Falls back to dynamic values if static has not been computed yet.
     const staticHigh      = cur.static_wem_high  || cur.wem_high;
     const staticLow       = cur.static_wem_low   || cur.wem_low;
     const staticHalfRange = cur.static_wem_range  ? cur.static_wem_range / 2 : cur.wem_range / 2;
@@ -791,7 +791,7 @@ function renderWEM(md){
     const staticIV        = cur.static_wem_iv     || cur.atm_iv || 0;
 
     // ── Select active mode values ──────────────────────────────────────────
-    // Dynamic falls back to static when workflow hasn't run yet for the new week
+    // Dynamic falls back to static when workflow has not run yet for the new week
     const isStatic = window._wemMode === 'static';
     const lo   = isStatic ? staticLow  : (cur.wem_low  || staticLow);
     const hi   = isStatic ? staticHigh : (cur.wem_high || staticHigh);
@@ -901,7 +901,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
 
   const isStatic2  = window._wemMode === 'static';
   // Static — uses locked values from set_next_week_static_wem() (Friday close + TheoTrade formula)
-  // Dynamic falls back to static when workflow hasn't run yet for the new week
+  // Dynamic falls back to static when workflow has not run yet for the new week
   const sHalf = cur ? ((cur.static_wem_range || cur.wem_range) / 2) : 1;
   const _sLo  = cur ? (cur.static_wem_low  || cur.wem_low)  : 0;
   const _sHi  = cur ? (cur.static_wem_high || cur.wem_high) : 0;
@@ -1078,7 +1078,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
     const bH = tH, bY = tY;
     // Bell curve always centered at z=0 (neutral midpoint), stdZ sets spread
     // avgZ line drawn separately to show where historical avg falls
-    const bellSigma = Math.max(stdZ, 0.3); // don't let it go too narrow
+    const bellSigma = Math.max(stdZ, 0.3); // do not let it go too narrow
     const bLine = Array.from({length: bW+1}, (_,i) => {
       const zv = -1.8 + (i/bW)*3.6;
       const y  = bY + bH - Math.exp(-0.5*(zv/bellSigma)**2) * bH * 0.82;
@@ -1430,7 +1430,7 @@ VOLATILITY: VIX:${fmt(vixQ.price,2)} (${sign(vixQ.pct_change)}${fmt(vixQ.pct_cha
   PCR:${fmt(o.pc_ratio_vol,3)} | F&G:${fgVal||'N/A'}/100 | ATM IV: ${fmt((wem?.atm_iv || 0) * 100, 2)}%
 
 OPTIONS — Today is ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dow]}.
-  RULE: Mon/Wed = mid-week 0DTE only. Friday = WEEKLY OPEX. NEVER say "today's expiry" unless today is Friday.
+  RULE: Mon/Wed = mid-week 0DTE only. Friday = WEEKLY OPEX. NEVER say "todays expiry" unless today is Friday.
 ${mpLines||'  No max pain data'}
   GEX: ${gex.regime||'N/A'} | Net:${gex.net_gex?(gex.net_gex/1e9).toFixed(2)+'B':'N/A'} | Flip:$${gex.flip_point||'N/A'} | Supp:$${gex.support||'N/A'} | Res:$${gex.resistance||'N/A'}
   PCR OI:${fmt(o.pc_ratio_oi,3)} | Call OI:${fmtK(o.total_call_oi||0)} | Put OI:${fmtK(o.total_put_oi||0)}
@@ -2063,7 +2063,7 @@ async function generateSummary(md, sd, forceRefresh) {
   const el = document.getElementById('aiSummary');
   if (!el) return;
 
-  // Throttle: don't re-run within 10 min unless forced
+  // Throttle: do not re-run within 10 min unless forced
   const now = Date.now();
   if (!forceRefresh && window._lastSummaryTs && (now - window._lastSummaryTs) < 10 * 60 * 1000) return;
   window._lastSummaryTs = now;
@@ -2076,7 +2076,7 @@ async function generateSummary(md, sd, forceRefresh) {
   try {
     const context = buildContext(md, sd);
 
-    const system = `You are a veteran SPY day trader with 20 years on a prop desk. You've seen every kind of market — crashes, melt-ups, Fed-induced whipsaws, retail-driven squeezes, and the usual daily nonsense. You're sharp, sardonic, and deeply knowledgeable. You call it like you see it. You don't sugarcoat, you don't hedge every sentence with disclaimers, and you have zero patience for financial media clichés.
+    const system = `You are a veteran SPY day trader with 20 years on a prop desk. You've seen every kind of market — crashes, melt-ups, Fed-induced whipsaws, retail-driven squeezes, and the usual daily nonsense. You're sharp, sardonic, and deeply knowledgeable. You call it like you see it. You do not sugarcoat, you do not hedge every sentence with disclaimers, and you have zero patience for financial media clichés.
 
 Your job is to write the daily market overview that greets traders when they open this dashboard. It should be intelligent, entertaining, and genuinely useful. Think of it as your morning briefing to a desk of experienced traders who can handle the truth and appreciate a dry sense of humor.
 
@@ -2091,19 +2091,19 @@ PERSONALITY RULES:
 
 FORMAT:
 - 3 to 5 paragraphs. Each one punchy and substantive.
-- Start with where SPY actually is and what it means in plain English — don't open with "As of today."
+- Start with where SPY actually is and what it means in plain English — do not open with "As of today."
 - Hit the key levels, volatility regime, notable cross-market signals, and any options structure that matters.
 - End with something honest — the real risk, the real opportunity, or the thing everyone is ignoring.
 - Use actual numbers from the data. Don't make things up. Don't round unless it makes sense.
 
 CRITICAL OPTIONS RULES:
 - Mon/Tue/Wed/Thu expiries are mid-week 0DTE noise. Only Friday is the WEEKLY OPEX.
-- Never say "this week's expiry" about a Wednesday. The weekly is Friday.
-- Reference max pain only for Friday and monthly expiries — they're the ones that matter for positioning.
+- Never say "this weeks expiry" about a Wednesday. The weekly is Friday.
+- Reference max pain only for Friday and monthly expiries — they are the ones that matter for positioning.
 
 \n\n${context}`;
 
-    const userMsg = `Write today's market overview. Give me the full picture — where SPY stands relative to key structure, what volatility is signaling, what the options market is pricing in, what's working cross-asset, and what the real story is that most people are probably missing or misreading. Be honest about what's clear, what's murky, and what's actually interesting today. Write it like you're talking to traders who know what they're doing.`;
+    const userMsg = `Write todays market overview. Give me the full picture — where SPY stands relative to key structure, what volatility is signaling, what the options market is pricing in, what is working cross-asset, and what the real story is that most people are probably missing or misreading. Be honest about what is clear, what is murky, and what is actually interesting today. Write it like you are talking to traders who know what they are doing.`;
 
     const reply = await callAI([{ role: 'user', content: userMsg }], system, 900);
 
@@ -2322,7 +2322,7 @@ HIGH VOLUME NODE PRICES (price levels with most volume concentration):
 ${hvns.length ? hvns.join('\n') : 'No HVN data available'}`;
 
     const reply = await callAI(
-      [{ role: 'user', content: `Give a thorough volume analysis in 4-5 sentences based on this data. Comment on: is today's volume above or below average and what that suggests, the volume trend (expanding/contracting), any notable concentration at specific price levels (HVNs), and what the open/close session breakdown tells us about conviction. Be specific with numbers.\n\n${context}` }],
+      [{ role: 'user', content: `Give a thorough volume analysis in 4-5 sentences based on this data. Comment on: is todays volume above or below average and what that suggests, the volume trend (expanding/contracting), any notable concentration at specific price levels (HVNs), and what the open/close session breakdown tells us about conviction. Be specific with numbers.\n\n${context}` }],
       'You are a volume analysis expert. Focus on what volume tells us about conviction, participation, and likely follow-through. Use the actual numbers. Explain what high or low volume at specific price levels means for those levels as support or resistance.',
       450
     );
@@ -3004,7 +3004,7 @@ async function renderLiquidity() {
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
         ${metricCard('FED BALANCE SHEET', d.fed_balance?.value, d.fed_balance?.change_wow, d.fed_balance?.change_pct, d.fed_balance?.date, '#8855ff', 'Total Fed assets. Rising = QE/easing. Falling = QT/tightening.')}
         ${metricCard('REVERSE REPO (RRP)', d.rrp?.value, d.rrp?.change_wow, d.rrp?.change_pct, d.rrp?.date, '#ff8800', 'Cash parked at Fed overnight. Draining RRP = liquidity entering markets = bullish.')}
-        ${metricCard('TREASURY GEN. ACCOUNT', d.tga?.value, d.tga?.change_wow, d.tga?.change_pct, d.tga?.date, '#ff3355', "Treasury's Fed account. Rising TGA drains liquidity. Falling TGA injects liquidity.")}
+        ${metricCard('TREASURY GEN. ACCOUNT', d.tga?.value, d.tga?.change_wow, d.tga?.change_pct, d.tga?.date, '#ff3355', "Treasury Fed account. Rising TGA drains liquidity. Falling TGA injects liquidity.")}
         ${metricCard('M2 MONEY SUPPLY', d.m2?.value, d.m2?.change_mom, d.m2?.change_pct, d.m2?.date, '#00ff88', 'Total money in circulation. Leads stocks by 6-12 months.')}
       </div>
 
@@ -3155,7 +3155,7 @@ async function loadAAII() {
       +(dataValid?'':' <span style="color:#ffcc00;">(live fetch invalid — showing last known good)</span>')
       +'</div>';
 
-    // Append live reading if it's a newer date than last hardcoded entry
+    // Append live reading if it is a newer date than last hardcoded entry
     const hist = AAII_HISTORY.slice();
     if (dataValid && dateLabel && dateLabel !== lastH.d) {
       hist.push({d: dateLabel, bull, neu, bear});
@@ -3305,7 +3305,7 @@ function renderCOTChart(el, hist) {
   ];
 
   // Scale Y axis to lev+dealer range (asset mgr is always large long and distorts scale)
-  // Asset mgr still drawn but may clip at top — that's fine, it's the least actionable line
+  // Asset mgr still drawn but may clip at top — that is fine, it's the least actionable line
   const scalingVals = hist.flatMap(h => [h.lev_net||0, h.dealer_net||0]);
   const allVals     = hist.flatMap(h => series.map(s => h[s.key]||0));
   const minV = Math.min(...scalingVals), maxV = Math.max(...scalingVals);
@@ -3501,21 +3501,21 @@ async function fetchSPYIntraday() {
   return null;
 }
 
-// Compute today's HVN from live intraday bars and inject into desk
+// Compute todays HVN from live intraday bars and inject into desk
 async function updateLiveHVN(spyData) {
   const el = $('deskHvnLive');
   if (!el) return;
   // spyintraday gives us OHLCV but not per-bar. We can show a placeholder
-  // showing today's session high-volume price estimate (use mid of day range as proxy)
+  // showing todays session high-volume price estimate (use mid of day range as proxy)
   if (!spyData?.available) return;
   const { open, high, low, close, volume } = spyData;
   if (!open || !high || !low) return;
   // Simple HVN estimate: price with most activity is near VWAP which we approximate
-  // as the midpoint weighted toward close (since we don't have per-bar data here)
+  // as the midpoint weighted toward close (since we do not have per-bar data here)
   const hvnEst = close || ((high + low + open) / 3);
   const todayStr = new Date().toISOString().split('T')[0];
   const grid = $('deskHvnGrid');
-  // If today already has a card in the grid, don't add
+  // If today already has a card in the grid, do not add
   if (grid && grid.innerHTML.includes(todayStr.slice(5))) return;
   const cur3 = parseFloat(close || 0);
   const dist = hvnEst && cur3 ? cur3 - hvnEst : null;
@@ -3683,7 +3683,7 @@ function isExtendedHours() {
   return mins >= 4 * 60 && mins < 16 * 60;
 }
 
-// Fetch and cache the current week's opening price (Monday open, or first trading day)
+// Fetch and cache the current weeks opening price (Monday open, or first trading day)
 // Sources tried in order: intraday (if Mon), market_data weekly_em, _sd rows, /quotes
 async function fetchWeekOpen() {
   try {
@@ -4040,6 +4040,8 @@ async function loadData(){
     loadAAII();
     loadCOT();
     renderLiquidity();
+    // Pre-load macro data in background
+    if (typeof renderMacro === 'function') window._macroPreloaded = false;
     
     // Fix 2: Dynamic interval — 15s during market hours, 60s otherwise
     _lastStaticRefresh = Date.now(); // mark static data as just loaded
@@ -4646,3 +4648,301 @@ async function renderGEXDailyHistory() {
     }
   });
 }
+
+// ─── MACRO DASHBOARD ─────────────────────────────────────────────────────────
+let _macroData = null;
+let _macroLoading = false;
+
+async function renderMacro() {
+  const el = document.getElementById('macroContent');
+  if (!el) return;
+  if (_macroLoading) return;
+
+  if (_macroData) { _renderMacroHTML(_macroData); return; }
+
+  _macroLoading = true;
+  el.innerHTML = `<div style="padding:60px;text-align:center;color:var(--text3);">
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;margin-bottom:12px;">LOADING MACRO DATA</div>
+    <div style="font-size:12px;">Fetching from Federal Reserve FRED database...</div>
+  </div>`;
+
+  try {
+    const r = await fetch('/fred?t=' + Date.now());
+    if (!r.ok) throw new Error('FRED endpoint returned ' + r.status);
+    _macroData = await r.json();
+    _macroLoading = false;
+    _renderMacroHTML(_macroData);
+  } catch(e) {
+    _macroLoading = false;
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:#ff3355;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;margin-bottom:8px;">FRED DATA UNAVAILABLE</div>
+      <div style="font-size:12px;color:var(--text3);">${e.message}</div>
+      <div style="margin-top:12px;font-size:11px;color:var(--text3);">Make sure FRED_API_KEY is set in Cloudflare Pages environment variables.</div>
+    </div>`;
+  }
+}
+
+function _renderMacroHTML(data) {
+  const el = document.getElementById('macroContent');
+  if (!el || !data) return;
+
+  const S = data.series || {};
+  const regime = data.regime || {};
+  const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
+  const fmt1 = v => v == null ? '—' : Number(v).toFixed(1);
+  const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+  const fmtB = v => {
+    if (v == null) return '—';
+    const abs = Math.abs(v), sign = v < 0 ? '-' : '';
+    if (abs >= 1e12) return sign + '$' + (abs/1e12).toFixed(2) + 'T';
+    if (abs >= 1e9)  return sign + '$' + (abs/1e9).toFixed(1) + 'B';
+    if (abs >= 1e6)  return sign + '$' + (abs/1e6).toFixed(1) + 'M';
+    return sign + '$' + Math.round(abs).toLocaleString();
+  };
+  const trendIcon = t => t === 'rising' ? '▲' : t === 'falling' ? '▼' : '→';
+  const trendColor = (t, goodDir) => {
+    if (goodDir === 'up')   return t === 'rising' ? '#00ff88' : t === 'falling' ? '#ff3355' : '#ffcc00';
+    if (goodDir === 'down') return t === 'falling' ? '#00ff88' : t === 'rising' ? '#ff3355' : '#ffcc00';
+    return '#ffcc00';
+  };
+
+  // Mini spark line using CSS bars
+  const spark = (history, color) => {
+    if (!history || history.length < 2) return '';
+    const vals = history.map(h => h.v).filter(v => v != null);
+    if (!vals.length) return '';
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const range = max - min || 1;
+    const bars = vals.slice(-16).map(v => {
+      const h = Math.max(4, Math.round(((v - min) / range) * 32));
+      return `<div style="width:3px;height:${h}px;background:${color};border-radius:1px;opacity:0.7;flex-shrink:0;"></div>`;
+    }).join('');
+    return `<div style="display:flex;align-items:flex-end;gap:1px;height:36px;margin-top:8px;">${bars}</div>`;
+  };
+
+  const seriesCard = (id, desc, explain, historicalNote) => {
+    const s = S[id];
+    if (!s) return `<div class="panel" style="opacity:0.4;"><div style="font-size:11px;color:var(--text3);">${desc} — no data</div></div>`;
+    const isGood = s.good_direction;
+    const tc = trendColor(s.trend, isGood);
+    const yoyStr = s.change_yoy != null ? ` · ${s.change_yoy > 0 ? '+' : ''}${fmt1(s.change_yoy)}${s.unit === '%' ? 'pp' : ''} YoY` : '';
+    const color = tc;
+    return `<div class="panel" style="border-top:3px solid ${color};">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${color};">${desc}</div>
+        <div style="font-size:18px;color:${color};">${trendIcon(s.trend)}</div>
+      </div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:26px;font-weight:900;color:var(--text);">${fmt1(s.latest)}${s.unit === '%' ? '%' : ''}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">${s.latest_date}${yoyStr}</div>
+      ${spark(s.history, color)}
+      ${explain ? `<div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">${explain}</div>` : ''}
+      ${historicalNote ? `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;line-height:1.5;">📚 ${historicalNote}</div>` : ''}
+    </div>`;
+  };
+
+  // Section header
+  const sectionHdr = (title, color, subtitle) =>
+    `<div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:${color};margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid ${color}33;">
+      ⬡ ${title}${subtitle ? `<span style="font-size:9px;color:var(--text3);font-family:'Share Tech Mono',monospace;letter-spacing:0;margin-left:12px;">${subtitle}</span>` : ''}
+    </div>`;
+
+  // Regime gauge
+  const regScore = regime.score || 0;
+  const regColor = regime.color || '#ffcc00';
+  const regLabel = regime.regime || 'MIXED';
+  const gaugeW = Math.max(2, Math.min(98, ((regScore + 100) / 200) * 100));
+
+  const regimeExplain = {
+    'GOLDILOCKS':  'Low inflation + strong employment + positive yield curve + tight credit spreads. The ideal environment for equities. Historically produces the strongest sustained bull markets.',
+    'EXPANSION':   'Growth is positive but some pressures are building. Equities typically perform well but volatility may increase. Watch for inflation or credit spreads to signal the next phase.',
+    'MIXED':       'Conflicting signals across macro indicators. Some factors are supportive, others are headwinds. Markets tend to be choppy. Requires stock selection rather than broad bets.',
+    'SLOWDOWN':    'Growth is decelerating. Employment may be softening, credit spreads widening. Historically a challenging period for cyclicals. Defensives and bonds start to outperform.',
+    'CONTRACTION': 'Recession conditions. Multiple indicators in the red. Cash and defensive positioning historically protect capital. Bear markets deepen until leading indicators turn.',
+  }[regLabel] || '';
+
+  const regimeHistory = {
+    'GOLDILOCKS':  '1995-1999 (tech boom), 2003-2007 (pre-GFC), 2013-2018 (post-QE recovery) all featured similar conditions.',
+    'EXPANSION':   '2010-2012 and 2021 showed expansion regimes before tipping into more challenging environments.',
+    'MIXED':       '2015-2016 and 2019 were mixed regimes — markets made new highs eventually but with significant corrections along the way.',
+    'SLOWDOWN':    '1999-2000, 2007, and Q4 2018 all showed similar slowdown readings before corrections.',
+    'CONTRACTION': '2001-2002, 2008-2009, and early 2020 were contraction regimes — each eventually recovered, but required patience.',
+  }[regLabel] || '';
+
+  const signalsHTML = (regime.signals || []).map(sig =>
+    `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);min-width:90px;">${sig.label}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${sig.color};min-width:100px;">${sig.val}</div>
+      <div style="font-size:11px;color:var(--text2);flex:1;">${sig.detail}</div>
+    </div>`
+  ).join('');
+
+  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
+
+    <!-- MACRO REGIME GAUGE -->
+    <div class="panel" style="margin-bottom:16px;border-left:4px solid ${regColor};">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;margin-bottom:14px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:6px;">⬡ MACRO REGIME GAUGE</div>
+          <div style="font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:${regColor};">${regLabel}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.7;max-width:600px;">${regimeExplain}</div>
+          ${regimeHistory ? `<div style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic;">📚 Similar periods: ${regimeHistory}</div>` : ''}
+        </div>
+        <div style="text-align:center;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:42px;font-weight:900;color:${regColor};">${regScore > 0 ? '+' : ''}${regScore}</div>
+          <div style="font-size:10px;color:var(--text3);">REGIME SCORE</div>
+          <div style="font-size:10px;color:var(--text3);">-100 → +100</div>
+        </div>
+      </div>
+      <!-- Gauge bar -->
+      <div style="position:relative;height:12px;background:linear-gradient(90deg,#ff3355,#ff8800,#ffcc00,#88cc00,#00ff88);border-radius:6px;margin-bottom:16px;">
+        <div style="position:absolute;left:${gaugeW}%;top:-4px;transform:translateX(-50%);width:4px;height:20px;background:#fff;border-radius:2px;box-shadow:0 0 8px rgba(255,255,255,0.8);"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);font-family:'Orbitron',monospace;margin-bottom:14px;">
+        <span>CONTRACTION</span><span>SLOWDOWN</span><span>MIXED</span><span>EXPANSION</span><span>GOLDILOCKS</span>
+      </div>
+      <!-- Signal breakdown -->
+      <div style="border-top:1px solid var(--border);padding-top:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">SIGNAL BREAKDOWN</div>
+        ${signalsHTML}
+      </div>
+    </div>
+
+    <!-- INTRO BANNER -->
+    <div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:14px 18px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">⬡ WHAT IS THIS TAB?</div>
+      This tab tracks the key economic forces that drive markets — the same data the Federal Reserve, hedge funds, and institutional investors watch every day. 
+      Data is pulled directly from the <strong style="color:var(--text1);">Federal Reserve Economic Database (FRED)</strong> — the most comprehensive source of US economic data.
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px;font-size:10px;">
+        ${[
+          ['#ff8800','INFLATION','How fast prices are rising. The Fed targets 2% inflation — above that, they raise rates which pressures stocks.'],
+          ['#00ff88','EMPLOYMENT','Jobs data drives consumer spending and Fed policy. Strong employment = strong economy but also inflation risk.'],
+          ['#00ccff','GROWTH','GDP, retail sales, industrial output — how fast the economy is actually expanding.'],
+          ['#8855ff','MONETARY','Fed tools: balance sheet size, money supply, and liquidity — directly impacts asset prices.'],
+          ['#ffcc00','RATES & CREDIT','Interest rates and credit spreads tell you the market fear level and the cost of money.'],
+        ].map(([c,t,d]) => `<div style="background:var(--bg2);border-radius:3px;padding:8px;border-left:2px solid ${c};">
+          <div style="color:${c};font-family:'Orbitron',monospace;font-size:7px;margin-bottom:4px;">${t}</div>${d}
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- INFLATION -->
+    ${sectionHdr('INFLATION', '#ff8800', 'How fast prices are rising · Fed target: 2% Core PCE')}
+    <div style="background:rgba(255,136,0,0.04);border:1px solid rgba(255,136,0,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      <strong style="color:var(--text1);">What is inflation?</strong> Inflation is the rate at which prices rise across the economy. The Fed targets 2% "Core PCE" — if inflation is above that, the Fed raises interest rates to slow the economy, which typically hurts stocks. 
+      Below target, the Fed can cut rates to stimulate growth, which is bullish for markets.
+      The two most-watched measures are <strong>CPI</strong> (what you pay at the store) and <strong>Core PCE</strong> (what the Fed officially targets — excludes food and energy which are volatile).
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+      ${seriesCard('CPILFESL', 'Core CPI (Ex Food/Energy)',
+        'The Fed secondary inflation watch. Strips out volatile food and energy to show underlying price pressure. Above 3% starts to concern markets.',
+        'In 2022, Core CPI peaked at 6.6% — the highest since 1982. The Fed raised rates 525bps in 16 months to fight it.')}
+      ${seriesCard('PCEPILFE', 'Core PCE — Fed Target',
+        'The Federal Reserve official inflation target is 2% Core PCE. This is the number that directly drives Fed rate decisions. Below 2% = dovish. Above 3% = hawkish.',
+        'The last time Core PCE was sustainably at 2% was 2018-2019. Post-COVID peak was 5.6% in early 2022.')}
+      ${seriesCard('T10YIE', '10-Year Breakeven Inflation',
+        'What the bond market expects inflation to average over the next 10 years. Derived from TIPS vs nominal Treasuries. This is forward-looking — tells you where inflation is headed, not where it has been.',
+        'Spikes above 3% occurred in 2022 and during post-COVID reopening. Below 2% signals deflation risk — historically rare outside recessions.')}
+    </div>
+
+    <!-- EMPLOYMENT -->
+    ${sectionHdr('EMPLOYMENT', '#00ff88', 'Labor market health · Fed dual mandate')}
+    <div style="background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      <strong style="color:var(--text1);">Why does employment matter?</strong> The Fed has a "dual mandate" — stable prices AND maximum employment. 
+      Strong employment means consumers spend, companies profit, and the economy grows. But too-strong employment means wage inflation and the Fed keeps rates higher for longer.
+      <strong>Unemployment rate</strong> is the headline, but <strong>Initial Jobless Claims</strong> is the most real-time indicator — released every Thursday, it shows how many people filed for unemployment that week.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+      ${seriesCard('UNRATE', 'Unemployment Rate',
+        'The percentage of the labor force actively seeking work. "Full employment" is generally considered 4-4.5%. Below 4% = overheated labor market. Above 6% = recession territory.',
+        'COVID hit 14.7% in April 2020 — the highest since the Great Depression. Recovered to 3.4% by early 2023, one of the lowest readings ever recorded.')}
+      ${seriesCard('ICSA', 'Initial Jobless Claims (Weekly)',
+        'New unemployment insurance filings each week. The most real-time jobs indicator available. Below 250K = healthy. Above 350K = warning sign. Spikes precede recessions.',
+        'Claims surged to 6.9 million in March 2020. They stayed below 250K for most of 2022-2023, signaling the labor market held up despite rate hikes.')}
+      ${seriesCard('JTSJOL', 'Job Openings (JOLTS)',
+        'How many jobs are available but unfilled. High openings = employers need workers = wage pressure. Low openings = labor demand cooling = Fed can relax.',
+        'Job openings peaked at 12 million in 2022 — a historically unprecedented 2 jobs per unemployed person. The "soft landing" narrative gained credibility as openings fell without unemployment spiking.')}
+      ${seriesCard('U6RATE', 'U-6 Underemployment Rate',
+        'The broadest measure of labor market slack — includes people working part-time who want full-time, and those who gave up looking. U-6 is always higher than U-3 (headline unemployment).',
+        'U-6 peaked at 22.9% during COVID. It tracks closely with the business cycle — a rising U-6 often signals a broader slowdown before the headline unemployment rate reflects it.')}
+    </div>
+
+    <!-- GROWTH -->
+    ${sectionHdr('ECONOMIC GROWTH', '#00ccff', 'GDP, spending, output')}
+    <div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      <strong style="color:var(--text1);">What drives growth?</strong> GDP is the total value of everything produced in the US. Two consecutive quarters of negative GDP = technical recession.
+      Retail sales tell you if consumers are spending (70% of GDP is consumer spending).
+      Industrial production shows factory and manufacturing output — a leading indicator of corporate earnings.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+      ${seriesCard('A191RL1Q225SBEA', 'Real GDP Growth (QoQ Ann.)',
+        'The broadest measure of economic output — total value of goods and services produced. "Real" means adjusted for inflation. Two negative quarters = technical recession.',
+        'The US has avoided recession despite the most aggressive Fed tightening cycle since the 1980s. GDP contracted briefly in H1 2022 but rebounded strongly — the "no landing" outcome.')}
+      ${seriesCard('RETAILSMNSA', 'Retail Sales',
+        'Monthly measure of consumer spending at stores and online. Consumer spending is ~70% of US GDP, so this is the single most important growth indicator. Inflation-adjusted matters more than nominal.',
+        'Retail sales collapsed 16% in April 2020, then surged as stimulus hit. The post-COVID spending boom drove both growth and inflation simultaneously — an unusual combination.')}
+      ${seriesCard('INDPRO', 'Industrial Production Index',
+        'Measures output from manufacturing, mining, and utilities. A leading indicator for corporate earnings — when factories slow down, profits follow. PMI surveys are even more leading.',
+        'Industrial production peaked in late 2022 and has been flat to declining since — consistent with a "manufacturing recession" even as the services sector held up.')}
+    </div>
+
+    <!-- MONETARY & LIQUIDITY -->
+    ${sectionHdr('MONETARY POLICY & LIQUIDITY', '#8855ff', 'Fed balance sheet, money supply, net liquidity')}
+    <div style="background:rgba(136,85,255,0.04);border:1px solid rgba(136,85,255,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      <strong style="color:var(--text1);">Why does liquidity matter for stocks?</strong> When the Fed expands its balance sheet (QE), it injects money into the financial system. That money needs somewhere to go — and it often goes into stocks and other risk assets.
+      <strong>Net Liquidity = Fed Balance Sheet − Reverse Repo − Treasury General Account.</strong> 
+      Rising net liquidity historically correlates strongly with rising stock prices. The RRP and TGA are like "parking lots" for money — when that money flows back into markets, it is a bullish tailwind.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+      ${seriesCard('WALCL', 'Fed Balance Sheet (Total Assets)',
+        'The size of the Federal Reserve balance sheet — all the bonds and assets it owns. Grew explosively during QE programs. Now shrinking via QT (Quantitative Tightening). A falling balance sheet is a headwind for risk assets.',
+        'The Fed balance sheet went from $900B (2008) to $4.5T (2015) to $8.9T (peak 2022) after COVID stimulus. It peaked at $8.97T in April 2022 and has been declining since.')}
+      ${seriesCard('M2SL', 'M2 Money Supply',
+        'Total money in the economy: cash, checking accounts, savings accounts, and money market funds. Growing M2 = more money available = inflationary and bullish for assets. Shrinking M2 = rare, deflationary, and happened in 2022-2023.',
+        'M2 contracted YoY in 2022-2023 for the first time since the 1930s. Historically, sustained M2 contraction has preceded every major recession.')}
+      ${seriesCard('RRPONTSYD', 'Overnight Reverse Repo (RRP)',
+        'Money parked at the Fed overnight by money market funds. When RRP is high, money is sitting idle rather than circulating in markets. As RRP drains, that liquidity can flow back into risk assets — a bullish signal.',
+        'RRP ballooned to $2.6T in 2023 as money market funds preferred Fed-guaranteed overnight rates over T-bills. The drain of RRP to near-zero in 2024 provided a significant liquidity tailwind.')}
+      ${seriesCard('WTREGEN', 'Treasury General Account (TGA)',
+        'The US Government checking account at the Fed. When Treasury spends from TGA, money flows into the economy (bullish). When Treasury rebuilds TGA, it drains liquidity (bearish). Debt ceiling cycles make this volatile.',
+        'The debt ceiling fight in 2023 caused TGA to drop to near-zero, then Treasury refilled it rapidly after resolution — draining $700B+ from markets in weeks and contributing to summer volatility.')}
+    </div>
+
+    <!-- RATES & CREDIT -->
+    ${sectionHdr('INTEREST RATES & CREDIT', '#ffcc00', 'The price of money · risk appetite')}
+    <div style="background:rgba(255,204,0,0.04);border:1px solid rgba(255,204,0,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      <strong style="color:var(--text1);">Rates tell the whole story.</strong> Interest rates are the price of money. Higher rates make bonds more attractive relative to stocks, increase borrowing costs, and slow growth.
+      The <strong>yield curve</strong> (10Y minus 2Y) is one of the most reliable recession predictors in history — it has inverted before every recession since 1955.
+      <strong>High-yield credit spreads</strong> show how much extra yield investors demand to hold risky corporate bonds vs safe Treasuries — a real-time fear gauge for the credit markets.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+      ${seriesCard('FEDFUNDS', 'Fed Funds Rate',
+        'The benchmark interest rate set by the Federal Reserve at each FOMC meeting. This is the single most important policy tool. Higher = restrictive (fights inflation). Lower = accommodative (stimulates growth).',
+        'The fastest rate hiking cycle since 1980: 0% to 5.5% in 16 months (March 2022 - July 2023). Prior cycles: 2004-2006 (1% to 5.25%), 2015-2018 (0% to 2.5%).')}
+      ${seriesCard('T10Y2Y', 'Yield Curve (10Y minus 2Y)',
+        'When short-term rates are higher than long-term rates, the curve is "inverted" (negative). This means bond markets expect the economy to slow — historically the most reliable recession signal with ~12-18 month lead time.',
+        'The yield curve inverted in 2022 and stayed negative for the longest period since the 1980s. It has preceded every US recession since 1955. The question is always timing — inversion to recession averages 12-18 months.')}
+      ${seriesCard('DGS10', '10-Year Treasury Yield',
+        'The benchmark long-term interest rate. Affects mortgage rates, corporate bonds, and stock valuations. Higher 10Y = headwind for stocks (higher discount rate for future earnings). Watch for moves above/below key levels.',
+        'The 10Y yield hit 0.5% in 2020 (all-time low) and peaked at 5.0% in October 2023. The 4-5% range is historically "normal" but felt extreme after a decade of near-zero rates.')}
+      ${seriesCard('BAMLH0A0HYM2', 'High Yield Credit Spread',
+        'The extra yield investors demand to hold "junk" bonds vs safe Treasuries. Tight spreads (below 3.5%) = markets are calm, credit is flowing freely. Wide spreads (above 6%) = stress, companies struggling to borrow.',
+        'HY spreads blew out to 11% in March 2020 (COVID) and 8.5% in 2022. They compressed to near record lows of 2.8% in 2024 — pricing in almost no default risk, which itself became a topic of debate.')}
+    </div>
+
+    <!-- CONSUMER -->
+    ${sectionHdr('CONSUMER HEALTH', '#ff8800', 'Spending · confidence · savings')}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+      ${seriesCard('UMCSENT', 'University of Michigan Consumer Sentiment',
+        'Monthly survey of ~600 households on their financial situation and economic outlook. Forward-looking — low confidence leads to less spending. One of the best leading indicators for retail sales.',
+        'Consumer sentiment collapsed to 50 in June 2022 — lower than during the 2008 financial crisis — even though the economy was technically not in recession. The "vibecession" phenomenon.')}
+      ${seriesCard('PSAVERT', 'Personal Savings Rate',
+        'Percentage of disposable income that households save rather than spend. High savings = potential spending fuel. Low savings = consumers stretched. Went negative before the 2008 crisis.',
+        'The savings rate surged to 33% in April 2020 (COVID lockdowns + stimulus) then crashed as consumers spent down their savings buffer. Low savings rates in 2023-2024 raised questions about spending sustainability.')}
+    </div>
+
+    <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;">
+      Data: Federal Reserve Economic Database (FRED) · St. Louis Fed · Updated ${data.updated ? new Date(data.updated).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}) : 'recently'}
+    </div>
+  </div>`;
+}
+
