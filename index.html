@@ -610,6 +610,7 @@
   <div class="tab group-tab" onclick="switchGroupTab('derivatives','options')">DERIVATIVES ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('history','pricehistory')">HISTORY ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('macro','macro')">⬡ MACRO</div>
+  <div class="tab" onclick="switchTab('transition')">⬡ TRANSITION</div>
 </div>
 
 <!-- Subtab bar — shown below main tabs when a group is active -->
@@ -1746,6 +1747,10 @@
   <div id="macroTransitionContent"><div class="no-data" style="padding:40px;text-align:center;">Loading transition data...</div></div>
 </div>
 
+<div class="tab-panel" id="panel-transition">
+  <div id="transitionContent"><div class="no-data" style="padding:40px;text-align:center;">Loading transition data...</div></div>
+</div>
+
 <div class="tab-panel" id="panel-liquidity">
   <div id="liquidityContent"><div class="no-data">Loading liquidity data...</div></div>
 </div>
@@ -2763,7 +2768,7 @@ function spyAdminPlay(i) {
 document.addEventListener('DOMContentLoaded', spyPlayerInit);
 </script>
   <script src="dashboard1.js"></script>
-  <script src="dashboard1b.js"></script><script src="dashboard2.js"></script><script src="macro.js"></script><script src="intraday_data.js"></script><script src="journal_trades.js"></script>
+  <script src="dashboard1b.js"></script><script src="dashboard2.js"></script><script src="macro.js"></script><script src="transition.js"></script><script src="intraday_data.js"></script><script src="journal_trades.js"></script>
 
 <!-- ============================================================
      EDGE STATS TAB — INLINE PANEL v3
