@@ -3081,10 +3081,6 @@ async function loadAAII() {
 
   // Historical AAII data — 26 weeks (oldest first). Update weekly.
   const AAII_HISTORY = [
-    {d:'Oct 8',  bull:37.7, neu:24.6, bear:37.7},
-    {d:'Oct 15', bull:45.3, neu:22.2, bear:32.5},
-    {d:'Oct 22', bull:43.8, neu:21.4, bear:34.8},
-    {d:'Oct 29', bull:44.0, neu:19.1, bear:36.9},
     {d:'Nov 5',  bull:38.0, neu:25.8, bear:36.3},
     {d:'Nov 12', bull:31.6, neu:19.2, bear:49.1},
     {d:'Nov 19', bull:32.6, neu:23.9, bear:43.6},
@@ -3107,7 +3103,6 @@ async function loadAAII() {
     {d:'Mar 18', bull:30.4, neu:17.6, bear:52.0},
     {d:'Mar 25', bull:32.1, neu:18.1, bear:49.8},
     {d:'Apr 1',  bull:33.6, neu:15.0, bear:51.4},
-    {d:'Apr 4',  bull:21.5, neu:26.3, bear:52.2},
   ];
 
   try {
@@ -3120,7 +3115,9 @@ async function loadAAII() {
     const sum = (rawBull||0) + (rawBear||0) + (rawNeu||0);
     // Reject round numbers (60/20/20 type scrape failures) and historically impossible readings
     const isRound = rawBull % 10 === 0 && rawNeu % 10 === 0 && rawBear % 10 === 0;
-    const dataValid = rawBull && rawBear && sum > 85 && sum < 115 && rawBull < 57 && rawBear < 75 && !isRound;
+    // Tighter sum check (95-105) and reject if any two values are identical multiples of 5
+    const twoEqual = (Math.abs(rawBull - rawNeu) < 0.5) || (Math.abs(rawBull - rawBear) < 0.5);
+    const dataValid = rawBull && rawBear && sum > 95 && sum < 105 && rawBull < 57 && rawBear < 75 && !isRound && !twoEqual;
 
     const lastH = AAII_HISTORY[AAII_HISTORY.length-1];
     const bull = dataValid ? rawBull : lastH.bull;
