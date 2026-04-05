@@ -610,6 +610,7 @@
   <div class="tab group-tab" onclick="switchGroupTab('derivatives','options')">DERIVATIVES ▾</div>
   <div class="tab group-tab" onclick="switchGroupTab('history','pricehistory')">HISTORY ▾</div>
   <div class="tab" onclick="switchTab('macro')">⬡ MACRO</div>
+  <div class="tab" onclick="switchTab('transition')">⬡ TRANSITION</div>
 </div>
 
 <!-- Subtab bar — shown below main tabs when a group is active -->
@@ -632,6 +633,11 @@
     <div class="subtab" onclick="switchGroupSub('gex-intraday',this)">⬡ GEX MAP</div>
     <div class="subtab" onclick="switchGroupSub('wem',this)">EXPECTED MOVE</div>
     <div class="subtab" onclick="switchGroupSub('volatility',this)">VOLATILITY</div>
+  </div>
+  <!-- Macro subtabs -->
+  <div class="subtab-group" id="subtabs-macro" style="display:none;">
+    <div class="subtab active" onclick="switchGroupSub('macro-overview',this)">OVERVIEW</div>
+    <div class="subtab" onclick="switchGroupSub('macro-transition',this)">⬡ AI TRANSITION</div>
   </div>
   <!-- Overview subtabs (overview gets bonds/breadth/sentiment) -->
   <div class="subtab-group" id="subtabs-overview" style="display:none;">
@@ -1733,8 +1739,12 @@
 <!-- ═══════════════════════════════════════════════════════
      LIQUIDITY
 ════════════════════════════════════════════════════════ -->
-<div class="tab-panel" id="panel-macro">
+<div class="tab-panel" id="panel-macro-overview">
   <div id="macroContent"><div class="no-data" style="padding:40px;text-align:center;">Loading macro data...</div></div>
+</div>
+
+<div class="tab-panel" id="panel-transition">
+  <div id="transitionContent"><div class="no-data" style="padding:40px;text-align:center;">Loading transition data...</div></div>
 </div>
 
 <div class="tab-panel" id="panel-liquidity">
