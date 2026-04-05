@@ -490,9 +490,9 @@
   background: var(--bg2);
   border: 1px solid var(--border);
   border-right: none;
-  border-radius: 10px 0 0 10px;
-  padding: 10px 0;
-  box-shadow: -6px 0 32px rgba(0,0,0,0.5);
+  border-radius: 8px 0 0 8px;
+  padding: 8px 0;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
 }
 
 .rsb-btn {
@@ -500,60 +500,59 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  width: 72px;
-  padding: 13px 6px;
+  gap: 3px;
+  width: 54px;
+  padding: 9px 4px;
   cursor: pointer;
-  border-radius: 7px;
+  border-radius: 6px;
   transition: background 0.15s, color 0.15s;
   color: var(--text3);
   position: relative;
   user-select: none;
 }
-.rsb-btn:hover { background: rgba(255,255,255,0.06); color: var(--text2); }
-.rsb-btn.active { background: rgba(0,204,255,0.12); color: var(--cyan); }
-.rsb-btn.ai-active { background: rgba(0,255,136,0.12); color: #00ff88; }
-.rsb-btn.music-active { background: rgba(255,136,0,0.12); color: #ff8800; }
+.rsb-btn:hover { background: rgba(255,255,255,0.05); color: var(--text2); }
+.rsb-btn.active { background: rgba(0,204,255,0.1); color: var(--cyan); }
+.rsb-btn.ai-active { background: rgba(0,255,136,0.1); color: #00ff88; }
 
 .rsb-icon {
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1;
 }
 .rsb-label {
   font-family: 'Orbitron', monospace;
-  font-size: 8px;
-  letter-spacing: 1.2px;
+  font-size: 7px;
+  letter-spacing: 1px;
   white-space: nowrap;
 }
 
 .rsb-divider {
-  width: 44px;
+  width: 32px;
   height: 1px;
   background: var(--border);
-  margin: 4px 0;
+  margin: 3px 0;
 }
 
 /* Unread badge on FLOOR and MSG buttons */
 .rsb-badge {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  min-width: 15px;
-  height: 15px;
+  top: 5px;
+  right: 5px;
+  min-width: 14px;
+  height: 14px;
   background: #ff3355;
   color: #fff;
   font-family: 'Orbitron', monospace;
   font-size: 8px;
-  border-radius: 8px;
+  border-radius: 7px;
   padding: 0 3px;
   display: none;
   align-items: center;
   justify-content: center;
-  line-height: 15px;
+  line-height: 14px;
 }
 
 /* Adjust content area so nothing hides behind the sidebar */
-.content { padding-right: 88px !important; }
+.content { padding-right: 70px !important; }
 </style>
 </head>
 <body>
@@ -578,13 +577,6 @@
   </div>
 <div class="rsb-divider"></div>
 
-  <!-- Music -->
-  <div class="rsb-btn" id="rsb-music" onclick="sidebarToggleMusic()" title="Music Player">
-    <span class="rsb-icon" id="rsb-music-icon">♪</span>
-    <span class="rsb-label">MUSIC</span>
-  </div>
-<div class="rsb-divider"></div>
-
   <!-- AI + Chat -->
   <div class="rsb-btn" id="rsb-ai" onclick="sidebarToggleAI()" title="AI Assistant">
     <span class="rsb-icon">⬡</span>
@@ -599,7 +591,7 @@
 </div>
 
 <div class="topbar">
-  <div class="logo">SPY <span>//</span> TRACKER</div>
+  <div class="logo" id="siteLogo" onclick="logoClick()">SPY <span>//</span> TRACKER</div>
   <div class="ticker-tape"><div class="ticker-inner" id="tickerInner"></div></div>
   <div id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">
     <span id="themeLabel">DARK</span>
@@ -645,6 +637,7 @@
   <div class="subtab-group" id="subtabs-macro" style="display:none;">
     <div class="subtab active" onclick="switchGroupSub('macro-overview',this)">OVERVIEW</div>
     <div class="subtab" onclick="switchGroupSub('transition',this)">⬡ AI TRANSITION</div>
+    <div class="subtab" onclick="window.open('ignition.html','_blank')" style="color:var(--orange);border-bottom-color:transparent;">🚀 IGNITION</div>
   </div>
   <!-- Overview subtabs (overview gets bonds/breadth/sentiment) -->
   <div class="subtab-group" id="subtabs-overview" style="display:none;">
@@ -4680,12 +4673,27 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
 #chat-ban-btn{background:rgba(255,51,85,0.15);border:1px solid #ff3355;border-radius:3px;color:#ff3355;cursor:pointer;padding:3px 8px;font-family:'Orbitron',monospace;font-size:8px;}
 
   /* ═══════════════ MUSIC PLAYER ═══════════════ */
-  /* Old floating music trigger — replaced by sidebar button */
-  #spyMusicBtn { display: none !important; }
+  #spyMusicBtn {
+    position: fixed;
+    bottom: 80px; right: 0;
+    z-index: 8001;
+    width: 54px; height: 44px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-right: none;
+    border-radius: 6px 0 0 6px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--cyan);
+    font-size: 16px;
+    transition: background 0.15s, color 0.15s;
+  }
+  #spyMusicBtn:hover { background: rgba(0,204,255,0.1); }
+  #spyMusicBtn.active { color: #00ff88; background: rgba(0,255,136,0.08); }
 
   #spyMusicPanel {
     position: fixed;
-    bottom: 70px; right: 90px;
+    bottom: 70px; right: 70px;
     z-index: 9002;
     width: 320px;
     background: #0c0c14;
@@ -5452,19 +5460,6 @@ function sidebarSwitch(id) {
   }
 }
 
-function sidebarToggleMusic() {
-  spyMusicToggle();
-  // Sync active state with panel visibility
-  setTimeout(() => {
-    const panel = document.getElementById('spyMusicPanel');
-    const btn = document.getElementById('rsb-music');
-    const icon = document.getElementById('rsb-music-icon');
-    const isOpen = panel && panel.style.display !== 'none' && panel.style.display !== '';
-    if (btn) btn.classList.toggle('music-active', isOpen);
-    if (icon) icon.textContent = isOpen ? '♫' : '♪';
-  }, 60);
-}
-
 function sidebarToggleAI() {
   toggleChat();
   const btn = document.getElementById('rsb-ai');
@@ -5530,14 +5525,6 @@ document.addEventListener('click', (e) => {
     const panel = document.getElementById('aiPanel');
     const btn   = document.getElementById('rsb-ai');
     if (btn) btn.classList.toggle('ai-active', panel && panel.classList.contains('open'));
-
-    // Sync music button state
-    const mPanel = document.getElementById('spyMusicPanel');
-    const mBtn   = document.getElementById('rsb-music');
-    const mIcon  = document.getElementById('rsb-music-icon');
-    const mOpen  = mPanel && mPanel.style.display !== 'none' && mPanel.style.display !== '';
-    if (mBtn)  mBtn.classList.toggle('music-active', mOpen);
-    if (mIcon) mIcon.textContent = mOpen ? '♫' : '♪';
   }, 60);
 });
 
@@ -5626,3 +5613,48 @@ setInterval(() => {
   <div id="spyPlayer"></div>
   <div id="spyPlayerTrigger"></div>
 </div>
+
+<!-- ════ THINKSCRIPT VAULT — 3-click logo easter egg ════ -->
+<style>
+#vaultOverlay{display:none;position:fixed;inset:0;z-index:99000;background:rgba(0,0,0,0.88);backdrop-filter:blur(4px);}
+#vaultPanel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(93vw,1100px);height:min(88vh,900px);background:var(--bg2);border:1px solid var(--border2);border-top:2px solid var(--green);border-radius:6px;display:flex;flex-direction:column;box-shadow:0 20px 80px rgba(0,0,0,0.95);animation:vaultUp 0.28s ease;}
+@keyframes vaultUp{from{transform:translate(-50%,-46%);opacity:0}to{transform:translate(-50%,-50%);opacity:1}}
+#vaultHeader{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+#vaultTitle{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;color:var(--green);}
+#vaultMeta{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);}
+#vaultClose{background:none;border:1px solid var(--border);color:var(--text3);cursor:pointer;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;padding:4px 12px;border-radius:3px;transition:all 0.15s;}
+#vaultClose:hover{border-color:var(--red);color:var(--red);}
+#vaultFrame{flex:1;border:none;border-radius:0 0 6px 6px;background:#fff;}
+</style>
+<div id="vaultOverlay" onclick="if(event.target===this)closeVault()">
+  <div id="vaultPanel">
+    <div id="vaultHeader">
+      <div id="vaultTitle">⬡ THE VAULT — THINKSCRIPT COLLECTION</div>
+      <div id="vaultMeta">TOS &amp; Thinkscript Collection · Jim Shinger</div>
+      <button id="vaultClose" onclick="closeVault()">✕ CLOSE</button>
+    </div>
+    <iframe id="vaultFrame" src=""></iframe>
+  </div>
+</div>
+<script>
+let _lc=0,_lt=null;
+function logoClick(){
+  _lc++;clearTimeout(_lt);
+  const logo=document.getElementById('siteLogo');
+  if(_lc===1)logo.style.color='var(--cyan)';
+  else if(_lc===2)logo.style.color='var(--green)';
+  else if(_lc>=3){logo.style.color='var(--text)';_lc=0;openVault();return;}
+  _lt=setTimeout(()=>{_lc=0;logo.style.color='var(--text)';},1200);
+}
+function openVault(){
+  document.getElementById('vaultFrame').src='TOS___Thinkscript_Collection.html';
+  document.getElementById('vaultOverlay').style.display='block';
+  document.body.style.overflow='hidden';
+}
+function closeVault(){
+  document.getElementById('vaultOverlay').style.display='none';
+  document.getElementById('vaultFrame').src='';
+  document.body.style.overflow='';
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeVault();});
+</script>
