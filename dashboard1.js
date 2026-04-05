@@ -1334,16 +1334,20 @@ function renderDesk(md,sd){
     <!-- EXPECTED MOVES -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       ${wem?(()=>{
-        const midP  = wem.wem_mid||cur||700;
-        const iv    = (wem.atm_iv&&wem.atm_iv>0)?wem.atm_iv:(wem.wem_range/2)/(midP*Math.sqrt(6/365)*0.70);
-        const em    = midP*iv/Math.sqrt(252);
+        const midP  = wem.wem_mid || wem.friday_close || cur || prevClose || 700;
+        // Use last known IV: atm_iv (live) → static_wem_iv (last close) → nothing
+        const iv    = (wem.atm_iv&&wem.atm_iv>0) ? wem.atm_iv
+                    : (wem.static_wem_iv&&wem.static_wem_iv>0) ? wem.static_wem_iv : null;
+        const em    = midP>0 && iv>0 ? midP*iv/Math.sqrt(252) : 0;
         // Detect if market is currently open using ET time
         const _etNow = new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}));
         const _etDow = _etNow.getDay(); // 0=Sun,6=Sat
         const _etMins = _etNow.getHours()*60+_etNow.getMinutes();
         const mktOpen = _etDow>=1 && _etDow<=5 && _etMins>=570 && _etMins<960; // 9:30am-4:00pm ET weekdays
         // When closed, use sd[0].close as anchor — most reliable last trading day close
-        const lastClose = (sd&&sd[0]&&sd[0].close) ? sd[0].close : (prevClose||cur||midP);
+        // Find last row with a real close (skip holidays/missing data)
+        // friday_close in wem is the official EOD close from the database
+        const lastClose = wem.friday_close || (sd && sd.find(r => r.close > 0))?.close || prevClose || cur || midP;
         const price = mktOpen ? (cur||midP) : lastClose;
         const histRanges = sd.filter(r=>r.measurements?.day_range>0).map(r=>r.measurements.day_range);
         const avgR  = histRanges.length ? histRanges.reduce((a,b)=>a+b,0)/histRanges.length : em;
@@ -2864,7 +2868,9 @@ function renderVolatility(md){
   const vvixLabel=vvixVal>120?'PANIC':vvixVal>100?'STRESSED':vvixVal>85?'ELEVATED':'CALM';
   const skewColor=skewVal>145?'#ff3355':skewVal>135?'#ff8800':skewVal>125?'#ffcc00':'#00ff88';
   const skewLabel=skewVal>145?'EXTREME TAIL':skewVal>135?'HIGH TAIL':skewVal>125?'ELEVATED':'NORMAL';
-  const spyIv=atm_iv?atm_iv*100:null;
+  // Use last known IV: atm_iv (live) → static_wem_iv (last close) → null
+  const staticIv = wem.static_wem_iv||null;
+  const spyIv = atm_iv ? atm_iv*100 : (staticIv ? staticIv*100 : null);
   const ivColor=spyIv>30?'#ff3355':spyIv>20?'#ff8800':spyIv>15?'#ffcc00':'#00ff88';
 
   // ── ROW 1: Big vol cards ──────────────────────────────────────────────────
