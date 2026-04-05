@@ -157,6 +157,16 @@ export async function onRequestGet(context) {
     fetchFRED(apiKey, 'PRS84006162', 20),       // Output per worker
   ]);
 
+  // Batch 3: Automation & robotics adoption signals
+  const [
+    mfgEmploy, mfgOutput, mfgOutputPerHour, mfgWeeklyHours,
+  ] = await Promise.all([
+    fetchFRED(apiKey, 'MANEMP', 48),    // Manufacturing employment — structural decline = automation
+    fetchFRED(apiKey, 'IPMAN', 48),     // Industrial production: manufacturing
+    fetchFRED(apiKey, 'OPHMFG', 36),    // Output per hour: manufacturing (direct automation signal)
+    fetchFRED(apiKey, 'AWHMAN', 48),    // Avg weekly hours: manufacturing (falling = fewer labor hours needed)
+  ]);
+
   // ── LABOR SUBSTITUTION RATE ────────────────────────────────────────────────
   // Key signal: output growing faster than hours worked = something else doing the work
   // Computed as rolling output growth / hours growth in information sector
@@ -249,6 +259,41 @@ export async function onRequestGet(context) {
     currentDebtGDP = debtGDP[debtGDP.length-1];
   }
 
+  // ── AUTOMATION & ROBOTICS ADOPTION SIGNAL ────────────────────────────────
+  // Key: manufacturing output rising while employment + hours fall = machines doing the work
+  let automationSignal = null;
+  if (mfgEmploy && mfgOutput && mfgEmploy.length >= 12 && mfgOutput.length >= 12) {
+    const empLatest  = mfgEmploy[mfgEmploy.length-1];
+    const empPeak    = Math.max(...mfgEmploy.map(p => p.v));
+    const empPeakYr  = mfgEmploy.find(p => p.v === empPeak)?.d?.slice(0,4) || '1979';
+    const outLatest  = mfgOutput[mfgOutput.length-1];
+    const outBase    = mfgOutput[0];
+    const outputGrowthPct = ((outLatest.v - outBase.v) / outBase.v) * 100;
+    const empChangePct    = ((empLatest.v - mfgEmploy[0].v) / mfgEmploy[0].v) * 100;
+    // Output/Employment ratio — rising = more output per worker = automation
+    const automationRatio = outLatest.v / empLatest.v;
+    const automationRatioBase = outBase.v / mfgEmploy[0].v;
+    const ratioGrowthPct = ((automationRatio - automationRatioBase) / automationRatioBase) * 100;
+
+    const oph = mfgOutputPerHour;
+    const hours = mfgWeeklyHours;
+    automationSignal = {
+      mfg_employ_current:   empLatest.v,
+      mfg_employ_peak:      empPeak,
+      mfg_employ_pct_below_peak: ((empPeak - empLatest.v) / empPeak) * 100,
+      mfg_output_growth_pct: Math.round(outputGrowthPct * 10) / 10,
+      mfg_emp_change_pct:   Math.round(empChangePct * 10) / 10,
+      output_per_worker_growth: Math.round(ratioGrowthPct * 10) / 10,
+      oph_current:  oph && oph.length ? oph[oph.length-1].v : null,
+      oph_history:  oph ? oph.slice(-20).map(p => ({ d: p.d.slice(0,4), v: p.v })) : [],
+      hours_current: hours && hours.length ? hours[hours.length-1].v : null,
+      hours_history: hours ? hours.slice(-24).map(p => ({ d: p.d.slice(0,7), v: p.v })) : [],
+      employ_history: mfgEmploy.slice(-36).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+      output_history: mfgOutput.slice(-36).map(p => ({ d: p.d.slice(0,7), v: p.v })),
+      peak_year: empPeakYr,
+    };
+  }
+
   // ── BRIDGE PHASE SCORE (0-100) ────────────────────────────────────────────
   // 0-30: Early bridge | 30-60: Mid bridge (building) | 60-80: Late bridge
   // 80-95: Pre-pop (infrastructure sufficient, survivors hardening)
@@ -315,6 +360,9 @@ export async function onRequestGet(context) {
     // Reference data
     ai_capex: AI_CAPEX_TRAJECTORY,
     historical_transitions: HISTORICAL_TRANSITIONS,
+
+    // Automation & robotics adoption
+    automation_signal: automationSignal,
 
     updated: new Date().toISOString()
   });
