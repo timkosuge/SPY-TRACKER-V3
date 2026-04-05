@@ -129,37 +129,32 @@ export async function onRequestGet(context) {
   const apiKey = context.env?.FRED_API_KEY;
   if (!apiKey) return json({ error: 'FRED_API_KEY not configured' }, 500);
 
-  // Fetch all FRED series in parallel
+  // Fetch in two batches — avoids overwhelming FRED API with 14 simultaneous requests
+  // which causes silent failures. Two batches ~4s total, well within Cloudflare limits.
   const [
-    productivity,      // nonfarm business output per hour
-    productivityInfo,  // information sector productivity
-    unitLaborCosts,    // unit labor costs - falling = AI doing work
-    softwareInvest,    // private software investment
-    rdInvest,          // R&D investment
-    privNonresInvest,  // total private nonresidential fixed investment
-    infoEmploy,        // information sector employment
-    profServEmploy,    // professional services employment
-    totalEmploy,       // total nonfarm employment
-    debtGDP,           // federal debt as % of GDP
-    corpProfits,       // corporate profits after tax
-    laborShare,        // labor share of income (falling = capital replacing labor)
-    tfpGrowth,         // total factor productivity
-    outputPerWorker,   // business sector output per worker
+    productivity, productivityInfo, unitLaborCosts,
+    softwareInvest, rdInvest, privNonresInvest, infoEmploy,
   ] = await Promise.all([
-    fetchFRED(apiKey, 'PRS85006092', 24),  // Nonfarm productivity
-    fetchFRED(apiKey, 'PRS88006092', 16),  // Nonfinancial corporate productivity
-    fetchFRED(apiKey, 'ULCNFB', 24),       // Unit labor costs nonfarm business
-    fetchFRED(apiKey, 'Y033RC1Q027SBEA', 20), // Software investment
-    fetchFRED(apiKey, 'Y054RC1Q027SBEA', 20), // R&D investment
-    fetchFRED(apiKey, 'PNFIQ', 20),        // Private nonresidential fixed investment
-    fetchFRED(apiKey, 'CEU5000000001', 36), // Information employment (thousands)
-    fetchFRED(apiKey, 'CEU6000000001', 36), // Professional services employment
-    fetchFRED(apiKey, 'PAYEMS', 36),        // Total nonfarm employment
-    fetchFRED(apiKey, 'GFDEGDQ188S', 20),  // Federal debt % of GDP
-    fetchFRED(apiKey, 'CP', 24),            // Corporate profits after tax
-    fetchFRED(apiKey, 'PRS85006151', 20),  // Labor share of output - nonfarm business
-    fetchFRED(apiKey, 'PRS85006092', 8),   // Nonfarm productivity (dupe for trend calc)
-    fetchFRED(apiKey, 'PRS84006162', 20),  // Output per worker
+    fetchFRED(apiKey, 'PRS85006092', 24),      // Nonfarm productivity
+    fetchFRED(apiKey, 'PRS88006092', 16),       // Nonfinancial corporate productivity
+    fetchFRED(apiKey, 'ULCNFB', 24),           // Unit labor costs nonfarm business
+    fetchFRED(apiKey, 'Y033RC1Q027SBEA', 20),  // Software investment
+    fetchFRED(apiKey, 'Y054RC1Q027SBEA', 20),  // R&D investment
+    fetchFRED(apiKey, 'PNFIQ', 20),            // Private nonresidential fixed investment
+    fetchFRED(apiKey, 'CEU5000000001', 36),     // Information employment (thousands)
+  ]);
+
+  const [
+    profServEmploy, totalEmploy, debtGDP,
+    corpProfits, laborShare, tfpGrowth, outputPerWorker,
+  ] = await Promise.all([
+    fetchFRED(apiKey, 'CEU6000000001', 36),    // Professional services employment
+    fetchFRED(apiKey, 'PAYEMS', 36),            // Total nonfarm employment
+    fetchFRED(apiKey, 'GFDEGDQ188S', 20),       // Federal debt % of GDP
+    fetchFRED(apiKey, 'CP', 24),                // Corporate profits after tax
+    fetchFRED(apiKey, 'PRS85006151', 20),       // Labor share of output - nonfarm business
+    fetchFRED(apiKey, 'PRS85006092', 8),        // Nonfarm productivity (dupe for trend calc)
+    fetchFRED(apiKey, 'PRS84006162', 20),       // Output per worker
   ]);
 
   // ── LABOR SUBSTITUTION RATE ────────────────────────────────────────────────
