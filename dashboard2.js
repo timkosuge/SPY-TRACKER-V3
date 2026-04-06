@@ -5519,7 +5519,7 @@ function _renderTransitionHTML(data) {
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px;">
       <div class="panel" style="border-top:3px solid #00ff88;">
         <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ff88;margin-bottom:4px;">NEW BUSINESS FORMATION</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: BUSTHIRTY · Census · Weekly applications</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: BABATOTALSAUS · Census · Weekly applications</div>
         ${wl.biz_formation ? `<div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">${Math.round(wl.biz_formation.current / 1000)}K</div>
         <div style="font-size:11px;color:${wl.biz_formation.yoy_change_pct > 0 ? '#00ff88' : '#ff3355'};">${wl.biz_formation.yoy_change_pct > 0 ? '+' : ''}${fmt1(wl.biz_formation.yoy_change_pct)}% YoY</div>
         ${miniChart(wl.biz_formation.history, '#00ff88')}` : '<div style="font-size:12px;color:var(--text3);">— no data</div>'}
@@ -5527,7 +5527,7 @@ function _renderTransitionHTML(data) {
       </div>
       <div class="panel" style="border-top:3px solid #00ccff;">
         <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ccff;margin-bottom:4px;">INTELLECTUAL PROPERTY INVESTMENT</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: A465RC1Q027SBEA · BEA · Winners invest in IP</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: B735RC1Q027SBEA · BEA · Winners invest in IP</div>
         ${wl.ip_investment ? `<div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">$${fmt1(wl.ip_investment.current / 1000)}T</div>
         <div style="font-size:11px;color:${wl.ip_investment.growth_pct > 20 ? '#00ff88' : '#ffcc00'};">+${fmt1(wl.ip_investment.growth_pct)}% since baseline</div>
         ${miniChart(wl.ip_investment.history, '#00ccff')}` : '<div style="font-size:12px;color:var(--text3);">— no data</div>'}
@@ -5551,7 +5551,7 @@ function _renderTransitionHTML(data) {
       </div>
       <div class="panel" style="border-top:3px solid ${wl.commercial_loans?.trend === 'rising' ? '#ff8800' : '#00ff88'};">
         <div style="font-family:'Orbitron',monospace;font-size:9px;color:${wl.commercial_loans?.trend === 'rising' ? '#ff8800' : '#00ff88'};margin-bottom:4px;">COMMERCIAL & INDUSTRIAL LOANS</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: CORBLACBW027SBOG · Fed · Old economy stress</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: CILACBW027SBOG · Fed · Old economy stress</div>
         ${wl.commercial_loans ? `<div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text1);">$${fmt1(wl.commercial_loans.current / 1000)}T</div>
         <div style="font-size:11px;color:${wl.commercial_loans.trend === 'rising' ? '#ff8800' : '#00ff88'};">${wl.commercial_loans.trend === 'rising' ? '▲ RISING' : '▼ FALLING'} · ${wl.commercial_loans.change_pct > 0 ? '+' : ''}${fmt1(wl.commercial_loans.change_pct)}%</div>
         ${miniChart(wl.commercial_loans.history, wl.commercial_loans.trend === 'rising' ? '#ff8800' : '#00ccff')}` : '<div style="font-size:12px;color:var(--text3);">— no data</div>'}
