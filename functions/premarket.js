@@ -81,28 +81,35 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ error: 'No pre-market bars found', available: false }), { headers });
     }
 
-    // Strict filter: only bars inside [p1, p2] with valid OHLC
-    // Also filter out single-print / no-volume bars which can have extreme outlier prices
+    // Yahoo ignores period2 for extended hours and returns a full session.
+    // Filter to only bars whose ET time is between 4:00am and 9:30am.
     const prevClose = result.meta?.previousClose || result.meta?.chartPreviousClose || null;
     const bars = timestamps.map((t, i) => ({
       t, open: opens[i], high: highs[i], low: lows[i], close: closes[i], vol: vols[i]
-    })).filter(b =>
-      b.t >= p1 &&
-      b.t <  p2 &&
-      b.high  != null &&
-      b.low   != null &&
-      b.close != null &&
-      b.high  > 0 &&
-      b.low   > 0 &&
-      (b.vol == null || b.vol >= 5)
-    );
+    })).filter(b => {
+      const etHour = new Date(b.t * 1000).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false });
+      const [h, m] = etHour.split(':').map(Number);
+      const etMins = h * 60 + m;
+      return etMins >= 240 &&   // >= 4:00am ET
+             etMins < 570 &&    // < 9:30am ET
+             b.high  != null &&
+             b.low   != null &&
+             b.close != null &&
+             b.high  > 0 &&
+             b.low   > 0 &&
+             (b.vol == null || b.vol >= 5);
+    });
 
 
     if (!bars.length) {
+      const firstT = timestamps[0];
+      const lastT  = timestamps[timestamps.length - 1];
       return new Response(JSON.stringify({
         error: 'No valid bars in pre-market window',
         available: false,
-        debug: { p1, p2, totalBars: timestamps.length, todayStr, etOffsetHrs, prevClose }
+        debug: { p1, p2, totalBars: timestamps.length, todayStr, etOffsetHrs, prevClose,
+                 firstBarT: firstT, firstBarDate: new Date(firstT*1000).toISOString(),
+                 lastBarT: lastT,  lastBarDate:  new Date(lastT*1000).toISOString() }
       }), { headers });
     }
 
