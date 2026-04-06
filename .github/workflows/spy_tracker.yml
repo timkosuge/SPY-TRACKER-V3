@@ -2,11 +2,8 @@ name: SPY Daily Tracker
 
 on:
   schedule:
-    # Every 30 minutes during US market hours (9:00 AM – 4:30 PM ET = 13:00–20:30 UTC), Mon–Fri
     - cron: '0,30 13-20 * * 1-5'
-    # After-close final run at 6:15 PM ET (22:15 UTC) — full end-of-day data
     - cron: '15 22 * * 1-5'
-    # Monday pre-market run at 8:30 AM ET (13:30 UTC) — catch weekend data
     - cron: '30 13 * * 1'
   workflow_dispatch:
 
@@ -60,9 +57,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git stash
-          git pull origin main
-          git stash pop
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/
           git add -f spy_data.db spy_data.json market_data.json \
                      analog_data.js tod_stats.js \
                      intraday_library.js expiry_data.js \
