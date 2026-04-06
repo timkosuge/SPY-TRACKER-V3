@@ -154,7 +154,7 @@ export async function onRequestGet(context) {
     fetchFRED(apiKey, 'CP', 24),                // Corporate profits after tax
     fetchFRED(apiKey, 'PRS85006151', 20),       // Labor share of output - nonfarm business
     fetchFRED(apiKey, 'PRS85006092', 8),        // Nonfarm productivity (dupe for trend calc)
-    fetchFRED(apiKey, 'PRS84006162', 20),       // Output per worker
+    fetchFRED(apiKey, 'PRS85006163', 20),       // Output per worker
   ]);
 
   // Batch 3: Automation & robotics adoption signals
@@ -171,11 +171,11 @@ export async function onRequestGet(context) {
   const [
     bizFormation, ipInvestment, ecommerceRetail, totalRetail, commercialLoans,
   ] = await Promise.all([
-    fetchFRED(apiKey, 'BUSTHIRTY', 52), // New business applications (Census/weekly) — startup formation
-    fetchFRED(apiKey, 'A465RC1Q027SBEA', 24), // Intellectual property investment (BEA) — winners invest in IP
+    fetchFRED(apiKey, 'BABATOTALSAUS', 52), // New business applications (Census/weekly) — startup formation
+    fetchFRED(apiKey, 'B735RC1Q027SBEA', 24), // Intellectual property investment (BEA) — winners invest in IP
     fetchFRED(apiKey, 'ECOMPCTSA', 20), // E-commerce as % of total retail (Census) — new commerce share
     fetchFRED(apiKey, 'RETAILSMNSA', 24), // Total retail sales — old commerce baseline
-    fetchFRED(apiKey, 'CORBLACBW027SBOG', 24), // Commercial & industrial loans — old economy stress signal
+    fetchFRED(apiKey, 'CILACBW027SBOG', 24), // Commercial & industrial loans — old economy stress signal
   ]);
 
   // ── LABOR SUBSTITUTION RATE ────────────────────────────────────────────────
