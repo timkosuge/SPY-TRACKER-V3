@@ -20,55 +20,51 @@ export async function onRequest(context) {
     if (!result) throw new Error('No data');
 
     const timestamps = result.timestamp || [];
-    const q          = result.indicators?.quote?.[0] || {};
-    const highs      = q.high   || [];
-    const lows       = q.low    || [];
-    const closes     = q.close  || [];
-    const vols       = q.volume || [];
+    const q     = result.indicators?.quote?.[0] || {};
+    const highs = q.high   || [];
+    const lows  = q.low    || [];
 
-    const gmtoff     = result.meta?.gmtoffset ?? -14400; // EDT=-14400, EST=-18000
-    const prevClose  = result.meta?.previousClose || result.meta?.chartPreviousClose || null;
+    // Today's date string in ET
+    const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 
-    // PM window in seconds-of-day UTC
-    const pmStartSec = 4 * 3600 - gmtoff;    // 4:00am ET
-    const pmEndSec   = 9.5 * 3600 - gmtoff;  // 9:30am ET
-
-    // Compute median volume of PM bars to filter outliers
-    const allPM = timestamps.map((t, i) => ({
-      t, h: highs[i], l: lows[i], c: closes[i], v: vols[i] ?? 0
-    })).filter(b => {
-      const s = b.t % 86400;
-      return s >= pmStartSec && s < pmEndSec && b.h != null && b.l != null && b.h > 0 && b.l > 0;
+    // Convert each bar's unix timestamp to ET date+time and filter strictly
+    // to today's 4:00am–9:30am ET window
+    const etFmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
     });
 
-    if (!allPM.length) {
+    const pmBars = timestamps.map((t, i) => {
+      const parts = etFmt.formatToParts(new Date(t * 1000));
+      const get = type => parts.find(p => p.type === type)?.value || '0';
+      const date = `${get('year')}-${get('month')}-${get('day')}`;
+      const mins = parseInt(get('hour')) * 60 + parseInt(get('minute'));
+      return { t, h: highs[i], l: lows[i], date, mins };
+    }).filter(b =>
+      b.date === etDate &&   // must be today in ET
+      b.mins >= 300 &&       // >= 5:00am ET
+      b.mins < 570 &&        // < 9:30am ET
+      b.h != null && b.l != null &&
+      b.h > 0 && b.l > 0
+    );
+
+    if (!pmBars.length) {
       return new Response(JSON.stringify({
         available: false, error: 'No PM bars found',
-        debug: { gmtoff, pmStartSec, pmEndSec, totalBars: timestamps.length }
+        debug: { etDate, totalBars: timestamps.length }
       }), { headers });
     }
 
-    // Filter out near-zero volume bars (bad ticks) — keep bars with vol > 0
-    // Also sanity check: within 1.5% of prevClose
-    const sanityMin = prevClose ? prevClose * 0.985 : 0;
-    const sanityMax = prevClose ? prevClose * 1.015 : Infinity;
-    const pmBars = allPM.filter(b =>
-      b.v > 0 &&
-      b.l >= sanityMin &&
-      b.h <= sanityMax
-    );
-
-    const bars = pmBars.length ? pmBars : allPM; // fallback to unfiltered if too aggressive
-
-    const high = Math.round(Math.max(...bars.map(b => b.h)) * 100) / 100;
-    const low  = Math.round(Math.min(...bars.map(b => b.l)) * 100) / 100;
+    const high = Math.round(Math.max(...pmBars.map(b => b.h)) * 100) / 100;
+    const low  = Math.round(Math.min(...pmBars.map(b => b.l)) * 100) / 100;
     const mid  = Math.round(((high + low) / 2) * 100) / 100;
 
     return new Response(JSON.stringify({
       available: true, high, low, mid,
-      bars: bars.length,
-      from: new Date(bars[0].t * 1000).toISOString(),
-      to:   new Date(bars[bars.length - 1].t * 1000).toISOString(),
+      bars: pmBars.length,
+      from: new Date(pmBars[0].t * 1000).toISOString(),
+      to:   new Date(pmBars[pmBars.length - 1].t * 1000).toISOString(),
     }), { headers });
 
   } catch(e) {
