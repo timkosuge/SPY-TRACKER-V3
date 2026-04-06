@@ -4826,7 +4826,14 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
 
   
   /* ═══ IGNITION PANEL ═══ */
-#panel-ignition { --ig: #ff6600; --ig2: #ffaa00; }
+#panel-ignition {
+  --bg:#050508;--bg2:#0c0c14;--bg3:#121220;--panel:#0f0f1a;
+  --border:#252545;--border2:#353560;
+  --green:#00ff88;--red:#ff3355;--yellow:#ffcc00;--orange:#ff8800;
+  --cyan:#00ccff;--purple:#8855ff;--dim:#606080;
+  --text:#e8e8ff;--text2:#c0c0e0;--text3:#9090c0;
+  --ig:#ff6600;--ig2:#ffaa00;
+}
 #panel-ignition .topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200;gap:16px;}
 #panel-ignition .logo-wrap{display:flex;flex-direction:column;gap:1px;}
 #panel-ignition .logo{font-family:'Orbitron',monospace;font-weight:900;font-size:18px;color:var(--text);letter-spacing:3px;}
