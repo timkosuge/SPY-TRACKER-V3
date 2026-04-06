@@ -96,20 +96,7 @@ export async function onRequest(context) {
       b.low   > 0 &&
       (b.vol == null || b.vol >= 5)
     );
-    const bars = timestamps.map((t, i) => ({
-      t, open: opens[i], high: highs[i], low: lows[i], close: closes[i], vol: vols[i]
-    })).filter(b =>
-      b.t >= p1 &&
-      b.t <  p2 &&          // strict < so the 9:30 open bar never bleeds in
-      b.high  != null &&
-      b.low   != null &&
-      b.close != null &&
-      b.high  > 0 &&
-      b.low   > 0 &&
-      (b.vol == null || b.vol >= 5) &&  // filter single-print no-volume bars
-      b.low   >= sanityMin &&            // sanity: within 3% of prev close
-      b.high  <= sanityMax
-    );
+
 
     if (!bars.length) {
       return new Response(JSON.stringify({
