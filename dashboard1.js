@@ -67,7 +67,7 @@ function _switchPanelOnly(id) {
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='macro-overview') { try { if(window._M) window._M.init(); } catch(e){ console.warn('macro:',e); } }
   if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
-  if(id==='ignition') { /* Ignition loads on demand */ }
+  if(id==='ignition') { try { if(typeof loadIgnitionData==='function') loadIgnitionData(); } catch(e){ console.warn('ignition:',e); } }
   if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
   if(id==='gex' && _md) { try { renderGEX(_md); renderGEXAdditions(_md); renderGEXDailyHistory(); } catch(e){ console.warn('gex:',e); } }
@@ -120,7 +120,7 @@ function switchTab(id){
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
   if(id==='macro-overview') { try { if(window._M) window._M.init(); } catch(e){ console.warn('macro:',e); } }
   if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
-  if(id==='ignition') { /* Ignition loads on demand */ }
+  if(id==='ignition') { try { if(typeof loadIgnitionData==='function') loadIgnitionData(); } catch(e){ console.warn('ignition:',e); } }
   if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
 }
 
