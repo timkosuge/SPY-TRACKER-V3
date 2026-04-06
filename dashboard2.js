@@ -845,7 +845,10 @@ function renderWEM(md){
     const compEl = $('wemCompareRow');
     if (compEl) compEl.innerHTML = comparisonHtml;
 
-    const iv = (cur.atm_iv && cur.atm_iv>0) ? cur.atm_iv : halfRange/(mid*Math.sqrt(6/365)*0.70);
+    // In static mode use the locked Friday IV; in dynamic use live ATM IV
+    const iv = isStatic
+      ? (staticIV || halfRange/(mid*Math.sqrt(6/365)*0.70))
+      : ((cur.atm_iv && cur.atm_iv>0) ? cur.atm_iv : halfRange/(mid*Math.sqrt(6/365)*0.70));
     const dailyEM   = mid * iv * Math.sqrt(1/365)  * 0.70;
     const weeklyEM  = halfRange;
     const monthlyEM = mid * iv * Math.sqrt(21/365) * 0.70;
