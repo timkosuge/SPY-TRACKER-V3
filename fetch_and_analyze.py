@@ -8,7 +8,7 @@ import os, sqlite3, requests, json, math
 from datetime import datetime, date, timedelta
 import pytz
 
-API_KEY  = os.environ.get("POLYGON_API_KEY", "YOUR_API_KEY_HERE")
+API_KEY  = "5p0U4LlFnKHppyKrAS_AKqtiGpzYR3ZO"
 SYMBOL   = "SPY"
 DB_PATH  = "spy_data.db"
 CT       = pytz.timezone("America/Chicago")
