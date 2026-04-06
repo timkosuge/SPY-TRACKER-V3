@@ -2075,14 +2075,14 @@
 
 </style>
   <div class="ig-tabs" id="igTabs">
-  <div class="ig-tab active" onclick="switchTab('overview')">OVERVIEW</div>
-  <div class="ig-tab" onclick="switchTab('ai')">AI INFRASTRUCTURE</div>
-  <div class="ig-tab" onclick="switchTab('robotics')">ROBOTICS & AUTOMATION</div>
-  <div class="ig-tab" onclick="switchTab('energy')">ENERGY TRANSITION</div>
-  <div class="ig-tab" onclick="switchTab('semisov')">SEMI SOVEREIGNTY</div>
-  <div class="ig-tab" onclick="switchTab('materials')">RAW MATERIALS</div>
-  <div class="ig-tab" onclick="switchTab('frontier')">FRONTIER</div>
-  <div class="ig-tab" onclick="switchTab('thesis')">THESIS</div>
+  <div class="ig-tab active" onclick="igSwitchTab('overview')">OVERVIEW</div>
+  <div class="ig-tab" onclick="igSwitchTab('ai')">AI INFRASTRUCTURE</div>
+  <div class="ig-tab" onclick="igSwitchTab('robotics')">ROBOTICS & AUTOMATION</div>
+  <div class="ig-tab" onclick="igSwitchTab('energy')">ENERGY TRANSITION</div>
+  <div class="ig-tab" onclick="igSwitchTab('semisov')">SEMI SOVEREIGNTY</div>
+  <div class="ig-tab" onclick="igSwitchTab('materials')">RAW MATERIALS</div>
+  <div class="ig-tab" onclick="igSwitchTab('frontier')">FRONTIER</div>
+  <div class="ig-tab" onclick="igSwitchTab('thesis')">THESIS</div>
 </div>
 
 <div class="hero">
@@ -6204,7 +6204,7 @@ function scoreFill(s){if(s<30)return'#ff3355';if(s<50)return'#ffcc00';if(s<70)re
 function phase(i){if(i<20)return'PRE-IGNITION';if(i<40)return'EARLY BUILDOUT';if(i<55)return'MID BUILDOUT';if(i<70)return'LATE BUILDOUT';if(i<85)return'VALIDATION';return'EARNED';}
 
 // ── Tab switching ────────────────────────────────────────────────────────────
-function switchTab(id){
+function igSwitchTab(id){
   document.querySelectorAll('.ig-tab').forEach((t,i)=>{
     const ids=['overview','ai','robotics','energy','semisov','materials','frontier','thesis'];
     t.classList.toggle('active',ids[i]===id);
