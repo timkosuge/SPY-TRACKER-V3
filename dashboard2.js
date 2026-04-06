@@ -845,6 +845,7 @@ function renderWEM(md){
     const compEl = $('wemCompareRow');
     if (compEl) compEl.innerHTML = comparisonHtml;
 
+    const atmIV = (cur.atm_iv && cur.atm_iv>0) ? cur.atm_iv : null;
     // In static mode use the locked Friday IV; in dynamic use live ATM IV
     const iv = isStatic
       ? (staticIV || halfRange/(mid*Math.sqrt(6/365)*0.70))
