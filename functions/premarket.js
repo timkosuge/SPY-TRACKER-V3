@@ -81,24 +81,19 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ error: 'No pre-market bars found', available: false }), { headers });
     }
 
-    // Yahoo ignores period2 for extended hours and returns a full session.
-    // Filter to only bars whose ET time is between 4:00am and 9:30am.
+    // Filter to bars strictly within the PM window with valid OHLC
     const prevClose = result.meta?.previousClose || result.meta?.chartPreviousClose || null;
     const bars = timestamps.map((t, i) => ({
       t, open: opens[i], high: highs[i], low: lows[i], close: closes[i], vol: vols[i]
-    })).filter(b => {
-      const etHour = new Date(b.t * 1000).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false });
-      const [h, m] = etHour.split(':').map(Number);
-      const etMins = h * 60 + m;
-      return etMins >= 240 &&   // >= 4:00am ET
-             etMins < 570 &&    // < 9:30am ET
-             b.high  != null &&
-             b.low   != null &&
-             b.close != null &&
-             b.high  > 0 &&
-             b.low   > 0 &&
-             (b.vol == null || b.vol >= 5);
-    });
+    })).filter(b =>
+      b.t >= p1 &&
+      b.t <  p2 &&
+      b.high  != null &&
+      b.low   != null &&
+      b.close != null &&
+      b.high  > 0 &&
+      b.low   > 0
+    );
 
 
     if (!bars.length) {
