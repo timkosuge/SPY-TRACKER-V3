@@ -1086,8 +1086,8 @@ def export_market_data(conn, options_data=None):
             # ── BUILDOUT: Picks & Shovels ─────────────────────────────────────
             "CDNS","SNPS","KEYS","COHU","ONTO",
             # ── BUILDOUT: Robotics & Automation ──────────────────────────────
-            "ISRG","TER","CGNX","SYM","ROK","EMR","FANUC.T","IRBT",
-            "NVEE","BRZE","ABB",
+            "ISRG","TER","CGNX","SYM","ROK","EMR","FANUY","IRBT",
+            "ABB","HON","AZPN",
             # ── BUILDOUT: Semiconductor Sovereignty ──────────────────────────
             "INTC","GFS","ON","WOLF","SWKS","QCOM","TXN","MPWR",
             # ── BUILDOUT: Energy Storage & Transition ────────────────────────
