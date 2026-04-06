@@ -9,6 +9,7 @@ const $=id=>document.getElementById(id);
 const GROUP_TABS = {
   desk:        ['desk','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol'],
   derivatives: ['options','gex','gex-intraday','wem','volatility'],
+  macro:       ['macro-overview','transition','ignition'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog'],
   overview:    ['overview','bonds','breadth','sentiment']
 };
@@ -64,7 +65,10 @@ function _switchPanelOnly(id) {
   if(id==='overview' && typeof _md!=='undefined' && _md) { try { renderOverview(_md); } catch(e){ console.warn('overview:',e); } }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
-  if(id==='macro') { try { if(window._M) window._M.init(); } catch(e){ console.warn('macro:',e); } }
+  if(id==='macro-overview') { try { if(window._M) window._M.init(); } catch(e){ console.warn('macro:',e); } }
+  if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
+  if(id==='ignition') { /* Ignition loads on demand */ }
+  if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
   if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
   if(id==='gex' && _md) { try { renderGEX(_md); renderGEXAdditions(_md); renderGEXDailyHistory(); } catch(e){ console.warn('gex:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
@@ -114,7 +118,10 @@ function switchTab(id){
   }
   if(id==='analog') { renderAnalog(); }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
-  if(id==='macro') { try { if(window._M) window._M.init(); } catch(e){ console.warn('macro:',e); } }
+  if(id==='macro-overview') { try { if(window._M) window._M.init(); } catch(e){ console.warn('macro:',e); } }
+  if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
+  if(id==='ignition') { /* Ignition loads on demand */ }
+  if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
 }
 
 // ── VIX bar marker ──
