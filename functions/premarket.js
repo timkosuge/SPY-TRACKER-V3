@@ -24,27 +24,27 @@ export async function onRequest(context) {
     const highs = q.high   || [];
     const lows  = q.low    || [];
 
-    // Today's date string in ET
-    const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+    // Today's date string in CT
+    const ctDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
 
-    // Convert each bar's unix timestamp to ET date+time and filter strictly
-    // to today's 4:00am–9:30am ET window
-    const etFmt = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York',
+    // Convert each bar's unix timestamp to CT date+time and filter strictly
+    // to today's 3:00am–8:30am CT window (= 4:00am–9:30am ET)
+    const ctFmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago',
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hour12: false
     });
 
     const pmBars = timestamps.map((t, i) => {
-      const parts = etFmt.formatToParts(new Date(t * 1000));
+      const parts = ctFmt.formatToParts(new Date(t * 1000));
       const get = type => parts.find(p => p.type === type)?.value || '0';
       const date = `${get('year')}-${get('month')}-${get('day')}`;
       const mins = parseInt(get('hour')) * 60 + parseInt(get('minute'));
       return { t, h: highs[i], l: lows[i], date, mins };
     }).filter(b =>
-      b.date === etDate &&   // must be today in ET
-      b.mins >= 300 &&       // >= 5:00am ET
-      b.mins < 570 &&        // < 9:30am ET
+      b.date === ctDate &&   // must be today in CT
+      b.mins >= 180 &&       // >= 3:00am CT
+      b.mins < 510 &&        // < 8:30am CT
       b.h != null && b.l != null &&
       b.h > 0 && b.l > 0
     );
@@ -52,7 +52,7 @@ export async function onRequest(context) {
     if (!pmBars.length) {
       return new Response(JSON.stringify({
         available: false, error: 'No PM bars found',
-        debug: { etDate, totalBars: timestamps.length }
+        debug: { ctDate, totalBars: timestamps.length }
       }), { headers });
     }
 
