@@ -1,5 +1,5 @@
 // Cloudflare Pages Function — /premarket
-// Gets SPY pre-market high/low/mid (4:00am – 9:30am ET)
+// Gets SPY pre-market high/low/mid (4:00am – 9:30am ET) via Polygon
 
 export async function onRequest(context) {
   const headers = {
@@ -9,56 +9,62 @@ export async function onRequest(context) {
   };
 
   try {
-    // Fetch today's 1m bars including pre/post market
-    const url = `https://query2.finance.yahoo.com/v8/finance/chart/SPY?interval=1m&range=1d&includePrePost=true`;
-    const resp = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
-    });
-    if (!resp.ok) throw new Error(`Yahoo ${resp.status}`);
+    const API_KEY = context.env.POLYGON_API_KEY;
+    if (!API_KEY) throw new Error('POLYGON_API_KEY not set');
+
+    // Today's date in ET
+    const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+
+    // Fetch 1m bars for today including pre-market
+    // Polygon's /aggs endpoint with extended hours
+    const url = `https://api.polygon.io/v2/aggs/ticker/SPY/range/1/minute/${etDate}/${etDate}?adjusted=true&sort=asc&limit=1000&extended_hours=true&apiKey=${API_KEY}`;
+
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Polygon ${resp.status}`);
 
     const data = await resp.json();
-    const result = data?.chart?.result?.[0];
-    if (!result) throw new Error('No data');
+    if (data.status === 'ERROR') throw new Error(data.error || 'Polygon error');
 
-    const timestamps = result.timestamp || [];
-    const q          = result.indicators?.quote?.[0] || {};
-    const highs      = q.high  || [];
-    const lows       = q.low   || [];
+    const results = data.results || [];
+    if (!results.length) throw new Error('No bars returned');
 
-    // gmtoffset is in seconds: EDT=-14400, EST=-18000
-    const gmtoff = result.meta?.gmtoffset ?? -14400;
+    // PM window: 4:00am–9:30am ET in unix ms
+    // Build window from etDate
+    const pmStart = new Date(`${etDate}T04:00:00`);
+    const pmEnd   = new Date(`${etDate}T09:30:00`);
+    // Convert to ET-aware timestamps
+    const pmStartMs = new Date(pmStart.toLocaleString('en-US', { timeZone: 'America/New_York' }) ).getTime();
 
-    // PM window in seconds-of-day (UTC):
-    // 4:00am ET  = 4*3600 - gmtoff  (e.g. EDT: 4*3600+14400 = 28800 = 8:00 UTC)
-    // 9:30am ET  = 9.5*3600 - gmtoff (e.g. EDT: 34200+14400 = 48600 = 13:30 UTC)
-    const pmStartSec = 4 * 3600 - gmtoff;
-    const pmEndSec   = 9.5 * 3600 - gmtoff;
+    // Simpler: Polygon timestamps are unix ms UTC
+    // 4:00am ET = 8:00 UTC (EDT) or 9:00 UTC (EST)
+    // Determine offset from first bar or use Intl
+    const now = new Date();
+    const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit' });
+    const utcStr = now.toLocaleString('en-US', { hour12: false, hour: '2-digit' });
+    const etOffsetHrs = parseInt(utcStr) - parseInt(etStr);
 
-    const pmBars = timestamps.map((t, i) => ({
-      t, high: highs[i], low: lows[i]
-    })).filter(b => {
-      if (b.high == null || b.low == null || b.high <= 0 || b.low <= 0) return false;
-      const secOfDay = b.t % 86400;
-      return secOfDay >= pmStartSec && secOfDay < pmEndSec;
-    });
+    const pmStartTs = new Date(`${etDate}T04:00:00Z`).getTime() - etOffsetHrs * 3600000;
+    const pmEndTs   = new Date(`${etDate}T09:30:00Z`).getTime() - etOffsetHrs * 3600000;
+
+    const pmBars = results.filter(b => b.t >= pmStartTs && b.t < pmEndTs);
 
     if (!pmBars.length) {
-      const sample = timestamps.slice(0, 3).map(t => ({ t, secOfDay: t % 86400 }));
       return new Response(JSON.stringify({
-        available: false, error: 'No PM bars found',
-        debug: { gmtoff, pmStartSec, pmEndSec, totalBars: timestamps.length, sample }
+        available: false, error: 'No PM bars in window',
+        debug: { etDate, pmStartTs, pmEndTs, totalBars: results.length,
+                 firstT: results[0]?.t, lastT: results[results.length-1]?.t }
       }), { headers });
     }
 
-    const high = Math.round(Math.max(...pmBars.map(b => b.high)) * 100) / 100;
-    const low  = Math.round(Math.min(...pmBars.map(b => b.low))  * 100) / 100;
+    const high = Math.round(Math.max(...pmBars.map(b => b.h)) * 100) / 100;
+    const low  = Math.round(Math.min(...pmBars.map(b => b.l)) * 100) / 100;
     const mid  = Math.round(((high + low) / 2) * 100) / 100;
 
     return new Response(JSON.stringify({
       available: true, high, low, mid,
       bars: pmBars.length,
-      from: new Date(pmBars[0].t * 1000).toISOString(),
-      to:   new Date(pmBars[pmBars.length - 1].t * 1000).toISOString(),
+      from: new Date(pmBars[0].t).toISOString(),
+      to:   new Date(pmBars[pmBars.length - 1].t).toISOString(),
     }), { headers });
 
   } catch(e) {
