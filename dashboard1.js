@@ -1363,7 +1363,11 @@ function renderDesk(md,sd){
         const stdR  = histRanges.length>1 ? Math.sqrt(histRanges.reduce((a,b)=>a+(b-avgR)**2,0)/histRanges.length) : avgR*0.3;
         // If market hasn't traded yet today, center z=0 (EM is a forecast, not realized)
         const mktClosed = !mktOpen;
-        const z     = mktClosed ? 0 : (stdR>0 ? (em-avgR)/stdR : 0);
+        // z = how far price has moved from today's open, normalized by the daily EM
+        // This shows intraday position on the bell curve (same logic as weekly WEM)
+        const dayOpenPrice = todayOpen || lastClose;
+        const intraMove = (mktOpen && cur && dayOpenPrice) ? cur - dayOpenPrice : 0;
+        const z     = mktClosed ? 0 : (em>0 ? intraMove/em : 0);
         const zRange = 1.8;
         const zCl   = mktClosed ? 0 : Math.max(-zRange, Math.min(zRange, z));
         const zCol  = mktClosed ? 'var(--cyan)' : Math.abs(z)>1.2?'#ff3355':Math.abs(z)>0.7?'#ff8800':Math.abs(z)>0.3?'#ffcc00':'#00ff88';
@@ -1420,25 +1424,29 @@ function renderDesk(md,sd){
       ${wem?`<div class="panel">
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ WEEKLY EXPECTED MOVE</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
-          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;">LOW</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#ff3355;">$${fmt(wem.wem_low,2)}</div></div>
-          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">ANCHOR</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;">$${fmt(wem.wem_mid,2)}</div></div>
-          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;">HIGH</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#00ff88;">$${fmt(wem.wem_high,2)}</div></div>
+          ${(()=>{
+            const wLo  = wem.wem_low  || wem.static_wem_low  || null;
+            const wHi  = wem.wem_high || wem.static_wem_high || null;
+            const wMid = wem.wem_mid  || wem.friday_close    || null;
+            const p    = cur || wMid  || 0;
+            const pct2 = wHi>wLo ? Math.min(Math.max((p-wLo)/(wHi-wLo)*100,2),98) : 50;
+            const outside = p>wHi || p<wLo;
+            const labelColor = outside?'#ff3355':'#000';
+            const labelBg    = outside?'#ff3355':'var(--cyan)';
+            return `
+          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;">LOW</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#ff3355;">$${fmt(wLo,2)}</div></div>
+          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">ANCHOR</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;">$${fmt(wMid,2)}</div></div>
+          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;">HIGH</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#00ff88;">$${fmt(wHi,2)}</div></div>
         </div>
-        ${(()=>{
-          const lo=wem.wem_low, hi=wem.wem_high, mid2=wem.wem_mid;
-          const p=cur||mid2||0;
-          const pct2=hi>lo?Math.min(Math.max((p-lo)/(hi-lo)*100,2),98):50;
-          const outside=p>hi||p<lo;
-          const labelColor=outside?'#ff3355':'#000';
-          const labelBg=outside?'#ff3355':'var(--cyan)';
-          return `<div style="position:relative;height:44px;background:linear-gradient(90deg,rgba(255,51,85,0.55),rgba(255,136,0,0.2),rgba(0,255,136,0.4),rgba(255,136,0,0.2),rgba(255,51,85,0.55));border-radius:4px;overflow:visible;margin-bottom:8px;">
-            <div style="position:absolute;left:${pct2}%;top:0;bottom:0;width:2px;background:${outside?'#ff3355':'var(--cyan)'};transform:translateX(-50%);box-shadow:0 0 6px ${outside?'#ff335588':'var(--cyan)'};border-radius:2px;z-index:2;"></div>
-            <div style="position:absolute;left:${pct2}%;top:50%;transform:translate(-50%,-50%);background:${labelBg};color:${labelColor};font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;padding:2px 7px;border-radius:3px;white-space:nowrap;z-index:3;box-shadow:0 2px 6px rgba(0,0,0,0.5);">$${fmt(p,2)}</div>
-            <div style="position:absolute;left:4px;bottom:4px;font-family:'Orbitron',monospace;font-size:7px;color:rgba(255,80,80,0.9);">$${fmt(lo,2)}</div>
-            <div style="position:absolute;right:4px;bottom:4px;font-family:'Orbitron',monospace;font-size:7px;color:rgba(0,255,136,0.9);">$${fmt(hi,2)}</div>
-          </div>
-          <div style="font-family:'Orbitron',monospace;font-size:9px;text-align:center;padding:4px;border-radius:3px;color:${outside?'#ff3355':'#00ff88'};background:${outside?'rgba(255,51,85,0.1)':'rgba(0,255,136,0.1);'};">${p>hi?'▲ ABOVE WEM HIGH':p<lo?'▼ BELOW WEM LOW':'✓ INSIDE WEM RANGE'}</div>`;
-        })()}
+        <div style="position:relative;height:44px;background:linear-gradient(90deg,rgba(255,51,85,0.55),rgba(255,136,0,0.2),rgba(0,255,136,0.4),rgba(255,136,0,0.2),rgba(255,51,85,0.55));border-radius:4px;overflow:visible;margin-bottom:8px;">
+          <div style="position:absolute;left:${pct2}%;top:0;bottom:0;width:2px;background:${outside?'#ff3355':'var(--cyan)'};transform:translateX(-50%);box-shadow:0 0 6px ${outside?'#ff335588':'var(--cyan)'};border-radius:2px;z-index:2;"></div>
+          <div style="position:absolute;left:${pct2}%;top:50%;transform:translate(-50%,-50%);background:${labelBg};color:${labelColor};font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;padding:2px 7px;border-radius:3px;white-space:nowrap;z-index:3;box-shadow:0 2px 6px rgba(0,0,0,0.5);">$${fmt(p,2)}</div>
+          <div style="position:absolute;left:4px;bottom:4px;font-family:'Orbitron',monospace;font-size:7px;color:rgba(255,80,80,0.9);">$${fmt(wLo,2)}</div>
+          <div style="position:absolute;right:4px;bottom:4px;font-family:'Orbitron',monospace;font-size:7px;color:rgba(0,255,136,0.9);">$${fmt(wHi,2)}</div>
+        </div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;text-align:center;padding:4px;border-radius:3px;color:${outside?'#ff3355':'#00ff88'};background:${outside?'rgba(255,51,85,0.1)':'rgba(0,255,136,0.1);'};">${p>wHi?'▲ ABOVE WEM HIGH':p<wLo?'▼ BELOW WEM LOW':'✓ INSIDE WEM RANGE'}</div>
+            `;
+          })()}
       </div>`:'<div class="panel"><div class="no-data">IV needed</div></div>'}
     </div>
 
