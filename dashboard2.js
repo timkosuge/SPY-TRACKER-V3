@@ -3076,6 +3076,126 @@ async function renderLiquidity() {
 }
 
 // ─────────────────────────────────────────────
+// MICHIGAN CONSUMER SENTIMENT (FRED)
+// ─────────────────────────────────────────────
+async function loadMichiganSentiment() {
+  const el = $('michiganPanel');
+  if (!el) return;
+  try {
+    // Re-use the fred proxy cache already fetched by macro tab if available
+    let fredData = null;
+    try {
+      const r = await fetch('/fred?t=' + Date.now());
+      if (r.ok) fredData = await r.json();
+    } catch(e) {}
+
+    const S = fredData?.series || {};
+    const umcs = S.UMCSENT;
+    if (!umcs) {
+      el.innerHTML = '<div class="no-data">Michigan Sentiment — data unavailable (FRED)</div>';
+      return;
+    }
+
+    const val = umcs.latest;
+    const prev = umcs.prev;
+    const chg = val != null && prev != null ? val - prev : null;
+    const trend = umcs.trend;
+    const history = umcs.history || [];
+    const color = val >= 90 ? '#00ff88' : val >= 75 ? '#88cc00' : val >= 60 ? '#ffcc00' : val >= 45 ? '#ff8800' : '#ff3355';
+    const signal = val >= 90 ? 'CONFIDENT' : val >= 75 ? 'POSITIVE' : val >= 60 ? 'CAUTIOUS' : val >= 45 ? 'PESSIMISTIC' : 'RECESSION FEAR';
+
+    // Sparkline
+    const spark = (hist, col, h=60) => {
+      if (!hist || hist.length < 2) return '';
+      const vals = hist.map(d => d.v).filter(v => v != null);
+      if (vals.length < 2) return '';
+      const min = Math.min(...vals), max = Math.max(...vals);
+      const range = max - min || 1;
+      const W = 400, H = h, P = 4;
+      const x = i => P + (i / (vals.length-1)) * (W - P*2);
+      const y = v => H - P - ((v-min)/range) * (H - P*2);
+      const pts = vals.map((v,i) => x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
+      const fill = x(0).toFixed(1)+','+H+' '+pts+' '+x(vals.length-1).toFixed(1)+','+H;
+      return '<svg width="100%" height="'+h+'" viewBox="0 0 '+(W+20)+' '+(H+4)+'" style="display:block;margin-top:8px;">' +
+        '<polygon points="'+fill+'" fill="'+col+'" opacity="0.12"/>' +
+        '<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.5"/>' +
+        '<circle cx="'+x(vals.length-1).toFixed(1)+'" cy="'+y(vals[vals.length-1]).toFixed(1)+'" r="3" fill="'+col+'"/>' +
+        // Historical reference lines at 60, 75, 90
+        [60,75,90].map(ref => {
+          if (ref < min || ref > max) return '';
+          const yy = y(ref).toFixed(1);
+          return '<line x1="'+P+'" y1="'+yy+'" x2="'+(W-P)+'" y2="'+yy+'" stroke="'+col+'" stroke-width="0.5" opacity="0.25" stroke-dasharray="3,3"/>'+
+                 '<text x="'+(W+2)+'" y="'+(parseFloat(yy)+3)+'" font-size="8" fill="'+col+'" opacity="0.5" font-family="Share Tech Mono,monospace">'+ref+'</text>';
+        }).join('') +
+        '</svg>';
+    };
+
+    // Historical context
+    const allVals = history.map(d => d.v).filter(v => v != null);
+    const avg10y = allVals.length ? (allVals.reduce((a,b)=>a+b,0)/allVals.length).toFixed(1) : null;
+    const vsAvg = avg10y ? (val - parseFloat(avg10y)).toFixed(1) : null;
+
+    el.innerHTML =
+      '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">' +
+        '<div style="text-align:center;">' +
+          '<div style="font-family:Share Tech Mono,monospace;font-size:42px;font-weight:900;color:'+color+';line-height:1;">'+val.toFixed(1)+'</div>' +
+          '<div style="font-family:Orbitron,monospace;font-size:9px;letter-spacing:1.5px;color:'+color+';margin-top:4px;">'+signal+'</div>' +
+          (chg!=null?'<div style="font-size:11px;color:'+(chg>=0?'#00ff88':'#ff3355')+';margin-top:4px;">'+(chg>=0?'+':'')+chg.toFixed(1)+' vs prior</div>':'') +
+        '</div>' +
+        '<div>' +
+          '<div style="font-size:12px;color:var(--text2);line-height:1.6;">University of Michigan survey of ~500 consumers on personal finances and broader economy. One of the longest-running sentiment series — data back to 1952. ' +
+          'Readings above 90 signal consumer confidence driving spending. Below 60 = recessionary pessimism.</div>' +
+          (avg10y?'<div style="font-size:11px;color:var(--text3);margin-top:6px;">Historical avg (this period): <span style="color:'+color+'">'+avg10y+'</span> · Current '+(vsAvg>=0?'<span style="color:#00ff88">+'+vsAvg+' above avg</span>':'<span style="color:#ff8800">'+vsAvg+' below avg</span>')+'</div>':'') +
+          spark(history, color, 60) +
+          '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Source: FRED / University of Michigan · Monthly · ' + (umcs.latest_date||'') + '</div>' +
+        '</div>' +
+      '</div>';
+
+  } catch(e) {
+    if ($('michiganPanel')) $('michiganPanel').innerHTML = '<div class="no-data">Michigan Sentiment unavailable: ' + e.message + '</div>';
+  }
+}
+
+// ─────────────────────────────────────────────
+// MARGIN DEBT (FINRA via liquidity.js)
+// ─────────────────────────────────────────────
+async function loadMarginDebtSentiment() {
+  const el = $('marginDebtPanel');
+  if (!el) return;
+  // liquidity.js populates window._liquidityData
+  const ld = window._liquidityData?.margin;
+  if (!ld || !ld.margin_debt) {
+    el.innerHTML = '<div class="no-data">Margin debt data loading... (check liquidity tab first)</div>';
+    return;
+  }
+  const debt = ld.margin_debt;
+  const prev = ld.prev_margin_debt;
+  const momChg = prev ? debt - prev : null;
+  const momPct = prev ? ((debt - prev) / prev * 100) : null;
+  // Context: margin debt as sentiment — rising = bullish leverage, falling sharply = forced deleveraging
+  const color = momPct == null ? '#ffcc00' : momPct > 5 ? '#ff8800' : momPct > 0 ? '#ffcc00' : momPct > -5 ? '#00ff88' : '#ff3355';
+  const signal = momPct == null ? '—' : momPct > 8 ? 'LEVERAGED EUPHORIA' : momPct > 3 ? 'RISING LEVERAGE' : momPct > -3 ? 'STABLE' : momPct > -8 ? 'DELEVERAGING' : 'FORCED SELLING';
+  const fmtB = v => { const abs=Math.abs(v); return (v<0?'-':'')+'$'+(abs>=1e12?(abs/1e12).toFixed(2)+'T':abs>=1e9?(abs/1e9).toFixed(1)+'B':(abs/1e6).toFixed(0)+'M'); };
+
+  el.innerHTML =
+    '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">' +
+      '<div style="text-align:center;">' +
+        '<div style="font-family:Share Tech Mono,monospace;font-size:36px;font-weight:900;color:'+color+';line-height:1;">'+fmtB(debt)+'</div>' +
+        '<div style="font-family:Orbitron,monospace;font-size:9px;letter-spacing:1.5px;color:'+color+';margin-top:4px;">'+signal+'</div>' +
+        (momPct!=null?'<div style="font-size:11px;color:'+(momPct>=0?'#ffcc00':'#ff3355')+';margin-top:4px;">'+(momPct>=0?'+':'')+momPct.toFixed(1)+'% MoM</div>':'') +
+      '</div>' +
+      '<div>' +
+        '<div style="font-size:12px;color:var(--text2);line-height:1.6;">FINRA margin debt is total borrowed money used to buy securities. ' +
+        'Rising margin debt signals leveraged optimism — investors confident enough to borrow. ' +
+        'Sharp drops are a red flag: forced deleveraging accelerates selloffs. Peaked at $936B in Oct 2021 before the 2022 bear market.</div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:8px;">Free credit cash: <span style="color:#00ccff">'+fmtB(ld.free_credit_cash||0)+'</span> · ' +
+        'Free credit margin: <span style="color:#00ccff">'+fmtB(ld.free_credit_margin||0)+'</span></div>' +
+        '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Source: FINRA · Monthly · ' + (ld.date||'') + '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+// ─────────────────────────────────────────────
 // AAII SENTIMENT
 // ─────────────────────────────────────────────
 async function loadAAII() {
@@ -5147,9 +5267,6 @@ function _renderMacroHTML(data) {
       ${seriesCard('CSUSHPISA', 'Case-Shiller Home Price Index',
         'Nationwide home price index — the gold standard for tracking US housing prices. Includes repeat-sale methodology to track actual price changes.',
         'Home prices rose 40% from 2020-2022 — the largest 2-year gain ever recorded. Fell 5% in 2022-2023 then re-accelerated. Affordability hit the worst levels since records began.')}
-      ${seriesCard('HOUST', 'Housing Starts',
-        'New residential construction. Housing is 15-18% of GDP when you include construction, real estate services, and furniture. Leading indicator — builders rarely break ground unless confident.',
-        'Housing starts collapsed 30% in 2022 as mortgage rates spiked. A sustained recovery requires either lower rates or demographic demand overwhelming affordability concerns.')}
     </div>
 
     <!-- MONETARY & LIQUIDITY -->
@@ -5215,24 +5332,12 @@ function _renderMacroHTML(data) {
       ${seriesCard('BAMLH0A0HYM2', 'High Yield Credit Spread',
         'The extra yield investors demand to hold "junk" bonds vs safe Treasuries. Tight spreads = calm markets. Wide spreads = stress and tightening financial conditions.',
         'HY spreads blew out to 11% in March 2020 and 8.5% in 2022. Compressed to near record lows of 2.8% in 2024 — pricing in almost no default risk.')}
-      ${seriesCard('BAMLC0A0CM', 'Investment Grade Credit Spread',
-        'The extra yield investment-grade corporate bonds pay vs equivalent Treasuries. Tighter than HY but moves in the same direction. When IG spreads widen, the credit cycle is turning.',
-        'IG spreads hit 3.6% in March 2020 and 1.8% in 2022. Near record tights of 0.85% in late 2024 — suggesting credit markets were pricing in a near-perfect macro scenario.')}
-      ${seriesCard('DGS2', '2-Year Treasury Yield',
-        'The most sensitive yield to near-term Fed policy expectations. When the 2Y trades above the Fed Funds Rate, markets expect hikes. When below, cuts are priced in.',
-        'The 2Y yield peaked at 5.08% in 2023 — highest since 2006. It leads Fed action rather than following it: the 2Y usually "tells" the Fed what to do before they announce it.')}
       ${seriesCard('DGS30', '30-Year Treasury Yield',
         'Long bond yield. Sensitive to inflation expectations and fiscal sustainability concerns. A rising 30Y relative to 10Y signals "term premium" — investors demanding more compensation for long-duration risk.',
         'The 30Y briefly traded at 5.18% in 2023 — highest since 2007. The term premium (extra compensation for duration) returning after a decade of near-zero is a structural shift for asset allocation.')}
       ${seriesCard('T10Y3M', 'Yield Curve (10Y minus 3M)',
         'Alternative yield curve measure. Some economists prefer this over 10Y-2Y as a recession predictor. The NY Fed uses this in their recession probability model.',
         'Inverted more deeply than 10Y-2Y in 2023. NY Fed recession probability model peaked above 70% — the highest since the early 1980s. A reminder that yield curve inversions signal probabilities, not certainties.')}
-      ${seriesCard('MORTGAGE30US', '30-Year Mortgage Rate',
-        'The interest rate on a 30-year fixed mortgage — the most important rate for US housing affordability. Tracks the 10Y Treasury yield plus a spread.',
-        'Surged from 3% to 7.8% in 2023 — the largest and fastest increase in mortgage rates since the early 1980s. Housing affordability hit the worst levels ever recorded. Volume collapsed. Prices stayed elevated (locked-in effect).')}
-      ${seriesCard('DFII10', '10-Year Real Yield (TIPS)',
-        'The 10Y Treasury yield adjusted for expected inflation. The real cost of borrowing. Negative real yields = financial repression (savers lose to inflation). High real yields = restrictive financial conditions.',
-        'Real yields went deeply negative (-1%) in 2021-2022 — the most accommodative financial conditions in decades. Surged to +2.5% in 2023 — a near-record swing that tightened conditions dramatically.')}
     </div>
 
     <!-- CONSUMER -->
@@ -5250,15 +5355,9 @@ function _renderMacroHTML(data) {
       ${seriesCard('PSAVERT', 'Personal Savings Rate',
         'Percentage of disposable income saved rather than spent. High = potential spending fuel. Low = consumers stretched.',
         'Surged to 33% in April 2020 then crashed as consumers spent down their stimulus buffer.')}
-      ${seriesCard('DRCCLACBS', 'Credit Card Delinquency Rate',
-        'Percentage of credit card balances 30+ days past due. Rising delinquencies signal consumer stress before unemployment rises. A leading recession indicator.',
-        'Hit record lows in 2021 (stimulus) then climbed steadily as stimulus wore off. Approaching 2008 pre-crisis levels in 2024-2025.')}
       ${seriesCard('DRSFRMACBS', 'Mortgage Delinquency Rate',
         'Percentage of mortgages past due. Spiked to 10% in 2010 during the housing crisis. Rising delinquencies forecast foreclosures and housing price pressure.',
         'Remained low post-COVID due to forbearance programs and home price appreciation. A key watch item as adjustable-rate mortgages reset.')}
-      ${seriesCard('REVOLSL', 'Revolving Credit Outstanding',
-        'Total credit card debt outstanding. Growing faster than income = consumers borrowing to maintain spending. A sign of stress when combined with high rates.',
-        'Hit $1.3T in 2024 — record high. Combined with near-record interest rates of 21%+, this is the largest consumer debt burden since the 2008 crisis.')}
       ${seriesCard('TOTALSL', 'Total Consumer Credit',
         'All consumer debt: credit cards + auto loans + student loans. Measures total household leverage.',
         'Exceeded $5T for the first time in 2024. The quality of this debt (who holds it, at what rates) matters as much as the quantity.')}
