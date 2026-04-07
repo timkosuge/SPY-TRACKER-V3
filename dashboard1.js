@@ -384,7 +384,7 @@ function renderHub(md,sd){
         </div>
         <!-- NEW YORK SESSION STATUS -->
         <div style="border-left:1px solid var(--border);padding-left:16px;">
-        <div id="hubNYBlock" onclick="openCityCam('newyork')" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for New York live cam">
+        <div id="hubNYBlock" onclick="openCityCam('newyork')" onmousedown="_nyLongPressStart()" onmouseup="_nyLongPressCancel()" onmouseleave="_nyLongPressCancel()" ontouchstart="_nyLongPressStart()" ontouchend="_nyLongPressCancel()" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for New York live cam | Hold for music">
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${isMarketHours?'#00ff88':(!isMarketHours&&!isPremarket&&!isAfterHours)?'#ff3355':'var(--text3)'};">NEW YORK</span>
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${sessionColor};background:${sessionColor}22;">${isMarketHours?'OPEN':isPremarket?'PRE':'CLOSED'}</span>
           </div>
