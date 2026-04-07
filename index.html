@@ -3078,8 +3078,8 @@ async function spyPlayerInit() {
   }
   const audio = document.getElementById('spyAudio');
   const audioB = document.getElementById('spyAudioB');
-  audio.volume = 0.7;
-  audioB.volume = 0.7;
+  audio.volume = 0.25;
+  audioB.volume = 0.25;
   // ended handler - only fire if not crossfading (crossfade handles transition)
   audio.addEventListener('ended', () => { if (!SPY_PLAYER.crossfading && !SPY_PLAYER.loop) spyNext(); });
   audioB.addEventListener('ended', () => { if (!SPY_PLAYER.crossfading && !SPY_PLAYER.loop) spyNext(); });
@@ -3381,16 +3381,6 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     setTimeout(() => {
       if (!SPY_PLAYER.initiated && SPY_PLAYER.playlist.length) {
         spyPlayerStart();
-        // Open the panel so they know music is playing
-        const panel = document.getElementById('spyMusicPanel');
-        const btn   = document.getElementById('spyMusicBtn');
-        if (panel && !panel.classList.contains('open')) {
-          panel.classList.add('open');
-          if (btn) btn.classList.add('active');
-          // Sync sidebar music button active state
-          const sideBtn = document.getElementById('rsb-music');
-          if (sideBtn) sideBtn.classList.add('music-active');
-        }
       }
     }, 300);
   }
