@@ -817,6 +817,7 @@ function renderWEM(md){
         <div class="wem-big-sub">${price<hi?'+':''}$${fmt(hi-price,2)} from here</div>
       </div>`;
 
+    const atmIV = (cur.atm_iv && cur.atm_iv>0) ? cur.atm_iv : null;
     // ── Show comparison row if in static mode ──────────────────────────────
     let comparisonHtml = '';
     if (isStatic) {
@@ -845,7 +846,6 @@ function renderWEM(md){
     const compEl = $('wemCompareRow');
     if (compEl) compEl.innerHTML = comparisonHtml;
 
-    const atmIV = (cur.atm_iv && cur.atm_iv>0) ? cur.atm_iv : null;
     // Use halfRange (already mode-aware: static or dynamic) as the basis for all EM boxes
     const iv = halfRange / (mid * Math.sqrt(6/365) * 0.70);
     const dailyEM   = mid * iv * Math.sqrt(1/365)  * 0.70;
