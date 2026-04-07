@@ -317,6 +317,9 @@ def fetch_spy_options_cboe():
         # Get the next 5 unique expiry dates
         near_expiries = expiry_dates[:8]
         nearest_exp   = expiry_dates[0] if expiry_dates else None
+        # For ATM IV: use nearest Friday expiry (weekly) — 0DTE IV is massively
+        # inflated on volatile days and gives a misleading WEM/EM calculation
+        friday_exp = next((e for e in expiry_dates if e.weekday() == 4), nearest_exp)
 
         # ── PCR — all expiries combined ────────────────────────────────────────
         total_call_vol = sum(o["vol"] for o in parsed if o["cp"] == "C")
@@ -329,16 +332,16 @@ def fetch_spy_options_cboe():
 
         # ── ATM IV ─────────────────────────────────────────────────────────────
         atm_iv = None
-        if nearest_exp:
+        if friday_exp:
             atm_opts = [o for o in parsed
-                        if o["exp"] == nearest_exp
+                        if o["exp"] == friday_exp
                         and o["cp"] == "C"
                         and abs(o["strike"] - spot) < 5
                         and o["iv"] > 0]
             if atm_opts:
                 closest = min(atm_opts, key=lambda x: abs(x["strike"] - spot))
                 atm_iv = round(closest["iv"], 4)
-                print(f"  ATM IV ({nearest_exp}): {atm_iv*100:.2f}%")
+                print(f"  ATM IV ({friday_exp}): {atm_iv*100:.2f}%")
 
         # ── IV metrics from nearest monthly (30+ DTE) ──────────────────────────
         iv_rank = None
@@ -1148,6 +1151,10 @@ def export_market_data(conn, options_data=None):
         output["top_put_strikes"]  = options_data.get("options_summary", {}).get("top_put_strikes", [])
         output["walls_by_expiry"]  = options_data.get("walls_by_expiry", [])
         output["gex"]             = options_data.get("gex", None)
+        output["atm_iv"]          = options_data.get("atm_iv", None)
+        # Patch atm_iv onto gex object so dashboard can read it from md.gex.atm_iv
+        if output["gex"] and output["atm_iv"]:
+            output["gex"]["atm_iv"] = output["atm_iv"]
         print(f"  Max pain: {len(output['max_pain'])} expirations")
     else:
         output["max_pain"]        = []
