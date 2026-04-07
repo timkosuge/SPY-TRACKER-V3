@@ -5172,10 +5172,10 @@ function _renderMacroHTML(data) {
       ${seriesCard('WTREGEN', 'Treasury General Account (TGA)',
         'The US Government checking account at the Fed. When Treasury spends from TGA, money flows into the economy (bullish). When Treasury rebuilds TGA, it drains liquidity (bearish). Debt ceiling cycles make this volatile.',
         'The debt ceiling fight in 2023 caused TGA to drop to near-zero, then Treasury refilled it rapidly after resolution — draining $700B+ from markets in weeks and contributing to summer volatility.')}
-      ${seriesCard('WSHOMCB', 'Fed MBS Holdings',
+      ${seriesCard('WSHOMCG', 'Fed MBS Holdings',
         'Fed holdings of mortgage-backed securities. The Fed bought MBS to suppress mortgage rates. Slow runoff means the private market must absorb supply the Fed once bought — keeping mortgage rates elevated.',
         'Fed MBS peaked at $2.7T in 2022. Unlike Treasuries, MBS prepay unpredictably — making QT less controllable and keeping the Fed in the housing market longer than intended.')}
-      ${seriesCard('WSTSECOUT', 'Fed Treasury Holdings',
+      ${seriesCard('TREAST', 'Fed Treasury Holdings',
         'Fed holdings of US Treasury securities — the core of QE/QT. When the Fed holds Treasuries, it suppresses yields. Reducing holdings forces the market to absorb supply.',
         'Fed Treasury holdings peaked at $5.7T in 2022. The ongoing unwind forces primary dealers and foreign holders to absorb what the Fed no longer buys — structural upward pressure on yields.')}
       ${seriesCard('BOGMBASE', 'Monetary Base',
