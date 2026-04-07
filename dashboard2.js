@@ -4781,7 +4781,11 @@ async function renderMacro() {
   if (!el) return;
   if (_macroLoading) return;
 
-  if (_macroData) { _renderMacroHTML(_macroData); return; }
+  if (_macroData) {
+    const count = Object.keys(_macroData.series || {}).length;
+    if (count >= 50) { _renderMacroHTML(_macroData); return; }
+    _macroData = null; // partial response — re-fetch
+  }
 
   _macroLoading = true;
   el.innerHTML = `<div style="padding:60px;text-align:center;color:var(--text3);">
@@ -5801,28 +5805,39 @@ async function refreshTransitionAI() {
 let _sovereignData = null;
 let _sovereignLoading = false;
 
-async function renderSovereign() {
+async function renderSovereign(force) {
   const el = document.getElementById('sovereignChessContent') || document.getElementById('sovereignContent');
   if (!el) return;
   if (_sovereignLoading) return;
-  if (_sovereignData) { _renderSovereignHTML(_sovereignData); return; }
+  // Use cache only if it has enough series and force-refresh not requested
+  if (_sovereignData && !force) {
+    const count = Object.keys(_sovereignData.series || {}).length;
+    if (count >= 50) { _renderSovereignHTML(_sovereignData); return; }
+    // Cache is partial — discard and re-fetch
+    _sovereignData = null;
+  }
 
-  el.innerHTML = `<div style="padding:40px;text-align:center;">
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ffcc00;margin-bottom:8px;">⬡ SOVEREIGN CHESS</div>
-    <div style="font-size:12px;color:var(--text3);">Loading geopolitical financial data from FRED...</div>
-  </div>`;
+  el.innerHTML = '<div style="padding:40px;text-align:center;">' +
+    '<div style="font-family:Orbitron,monospace;font-size:10px;letter-spacing:2px;color:#ffcc00;margin-bottom:8px;">⬡ SOVEREIGN CHESS</div>' +
+    '<div style="font-size:12px;color:var(--text3);">Loading geopolitical financial data from FRED...</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:8px;">Fetching ' + Object.keys(window._FRED_SERIES_COUNT || {}).length + ' economic series — may take a few seconds</div>' +
+  '</div>';
 
   _sovereignLoading = true;
   try {
     const r = await fetch('/fred?t=' + Date.now());
     if (!r.ok) throw new Error('FRED endpoint ' + r.status);
-    _sovereignData = await r.json();
+    const data = await r.json();
+    const count = Object.keys(data.series || {}).length;
+    if (count < 10) throw new Error('Only ' + count + ' series returned — FRED API may be rate limiting. Try again in 30 seconds.');
+    _sovereignData = data;
     _renderSovereignHTML(_sovereignData);
   } catch(e) {
-    el.innerHTML = `<div style="padding:40px;text-align:center;color:#ff3355;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;margin-bottom:8px;">DATA UNAVAILABLE</div>
-      <div style="font-size:12px;">${e.message}</div>
-    </div>`;
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:#ff3355;">' +
+      '<div style="font-family:Orbitron,monospace;font-size:10px;margin-bottom:8px;">DATA UNAVAILABLE</div>' +
+      '<div style="font-size:12px;">' + e.message + '</div>' +
+      '<div style="margin-top:16px;"><button onclick="renderSovereign(true)" style="background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.3);color:#ffcc00;padding:8px 20px;border-radius:4px;cursor:pointer;font-family:Orbitron,monospace;font-size:9px;letter-spacing:1px;">↻ RETRY</button></div>' +
+    '</div>';
   }
   _sovereignLoading = false;
 }
@@ -6187,7 +6202,7 @@ function _renderSovereignHTML(data) {
     </div>
 
     <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);text-align:right;padding:8px 0;">
-      Data: FRED (US Treasury TIC, BOJ, OECD) · Updated: ${data.updated ? new Date(data.updated).toLocaleString() : '—'} · ${data.seriesCount || 0} series loaded
+      Data: FRED (US Treasury TIC, BOJ, OECD) · Updated: ${data.updated ? new Date(data.updated).toLocaleString() : '—'} · ${data.seriesCount || Object.keys(S).length} of 64 series loaded <button onclick="renderSovereign(true)" style="margin-left:12px;background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.25);color:#ffcc00;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:Orbitron,monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH DATA</button>
     </div>
   </div>`;
   } catch(sovereignErr) {
