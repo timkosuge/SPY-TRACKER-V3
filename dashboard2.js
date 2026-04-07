@@ -846,10 +846,8 @@ function renderWEM(md){
     if (compEl) compEl.innerHTML = comparisonHtml;
 
     const atmIV = (cur.atm_iv && cur.atm_iv>0) ? cur.atm_iv : null;
-    // In static mode use the locked Friday IV; in dynamic use live ATM IV
-    const iv = isStatic
-      ? (staticIV || halfRange/(mid*Math.sqrt(6/365)*0.70))
-      : ((cur.atm_iv && cur.atm_iv>0) ? cur.atm_iv : halfRange/(mid*Math.sqrt(6/365)*0.70));
+    // Use halfRange (already mode-aware: static or dynamic) as the basis for all EM boxes
+    const iv = halfRange / (mid * Math.sqrt(6/365) * 0.70);
     const dailyEM   = mid * iv * Math.sqrt(1/365)  * 0.70;
     const weeklyEM  = halfRange;
     const monthlyEM = mid * iv * Math.sqrt(21/365) * 0.70;
