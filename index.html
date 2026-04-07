@@ -3257,7 +3257,7 @@ function spyMute() {
     if (slider) slider.value = 0;
     if (icon) icon.textContent = '🔇';
   } else {
-    audio.volume = SPY_PLAYER._prevVol || 0.7;
+    audio.volume = SPY_PLAYER._prevVol || 0.25;
     if (slider) slider.value = audio.volume;
     if (icon) icon.textContent = '🔊';
   }
