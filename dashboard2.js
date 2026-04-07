@@ -5972,6 +5972,7 @@ function _renderSovereignHTML(data) {
     </svg>`;
   };
 
+  try {
   el.innerHTML = `<div style="padding:16px 16px;max-width:1400px;margin:0 auto;">
 
     <!-- THESIS HEADER -->
@@ -6068,19 +6069,19 @@ function _renderSovereignHTML(data) {
         <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Key names in the AI/robotics buildout</div>
         ${japanStocks.slice(0,6).map(s => {
           const q = lq[s.sym] || {};
-          const price = q.price ? '$' + q.price.toFixed(2) : '—';
+          const price = q.price ? '$' + q.price.toFixed(2) : '\u2014';
           const chg = q.pct_change;
           const chgColor = chg == null ? 'var(--text3)' : chg > 0 ? '#00ff88' : '#ff3355';
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">
-            <div>
-              <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text);">${s.name}</span>
-              <span style="font-size:9px;color:var(--text3);margin-left:6px;">${s.desc}</span>
-            </div>
-            <div style="text-align:right;">
-              <div style="font-family:'Share Tech Mono',monospace;font-size:12px;">${price}</div>
-              ${chg != null ? `<div style="font-size:10px;color:${chgColor};">${chg > 0 ? '+' : ''}${chg.toFixed(2)}%</div>` : ''}
-            </div>
-          </div>`;
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">' +
+            '<div>' +
+              '<span style="font-family:Share Tech Mono,monospace;font-size:12px;color:var(--text);">' + s.name + '</span>' +
+              '<span style="font-size:9px;color:var(--text3);margin-left:6px;">' + s.desc + '</span>' +
+            '</div>' +
+            '<div style="text-align:right;">' +
+              '<div style="font-family:Share Tech Mono,monospace;font-size:12px;">' + price + '</div>' +
+              (chg != null ? '<div style="font-size:10px;color:' + chgColor + ';">' + (chg > 0 ? '+' : '') + chg.toFixed(2) + '%</div>' : '') +
+            '</div>' +
+          '</div>';
         }).join('')}
         <div style="font-size:10px;color:var(--text3);margin-top:6px;">Live prices via market data feed</div>
       </div>
@@ -6189,6 +6190,12 @@ function _renderSovereignHTML(data) {
       Data: FRED (US Treasury TIC, BOJ, OECD) · Updated: ${data.updated ? new Date(data.updated).toLocaleString() : '—'} · ${data.seriesCount || 0} series loaded
     </div>
   </div>`;
+  } catch(sovereignErr) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:#ff3355;">' +
+      '<div style="font-family:Orbitron,monospace;font-size:10px;margin-bottom:8px;">RENDER ERROR</div>' +
+      '<div style="font-size:12px;">' + sovereignErr.message + '</div></div>';
+    console.error('Sovereign render error:', sovereignErr);
+  }
 
   // Auto-generate AI analysis
   setTimeout(generateSovereignAI, 500);
