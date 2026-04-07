@@ -6772,8 +6772,10 @@ function openWeatherWindow() {
       const [desc, icon] = weatherDesc(wc);
       const curr = d.current;
       const daily = d.daily;
-      const sunrise = new Date(daily.sunrise[0]).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'});
-      const sunset  = new Date(daily.sunset[0]).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'});
+      // Open-Meteo sunrise/sunset are local time strings like "2026-04-07T06:23" — parse directly
+      const parseSunTime = s => { const parts = s.split('T')[1].split(':'); const h=parseInt(parts[0]); const m=parts[1]; const ampm=h>=12?'PM':'AM'; return `${h>12?h-12:h||12}:${m} ${ampm}`; };
+      const sunrise = parseSunTime(daily.sunrise[0]);
+      const sunset  = parseSunTime(daily.sunset[0]);
 
       // Hourly forecast — next 12 hours
       const now = new Date();
@@ -6813,7 +6815,8 @@ function openWeatherWindow() {
         <div style="max-height:220px;overflow-y:auto;">${hourlyHtml}</div>
       `;
     } catch(e) {
-      document.getElementById('weatherWinBody').innerHTML = '<div style="color:#ff3355;">Failed to load weather data.</div>';
+      console.error('Weather error:', e);
+      document.getElementById('weatherWinBody').innerHTML = `<div style="color:#ff3355;">Failed to load weather data.<br><span style="font-size:10px;color:var(--text3);">${e.message}</span></div>`;
     }
   }, () => {
     document.getElementById('weatherWinBody').innerHTML = '<div style="color:#ff8800;">Location access denied.</div>';
