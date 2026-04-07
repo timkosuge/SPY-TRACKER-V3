@@ -4135,6 +4135,7 @@ async function loadData(){
     // Patch F&G with CNN value immediately
     if (liveFG) md.fear_greed = liveFG;
     // Patch GEX + max pain with live CBOE data (overrides stale workflow data)
+    console.log('[GEX CHECK] liveGEX:', liveGEX ? JSON.stringify(liveGEX).slice(0,300) : 'null');
     if (liveGEX?.gex?.flip_point) {
       md.gex = liveGEX.gex;
       // Patch atm_straddle into md.gex so daily EM can use real straddle price
