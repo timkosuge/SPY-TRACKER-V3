@@ -5051,11 +5051,11 @@ function _renderMacroHTML(data) {
             ['📚','Plain English','Every metric explained so anyone can understand it'],
             ['📈','Charts','Up to 3 years of history on every indicator'],
             ['🔗','Sourced','Every number links back to its original FRED page'],
-          ].map(([icon,title,desc]) => `<div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:10px 12px;">
-            <div style="font-size:16px;margin-bottom:4px;">${icon}</div>
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);margin-bottom:3px;">${title}</div>
-            <div style="font-size:10px;color:var(--text3);line-height:1.4;">${desc}</div>
-          </div>`).join('')}
+          ].map(([icon,title,desc]) => '<div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:10px 12px;">' +
+            '<div style="font-size:16px;margin-bottom:4px;">' + icon + '</div>' +
+            '<div style="font-family:Orbitron,monospace;font-size:8px;color:var(--cyan);margin-bottom:3px;">' + title + '</div>' +
+            '<div style="font-size:10px;color:var(--text3);line-height:1.4;">' + desc + '</div>' +
+          '</div>').join('')}
         </div>
       </div>
 
@@ -5078,11 +5078,11 @@ function _renderMacroHTML(data) {
             ['BLS','bls.gov','Bureau of Labor Statistics — jobs, inflation, wages'],
             ['BEA','bea.gov','Bureau of Economic Analysis — GDP, trade, investment'],
             ['Federal Reserve','federalreserve.gov','Fed balance sheet, rates, monetary policy'],
-          ].map(([name,url,desc]) => `<div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.07);border-radius:3px;padding:7px 10px;flex:1;min-width:160px;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);margin-bottom:2px;">${name}</div>
-            <div style="font-size:9px;color:var(--text3);margin-bottom:3px;">${url}</div>
-            <div style="font-size:10px;color:var(--text2);">${desc}</div>
-          </div>`).join('')}
+          ].map(([name,url,desc]) => '<div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.07);border-radius:3px;padding:7px 10px;flex:1;min-width:160px;">' +
+            '<div style="font-family:Orbitron,monospace;font-size:8px;color:var(--cyan);margin-bottom:2px;">' + name + '</div>' +
+            '<div style="font-size:9px;color:var(--text3);margin-bottom:3px;">' + url + '</div>' +
+            '<div style="font-size:10px;color:var(--text2);">' + desc + '</div>' +
+          '</div>').join('')}
         </div>
       </div>
 
@@ -5097,10 +5097,10 @@ function _renderMacroHTML(data) {
             ['#8855ff','MONETARY','What is the Fed doing with money supply and its balance sheet? This directly moves asset prices.'],
             ['#ffcc00','RATES & CREDIT','The price of money. Yield curve shape predicts recessions. Credit spreads measure fear.'],
             ['#ff8800','CONSUMER','Are people confident? Consumer spending is 70% of GDP — sentiment leads actual spending.'],
-          ].map(([c,t,d]) => `<div style="border-left:2px solid ${c};padding:6px 10px;background:rgba(0,0,0,0.15);border-radius:0 3px 3px 0;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:${c};margin-bottom:3px;">${t}</div>
-            <div style="font-size:10px;color:var(--text2);line-height:1.4;">${d}</div>
-          </div>`).join('')}
+          ].map(([c,t,d]) => '<div style="border-left:2px solid ' + c + ';padding:6px 10px;background:rgba(0,0,0,0.15);border-radius:0 3px 3px 0;">' +
+            '<div style="font-family:Orbitron,monospace;font-size:8px;color:' + c + ';margin-bottom:3px;">' + t + '</div>' +
+            '<div style="font-size:10px;color:var(--text2);line-height:1.4;">' + d + '</div>' +
+          '</div>').join('')}
         </div>
       </div>
     </div>
@@ -5112,7 +5112,7 @@ function _renderMacroHTML(data) {
           <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:6px;">⬡ MACRO REGIME GAUGE</div>
           <div style="font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:${regColor};">${regLabel}</div>
           <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.7;max-width:600px;">${regimeExplain}</div>
-          ${regimeHistory ? `<div style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic;">📚 Similar periods: ${regimeHistory}</div>` : ''}
+          ${regimeHistory ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic;">📚 Similar periods: ' + regimeHistory + '</div>' : ''}
         </div>
         <div style="text-align:center;">
           <div style="font-family:'Share Tech Mono',monospace;font-size:42px;font-weight:900;color:${regColor};">${regScore > 0 ? '+' : ''}${regScore}</div>
@@ -5160,9 +5160,9 @@ function _renderMacroHTML(data) {
           ['#00ccff','GROWTH','GDP, retail sales, industrial output — how fast the economy is actually expanding.'],
           ['#8855ff','MONETARY','Fed tools: balance sheet size, money supply, and liquidity — directly impacts asset prices.'],
           ['#ffcc00','RATES & CREDIT','Interest rates and credit spreads tell you the market fear level and the cost of money.'],
-        ].map(([c,t,d]) => `<div style="background:var(--bg2);border-radius:3px;padding:8px;border-left:2px solid ${c};">
-          <div style="color:${c};font-family:'Orbitron',monospace;font-size:7px;margin-bottom:4px;">${t}</div>${d}
-        </div>`).join('')}
+        ].map(([c,t,d]) => '<div style="background:var(--bg2);border-radius:3px;padding:8px;border-left:2px solid ' + c + ';">' +
+          '<div style="color:' + c + ';font-family:Orbitron,monospace;font-size:7px;margin-bottom:4px;">' + t + '</div>' + d +
+        '</div>').join('')}
       </div>
     </div>
 
