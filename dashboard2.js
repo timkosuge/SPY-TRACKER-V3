@@ -3848,7 +3848,7 @@ async function refreshLiveData() {
         freshMd.fear_greed = _md.fear_greed;
         if (_md.gex?.flip_point) freshMd.gex = _md.gex;
         if (_md.max_pain?.length) freshMd.max_pain = _md.max_pain;
-        _md = freshMd;
+        _md = freshMd; window._macroMD = _md;
       }
       if (freshSd && freshSd.length) _sd = freshSd;
       _lastStaticRefresh = now;
@@ -3920,7 +3920,7 @@ async function refreshLiveData() {
         merged.quotes['SPY'].change     = spyOHLC.change;
         merged.quotes['SPY'].pct_change = spyOHLC.changePct;
       }
-      _md = merged;
+      _md = merged; window._macroMD = _md;
       
       // Re-render all live-data-dependent tabs
       renderHub(merged, _sd);
