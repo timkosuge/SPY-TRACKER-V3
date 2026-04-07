@@ -472,89 +472,101 @@
   .breach-day .bd-val{font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;}</style>
 
 <style>
-/* ── Right sidebar ──────────────────────────────────────────────── */
+/* ── Right sidebar — icon rail, overlay mode, no content displacement ── */
 #rightSidebar {
   position: fixed;
   right: 0;
-  top: 40px;
-  bottom: 140px;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 8000;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-evenly;
-  gap: 0;
-  background: var(--bg2);
+  gap: 2px;
+  background: rgba(10,10,20,0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-right: none;
-  border-radius: 8px 0 0 8px;
-  padding: 8px 0;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
-  overflow-y: auto;
-  overflow-x: hidden;
+  border-radius: 10px 0 0 10px;
+  padding: 10px 0;
+  box-shadow: -2px 0 20px rgba(0,0,0,0.5);
+  width: 40px;
 }
 
 .rsb-btn {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  width: 54px;
-  padding: 14px 4px;
+  width: 36px;
+  height: 36px;
   cursor: pointer;
   border-radius: 6px;
   transition: background 0.15s, color 0.15s;
   color: var(--text3);
   position: relative;
   user-select: none;
-  flex: 1;
-  max-height: 80px;
+  font-size: 15px;
 }
-.rsb-btn:hover { background: rgba(255,255,255,0.05); color: var(--text2); }
-.rsb-btn.active { background: rgba(0,204,255,0.1); color: var(--cyan); }
-.rsb-btn.ai-active { background: rgba(0,255,136,0.1); color: #00ff88; }
+.rsb-btn:hover { background: rgba(255,255,255,0.08); color: var(--text2); }
+.rsb-btn.active { background: rgba(0,204,255,0.12); color: var(--cyan); }
+.rsb-btn.ai-active { background: rgba(0,255,136,0.12); color: #00ff88; }
 
-.rsb-icon {
-  font-size: 16px;
-  line-height: 1;
-}
-.rsb-label {
+/* Tooltip — appears to the left on hover */
+.rsb-btn::before {
+  content: attr(title);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text2);
   font-family: 'Orbitron', monospace;
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 1px;
+  padding: 4px 8px;
+  border-radius: 4px;
   white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
 }
+.rsb-btn:hover::before { opacity: 1; }
+
+/* Hide the old text labels — icon only */
+.rsb-icon { font-size: 15px; line-height: 1; }
+.rsb-label { display: none; }
 
 .rsb-divider {
-  width: 32px;
+  width: 24px;
   height: 1px;
   background: var(--border);
-  margin: 3px 0;
+  margin: 4px 0;
 }
 
-/* Unread badge on FLOOR and MSG buttons */
+/* Unread badge */
 .rsb-badge {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  min-width: 14px;
-  height: 14px;
+  top: 3px;
+  right: 3px;
+  min-width: 13px;
+  height: 13px;
   background: #ff3355;
   color: #fff;
   font-family: 'Orbitron', monospace;
-  font-size: 8px;
+  font-size: 7px;
   border-radius: 7px;
-  padding: 0 3px;
+  padding: 0 2px;
   display: none;
   align-items: center;
   justify-content: center;
-  line-height: 14px;
+  line-height: 13px;
 }
 
-/* Adjust content area so nothing hides behind the sidebar */
-.content { padding-right: 70px !important; }
-.tab-panel { padding-right: 64px; box-sizing: border-box; }
+/* No content displacement — sidebar overlays */
+.content { padding-right: 0 !important; }
+.tab-panel { padding-right: 0; box-sizing: border-box; }
 </style>
 </head>
 <body>
