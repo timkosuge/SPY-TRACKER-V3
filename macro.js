@@ -328,17 +328,18 @@ window._M = (() => {
      2.  LIVE DATA — FRED CSV fetches (no key needed)
   ═══════════════════════════════════════════════════════ */
 
+  // Cache for /fred proxy response to avoid multiple calls
+  let _fredProxyCache = null;
   async function fetchFRED(seriesId, limit=16) {
     try {
-      const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`;
-      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/csv' } });
-      if (!r.ok) return null;
-      const text = await r.text();
-      const lines = text.trim().split('\n').filter(l => !l.startsWith('DATE') && l.includes(','));
-      return lines.slice(-limit).map(l => {
-        const [date, val] = l.split(',');
-        return { date: date.trim(), value: val.trim() === '.' ? null : parseFloat(val.trim()) };
-      }).filter(d => d.value != null);
+      if (!_fredProxyCache) {
+        const r = await fetch('/fred?t=' + Date.now());
+        if (!r.ok) return null;
+        _fredProxyCache = await r.json();
+      }
+      const series = _fredProxyCache.series?.[seriesId];
+      if (!series?.history) return null;
+      return series.history.slice(-limit).map(h => ({ date: h.d, value: h.v })).filter(d => d.value != null);
     } catch { return null; }
   }
 
@@ -1145,23 +1146,19 @@ Macro data snapshot (Q1 2026):
     if (textEl)   textEl.innerHTML = '<div style="color:var(--text3);font-style:italic;">Synthesizing macro intelligence…</div>';
 
     try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      const resp = await fetch('/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: `You are a macro analyst for a professional trading terminal. You write in clear, direct prose aimed at experienced market participants. 
-You are aware that we are in an economic transition era where AI and automation are beginning to reshape traditional macro relationships.
-Do NOT use markdown headers or bullet points. Write in flowing paragraphs. Be specific with numbers from the data provided. Be honest about uncertainty.
-Keep your response to 3–4 paragraphs maximum. Tone: analytical, direct, slightly opinionated but grounded.`,
-          messages: [{ role: 'user', content: `${MACRO_CONTEXT()}\n\n${userPrompt}` }]
+          system: `You are a macro analyst for a professional trading terminal. You write in clear, direct prose aimed at experienced market participants. You are aware that we are in an economic transition era where AI and automation are beginning to reshape traditional macro relationships. Do NOT use markdown headers or bullet points. Write in flowing paragraphs. Be specific with numbers from the data provided. Be honest about uncertainty. Keep your response to 3-4 paragraphs maximum. Tone: analytical, direct, slightly opinionated but grounded.`,
+          messages: [{ role: 'user', content: MACRO_CONTEXT() + '\n\n' + userPrompt }],
+          max_tokens: 1000
         })
       });
 
       if (!resp.ok) throw new Error('API error ' + resp.status);
       const data = await resp.json();
-      const text = data.content?.map(b => b.text || '').join('') || '';
+      const text = data.content || '';
 
       if (textEl) {
         textEl.innerHTML = text
