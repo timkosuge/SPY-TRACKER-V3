@@ -1061,7 +1061,7 @@ function renderDesk(md,sd){
   const esSpyRatio  = es  && cur ? es  / cur : null;
 
   // IV from WEM
-  const atmIV = wem?.atm_iv ? wem.atm_iv * 100 : null;
+  const atmIV = (md.gex?.atm_iv || wem?.atm_iv) ? (md.gex?.atm_iv || wem?.atm_iv) * 100 : null;
 
   // GEX summary for gauge
   const gexFlip    = gex.flip_point || null;
@@ -1347,7 +1347,8 @@ function renderDesk(md,sd){
       ${wem?(()=>{
         const midP  = wem.wem_mid || wem.friday_close || cur || prevClose || 700;
         // Use last known IV: atm_iv (live) → static_wem_iv (last close) → nothing
-        const iv    = (wem.atm_iv&&wem.atm_iv>0) ? wem.atm_iv
+        const iv    = (md.gex?.atm_iv&&md.gex.atm_iv>0) ? md.gex.atm_iv
+                    : (wem.atm_iv&&wem.atm_iv>0) ? wem.atm_iv
                     : (wem.static_wem_iv&&wem.static_wem_iv>0) ? wem.static_wem_iv : null;
         const em    = midP>0 && iv>0 ? midP*iv/Math.sqrt(252) : 0;
         // Detect if market is currently open using ET time
@@ -2593,7 +2594,7 @@ function renderOptions(md){
   const spy = q['SPY']||{};
   const cur = spy.price||0;
   const gex = md.gex||{};
-  const atm_iv = md.weekly_em?.[0]?.atm_iv || o.atm_iv || null;
+  const atm_iv = md.gex?.atm_iv || md.weekly_em?.[0]?.atm_iv || o.atm_iv || null;
   const atm_iv_pct = (atm_iv || 0) * 100;  
   const sign2 = v => v>=0?'+':'';
 
@@ -2983,7 +2984,7 @@ function renderVolatility(md){
   const vvix=q['^VVIX'], skew=q['^SKEW'], vxx=q['VXX']||{};
   const spy=q['SPY']||{};
   const vix=vs?.price||0;
-  const atm_iv = md.weekly_em?.[0]?.atm_iv;
+  const atm_iv = md.gex?.atm_iv || md.weekly_em?.[0]?.atm_iv;
   const wem = md.weekly_em?.[0] || {};
   const opt = md.options_summary || {};
   const sd = typeof _sd !== 'undefined' ? _sd : [];
