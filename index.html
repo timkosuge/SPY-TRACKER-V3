@@ -472,99 +472,149 @@
   .breach-day .bd-val{font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;}</style>
 
 <style>
-/* ── Right sidebar — icon rail, overlay mode, no content displacement ── */
-#rightSidebar {
+/* ── Right sidebar — collapsible drawer with glowing edge tab ────── */
+
+/* Outer wrapper — fixed to right edge, full height */
+#sidebarWrap {
   position: fixed;
   right: 0;
   top: 50%;
   transform: translateY(-50%);
   z-index: 8000;
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  pointer-events: none; /* children re-enable */
+}
+
+/* Glowing edge tab — always visible, clickable */
+#sidebarTab {
+  width: 14px;
+  min-height: 120px;
+  background: var(--bg2);
+  border: 1px solid rgba(0,204,255,0.35);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  cursor: pointer;
+  display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  background: rgba(10,10,20,0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  justify-content: center;
+  gap: 6px;
+  box-shadow: -2px 0 14px rgba(0,204,255,0.18), -1px 0 6px rgba(0,204,255,0.12);
+  transition: box-shadow 0.2s, border-color 0.2s, background 0.15s;
+  pointer-events: all;
+  user-select: none;
+  flex-shrink: 0;
+}
+#sidebarTab:hover {
+  background: rgba(0,204,255,0.07);
+  border-color: rgba(0,204,255,0.6);
+  box-shadow: -2px 0 20px rgba(0,204,255,0.3), -1px 0 10px rgba(0,204,255,0.2);
+}
+#sidebarTab .st-arrow {
+  font-size: 8px;
+  color: var(--cyan);
+  transition: transform 0.25s;
+  line-height: 1;
+}
+#sidebarTab .st-label {
+  writing-mode: vertical-rl;
+  font-family: 'Orbitron', monospace;
+  font-size: 6px;
+  letter-spacing: 2px;
+  color: rgba(0,204,255,0.6);
+  white-space: nowrap;
+}
+
+/* Arrow flips when open */
+#sidebarWrap.open #sidebarTab .st-arrow { transform: rotate(180deg); }
+
+/* The actual sidebar panel — slides in/out */
+#rightSidebar {
+  width: 60px;
+  max-width: 60px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: 0;
+  background: var(--bg2);
   border: 1px solid var(--border);
   border-right: none;
-  border-radius: 10px 0 0 10px;
+  border-left: none;
   padding: 10px 0;
-  box-shadow: -2px 0 20px rgba(0,0,0,0.5);
-  width: 40px;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+  transition: max-width 0.25s ease, opacity 0.2s ease, padding 0.25s ease;
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Collapsed state */
+#sidebarWrap:not(.open) #rightSidebar {
+  max-width: 0;
+  opacity: 0;
+  padding: 0;
+  pointer-events: none;
 }
 
 .rsb-btn {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  gap: 4px;
+  width: 54px;
+  padding: 12px 4px;
   cursor: pointer;
   border-radius: 6px;
   transition: background 0.15s, color 0.15s;
   color: var(--text3);
   position: relative;
   user-select: none;
-  font-size: 15px;
+  flex: 1;
+  max-height: 80px;
 }
-.rsb-btn:hover { background: rgba(255,255,255,0.08); color: var(--text2); }
-.rsb-btn.active { background: rgba(0,204,255,0.12); color: var(--cyan); }
-.rsb-btn.ai-active { background: rgba(0,255,136,0.12); color: #00ff88; }
+.rsb-btn:hover { background: rgba(255,255,255,0.06); color: var(--text2); }
+.rsb-btn.active { background: rgba(0,204,255,0.1); color: var(--cyan); }
+.rsb-btn.ai-active { background: rgba(0,255,136,0.1); color: #00ff88; }
 
-/* Tooltip — appears to the left on hover */
-.rsb-btn::before {
-  content: attr(title);
-  position: absolute;
-  right: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  color: var(--text2);
+.rsb-icon { font-size: 16px; line-height: 1; }
+.rsb-label {
   font-family: 'Orbitron', monospace;
-  font-size: 8px;
+  font-size: 7px;
   letter-spacing: 1px;
-  padding: 4px 8px;
-  border-radius: 4px;
   white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s;
 }
-.rsb-btn:hover::before { opacity: 1; }
-
-/* Hide the old text labels — icon only */
-.rsb-icon { font-size: 15px; line-height: 1; }
-.rsb-label { display: none; }
 
 .rsb-divider {
-  width: 24px;
+  width: 36px;
   height: 1px;
   background: var(--border);
-  margin: 4px 0;
+  margin: 3px 0;
 }
 
 /* Unread badge */
 .rsb-badge {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  min-width: 13px;
-  height: 13px;
+  top: 5px;
+  right: 5px;
+  min-width: 14px;
+  height: 14px;
   background: #ff3355;
   color: #fff;
   font-family: 'Orbitron', monospace;
-  font-size: 7px;
+  font-size: 8px;
   border-radius: 7px;
-  padding: 0 2px;
+  padding: 0 3px;
   display: none;
   align-items: center;
   justify-content: center;
-  line-height: 13px;
+  line-height: 14px;
 }
 
-/* No content displacement — sidebar overlays */
+/* No content displacement */
 .content { padding-right: 0 !important; }
 .tab-panel { padding-right: 0; box-sizing: border-box; }
 </style>
@@ -573,6 +623,11 @@
 
 <!-- ── Right Sidebar ────────────────────────────────────────────── -->
 <span id="floor-tab-badge" style="display:none;position:absolute;"></span>
+<div id="sidebarWrap">
+  <div id="sidebarTab" onclick="sidebarToggleDrawer()" title="Toggle panel">
+    <span class="st-arrow">◀</span>
+    <span class="st-label">TOOLS</span>
+  </div>
 <div id="rightSidebar">
 
   <!-- Community / tools section -->
@@ -603,6 +658,7 @@
   </div>
 
 </div>
+</div><!-- /sidebarWrap -->
 
 <div class="topbar">
   <div class="logo" id="spyLogo" onclick="_logoTap()" style="cursor:pointer;user-select:none;">SPY <span>//</span> TRACKER</div>
@@ -5957,6 +6013,25 @@ function chatLightbox(src){ document.getElementById('chat-lightbox-img').src=src
 // ── Sidebar navigation ────────────────────────────────────────────────────
 
 const SIDEBAR_TABS = ['media','journal','floor','blog'];
+
+function sidebarToggleDrawer() {
+  const wrap = document.getElementById('sidebarWrap');
+  if (!wrap) return;
+  const isOpen = wrap.classList.contains('open');
+  wrap.classList.toggle('open', !isOpen);
+  localStorage.setItem('sidebarOpen', !isOpen ? 'true' : 'false');
+}
+
+// Restore state on load
+(function() {
+  const saved = localStorage.getItem('sidebarOpen');
+  if (saved === 'true') {
+    document.addEventListener('DOMContentLoaded', () => {
+      const wrap = document.getElementById('sidebarWrap');
+      if (wrap) wrap.classList.add('open');
+    });
+  }
+})();
 
 function sidebarSwitch(id) {
   // If already active, deactivate and go back to hub
