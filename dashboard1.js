@@ -366,7 +366,7 @@ function renderHub(md,sd){
         <div></div>
         <!-- LONDON SESSION -->
         <div style="border-left:1px solid var(--border);padding-left:16px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div id="hubLonBlock" onclick="openCityCam('london')" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for London live cam">
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${lonIsOpen?'#00ff88':lonStatus==='CLOSED'?'#ff3355':'var(--text3)'};">LONDON</span>
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${lonColor};background:${lonColor}22;">${lonStatus}</span>
           </div>
@@ -375,7 +375,7 @@ function renderHub(md,sd){
         </div>
         <!-- TOKYO SESSION -->
         <div style="border-left:1px solid var(--border);padding-left:16px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div id="hubTokyoBlock" onclick="openCityCam('tokyo')" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for Tokyo live cam">
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${tokyoIsOpen?'#00ff88':tokyoStatus==='CLOSED'?'#ff3355':'var(--text3)'};">TOKYO</span>
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${tokyoColor};background:${tokyoColor}22;">${tokyoStatus}</span>
           </div>
@@ -384,7 +384,7 @@ function renderHub(md,sd){
         </div>
         <!-- NEW YORK SESSION STATUS -->
         <div style="border-left:1px solid var(--border);padding-left:16px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div id="hubNYBlock" onclick="openCityCam('newyork')" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for New York live cam">
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${isMarketHours?'#00ff88':(!isMarketHours&&!isPremarket&&!isAfterHours)?'#ff3355':'var(--text3)'};">NEW YORK</span>
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${sessionColor};background:${sessionColor}22;">${isMarketHours?'OPEN':isPremarket?'PRE':'CLOSED'}</span>
           </div>
