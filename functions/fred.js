@@ -242,19 +242,28 @@ export async function onRequestGet(context) {
   const apiKey = context.env?.FRED_API_KEY;
   if (!apiKey) return json({ error: 'FRED_API_KEY not configured' }, 500);
 
-  // Fetch all series in parallel — avoids sequential timeout on Cloudflare Functions
-  // FRED allows 120 req/min; 24 simultaneous requests is well within limits (~2s vs ~12s sequential)
-  const seriesIds = Object.keys(SERIES);
   const sovereignIds = new Set(['FDHBJA','FDHBCHI','FDHBFIN','DEXJPUS','IRLTLT01JPM156N','JPNURQPDS','JPNCPIALLMINMEI','JPNRGDPEXP','DTWEXBGS','DEXCHUS','DEXUSEU','GOLDAMGBD228NLBM','GFDEBTN','GFDEGDQ188S','FYFSD','INTGSTUSESM193N']);
-  const fetched = await Promise.all(seriesIds.map(id => fetchSeries(apiKey, id, sovereignIds.has(id) ? 60 : 36)));
+  const seriesIds = Object.keys(SERIES);
 
+  // Cloudflare Workers limit: 50 concurrent subrequests max.
+  // Batch into groups of 40 to stay safely under the limit.
+  // Two batches covers all 64 series without hitting the ceiling.
+  const BATCH = 40;
   const results = {};
-  seriesIds.forEach((id, i) => {
-    const obs = fetched[i];
-    if (obs) results[id] = { ...calcStats(obs), ...SERIES[id] };
-  });
+
+  for (let i = 0; i < seriesIds.length; i += BATCH) {
+    const batch = seriesIds.slice(i, i + BATCH);
+    const fetched = await Promise.all(
+      batch.map(id => fetchSeries(apiKey, id, sovereignIds.has(id) ? 60 : 36))
+    );
+    batch.forEach((id, j) => {
+      const obs = fetched[j];
+      if (obs) results[id] = { ...calcStats(obs), ...SERIES[id] };
+    });
+  }
 
   const regime = computeRegime(results);
+  const seriesCount = Object.keys(results).length;
 
-  return json({ series: results, regime, updated: new Date().toISOString() });
+  return json({ series: results, regime, seriesCount, updated: new Date().toISOString() });
 }
