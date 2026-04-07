@@ -759,6 +759,9 @@ function renderWEM(md){
   const wems=md.weekly_em||[], stats=md.wem_stats||{};
   const q=md.quotes||{}, spy=q['SPY']||{};
   const cur=wems.find(w=>!w.week_close)||wems[0];
+  // Ensure live atm_iv is always on md.gex — patch from window._md if needed
+  if (!md.gex) md.gex = {};
+  if (!md.gex.atm_iv && window._md?.gex?.atm_iv) md.gex.atm_iv = window._md.gex.atm_iv;
 
   // ── Mode toggle ──────────────────────────────────────────────────────────
   if (!window._wemMode) window._wemMode = 'dynamic';
@@ -3978,7 +3981,11 @@ async function refreshLiveData() {
         // Preserve any live patches already on _md (quotes, gex, fear_greed)
         freshMd.quotes = _md.quotes;
         freshMd.fear_greed = _md.fear_greed;
-        if (_md.gex?.flip_point) freshMd.gex = _md.gex;
+        if (_md.gex?.flip_point) {
+          freshMd.gex = _md.gex;
+          // Preserve patched atm_iv from live GEX fetch
+          if (_md.gex.atm_iv) freshMd.gex.atm_iv = _md.gex.atm_iv;
+        }
         if (_md.max_pain?.length) freshMd.max_pain = _md.max_pain;
         _md = freshMd; window._macroMD = _md;
       }
