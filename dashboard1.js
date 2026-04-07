@@ -1463,7 +1463,7 @@ function renderDesk(md,sd){
             if (!canvas) return;
             const dpr = window.devicePixelRatio || 1;
             const W = canvas.parentElement.clientWidth;
-            const H = 200;
+            const H = 160;
             canvas.width  = W * dpr; canvas.height = H * dpr;
             canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
             const ctx = canvas.getContext('2d');
