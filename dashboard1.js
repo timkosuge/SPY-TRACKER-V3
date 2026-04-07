@@ -352,7 +352,7 @@ function renderHub(md,sd){
     <div class="panel" style="border-left:4px solid ${sessionColor};">
       <div style="display:grid;grid-template-columns:auto auto auto 1fr auto auto auto;gap:16px;align-items:center;">
         <div>
-          <div style="font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:${sessionColor};letter-spacing:2px;">${sessionLabel}</div>
+          <div id="hubSessionLabel" onclick="weatherEasterEggClick()" style="font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:${sessionColor};letter-spacing:2px;cursor:pointer;" title="Click 3x for local weather">${sessionLabel}</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text2);margin-top:4px;">${dateStr}</div>
         </div>
         <div style="border-left:1px solid var(--border);padding-left:16px;">
