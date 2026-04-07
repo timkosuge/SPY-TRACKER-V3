@@ -800,7 +800,7 @@ function renderWEM(md){
     const dte = cur.dte || 1;
     // Use window._md.gex.atm_iv as extra fallback in case md reference is stale
     const _liveGexIV = md.gex?.atm_iv || window._md?.gex?.atm_iv || null;
-    console.log('[WEM] liveGexIV:', _liveGexIV, 'cur.atm_iv:', cur.atm_iv, 'staticIV:', staticIV);
+    console.log('[WEM] liveGexIV:', _liveGexIV, 'md.gex:', JSON.stringify(md.gex)?.slice(0,200), 'window._md.gex.atm_iv:', window._md?.gex?.atm_iv);
     const liveIV = (_liveGexIV && _liveGexIV > 0) ? _liveGexIV : (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
     const dynMid = staticMid;
     const _dynHalf = dynMid && liveIV ? dynMid * liveIV * Math.sqrt(dte / 365) * 0.70 : staticHalfRange;
