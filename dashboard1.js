@@ -1448,47 +1448,106 @@ function renderDesk(md,sd){
           <div style="position:absolute;right:4px;bottom:4px;font-family:'Orbitron',monospace;font-size:7px;color:rgba(0,255,136,0.9);">$${fmt(wHi,2)}</div>
         </div>
         <div style="font-family:'Orbitron',monospace;font-size:9px;text-align:center;padding:4px;border-radius:3px;color:${outside?'#ff3355':'#00ff88'};background:${outside?'rgba(255,51,85,0.1)':'rgba(0,255,136,0.1);'};">${p>wHi?'▲ ABOVE WEM HIGH':p<wLo?'▼ BELOW WEM LOW':'✓ INSIDE WEM RANGE'}</div>
+        ${(()=>{
+          const g = gex;
+          const gFlip = g.flip_point, gSup = g.support, gRes = g.resistance;
+          const netGex = g.net_gex || 0;
+          const isPos = netGex > 0;
+          const regColor = isPos ? '#00ff88' : '#ff3355';
+          const regime = g.regime || (isPos ? 'POSITIVE' : 'NEGATIVE');
+          const fmtB = n => { if(!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
+          if (!gFlip && !gSup && !gRes) return '';
+          const canvasId = 'miniGexCanvas';
+          setTimeout(() => {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const dpr = window.devicePixelRatio || 1;
+            const W = canvas.parentElement.clientWidth;
+            const H = 120;
+            canvas.width  = W * dpr; canvas.height = H * dpr;
+            canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            const spot = window._md && window._md.quotes && window._md.quotes['SPY'] ? window._md.quotes['SPY'].price : (p || 0);
+            const levels = [gFlip, gSup, gRes, spot].filter(Boolean);
+            if (!levels.length) return;
+            const minP = Math.min(...levels) - 4;
+            const maxP = Math.max(...levels) + 4;
+            const pad = { l: 48, r: 12, t: 14, b: 18 };
+            const cw = W - pad.l - pad.r;
+            const ch = H - pad.t - pad.b;
+            const toX = v => pad.l + ((v - minP) / (maxP - minP)) * cw;
+            const midY = pad.t + ch / 2;
+            ctx.fillStyle = '#0c0c14'; ctx.fillRect(0, 0, W, H);
+            // Regime gradient
+            const flipX = Math.max(0,Math.min(1,(gFlip-minP)/(maxP-minP)));
+            const grad = ctx.createLinearGradient(pad.l, 0, pad.l+cw, 0);
+            grad.addColorStop(0, 'rgba(255,51,85,0.07)');
+            grad.addColorStop(flipX, 'rgba(255,51,85,0.07)');
+            grad.addColorStop(flipX, 'rgba(0,255,136,0.07)');
+            grad.addColorStop(1, 'rgba(0,255,136,0.07)');
+            ctx.fillStyle = grad; ctx.fillRect(pad.l, pad.t, cw, ch);
+            // Subtle price grid
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+            ctx.font = "9px 'Share Tech Mono',monospace"; ctx.fillStyle = '#606080'; ctx.textAlign = 'right';
+            const step = (maxP - minP) > 20 ? 5 : 2;
+            for (let pv = Math.ceil(minP/step)*step; pv <= maxP; pv += step) {
+              const y = pad.t + ch - ((pv-minP)/(maxP-minP))*ch;
+              ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+cw, y); ctx.stroke();
+              ctx.fillText('$'+pv.toFixed(0), pad.l-4, y+3);
+            }
+            // Support
+            if (gSup) {
+              const x = toX(gSup);
+              ctx.strokeStyle='#ff3355'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+              ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke(); ctx.setLineDash([]);
+              ctx.fillStyle='#ff3355'; ctx.textAlign='center'; ctx.font="bold 8px 'Share Tech Mono',monospace";
+              ctx.fillText('SUP', x, pad.t+ch+12); ctx.fillText('$'+gSup.toFixed(0), x, pad.t-3);
+            }
+            // Resistance
+            if (gRes) {
+              const x = toX(gRes);
+              ctx.strokeStyle='#00ff88'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+              ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke(); ctx.setLineDash([]);
+              ctx.fillStyle='#00ff88'; ctx.textAlign='center'; ctx.font="bold 8px 'Share Tech Mono',monospace";
+              ctx.fillText('RES', x, pad.t+ch+12); ctx.fillText('$'+gRes.toFixed(0), x, pad.t-3);
+            }
+            // Flip
+            if (gFlip) {
+              const x = toX(gFlip);
+              ctx.strokeStyle='#ffcc00'; ctx.lineWidth=2; ctx.setLineDash([5,3]);
+              ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke(); ctx.setLineDash([]);
+              ctx.fillStyle='#ffcc00'; ctx.textAlign='center'; ctx.font="bold 8px 'Share Tech Mono',monospace";
+              ctx.fillText('FLIP', x, pad.t+ch+12); ctx.fillText('$'+gFlip.toFixed(0), x, pad.t-3);
+            }
+            // Spot
+            if (spot) {
+              const x = toX(spot);
+              ctx.strokeStyle='rgba(0,204,255,0.9)'; ctx.lineWidth=2.5; ctx.setLineDash([]);
+              ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke();
+              ctx.beginPath(); ctx.arc(x,midY,5,0,Math.PI*2);
+              ctx.fillStyle='#00ccff'; ctx.fill();
+              ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
+              ctx.fillStyle='#00ccff'; ctx.textAlign='left'; ctx.font="bold 11px 'Share Tech Mono',monospace";
+              ctx.fillText('$'+spot.toFixed(2), x+8, midY+4);
+            }
+          }, 80);
+          let html = '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">';
+          html += '<div style="font-family:\'Orbitron\',monospace;font-size:8px;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;">⬡ GEX LEVELS</div>';
+          html += '<canvas id="miniGexCanvas" style="width:100%;display:block;border-radius:3px;"></canvas>';
+          html += '<div style="display:flex;gap:14px;margin-top:5px;font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--text3);">';
+          html += '<span><span style="color:var(--cyan);">│</span> SPOT</span>';
+          html += '<span><span style="color:#ffcc00;">┅</span> FLIP</span>';
+          html += '<span><span style="color:#ff3355;">┅</span> SUPPORT</span>';
+          html += '<span><span style="color:#00ff88;">┅</span> RESISTANCE</span>';
+          html += '<span style="margin-left:auto;color:'+regColor+';">'+regime+' · '+fmtB(netGex)+'</span>';
+          html += '</div></div>';
+          return html;
+        })()}
             `;
           })()}
       </div>`:'<div class="panel"><div class="no-data">IV needed</div></div>'}
     </div>
-
-
-
-    <!-- MINI GEX MAP -->
-    ${(()=>{
-      const g = gex;
-      const flip = g.flip_point, sup = g.support, res = g.resistance;
-      const netGex = g.net_gex || 0;
-      const isPos = netGex > 0;
-      const regColor = isPos ? '#00ff88' : '#ff3355';
-      const regime = g.regime || (isPos ? 'POSITIVE' : 'NEGATIVE');
-      const fmtB = n => { if(!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
-      const p = cur || spot || 0;
-      if (!flip && !sup && !res) return '<div class="panel" style="margin-bottom:10px;"><div class="no-data">GEX data unavailable</div></div>';
-      const allPts = [flip,sup,res,p].filter(Boolean);
-      const minPt = Math.min(...allPts) - 3;
-      const maxPt = Math.max(...allPts) + 3;
-      const pctOf = v => v ? ((v-minPt)/(maxPt-minPt)*100).toFixed(1) : null;
-      const pPct = pctOf(p), flipPct = pctOf(flip), supPct = pctOf(sup), resPct = pctOf(res);
-      let html = '<div class="panel" style="margin-bottom:10px;">';
-      html += '<div style="font-family:\'Orbitron\',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ GEX LEVELS</div>';
-      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;">';
-      html += '<div style="text-align:center;padding:8px;background:rgba(0,204,255,0.07);border:1px solid rgba(0,204,255,0.25);border-radius:3px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:var(--cyan);margin-bottom:3px;">FLIP</div><div style="font-family:\'Share Tech Mono\',monospace;font-size:14px;color:var(--cyan);">$'+fmt(flip,2)+'</div></div>';
-      html += '<div style="text-align:center;padding:8px;background:rgba(255,51,85,0.07);border:1px solid rgba(255,51,85,0.25);border-radius:3px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">SUPPORT</div><div style="font-family:\'Share Tech Mono\',monospace;font-size:14px;color:#ff3355;">$'+fmt(sup,2)+'</div></div>';
-      html += '<div style="text-align:center;padding:8px;background:rgba(0,255,136,0.07);border:1px solid rgba(0,255,136,0.25);border-radius:3px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">RESISTANCE</div><div style="font-family:\'Share Tech Mono\',monospace;font-size:14px;color:#00ff88;">$'+fmt(res,2)+'</div></div>';
-      html += '<div style="text-align:center;padding:8px;background:'+regColor+'11;border:1px solid '+regColor+'44;border-radius:3px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:'+regColor+';margin-bottom:3px;">NET GEX</div><div style="font-family:\'Share Tech Mono\',monospace;font-size:12px;color:'+regColor+';">'+fmtB(netGex)+'</div></div>';
-      html += '</div>';
-      html += '<div style="position:relative;height:32px;background:linear-gradient(90deg,rgba(255,51,85,0.15),rgba(255,136,0,0.08),rgba(0,255,136,0.15));border:1px solid var(--border);border-radius:4px;margin-bottom:8px;">';
-      if (supPct)  html += '<div style="position:absolute;left:'+supPct+'%;top:0;bottom:0;width:1px;background:#ff3355;opacity:0.7;"><div style="position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-family:\'Orbitron\',monospace;font-size:7px;color:#ff3355;white-space:nowrap;margin-bottom:2px;">SUP</div></div>';
-      if (resPct)  html += '<div style="position:absolute;left:'+resPct+'%;top:0;bottom:0;width:1px;background:#00ff88;opacity:0.7;"><div style="position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-family:\'Orbitron\',monospace;font-size:7px;color:#00ff88;white-space:nowrap;margin-bottom:2px;">RES</div></div>';
-      if (flipPct) html += '<div style="position:absolute;left:'+flipPct+'%;top:0;bottom:0;width:2px;background:#ffcc00;opacity:0.9;"><div style="position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-family:\'Orbitron\',monospace;font-size:7px;color:#ffcc00;white-space:nowrap;margin-bottom:2px;">FLIP</div></div>';
-      if (pPct)    html += '<div style="position:absolute;left:'+pPct+'%;top:50%;transform:translate(-50%,-50%);background:var(--cyan);color:#000;font-family:\'Share Tech Mono\',monospace;font-size:10px;font-weight:bold;padding:1px 5px;border-radius:2px;white-space:nowrap;z-index:2;">$'+fmt(p,2)+'</div>';
-      html += '</div>';
-      html += '<div style="font-family:\'Orbitron\',monospace;font-size:8px;text-align:center;padding:4px 8px;border-radius:3px;color:'+regColor+';background:'+regColor+'11;">'+regime+' GEX — '+(isPos?'Market makers are long gamma. Expect mean reversion. Moves get dampened.':'Market makers are short gamma. Expect acceleration. Moves can expand.')+'</div>';
-      html += '</div>';
-      return html;
-    })()}
 
     <!-- HVN — last 5 days with actual intraday data -->
     <div class="panel" style="margin-bottom:10px;">
