@@ -45,6 +45,63 @@ const SERIES = {
   T10Y2Y:    { name: 'Yield Curve (10Y-2Y)',   cat: 'rates', unit: '%',            freq: 'daily',   good_direction: 'up' },
   BAMLH0A0HYM2: { name: 'HY Credit Spread',   cat: 'rates', unit: '%',            freq: 'daily',   good_direction: 'down' },
 
+  // RATES — additional
+  DFII10:         { name: '10Y Real Yield (TIPS)',          cat: 'rates',    unit: '%',    freq: 'daily',   good_direction: 'stable' },
+  DGS30:          { name: '30Y Treasury Yield',             cat: 'rates',    unit: '%',    freq: 'daily',   good_direction: 'stable' },
+  T10Y3M:         { name: 'Yield Curve (10Y-3M)',           cat: 'rates',    unit: '%',    freq: 'daily',   good_direction: 'up' },
+  MORTGAGE30US:   { name: '30Y Fixed Mortgage Rate',        cat: 'rates',    unit: '%',    freq: 'weekly',  good_direction: 'down' },
+  BAMLC0A0CM:     { name: 'IG Credit Spread',               cat: 'rates',    unit: '%',    freq: 'daily',   good_direction: 'down' },
+
+  // EMPLOYMENT — additional
+  CCSA:           { name: 'Continuing Jobless Claims',      cat: 'employment', unit: 'K', freq: 'weekly',  good_direction: 'down' },
+  JTSQUL:         { name: 'Quits Rate',                     cat: 'employment', unit: '%', freq: 'monthly', good_direction: 'up' },
+  CES0500000003:  { name: 'Avg Hourly Earnings',            cat: 'employment', unit: '$/hr', freq: 'monthly', good_direction: 'stable' },
+  OPHNFB:         { name: 'Nonfarm Business Productivity',  cat: 'employment', unit: '%', freq: 'quarterly', good_direction: 'up' },
+
+  // GROWTH — additional
+  PERMIT:         { name: 'Building Permits',               cat: 'growth',   unit: 'K',    freq: 'monthly', good_direction: 'up' },
+  PCE:            { name: 'Personal Consumption Expenditures', cat: 'growth', unit: '$B',  freq: 'monthly', good_direction: 'up' },
+  DSPIC96:        { name: 'Real Disposable Personal Income', cat: 'growth',  unit: '$B',   freq: 'monthly', good_direction: 'up' },
+  BOPGSTB:        { name: 'US Trade Balance',               cat: 'growth',   unit: '$B',   freq: 'monthly', good_direction: 'up' },
+  ISRATIO:        { name: 'Inventory to Sales Ratio',        cat: 'growth',   unit: 'ratio', freq: 'monthly', good_direction: 'down' },
+  CSUSHPISA:      { name: 'Case-Shiller Home Price Index',  cat: 'growth',   unit: 'Index', freq: 'monthly', good_direction: 'stable' },
+
+  // MONETARY — additional
+  WSHOMCB:        { name: 'Fed MBS Holdings',               cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
+  WSTSECOUT:      { name: 'Fed Treasury Holdings',          cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
+  BOGMBASE:       { name: 'Monetary Base',                  cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
+  TOTRESNS:       { name: 'Bank Reserves at Fed',           cat: 'liquidity', unit: '$B', freq: 'monthly', good_direction: 'stable' },
+
+  // CONSUMER — additional
+  DRCCLACBS:      { name: 'Credit Card Delinquency Rate',   cat: 'consumer', unit: '%',   freq: 'quarterly', good_direction: 'down' },
+  DRSFRMACBS:     { name: 'Mortgage Delinquency Rate',      cat: 'consumer', unit: '%',   freq: 'quarterly', good_direction: 'down' },
+  REVOLSL:        { name: 'Revolving Consumer Credit',      cat: 'consumer', unit: '$B',  freq: 'monthly', good_direction: 'stable' },
+  TOTALSL:        { name: 'Total Consumer Credit',          cat: 'consumer', unit: '$B',  freq: 'monthly', good_direction: 'stable' },
+
+  // SOVEREIGN DEBT — US TREASURY FOREIGN HOLDINGS (TIC Data, monthly, $B)
+  FDHBJA:    { name: 'Japan US Treasury Holdings',  cat: 'sovereign', unit: '$B', freq: 'monthly', good_direction: 'up' },
+  FDHBCHI:   { name: 'China US Treasury Holdings',  cat: 'sovereign', unit: '$B', freq: 'monthly', good_direction: 'stable' },
+  FDHBFIN:   { name: 'Total Foreign UST Holdings',  cat: 'sovereign', unit: '$B', freq: 'monthly', good_direction: 'up' },
+
+  // JAPAN ECONOMY
+  DEXJPUS:           { name: 'USD/JPY Exchange Rate',    cat: 'japan', unit: '¥/$',  freq: 'daily',   good_direction: 'stable' },
+  IRLTLT01JPM156N:   { name: 'Japan 10Y Bond Yield',     cat: 'japan', unit: '%',    freq: 'monthly', good_direction: 'stable' },
+  JPNURQPDS:         { name: 'Japan Unemployment Rate',  cat: 'japan', unit: '%',    freq: 'quarterly', good_direction: 'down' },
+  JPNCPIALLMINMEI:   { name: 'Japan CPI',                cat: 'japan', unit: 'Index',freq: 'monthly', good_direction: 'stable' },
+  JPNRGDPEXP:        { name: 'Japan Real GDP',            cat: 'japan', unit: '$B',   freq: 'quarterly', good_direction: 'up' },
+
+  // DOLLAR & GLOBAL
+  DTWEXBGS:  { name: 'Trade-Weighted Dollar (Broad)', cat: 'dollar', unit: 'Index', freq: 'weekly',  good_direction: 'stable' },
+  DEXCHUS:   { name: 'USD/CNY Exchange Rate',         cat: 'dollar', unit: 'CNY/$', freq: 'daily',   good_direction: 'stable' },
+  DEXUSEU:   { name: 'USD/EUR Exchange Rate',         cat: 'dollar', unit: '$/EUR', freq: 'daily',   good_direction: 'stable' },
+  GOLDAMGBD228NLBM: { name: 'Gold Price (London Fix)', cat: 'dollar', unit: '$/oz', freq: 'daily',   good_direction: 'up' },
+
+  // FISCAL & DEBT
+  GFDEBTN:          { name: 'Federal Debt Outstanding',      cat: 'fiscal', unit: '$B',  freq: 'quarterly', good_direction: 'stable' },
+  GFDEGDQ188S:      { name: 'Federal Debt to GDP',           cat: 'fiscal', unit: '%',   freq: 'quarterly', good_direction: 'down' },
+  FYFSD:            { name: 'Federal Budget Surplus/Deficit', cat: 'fiscal', unit: '$B',  freq: 'annual',    good_direction: 'up' },
+  INTGSTUSESM193N:  { name: 'Interest Payments as % GDP',    cat: 'fiscal', unit: '%',   freq: 'monthly',   good_direction: 'down' },
+
   // CONSUMER
   UMCSENT:   { name: 'Consumer Sentiment',     cat: 'consumer', unit: 'Index',     freq: 'monthly', good_direction: 'up' },
   PSAVERT:   { name: 'Personal Savings Rate',  cat: 'consumer', unit: '%',         freq: 'monthly', good_direction: 'stable' },
@@ -188,7 +245,8 @@ export async function onRequestGet(context) {
   // Fetch all series in parallel — avoids sequential timeout on Cloudflare Functions
   // FRED allows 120 req/min; 24 simultaneous requests is well within limits (~2s vs ~12s sequential)
   const seriesIds = Object.keys(SERIES);
-  const fetched = await Promise.all(seriesIds.map(id => fetchSeries(apiKey, id, 36)));
+  const sovereignIds = new Set(['FDHBJA','FDHBCHI','FDHBFIN','DEXJPUS','IRLTLT01JPM156N','JPNURQPDS','JPNCPIALLMINMEI','JPNRGDPEXP','DTWEXBGS','DEXCHUS','DEXUSEU','GOLDAMGBD228NLBM','GFDEBTN','GFDEGDQ188S','FYFSD','INTGSTUSESM193N']);
+  const fetched = await Promise.all(seriesIds.map(id => fetchSeries(apiKey, id, sovereignIds.has(id) ? 60 : 36)));
 
   const results = {};
   seriesIds.forEach((id, i) => {
