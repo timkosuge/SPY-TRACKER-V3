@@ -6821,6 +6821,112 @@ function openWeatherWindow() {
   });
 }
 
+// ── Quote Easter Eggs ─────────────────────────────────────────────────────────
+
+const PATIENCE_QUOTES = [
+  { q: "The two most powerful warriors are patience and time.", a: "Leo Tolstoy" },
+  { q: "Adopt the pace of nature: her secret is patience.", a: "Ralph Waldo Emerson" },
+  { q: "He that can have patience can have what he will.", a: "Benjamin Franklin" },
+  { q: "The key to everything is patience. You get the chicken by hatching the egg, not by smashing it.", a: "Arnold H. Glasow" },
+  { q: "Patience is not the ability to wait, but the ability to keep a good attitude while waiting.", a: "Joyce Meyer" },
+  { q: "A man who is a master of patience is master of everything else.", a: "George Savile" },
+  { q: "One moment of patience may ward off great disaster. One moment of impatience may ruin a whole life.", a: "Chinese Proverb" },
+  { q: "The waiting is the hardest part. But the harvest only comes after the planting.", a: "Unknown" },
+  { q: "Trees that are slow to grow bear the best fruit.", a: "Molière" },
+  { q: "Patience is bitter, but its fruit is sweet.", a: "Jean-Jacques Rousseau" },
+  { q: "It does not matter how slowly you go as long as you do not stop.", a: "Confucius" },
+  { q: "All great things are only a number of small things that have been carefully collected together.", a: "Unknown" },
+  { q: "The strongest of all warriors are these two — Time and Patience.", a: "Leo Tolstoy" },
+  { q: "A river cuts through rock not because of its power, but because of its persistence.", a: "James N. Watkins" },
+  { q: "The big money is not in the buying and the selling, but in the waiting.", a: "Charlie Munger" },
+  { q: "Compound interest is the eighth wonder of the world. He who understands it, earns it.", a: "Albert Einstein" },
+  { q: "Time is the friend of the wonderful business, the enemy of the mediocre.", a: "Warren Buffett" },
+  { q: "Our favorite holding period is forever.", a: "Warren Buffett" },
+  { q: "The stock market is a device for transferring money from the impatient to the patient.", a: "Warren Buffett" },
+  { q: "Spend each day trying to be a little wiser than you were when you woke up.", a: "Charlie Munger" },
+];
+
+const MARKET_QUOTES = [
+  { q: "In the short run, the market is a voting machine. In the long run, it is a weighing machine.", a: "Benjamin Graham" },
+  { q: "The market is a pendulum that forever swings between unsustainable optimism and unjustified pessimism.", a: "Benjamin Graham" },
+  { q: "The investor's chief problem — and even his worst enemy — is likely to be himself.", a: "Benjamin Graham" },
+  { q: "It's not whether you're right or wrong, but how much money you make when you're right and how much you lose when you're wrong.", a: "George Soros" },
+  { q: "Markets can remain irrational longer than you can remain solvent.", a: "John Maynard Keynes" },
+  { q: "The time to buy is when there's blood in the streets.", a: "Baron Rothschild" },
+  { q: "Price is what you pay. Value is what you get.", a: "Warren Buffett" },
+  { q: "Be fearful when others are greedy and greedy when others are fearful.", a: "Warren Buffett" },
+  { q: "The stock market is filled with individuals who know the price of everything, but the value of nothing.", a: "Philip Fisher" },
+  { q: "The four most dangerous words in investing are: this time it's different.", a: "Sir John Templeton" },
+  { q: "Behind every stock is a company. Find out what it's doing.", a: "Peter Lynch" },
+  { q: "Know what you own, and know why you own it.", a: "Peter Lynch" },
+  { q: "The market does not know if you are long or short and does not care about your cost basis.", a: "Jesse Livermore" },
+  { q: "Wall Street never changes. The pockets change, the suckers change, the stocks change, but Wall Street never changes.", a: "Jesse Livermore" },
+  { q: "Cut your losses and let your winners run.", a: "Jesse Livermore" },
+  { q: "The trend is your friend until the end when it bends.", a: "Ed Seykota" },
+  { q: "Every once in a while the market does something so stupid it takes your breath away.", a: "Jim Cramer" },
+  { q: "The most contrarian thing of all is not to oppose the crowd but to think for yourself.", a: "Peter Thiel" },
+  { q: "It's not about being right. It's about how much you make when you're right.", a: "Stanley Druckenmiller" },
+  { q: "The stock market is the only store where customers run out when things go on sale.", a: "Unknown" },
+];
+
+function _showQuoteWindow(quotes, title) {
+  const existing = document.getElementById('quoteWindow');
+  if (existing) { existing.remove(); return; }
+
+  const q = quotes[Math.floor(Math.random() * quotes.length)];
+
+  const win = document.createElement('div');
+  win.id = 'quoteWindow';
+  win.style.cssText = [
+    'position:fixed', 'bottom:20px', 'right:20px', 'width:360px',
+    'background:var(--bg2)', 'border:1px solid var(--border2)', 'border-radius:6px',
+    'box-shadow:0 8px 32px rgba(0,0,0,0.7)', 'z-index:9999',
+    'display:flex', 'flex-direction:column', 'overflow:hidden',
+    "font-family:'Orbitron',monospace"
+  ].join(';');
+
+  win.innerHTML = `
+    <div id="quoteWinHeader" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);cursor:move;flex-shrink:0;">
+      <span style="font-size:9px;letter-spacing:2px;color:var(--text3);">&#x2B21; ${title}</span>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button onclick="this.closest('#quoteWindow').remove();_showQuoteWindow(${title.includes('PATIENCE') ? 'PATIENCE_QUOTES' : 'MARKET_QUOTES'},'${title}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;font-family:'Orbitron',monospace;letter-spacing:1px;padding:0;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text3)'">↻</button>
+        <button onclick="document.getElementById('quoteWindow').remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text3)'">&#xD7;</button>
+      </div>
+    </div>
+    <div style="padding:24px 20px 20px;text-align:center;">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:var(--text);line-height:1.7;margin-bottom:16px;">&ldquo;${q.q}&rdquo;</div>
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);">— ${q.a.toUpperCase()}</div>
+    </div>
+  `;
+
+  const header = win.querySelector('#quoteWinHeader');
+  let dragging = false, ox = 0, oy = 0;
+  header.addEventListener('mousedown', e => { if (e.target.tagName === 'BUTTON') return; dragging = true; ox = e.clientX - win.getBoundingClientRect().left; oy = e.clientY - win.getBoundingClientRect().top; });
+  document.addEventListener('mousemove', e => { if (!dragging) return; win.style.left=(e.clientX-ox)+'px'; win.style.top=(e.clientY-oy)+'px'; win.style.right='auto'; win.style.bottom='auto'; });
+  document.addEventListener('mouseup', () => { dragging = false; });
+
+  document.body.appendChild(win);
+}
+
+// Triple-click handlers
+let _quoteTapCount = 0, _quoteTapTimer = null;
+function _quoteTap(type) {
+  _quoteTapCount++;
+  clearTimeout(_quoteTapTimer);
+  if (_quoteTapCount >= 3) {
+    _quoteTapCount = 0;
+    if (type === 'patience') _showQuoteWindow(PATIENCE_QUOTES, 'PATIENCE & TIME');
+    else _showQuoteWindow(MARKET_QUOTES, 'MARKET WISDOM');
+    return;
+  }
+  _quoteTapTimer = setTimeout(() => { _quoteTapCount = 0; }, 800);
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target.closest('#hubCountdownBlock')) _quoteTap('patience');
+  if (e.target.closest('#tickerInner') || e.target.closest('.ticker-tape')) _quoteTap('market');
+});
+
 // ── City Live Cam floating window ────────────────────────────────────────────
 const CITY_CAMS = {
   london:  { label: 'LONDON',   src: 'https://www.youtube.com/embed/WKGK_hYnlGE?si=3LSv3OCvLXXvCCf7&autoplay=1&mute=1' },
