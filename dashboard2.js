@@ -792,10 +792,16 @@ function renderWEM(md){
     // ── Select active mode values ──────────────────────────────────────────
     // Dynamic falls back to static when workflow has not run yet for the new week
     const isStatic = window._wemMode === 'static';
-    const lo   = isStatic ? staticLow  : (cur.wem_low  || staticLow);
-    const hi   = isStatic ? staticHigh : (cur.wem_high || staticHigh);
-    const mid  = isStatic ? staticMid  : (cur.wem_mid  || staticMid);
-    const halfRange = isStatic ? staticHalfRange : (cur.wem_range ? cur.wem_range / 2 : staticHalfRange);
+    // Dynamic: recalculate from live IV + remaining DTE.
+    // Uses Friday weekly expiry IV (not 0DTE) so it decays naturally as DTE shrinks.
+    const dte = cur.dte || 1;
+    const liveIV = (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
+    const dynMid = staticMid;
+    const _dynHalf = dynMid && liveIV ? dynMid * liveIV * Math.sqrt(dte / 365) * 0.70 : staticHalfRange;
+    const lo   = isStatic ? staticLow  : dynMid - _dynHalf;
+    const hi   = isStatic ? staticHigh : dynMid + _dynHalf;
+    const mid  = isStatic ? staticMid  : dynMid;
+    const halfRange = isStatic ? staticHalfRange : _dynHalf;
     const price = spy.price || mid || 0;
 
     $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}${isStatic?' · STATIC RANGE':' · DYNAMIC RANGE'}`;
@@ -821,7 +827,7 @@ function renderWEM(md){
     // ── Show comparison row if in static mode ──────────────────────────────
     let comparisonHtml = '';
     if (isStatic) {
-      const dynHalf = cur.wem_range / 2;
+      const dynHalf = _dynHalf;
       const decay = dynHalf < staticHalfRange ? (1 - dynHalf/staticHalfRange)*100 : 0;
       comparisonHtml = `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--bg3);border-radius:3px;margin-top:8px;font-size:11px;font-family:'Share Tech Mono',monospace;">
         <span style="color:var(--text3);">STATIC ±$${fmt(staticHalfRange,2)}</span>
@@ -909,11 +915,14 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   const sHalf = _sHalf2 || (cur ? ((cur.static_wem_range || cur.wem_range) / 2) : 1);
   const _sLo  = _sMid && _sHalf2 ? _sMid - _sHalf2 : (cur ? (cur.static_wem_low  || cur.wem_low)  : 0);
   const _sHi  = _sMid && _sHalf2 ? _sMid + _sHalf2 : (cur ? (cur.static_wem_high || cur.wem_high) : 0);
-  const lo2   = cur ? (isStatic2 ? _sLo  : (cur.wem_low   || _sLo))  : 0;
-  const hi2   = cur ? (isStatic2 ? _sHi  : (cur.wem_high  || _sHi))  : 0;
-  const mid2  = cur ? (isStatic2 ? _sMid : (cur.wem_mid   || _sMid)) : 0;
+  const _dte2 = cur ? (cur.dte || 1) : 1;
+  const _liveIV2 = cur ? ((cur.atm_iv && cur.atm_iv > 0 ? cur.atm_iv : _sIV)) : _sIV;
+  const _dynHalf2 = _sMid && _liveIV2 ? _sMid * _liveIV2 * Math.sqrt(_dte2 / 365) * 0.70 : sHalf;
+  const lo2   = cur ? (isStatic2 ? _sLo  : _sMid - _dynHalf2) : 0;
+  const hi2   = cur ? (isStatic2 ? _sHi  : _sMid + _dynHalf2) : 0;
+  const mid2  = cur ? _sMid : 0;
   const price2 = (spy.price || mid2 || 0);
-  const halfRange2 = isStatic2 ? sHalf : (cur ? (cur.wem_range/2 || sHalf) : 1);
+  const halfRange2 = isStatic2 ? sHalf : _dynHalf2;
   const z = halfRange2 > 0 ? (price2 - mid2) / halfRange2 : 0;
   const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
   const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
