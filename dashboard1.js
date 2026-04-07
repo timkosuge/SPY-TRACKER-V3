@@ -1459,11 +1459,12 @@ function renderDesk(md,sd){
           const fmtB = n => { if(!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
           if (!gFlip && !gSup && !gRes) return '';
           const canvasId = 'miniGexCanvas';
-          setTimeout(() => {
+          const _drawMiniGex = () => {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return;
             const dpr = window.devicePixelRatio || 1;
-            const W = canvas.parentElement.clientWidth;
+            const W = canvas.parentElement?.clientWidth || canvas.closest?.('.panel')?.clientWidth || 600;
+            if (!W || W < 10) { setTimeout(_drawMiniGex, 200); return; }
             const H = 160;
             canvas.width  = W * dpr; canvas.height = H * dpr;
             canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -1532,7 +1533,8 @@ function renderDesk(md,sd){
               ctx.fillStyle='#00ccff'; ctx.textAlign='left'; ctx.font="bold 11px 'Share Tech Mono',monospace";
               ctx.fillText('$'+spot.toFixed(2), x+8, midY+4);
             }
-          }, 80);
+          };
+          setTimeout(_drawMiniGex, 150);
           let html = '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">';
           html += '<div style="font-family:\'Orbitron\',monospace;font-size:8px;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;">⬡ GEX LEVELS</div>';
           html += '<canvas id="miniGexCanvas" style="width:100%;display:block;border-radius:3px;"></canvas>';
