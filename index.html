@@ -6821,6 +6821,52 @@ function openWeatherWindow() {
   });
 }
 
+// ── Live News easter egg — triple-click CT time ───────────────────────────────
+let _newsTapCount = 0, _newsTapTimer = null;
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#hubClockBlock')) return;
+  _newsTapCount++;
+  clearTimeout(_newsTapTimer);
+  if (_newsTapCount >= 3) {
+    _newsTapCount = 0;
+    openNewsWindow();
+    return;
+  }
+  _newsTapTimer = setTimeout(() => { _newsTapCount = 0; }, 800);
+});
+
+function openNewsWindow() {
+  const existing = document.getElementById('newsWindow');
+  if (existing) { existing.remove(); return; }
+
+  const win = document.createElement('div');
+  win.id = 'newsWindow';
+  win.style.cssText = [
+    'position:fixed', 'bottom:20px', 'right:20px', 'width:480px', 'height:290px',
+    'background:#000', 'border:1px solid var(--border2)', 'border-radius:6px',
+    'box-shadow:0 8px 32px rgba(0,0,0,0.7)', 'z-index:9999',
+    'display:flex', 'flex-direction:column', 'overflow:hidden',
+    "font-family:'Orbitron',monospace"
+  ].join(';');
+
+  win.innerHTML = `
+    <div id="newsWinHeader" style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;cursor:move;">
+      <span style="font-size:9px;letter-spacing:2px;color:var(--text3);">&#x2B21; LIVE NEWS</span>
+      <button onclick="document.getElementById('newsWindow').remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text3)'">&#xD7;</button>
+    </div>
+    <iframe src="https://www.youtube.com/embed/vDe28GmG1to?si=igmPHSx5s8Ovw0Yp&autoplay=1&mute=1" style="flex:1;width:100%;border:none;" allow="autoplay;encrypted-media" allowfullscreen></iframe>
+  `;
+
+  const header = win.querySelector('#newsWinHeader');
+  let dragging = false, ox = 0, oy = 0;
+  header.addEventListener('mousedown', e => { if (e.target.tagName === 'BUTTON') return; dragging = true; ox = e.clientX - win.getBoundingClientRect().left; oy = e.clientY - win.getBoundingClientRect().top; });
+  document.addEventListener('mousemove', e => { if (!dragging) return; win.style.left=(e.clientX-ox)+'px'; win.style.top=(e.clientY-oy)+'px'; win.style.right='auto'; win.style.bottom='auto'; });
+  document.addEventListener('mouseup', () => { dragging = false; });
+
+  document.body.appendChild(win);
+}
+
 // ── Quote Easter Eggs ─────────────────────────────────────────────────────────
 
 const PATIENCE_QUOTES = [
