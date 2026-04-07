@@ -5060,10 +5060,17 @@ function _renderMacroHTML(data) {
       ${seriesCard('PCEPILFE', 'Core PCE — Fed Target',
         'The Federal Reserve official inflation target is 2% Core PCE. This is the number that directly drives Fed rate decisions. Below 2% = dovish. Above 3% = hawkish.',
         'The last time Core PCE was sustainably at 2% was 2018-2019. Post-COVID peak was 5.6% in early 2022.')}
+      ${seriesCard('CPIAUCSL', 'Headline CPI (All Items)',
+        'The broadest inflation measure — includes food and energy. This is what you feel at the grocery store and gas pump. The Fed focuses on Core PCE but headline CPI drives consumer psychology.',
+        'Peaked at 9.1% in June 2022 — highest since 1981. The Fed raised rates 525bps in 16 months to fight it. Shelter and services have been the last holdouts.')}
       ${seriesCard('T10YIE', '10-Year Breakeven Inflation',
         'What the bond market expects inflation to average over the next 10 years. Derived from TIPS vs nominal Treasuries. This is forward-looking — tells you where inflation is headed, not where it has been.',
         'Spikes above 3% occurred in 2022 and during post-COVID reopening. Below 2% signals deflation risk — historically rare outside recessions.')}
     </div>
+
+      ${seriesCard('DFII10', '10-Year Real Yield (TIPS)',
+        'The "real" interest rate after inflation. Rising real yields = tighter financial conditions, headwind for equities and gold. Negative real yields = financial repression = bullish for risk assets.',
+        'Real yields went deeply negative (-1.5%) in 2021-2022 during the inflation surge. Normalization above 2% historically precedes equity compression.')}
 
     <!-- EMPLOYMENT -->
     ${sectionHdr('EMPLOYMENT', '#00ff88', 'Labor market health · Fed dual mandate')}
@@ -5082,9 +5089,30 @@ function _renderMacroHTML(data) {
       ${seriesCard('JTSJOL', 'Job Openings (JOLTS)',
         'How many jobs are available but unfilled. High openings = employers need workers = wage pressure. Low openings = labor demand cooling = Fed can relax.',
         'Job openings peaked at 12 million in 2022 — a historically unprecedented 2 jobs per unemployed person. The "soft landing" narrative gained credibility as openings fell without unemployment spiking.')}
+      ${seriesCard('PAYEMS', 'Nonfarm Payrolls (Monthly Change)',
+        'The most-watched monthly jobs report. How many jobs were added or lost. Above 200K = strong. 100-200K = healthy. Below 100K = slowing. Negative = recession alarm.',
+        'COVID wiped 22M jobs in 2 months. The recovery added them back faster than any prior cycle — a structural mystery that economists still debate.')}
+      ${seriesCard('CCSA', 'Continuing Jobless Claims',
+        'People who filed for unemployment last week AND the week before. A leading indicator of labor market deterioration. Rising continuing claims = people struggling to find work after losing jobs.',
+        'Continuing claims below 1.8M = tight market. Above 2.5M = labor market loosening. Spikes above 3M historically signal recession.')}
       ${seriesCard('U6RATE', 'U-6 Underemployment Rate',
-        'The broadest measure of labor market slack — includes people working part-time who want full-time, and those who gave up looking. U-6 is always higher than U-3 (headline unemployment).',
-        'U-6 peaked at 22.9% during COVID. It tracks closely with the business cycle — a rising U-6 often signals a broader slowdown before the headline unemployment rate reflects it.')}
+        'The broadest labor market measure — includes part-time workers who want full-time and discouraged workers who stopped looking. Always higher than headline U-3.',
+        'U-6 peaked at 22.9% during COVID. Rising U-6 often signals broader slowdown before headline unemployment catches up.')}
+      ${seriesCard('PAYEMS', 'Nonfarm Payrolls (Total)',
+        'Total jobs in the US economy outside of farming — the headline monthly jobs report number. The single most market-moving data release each month.',
+        'Added 20M jobs in just 3 months in 2021 after losing 22M in March-April 2020. The speed of recovery was unprecedented. Monthly pace has decelerated from 500K+ (2021) to ~150-200K (2024).')}
+      ${seriesCard('CCSA', 'Continuing Jobless Claims',
+        'People currently receiving unemployment benefits — not just new filers. Rising continuing claims mean the unemployed are staying unemployed longer. A more durable signal than initial claims.',
+        'Continuing claims hit 5.9M in May 2020. Persistently elevated continuing claims (above 2M) signal structural unemployment, not just cyclical fluctuation.')}
+      ${seriesCard('JTSQUL', 'Quits Rate',
+        'The percentage of workers voluntarily quitting their jobs. High quits = workers are confident they can find better jobs (tight labor market). Falling quits = workers are nervous about leaving.',
+        'The "Great Resignation" pushed quits to a record 3.0% in 2021-2022. The quits rate is a leading indicator of wage growth — workers quit for better pay. Now normalizing signals wage pressure easing.')}
+      ${seriesCard('CES0500000003', 'Average Hourly Earnings',
+        'Average hourly wages across all private sector workers. Wage growth above 4% YoY typically signals inflationary pressure. The Fed watches this closely as a key inflation input.',
+        'Wages surged 6-7% YoY in 2022 — the fastest pace since the early 1980s and a major contributor to the services inflation that proved sticky even as goods inflation faded.')}
+      ${seriesCard('OPHNFB', 'Nonfarm Business Productivity',
+        'Output per hour worked — the most important long-run economic variable. Rising productivity allows wages to rise without inflation. Falling productivity means growth requires more workers.',
+        'Productivity collapsed -3.5% in 2022 — the worst since 1948. Rebounded strongly in 2023-2024. The AI productivity question: will technology finally show up in the productivity data? The Solow Paradox redux.')}
     </div>
 
     <!-- GROWTH -->
@@ -5102,9 +5130,40 @@ function _renderMacroHTML(data) {
         'Monthly measure of consumer spending at stores and online. Consumer spending is ~70% of US GDP, so this is the single most important growth indicator. Inflation-adjusted matters more than nominal.',
         'Retail sales collapsed 16% in April 2020, then surged as stimulus hit. The post-COVID spending boom drove both growth and inflation simultaneously — an unusual combination.')}
       ${seriesCard('INDPRO', 'Industrial Production Index',
-        'Measures output from manufacturing, mining, and utilities. A leading indicator for corporate earnings — when factories slow down, profits follow. PMI surveys are even more leading.',
-        'Industrial production peaked in late 2022 and has been flat to declining since — consistent with a "manufacturing recession" even as the services sector held up.')}
+        'Output from manufacturing, mining, and utilities. A leading indicator for corporate earnings — when factories slow down, profits follow.',
+        'Peaked in late 2022 and has been flat to declining since — a "manufacturing recession" even as services held up.')}
+      ${seriesCard('HOUST', 'Housing Starts',
+        'Number of new residential construction projects begun each month. Housing is one of the most interest-rate-sensitive sectors. Starts collapse when mortgage rates rise.',
+        'Housing starts fell 30% from peak in 2022 as mortgage rates surged. The "lock-in effect" — existing homeowners refusing to sell and give up 3% mortgages — created a historic housing supply crunch.')}
+      ${seriesCard('PERMIT', 'Building Permits',
+        'Authorizations to begin new construction — a leading indicator for housing starts. Permits lead starts by 1-2 months.',
+        'Permits peak and trough before starts — watching permits gives advance warning of the housing cycle direction.')}
+      ${seriesCard('PCE', 'Personal Consumption Expenditures',
+        'Total consumer spending — 70% of US GDP. The most important growth driver. PCE tracks what people actually spend, not what they could spend.',
+        'PCE surged 10%+ YoY in 2021 as stimulus-fueled demand hit a supply-constrained economy — the direct cause of the 2022 inflation surge.')}
+      ${seriesCard('DSPIC96', 'Real Disposable Personal Income',
+        'Inflation-adjusted income after taxes. Real income growth supports sustainable spending. When spending grows faster than income, consumers are drawing down savings or taking on debt.',
+        'Real disposable income fell in 2021-2022 even as nominal wages rose because inflation eroded purchasing power faster than wages increased — the source of consumer frustration despite "low unemployment."')}
+      ${seriesCard('BOPGSTB', 'US Trade Balance',
+        'Exports minus imports. Negative = trade deficit (US imports more than it exports). The trade deficit matters because it represents money flowing out of the US economy.',
+        'The US has run a trade deficit continuously since 1975. Surged to record -$100B/month in 2022 as consumers bought imported goods with stimulus money. Trade policy (tariffs) is explicitly about changing this.')}
+      ${seriesCard('ISRATIO', 'Inventory to Sales Ratio',
+        'How many months of inventory businesses have relative to sales. Rising ratio = demand weakening or supply overshooting. A key leading indicator for production cutbacks.',
+        'Inventory/sales spiked in 2022 as supply chains recovered just as consumer demand was weakening — leading to the "inventory recession" in manufacturing.')}
+      ${seriesCard('CSUSHPISA', 'Case-Shiller Home Price Index',
+        'Nationwide home price index — the gold standard for tracking US housing prices. Includes repeat-sale methodology to track actual price changes.',
+        'Home prices rose 40% from 2020-2022 — the largest 2-year gain ever recorded. Fell 5% in 2022-2023 then re-accelerated. Affordability hit the worst levels since records began.')}
     </div>
+
+      ${seriesCard('HOUST', 'Housing Starts',
+        'New residential construction. Housing is 15-18% of GDP when you include construction, real estate services, and furniture. Leading indicator — builders don't break ground unless confident.',
+        'Housing starts collapsed 30% in 2022 as mortgage rates spiked. A sustained recovery requires either lower rates or demographic demand overwhelming affordability concerns.')}
+      ${seriesCard('CSUSHPISA', 'Case-Shiller Home Price Index',
+        'The gold standard for US home price data. Covers 20 major metro areas. YoY above 5% = overheating. Near 0% = correction. Negative = crisis.',
+        'Home prices fell 27% nationally in 2006-2012. The 2020-2022 surge of 40%+ in 24 months was historically unprecedented — driven by remote work, low rates, and supply shortage.')}
+      ${seriesCard('DSPIC96', 'Real Disposable Personal Income',
+        'What Americans have left to spend after taxes and inflation. The true purchasing power of households. Declining real DPI = consumers spending on credit or cutting back.',
+        'COVID stimulus briefly pushed real DPI 30% above trend — the rocket fuel for the 2021-2022 inflation surge. The hangover: real DPI fell below pre-COVID trend by 2023.')}
 
     <!-- MONETARY & LIQUIDITY -->
     ${sectionHdr('MONETARY POLICY & LIQUIDITY', '#8855ff', 'Fed balance sheet, money supply, net liquidity')}
@@ -5126,6 +5185,18 @@ function _renderMacroHTML(data) {
       ${seriesCard('WTREGEN', 'Treasury General Account (TGA)',
         'The US Government checking account at the Fed. When Treasury spends from TGA, money flows into the economy (bullish). When Treasury rebuilds TGA, it drains liquidity (bearish). Debt ceiling cycles make this volatile.',
         'The debt ceiling fight in 2023 caused TGA to drop to near-zero, then Treasury refilled it rapidly after resolution — draining $700B+ from markets in weeks and contributing to summer volatility.')}
+      ${seriesCard('WSHOMCB', 'Fed MBS Holdings',
+        'Fed holdings of mortgage-backed securities. The Fed bought MBS to suppress mortgage rates. Slow runoff means the private market must absorb supply the Fed once bought — keeping mortgage rates elevated.',
+        'Fed MBS peaked at $2.7T in 2022. Unlike Treasuries, MBS prepay unpredictably — making QT less controllable and keeping the Fed in the housing market longer than intended.')}
+      ${seriesCard('WSTSECOUT', 'Fed Treasury Holdings',
+        'Fed holdings of US Treasury securities — the core of QE/QT. When the Fed holds Treasuries, it suppresses yields. Reducing holdings forces the market to absorb supply.',
+        'Fed Treasury holdings peaked at $5.7T in 2022. The ongoing unwind forces primary dealers and foreign holders to absorb what the Fed no longer buys — structural upward pressure on yields.')}
+      ${seriesCard('BOGMBASE', 'Monetary Base',
+        'Currency in circulation + bank reserves at the Fed. The rawest money measure. The foundation from which the banking system creates credit.',
+        'Exploded from $800B to $6T in the QE era. The transmission from base money to broad money to inflation operates with long and variable lags — explaining why 2020-2021 QE only showed up in inflation in 2022.')}
+      ${seriesCard('TOTRESNS', 'Bank Reserves at the Fed',
+        'Cash commercial banks keep on deposit at the Federal Reserve. High reserves = banks have capacity to lend. Critically important for understanding the plumbing of QT.',
+        'Reserves collapsed to near zero before 2008 (banks held minimum required). After QE, reserves exploded to $4T+. The Fed pays interest on these reserves — effectively paying banks to not lend, controlling inflation.')}
     </div>
 
     <!-- RATES & CREDIT -->
@@ -5145,20 +5216,101 @@ function _renderMacroHTML(data) {
       ${seriesCard('DGS10', '10-Year Treasury Yield',
         'The benchmark long-term interest rate. Affects mortgage rates, corporate bonds, and stock valuations. Higher 10Y = headwind for stocks (higher discount rate for future earnings). Watch for moves above/below key levels.',
         'The 10Y yield hit 0.5% in 2020 (all-time low) and peaked at 5.0% in October 2023. The 4-5% range is historically "normal" but felt extreme after a decade of near-zero rates.')}
+      ${seriesCard('DGS2', '2-Year Treasury Yield',
+        'The most Fed-sensitive Treasury. Moves almost in lockstep with Fed Funds expectations. Rising = market pricing more hikes or higher-for-longer. Falling = pricing cuts.',
+        'The 2Y yield inverted below the 10Y in 2022 — the yield curve inversion that historically precedes recessions. Watch for dis-inversion as a recession confirmation signal.')}
+      ${seriesCard('MORTGAGE30US', '30-Year Mortgage Rate',
+        'The rate most Americans actually pay to buy a home. Peaked above 8% in late 2023 — highest since 2000. Every 1% move = ~$250/month on a $400K loan. Housing affordability destroyed.',
+        'The 2020-2021 rate of 2.7-3% created a "lock-in" effect — millions of homeowners won't sell because they'd lose their rate. This structural supply freeze is keeping home prices elevated.')}
+      ${seriesCard('BAMLC0A0CM', 'Investment Grade Credit Spread',
+        'How much more yield IG corporate bonds pay vs Treasuries. Below 1% = complacency. Above 2% = stress. Above 3% = crisis. IG spreads are tighter than HY and move less dramatically.',
+        'IG spreads hit record tights in 2021 at ~0.8%. Widened to 1.6% in 2022 rate shock. Current levels are a key indicator of whether large-cap US companies face funding stress.')}
       ${seriesCard('BAMLH0A0HYM2', 'High Yield Credit Spread',
-        'The extra yield investors demand to hold "junk" bonds vs safe Treasuries. Tight spreads (below 3.5%) = markets are calm, credit is flowing freely. Wide spreads (above 6%) = stress, companies struggling to borrow.',
-        'HY spreads blew out to 11% in March 2020 (COVID) and 8.5% in 2022. They compressed to near record lows of 2.8% in 2024 — pricing in almost no default risk, which itself became a topic of debate.')}
+        'The extra yield investors demand to hold "junk" bonds vs safe Treasuries. Tight spreads = calm markets. Wide spreads = stress and tightening financial conditions.',
+        'HY spreads blew out to 11% in March 2020 and 8.5% in 2022. Compressed to near record lows of 2.8% in 2024 — pricing in almost no default risk.')}
+      ${seriesCard('BAMLC0A0CM', 'Investment Grade Credit Spread',
+        'The extra yield investment-grade corporate bonds pay vs equivalent Treasuries. Tighter than HY but moves in the same direction. When IG spreads widen, the credit cycle is turning.',
+        'IG spreads hit 3.6% in March 2020 and 1.8% in 2022. Near record tights of 0.85% in late 2024 — suggesting credit markets were pricing in a near-perfect macro scenario.')}
+      ${seriesCard('DGS2', '2-Year Treasury Yield',
+        'The most sensitive yield to near-term Fed policy expectations. When the 2Y trades above the Fed Funds Rate, markets expect hikes. When below, cuts are priced in.',
+        'The 2Y yield peaked at 5.08% in 2023 — highest since 2006. It leads Fed action rather than following it: the 2Y usually "tells" the Fed what to do before they announce it.')}
+      ${seriesCard('DGS30', '30-Year Treasury Yield',
+        'Long bond yield. Sensitive to inflation expectations and fiscal sustainability concerns. A rising 30Y relative to 10Y signals "term premium" — investors demanding more compensation for long-duration risk.',
+        'The 30Y briefly traded at 5.18% in 2023 — highest since 2007. The term premium (extra compensation for duration) returning after a decade of near-zero is a structural shift for asset allocation.')}
+      ${seriesCard('T10Y3M', 'Yield Curve (10Y minus 3M)',
+        'Alternative yield curve measure. Some economists prefer this over 10Y-2Y as a recession predictor. The NY Fed uses this in their recession probability model.',
+        'Inverted more deeply than 10Y-2Y in 2023. NY Fed recession probability model peaked above 70% — the highest since the early 1980s. A reminder that yield curve inversions signal probabilities, not certainties.')}
+      ${seriesCard('MORTGAGE30US', '30-Year Mortgage Rate',
+        'The interest rate on a 30-year fixed mortgage — the most important rate for US housing affordability. Tracks the 10Y Treasury yield plus a spread.',
+        'Surged from 3% to 7.8% in 2023 — the largest and fastest increase in mortgage rates since the early 1980s. Housing affordability hit the worst levels ever recorded. Volume collapsed. Prices stayed elevated (locked-in effect).')}
+      ${seriesCard('DFII10', '10-Year Real Yield (TIPS)',
+        'The 10Y Treasury yield adjusted for expected inflation. The real cost of borrowing. Negative real yields = financial repression (savers lose to inflation). High real yields = restrictive financial conditions.',
+        'Real yields went deeply negative (-1%) in 2021-2022 — the most accommodative financial conditions in decades. Surged to +2.5% in 2023 — a near-record swing that tightened conditions dramatically.')}
     </div>
 
     <!-- CONSUMER -->
-    ${sectionHdr('CONSUMER HEALTH', '#ff8800', 'Spending · confidence · savings')}
+    ${sectionHdr('CONSUMER HEALTH', '#ff8800', 'Spending · credit · confidence · savings')}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      ${seriesCard('UMCSENT', 'University of Michigan Consumer Sentiment',
-        'Monthly survey of ~600 households on their financial situation and economic outlook. Forward-looking — low confidence leads to less spending. One of the best leading indicators for retail sales.',
-        'Consumer sentiment collapsed to 50 in June 2022 — lower than during the 2008 financial crisis — even though the economy was technically not in recession. The "vibecession" phenomenon.')}
+      ${seriesCard('UMCSENT', 'UMich Consumer Sentiment',
+        'Monthly survey of ~600 households on their financial situation and economic outlook. Forward-looking — low confidence leads to less spending.',
+        'Collapsed to 50 in June 2022 — lower than during the 2008 crisis — even without a technical recession. The "vibecession" phenomenon.')}
+      ${seriesCard('DRCCLACBS', 'Credit Card Delinquency Rate',
+        'Percentage of credit card balances 30+ days past due. The canary in the consumer coal mine. Rising delinquencies = consumers running out of financial buffer. Precedes defaults by 2-4 quarters.',
+        'Delinquencies hit historic lows in 2021 due to stimulus. Rising sharply since 2022 as the stimulus cushion depleted. Now above pre-COVID levels for the first time — a critical watch signal.')}
+      ${seriesCard('REVOLSL', 'Revolving Credit (Credit Cards)',
+        'Total outstanding credit card debt. Americans have been putting more on cards as savings depleted. At record highs above $1.1T. Rising revolving credit + rising delinquencies = consumer stress.',
+        'Revolving credit collapsed in 2020 as stimulus allowed paydowns. The subsequent surge above $1T is structural — lower-income consumers increasingly dependent on credit for necessities.')}
       ${seriesCard('PSAVERT', 'Personal Savings Rate',
-        'Percentage of disposable income that households save rather than spend. High savings = potential spending fuel. Low savings = consumers stretched. Went negative before the 2008 crisis.',
-        'The savings rate surged to 33% in April 2020 (COVID lockdowns + stimulus) then crashed as consumers spent down their savings buffer. Low savings rates in 2023-2024 raised questions about spending sustainability.')}
+        'Percentage of disposable income saved rather than spent. High = potential spending fuel. Low = consumers stretched.',
+        'Surged to 33% in April 2020 then crashed as consumers spent down their stimulus buffer.')}
+      ${seriesCard('DRCCLACBS', 'Credit Card Delinquency Rate',
+        'Percentage of credit card balances 30+ days past due. Rising delinquencies signal consumer stress before unemployment rises. A leading recession indicator.',
+        'Hit record lows in 2021 (stimulus) then climbed steadily as stimulus wore off. Approaching 2008 pre-crisis levels in 2024-2025.')}
+      ${seriesCard('DRSFRMACBS', 'Mortgage Delinquency Rate',
+        'Percentage of mortgages past due. Spiked to 10% in 2010 during the housing crisis. Rising delinquencies forecast foreclosures and housing price pressure.',
+        'Remained low post-COVID due to forbearance programs and home price appreciation. A key watch item as adjustable-rate mortgages reset.')}
+      ${seriesCard('REVOLSL', 'Revolving Credit Outstanding',
+        'Total credit card debt outstanding. Growing faster than income = consumers borrowing to maintain spending. A sign of stress when combined with high rates.',
+        'Hit $1.3T in 2024 — record high. Combined with near-record interest rates of 21%+, this is the largest consumer debt burden since the 2008 crisis.')}
+      ${seriesCard('TOTALSL', 'Total Consumer Credit',
+        'All consumer debt: credit cards + auto loans + student loans. Measures total household leverage.',
+        'Exceeded $5T for the first time in 2024. The quality of this debt (who holds it, at what rates) matters as much as the quantity.')}
+    </div>
+
+    <!-- FISCAL & DEBT -->
+    ${sectionHdr('FISCAL POSITION & NATIONAL DEBT', '#ff3355', 'Deficit · debt level · interest burden')}
+    <div style="background:rgba(255,51,85,0.04);border:1px solid rgba(255,51,85,0.12);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      <strong style="color:var(--text1);">Why does the deficit matter?</strong> The US government spends more than it collects in taxes every year. It borrows the difference by issuing Treasury bonds. When debt is high relative to GDP, more of the budget goes to interest payments — crowding out spending on everything else. 
+      At current rates, interest on the debt is the <strong style="color:#ff3355;">fastest-growing line item in the federal budget</strong> — exceeding defense spending for the first time in US history.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+      ${seriesCard('GFDEBTN', 'Federal Debt Outstanding',
+        'Total national debt — all Treasury bonds, bills, and notes outstanding. Crossed $36T in 2025. The trajectory matters more than the level: adding $1T every ~100 days.',
+        'Took 200 years to reach $1T (1981). Then $1T every ~18 months in the 2020s. Einstein's "eighth wonder" — compound interest applied to a sovereign.')}
+      ${seriesCard('GFDEGDQ188S', 'Federal Debt to GDP',
+        'Debt as a percentage of economic output. The most important long-run sustainability metric. Above 100% = debt exceeds annual economic output. Japan is at 260% — the extreme case.',
+        'The US crossed 100% for the first time during COVID in 2020. Pre-WWII record was 106%. Current trajectory reaches 130%+ by 2030 without fiscal adjustment.')}
+      ${seriesCard('FYFSD', 'Federal Budget Surplus/Deficit',
+        'Annual difference between government revenue and spending. Negative = deficit. The US has run a deficit every year since 2001 except 2000.',
+        'The 2023 deficit was $1.7T — 6.3% of GDP — during a non-recessionary year. Structural deficits of this size are historically associated with either crisis or currency devaluation.')}
+      ${seriesCard('INTGSTUSESM193N', 'Interest Payments as % of GDP',
+        'What the government pays to service its debt as a share of economic output. Rising fast as old low-rate debt matures and gets refinanced at higher rates.',
+        'Crossed 3% of GDP in 2024 — exceeding the entire defense budget. At current projections, interest payments consume 20% of all federal revenue by 2030.')}
+    </div>
+
+    <!-- DOLLAR & GLOBAL -->
+    ${sectionHdr('DOLLAR & GLOBAL FINANCE', '#00ccff', 'Reserve currency · trade · exchange rates')}
+    <div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+      <strong style="color:var(--text1);">The dollar is the world's reserve currency.</strong> 60% of global foreign exchange reserves are in dollars. Oil is priced in dollars. Most international trade is settled in dollars. This gives the US the "exorbitant privilege" — it can borrow cheaply and run deficits that would destroy any other currency. 
+      The trade-weighted dollar tells you the relative strength of the US economy vs its trading partners. DXY strength benefits US consumers (cheaper imports) but hurts US exporters and emerging market debtors.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
+      ${seriesCard('DTWEXBGS', 'Trade-Weighted Dollar Index',
+        'Broad measure of the dollar against all US trading partners, weighted by trade volume. More comprehensive than DXY (which only tracks 6 currencies).',
+        'The dollar surged 15% in 2022 as the Fed hiked faster than other central banks. A strong dollar exports US inflation to the rest of the world, creating pressure on EM economies with dollar-denominated debt.')}
+      ${seriesCard('DEXJPUS', 'USD/JPY Exchange Rate',
+        'How many yen per dollar. The most important cross-rate for global macro — the yen carry trade (borrowing cheap yen to buy US assets) is one of the largest capital flows in the world.',
+        'Yen hit 160 per dollar in 2024 — weakest since 1990. BOJ's shift away from ultra-loose policy triggered the largest single-day market crash in decades in August 2024 as carry trades unwound.')}
     </div>
 
     <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;">
@@ -5589,4 +5741,448 @@ async function refreshTransitionAI() {
   const el = document.getElementById('transitionAIText');
   if (el) el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Regenerating...</span>';
   if (_transitionData) await generateTransitionAI(_transitionData);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SOVEREIGN CHESS — The Geopolitical Financial Realignment
+// Tracks: Japan economy, US Treasury ownership, crypto endgame thesis
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _sovereignData = null;
+let _sovereignLoading = false;
+
+async function renderSovereign() {
+  const el = document.getElementById('sovereignChessContent') || document.getElementById('sovereignContent');
+  if (!el) return;
+  if (_sovereignLoading) return;
+  if (_sovereignData) { _renderSovereignHTML(_sovereignData); return; }
+
+  el.innerHTML = `<div style="padding:40px;text-align:center;">
+    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ffcc00;margin-bottom:8px;">⬡ SOVEREIGN CHESS</div>
+    <div style="font-size:12px;color:var(--text3);">Loading geopolitical financial data from FRED...</div>
+  </div>`;
+
+  _sovereignLoading = true;
+  try {
+    const r = await fetch('/fred?t=' + Date.now());
+    if (!r.ok) throw new Error('FRED endpoint ' + r.status);
+    _sovereignData = await r.json();
+    _renderSovereignHTML(_sovereignData);
+  } catch(e) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:#ff3355;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;margin-bottom:8px;">DATA UNAVAILABLE</div>
+      <div style="font-size:12px;">${e.message}</div>
+    </div>`;
+  }
+  _sovereignLoading = false;
+}
+
+function _renderSovereignHTML(data) {
+  const el = document.getElementById('sovereignChessContent') || document.getElementById('sovereignContent');
+  if (!el || !data) return;
+
+  const S = data.series || {};
+  const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
+  const fmt1 = v => v == null ? '—' : Number(v).toFixed(1);
+  const fmtB = v => {
+    if (v == null) return '—';
+    const abs = Math.abs(v), sign = v < 0 ? '-' : '';
+    if (abs >= 1e12) return sign + '$' + (abs/1e12).toFixed(2) + 'T';
+    if (abs >= 1e9)  return sign + '$' + (abs/1e9).toFixed(1) + 'B';
+    if (abs >= 1e6)  return sign + '$' + (abs/1e6).toFixed(1) + 'M';
+    return sign + '$' + Math.round(abs).toLocaleString();
+  };
+  const trendArrow = t => t === 'rising' ? '▲' : t === 'falling' ? '▼' : '→';
+  const trendColor = t => t === 'rising' ? '#00ff88' : t === 'falling' ? '#ff3355' : '#ffcc00';
+
+  // Mini sparkline SVG
+  const spark = (history, color = '#00ccff', h = 50) => {
+    if (!history || history.length < 2) return '';
+    const vals = history.map(d => d.v).filter(v => v != null);
+    if (vals.length < 2) return '';
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const range = max - min || Math.abs(min) * 0.05 || 1;
+    const W = 200, H = h, P = 3;
+    const x = i => P + (i / (vals.length - 1)) * (W - P*2);
+    const y = v => H - P - ((v - min) / range) * (H - P*2);
+    const pts = vals.map((v,i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    const fill = `${x(0).toFixed(1)},${H} ` + pts + ` ${x(vals.length-1).toFixed(1)},${H}`;
+    return `<svg width="${W}" height="${H}" style="display:block;width:100%;height:${H}px;">
+      <polygon points="${fill}" fill="${color}" opacity="0.12"/>
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.9"/>
+      <circle cx="${x(vals.length-1)}" cy="${y(vals[vals.length-1])}" r="2.5" fill="${color}"/>
+    </svg>`;
+  };
+
+  // Data card
+  const dataCard = (title, value, unit, change, changeLabel, history, color, desc) => {
+    const chgColor = change == null ? 'var(--text3)' : change > 0 ? '#00ff88' : change < 0 ? '#ff3355' : '#ffcc00';
+    return `<div class="panel" style="border-top:2px solid ${color};">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">${title}</div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:${color};">${value}</div>
+        <div style="font-size:11px;color:var(--text3);">${unit}</div>
+      </div>
+      ${change != null ? `<div style="font-size:11px;color:${chgColor};margin-bottom:6px;">${change > 0 ? '+' : ''}${fmt2(change)} ${changeLabel}</div>` : ''}
+      ${spark(history, color, 45)}
+      ${desc ? `<div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;">${desc}</div>` : ''}
+    </div>`;
+  };
+
+  // Section header
+  const secHdr = (icon, title, subtitle, color) => `
+    <div style="display:flex;align-items:center;gap:12px;margin:24px 0 12px;padding-bottom:8px;border-bottom:1px solid ${color}44;">
+      <div style="font-size:20px;">${icon}</div>
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:${color};">${title}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">${subtitle}</div>
+      </div>
+    </div>`;
+
+  // Pull live quotes for Japanese stocks
+  const lq = window._macroMD?.quotes || {};
+  const japanStocks = [
+    { sym: '6758.T', name: 'Sony',         desc: 'AI/entertainment/sensors' },
+    { sym: '9984.T', name: 'SoftBank',     desc: 'AI/tech investment arm' },
+    { sym: '6861.T', name: 'Keyence',      desc: 'Factory automation' },
+    { sym: '6954.T', name: 'FANUC',        desc: 'Industrial robots' },
+    { sym: '8035.T', name: 'Tokyo Electron',desc: 'Semiconductor equipment' },
+    { sym: '6723.T', name: 'Renesas',      desc: 'Auto/industrial chips' },
+    { sym: '7203.T', name: 'Toyota',       desc: 'Robotics/EV/hydrogen' },
+    { sym: '6902.T', name: 'DENSO',        desc: 'Auto tech/sensors' },
+    { sym: 'NTDOY',  name: 'Nintendo',     desc: 'Consumer tech/IP' },
+    { sym: 'MFG',    name: 'Mitsubishi UFJ',desc: 'Japan banking/UST' },
+    { sym: 'NMR',    name: 'Nomura',       desc: 'Japan investment bank' },
+  ];
+
+  // Treasury ownership data
+  const japanUST  = S.FDHBJA;
+  const chinaUST  = S.FDHBCHI;
+  const totalForeign = S.FDHBFIN;
+
+  // Japan economy
+  const jpyusd    = S.DEXJPUS;
+  const jpn10y    = S.IRLTLT01JPM156N;
+  const jpnUnemp  = S.JPNURQPDS;
+  const jpnCpi    = S.JPNCPIALLMINMEI;
+  const jpnGdp    = S.JPNRGDPEXP;
+
+  // Crypto + dollar
+  const dxy       = S.DTWEXBGS;
+  const usdJpy    = S.DEXJPUS;
+  const usdCny    = S.DEXCHUS;
+
+  // Compute Japan vs China gap in UST holdings
+  const japanLatest = japanUST?.latest;
+  const chinaLatest = chinaUST?.latest;
+  const gapBillions = japanLatest && chinaLatest ? japanLatest - chinaLatest : null;
+
+  // Build Japan vs China holdings chart data
+  const buildComparisonChart = () => {
+    if (!japanUST?.history || !chinaUST?.history) return '';
+    const jHist = japanUST.history.slice(-36);
+    const cHist = chinaUST.history.slice(-36);
+    // Align by date
+    const dates = jHist.map(d => d.d);
+    const jVals = jHist.map(d => d.v);
+    const cVals = dates.map(d => {
+      const found = chinaUST.history.find(h => h.d === d);
+      return found ? found.v : null;
+    });
+
+    const allVals = [...jVals, ...cVals.filter(v => v != null)];
+    const minV = Math.min(...allVals) * 0.95;
+    const maxV = Math.max(...allVals) * 1.02;
+    const range = maxV - minV;
+    const W = 800, H = 180, PL = 60, PR = 20, PT = 20, PB = 30;
+    const iW = W - PL - PR, iH = H - PT - PB;
+    const x = i => PL + (i / (dates.length - 1)) * iW;
+    const y = v => PT + iH - ((v - minV) / range) * iH;
+
+    const jLine = jVals.map((v,i) => (i===0?'M':'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+    const cLine = cVals.map((v,i) => v != null ? ((i===0||cVals[i-1]==null?'M':'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)) : '').filter(Boolean).join(' ');
+
+    // Label indices
+    const labelIdxs = [0, Math.floor(dates.length/4), Math.floor(dates.length/2), Math.floor(3*dates.length/4), dates.length-1];
+
+    return `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;">
+      <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+iH}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <line x1="${PL}" y1="${PT+iH}" x2="${PL+iW}" y2="${PT+iH}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      ${[0,0.25,0.5,0.75,1].map(pct => {
+        const val = minV + pct * range;
+        const yy = y(val);
+        return `<line x1="${PL}" y1="${yy.toFixed(1)}" x2="${PL+iW}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+          <text x="${PL-5}" y="${(yy+4).toFixed(1)}" text-anchor="end" fill="rgba(255,255,255,0.3)" font-size="9" font-family="Share Tech Mono,monospace">$${(val/1000).toFixed(0)}B</text>`;
+      }).join('')}
+      ${labelIdxs.map(i => `<text x="${x(i).toFixed(1)}" y="${H-5}" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="9" font-family="Share Tech Mono,monospace">${dates[i]?.slice(0,7)||''}</text>`).join('')}
+      <path d="${jLine}" fill="none" stroke="#00ccff" stroke-width="2" opacity="0.9"/>
+      <path d="${cLine}" fill="none" stroke="#ff3355" stroke-width="2" opacity="0.9"/>
+      <text x="${PL+iW-60}" y="${y(jVals[jVals.length-1])-8}" fill="#00ccff" font-size="10" font-family="Orbitron,monospace">JAPAN</text>
+      <text x="${PL+iW-60}" y="${y(cVals.filter(v=>v!=null).slice(-1)[0]||minV)+14}" fill="#ff3355" font-size="10" font-family="Orbitron,monospace">CHINA</text>
+    </svg>`;
+  };
+
+  el.innerHTML = `<div style="padding:16px 16px;max-width:1400px;margin:0 auto;">
+
+    <!-- THESIS HEADER -->
+    <div style="background:linear-gradient(135deg,rgba(255,204,0,0.06),rgba(0,204,255,0.03));border:1px solid rgba(255,204,0,0.2);border-radius:6px;padding:18px 20px;margin-bottom:20px;">
+      <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:3px;color:#ffcc00;margin-bottom:10px;">⬡ SOVEREIGN CHESS — THE GREAT REALIGNMENT</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ccff;letter-spacing:1px;margin-bottom:6px;">THE JAPAN THESIS</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.7;">Japan's decade-plus of stagnation ends as they become a pivotal partner in the US tech buildout. Their robotics, semiconductor, and manufacturing DNA positions them for a boom that rivals the 80s-90s — but this time as a <strong style="color:#00ccff;">strategic ally</strong>, not a competitor.</div>
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;letter-spacing:1px;margin-bottom:6px;">THE TREASURY THESIS</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.7;">The US wants its debt held by allies, not adversaries. Japan (#1 foreign holder) and the strategic displacement of China (#2) from US Treasuries is <strong style="color:#ffcc00;">not accidental</strong>. Watch the spread widen. This is the financial front of a 100-year dominance play.</div>
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#8855ff;letter-spacing:1px;margin-bottom:6px;">THE CRYPTO ENDGAME</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.7;">The US will not allow a rival reserve currency to survive. Bitcoin will be used, controlled, and ultimately replaced by a <strong style="color:#8855ff;">US-backed digital dollar</strong> — the full faith and credit of the United States, digitized. The "public execution" of crypto will make the lesson stick.</div>
+        </div>
+      </div>
+    </div>
+
+    ${secHdr('🏛️', 'US TREASURY OWNERSHIP — WHO HOLDS AMERICA\'S DEBT', 'Monthly TIC data from US Treasury via FRED · Japan vs China displacement', '#ffcc00')}
+
+    <!-- KEY METRICS ROW -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+      <div class="panel" style="border-top:2px solid #00ccff;text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">JAPAN HOLDINGS</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#00ccff;">${japanLatest ? '$' + (japanLatest/1000).toFixed(1) + 'T' : '—'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">#1 Foreign Holder</div>
+        <div style="font-size:11px;color:${japanUST?.trend ? trendColor(japanUST.trend) : 'var(--text3)'};margin-top:4px;">${japanUST?.trend ? trendArrow(japanUST.trend) + ' ' + japanUST.trend : '—'}</div>
+      </div>
+      <div class="panel" style="border-top:2px solid #ff3355;text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">CHINA HOLDINGS</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#ff3355;">${chinaLatest ? '$' + (chinaLatest/1000).toFixed(1) + 'T' : '—'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">#2 Foreign Holder</div>
+        <div style="font-size:11px;color:${chinaUST?.trend ? trendColor(chinaUST.trend) : 'var(--text3)'};margin-top:4px;">${chinaUST?.trend ? trendArrow(chinaUST.trend) + ' ' + chinaUST.trend : '—'}</div>
+      </div>
+      <div class="panel" style="border-top:2px solid #ffcc00;text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">JAPAN vs CHINA GAP</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#ffcc00;">${gapBillions ? '$' + Math.abs(gapBillions).toFixed(0) + 'B' : '—'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">Japan leads by</div>
+        <div style="font-size:11px;color:${gapBillions > 0 ? '#00ccff' : '#ff3355'};margin-top:4px;">${gapBillions > 0 ? '▲ Japan ahead' : '▼ China ahead'}</div>
+      </div>
+      <div class="panel" style="border-top:2px solid #8855ff;text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">TOTAL FOREIGN</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#8855ff;">${totalForeign?.latest ? '$' + (totalForeign.latest/1000).toFixed(1) + 'T' : '—'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">All Foreign Holdings</div>
+        <div style="font-size:11px;color:${totalForeign?.trend ? trendColor(totalForeign.trend) : 'var(--text3)'};margin-top:4px;">${totalForeign?.trend ? trendArrow(totalForeign.trend) + ' ' + totalForeign.trend : '—'}</div>
+      </div>
+    </div>
+
+    <!-- JAPAN vs CHINA CHART -->
+    <div class="panel" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#ffcc00;">⬡ JAPAN vs CHINA — US TREASURY HOLDINGS ($B)</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Monthly TIC data · Source: US Treasury via FRED</div>
+        </div>
+        <div style="display:flex;gap:16px;font-size:11px;font-family:'Share Tech Mono',monospace;">
+          <span style="color:#00ccff;">━━ Japan</span>
+          <span style="color:#ff3355;">━━ China</span>
+        </div>
+      </div>
+      ${buildComparisonChart()}
+      <div style="margin-top:12px;font-size:12px;color:var(--text2);line-height:1.7;padding:10px;background:rgba(255,204,0,0.04);border-radius:3px;border-left:3px solid #ffcc00;">
+        <strong style="color:#ffcc00;">What to watch:</strong> China has been reducing UST holdings since 2013 peak (~$1.3T). Japan has held steady and is now the clear #1. 
+        A sustained divergence — Japan growing, China shrinking — is the financial signature of the US-China decoupling. 
+        Every $100B China sells that Japan (or another ally) absorbs is a transfer of leverage.
+      </div>
+    </div>
+
+    ${secHdr('🗾', 'JAPAN ECONOMY — THE SLEEPING GIANT AWAKENS', 'Live FRED data · BOJ policy · Inflation era begins after 30 years', '#00ccff')}
+
+    <div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.1);border-radius:4px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
+      Japan spent 30+ years in deflationary stagnation — the very scenario the US fears. Now, for the first time since the 1990s, Japan has <strong style="color:#00ccff;">real inflation</strong>, a <strong style="color:#00ccff;">weak yen driving export competitiveness</strong>, a government actively pushing corporate governance reform, and the world's most sophisticated robotics and semiconductor equipment manufacturers sitting at the center of the AI buildout supply chain.
+      The BOJ's decade of negative rates created a massive carry trade. As rates normalize, that unwind creates volatility — but also signals a fundamental regime change in the Japanese economy.
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
+      ${dataCard('USD/JPY EXCHANGE RATE', jpyusd?.latest ? fmt1(jpyusd.latest) : '—', '¥ per $', jpyusd?.change, 'vs prev', jpyusd?.history, '#00ccff',
+        'Yen weakness = Japan exports cheaper globally. Drives corporate profits for Toyota, Sony, Nintendo. Also imports inflation — forcing BOJ to act.')}
+      ${dataCard('JAPAN 10Y BOND YIELD', jpn10y?.latest ? fmt2(jpn10y.latest) + '%' : '—', '', jpn10y?.change, 'pp vs prev', jpn10y?.history, '#ffcc00',
+        'BOJ held 10Y at near-zero for a decade via YCC. Rising yield = normalization. Watch for BOJ to lose control of the curve — that is the global volatility trigger.')}
+      ${dataCard('JAPAN UNEMPLOYMENT', jpnUnemp?.latest ? fmt1(jpnUnemp.latest) + '%' : '—', '', jpnUnemp?.change, 'pp vs prev', jpnUnemp?.history, '#00ff88',
+        'Japan unemployment near 50-year lows. Full employment + rising wages = domestic consumption story finally works. Critical for non-export GDP growth.')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
+      ${dataCard('JAPAN CPI (YoY)', jpnCpi?.latest ? fmt1(jpnCpi.latest) + '%' : '—', 'YoY', jpnCpi?.change_yoy, 'pp YoY chg', jpnCpi?.history, '#ff8800',
+        'Japan CPI above 2% for the first time since the 1990s. This is the end of deflation. For 30 years Japanese consumers hoarded cash because prices fell — that behavior is reversing.')}
+      ${dataCard('JAPAN REAL GDP GROWTH', jpnGdp?.latest ? fmt1(jpnGdp.latest) + '%' : '—', 'QoQ Ann.', jpnGdp?.change, 'pp vs prev Q', jpnGdp?.history, '#8855ff',
+        'Japan GDP oscillates between contraction and modest growth. The AI/tech buildout thesis says this breaks structurally higher as capex floods in and robotics drives productivity.')}
+      <div class="panel" style="border-top:2px solid #ffcc00;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:8px;">JAPAN TECH SECTOR</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Key names in the AI/robotics buildout</div>
+        ${japanStocks.slice(0,6).map(s => {
+          const q = lq[s.sym] || {};
+          const price = q.price ? '$' + q.price.toFixed(2) : '—';
+          const chg = q.pct_change;
+          const chgColor = chg == null ? 'var(--text3)' : chg > 0 ? '#00ff88' : '#ff3355';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">
+            <div>
+              <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text);">${s.name}</span>
+              <span style="font-size:9px;color:var(--text3);margin-left:6px;">${s.desc}</span>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-family:'Share Tech Mono',monospace;font-size:12px;">${price}</div>
+              ${chg != null ? `<div style="font-size:10px;color:${chgColor};">${chg > 0 ? '+' : ''}${chg.toFixed(2)}%</div>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;">Live prices via market data feed</div>
+      </div>
+    </div>
+
+    <!-- Rapidus & semiconductor sovereignty -->
+    <div class="panel" style="margin-bottom:16px;border-left:3px solid #00ccff;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ccff;letter-spacing:2px;margin-bottom:8px;">⬡ JAPAN SEMICONDUCTOR SOVEREIGNTY — RAPIDUS & THE CHIP ALLIANCE</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px;color:var(--text2);line-height:1.7;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:4px;">RAPIDUS</div>
+          Japan's moon-shot: 2nm chip fab by 2027 in partnership with IBM. Government-backed, strategically critical. Breaks decades of reliance on TSMC/Samsung. If successful, Japan becomes the third node in the US-allied semiconductor triangle (US design → TSMC/Japan fab → global supply).
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:4px;">TSMC JAPAN (JASM)</div>
+          TSMC's Kumamoto fab — $20B+ investment, subsidized by Japanese government. Already producing 12/16nm chips. Phase 2 planned. This is Japan becoming the backup fab location for the free world's chip supply — strategic redundancy against Taiwan scenarios.
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:4px;">EQUIPMENT DOMINANCE</div>
+          Tokyo Electron (TEL), Screen Holdings, and Shin-Etsu already supply 20-30% of global semiconductor equipment and materials. Japan doesn't need to build fabs — they control the machines that build the chips. This is leverage the US cannot afford to lose.
+        </div>
+      </div>
+    </div>
+
+    ${secHdr('₿', 'THE CRYPTO ENDGAME — SUN TZU & THE DIGITAL DOLLAR', 'BTC dominance · CBDC progress · The strategic execution', '#8855ff')}
+
+    <div style="background:rgba(136,85,255,0.05);border:1px solid rgba(136,85,255,0.15);border-radius:4px;padding:14px 16px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8;">
+      The United States holds the reserve currency — the source of its global financial dominance. No rational actor in Washington will allow a decentralized alternative to meaningfully compete with the dollar. 
+      The strategy: <strong style="color:#8855ff;">use it, control it, replace it</strong>. Approve ETFs (legitimize). Buy Bitcoin reserves (control supply). Regulate on-ramps (control flow). Meanwhile build the CBDC infrastructure. 
+      When ready: trigger a crisis of confidence in crypto — regulatory, security, or geopolitical — and introduce the US Digital Dollar backed by the full faith and credit of the United States government. 
+      Bitcoin becomes the cautionary tale that sells the safe alternative. <strong style="color:#8855ff;">Sun Tzu: appear weak when you are strong.</strong>
+    </div>
+
+    <!-- Crypto metrics -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+      ${(() => {
+        const btc = lq['BTC-USD'] || {};
+        const eth = lq['ETH-USD'] || {};
+        const dxyData = S.DTWEXBGS;
+        const cards = [
+          { label: 'BITCOIN', val: btc.price ? '$' + btc.price.toLocaleString('en-US', {maximumFractionDigits:0}) : '—', sub: btc.pct_change != null ? (btc.pct_change > 0 ? '+' : '') + btc.pct_change.toFixed(2) + '% today' : '', color: '#ff8800', note: 'Risk asset + liquidity signal. Inverse to dollar strength.' },
+          { label: 'ETHEREUM', val: eth.price ? '$' + eth.price.toLocaleString('en-US', {maximumFractionDigits:0}) : '—', sub: eth.pct_change != null ? (eth.pct_change > 0 ? '+' : '') + eth.pct_change.toFixed(2) + '% today' : '', color: '#8855ff', note: 'Smart contract platform. CBDC rails will likely use similar tech.' },
+          { label: 'TRADE-WEIGHTED DOLLAR', val: dxyData?.latest ? fmt1(dxyData.latest) : '—', sub: dxyData?.trend ? trendArrow(dxyData.trend) + ' ' + dxyData.trend : '', color: '#00ccff', note: 'Broad dollar index vs trading partners. Crypto trades inversely.' },
+          { label: 'USD/CNY', val: S.DEXCHUS?.latest ? fmt2(S.DEXCHUS.latest) : '—', sub: S.DEXCHUS?.trend ? trendArrow(S.DEXCHUS.trend) + ' ' + S.DEXCHUS.trend : '', color: '#ffcc00', note: 'Yuan vs dollar. China\'s currency manipulation tool and UST selling pressure indicator.' },
+        ];
+        return cards.map(c => `
+          <div class="panel" style="border-top:2px solid ${c.color};">
+            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">${c.label}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${c.color};margin-bottom:4px;">${c.val}</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">${c.sub}</div>
+            <div style="font-size:11px;color:var(--text2);line-height:1.4;">${c.note}</div>
+          </div>`).join('');
+      })()}
+    </div>
+
+    <!-- CBDC Scoreboard -->
+    <div class="panel" style="margin-bottom:16px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:#8855ff;letter-spacing:2px;margin-bottom:12px;">⬡ CBDC GLOBAL RACE — WHERE COUNTRIES STAND</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
+        ${[
+          { country: 'CHINA', cbdc: 'Digital Yuan (e-CNY)', status: 'LIVE', color: '#ff3355', detail: 'Fully deployed. 140M+ wallets. Used for domestic payments. Strategic test bed for replacing SWIFT.' },
+          { country: 'USA', cbdc: 'Digital Dollar / FedNow', color: '#00ccff', status: 'IN PROGRESS', detail: 'FedNow (2023) is the rails. Retail CBDC politically controversial. Executive orders signal intent. Watch Treasury/Fed coordination.' },
+          { country: 'EU', cbdc: 'Digital Euro', status: 'PILOT', color: '#ffcc00', detail: 'ECB pilot phase. 2025-2026 decision point. Designed to work alongside cash. Privacy protections politically required.' },
+          { country: 'JAPAN', cbdc: 'Digital Yen', status: 'PILOT', color: '#00ff88', detail: 'BOJ running pilot since 2021. Japan positioned as US CBDC ally — interoperability with digital dollar is the strategic prize.' },
+          { country: 'UK', cbdc: 'Digital Pound', status: 'RESEARCH', color: '#ffcc00', detail: 'HM Treasury + Bank of England consultation. Called "Britcoin" informally. Decision expected 2025-2026.' },
+          { country: 'RUSSIA', cbdc: 'Digital Ruble', status: 'PILOT', color: '#ff8800', detail: 'Accelerated post-sanctions. Designed to bypass SWIFT. Interoperability with China e-CNY = parallel financial system in progress.' },
+        ].map(c => `
+          <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${c.color};border-radius:3px;padding:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <div style="font-family:'Orbitron',monospace;font-size:9px;color:${c.color};">${c.country}</div>
+              <div style="font-family:'Orbitron',monospace;font-size:7px;padding:2px 6px;border:1px solid ${c.color}44;border-radius:2px;color:${c.color};">${c.status}</div>
+            </div>
+            <div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:4px;">${c.cbdc}</div>
+            <div style="font-size:11px;color:var(--text3);line-height:1.5;">${c.detail}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    ${secHdr('🌍', 'DOLLAR SYSTEM ARCHITECTURE — THE FULL PICTURE', 'Exchange rates · Treasury demand · Petrodollar dynamics', '#00ff88')}
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
+      ${dataCard('USD/JPY', jpyusd?.latest ? fmt1(jpyusd.latest) : '—', '¥ per $1', jpyusd?.change, 'vs prev', jpyusd?.history, '#00ccff', 'Yen carry trade unwind = global volatility. BOJ normalization timeline is the key unknown.')}
+      ${dataCard('USD/CNY', S.DEXCHUS?.latest ? fmt2(S.DEXCHUS.latest) : '—', '¥ per $1', S.DEXCHUS?.change, 'vs prev', S.DEXCHUS?.history, '#ff3355', 'China manages yuan carefully. Devaluation = competitive pressure. Revaluation = sign of strength.')}
+      ${dataCard('USD/EUR', S.DEXUSEU?.latest ? fmt2(S.DEXUSEU.latest) : '—', '$ per €1', S.DEXUSEU?.change, 'vs prev', S.DEXUSEU?.history, '#ffcc00', 'Euro-dollar parity is a stress signal. EUR strength = dollar weakness = commodity tailwind.')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;">
+      ${dataCard('TRADE-WEIGHTED DOLLAR INDEX', S.DTWEXBGS?.latest ? fmt1(S.DTWEXBGS.latest) : '—', 'Index', S.DTWEXBGS?.change, 'vs prev', S.DTWEXBGS?.history, '#00ccff', 'Broadest measure of dollar strength vs all trading partners. Rising dollar = tighter global financial conditions, EM stress, commodity headwinds.')}
+      ${dataCard('GOLD (LONDON FIX)', S.GOLDAMGBD228NLBM?.latest ? '$' + S.GOLDAMGBD228NLBM.latest.toLocaleString('en-US',{maximumFractionDigits:0}) : '—', '$/oz', S.GOLDAMGBD228NLBM?.change, 'vs prev', S.GOLDAMGBD228NLBM?.history, '#ffcc00', 'Gold is the anti-dollar. Central banks (especially China, Russia, India) have been buying aggressively since 2022 sanctions showed dollar reserves can be frozen. De-dollarization in action.')}
+    </div>
+
+    <!-- AI Analysis button -->
+    <div class="panel" style="border-left:4px solid #ffcc00;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#ffcc00;">⬡ AI SOVEREIGN ANALYSIS</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Grok synthesizes the current geopolitical financial situation</div>
+        </div>
+        <button onclick="generateSovereignAI()" style="background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.4);color:#ffcc00;padding:6px 14px;border-radius:3px;cursor:pointer;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;">⬡ GENERATE ANALYSIS</button>
+      </div>
+      <div id="sovereignAIText" style="font-size:13px;color:var(--text2);line-height:1.9;">
+        <span style="color:var(--text3);font-style:italic;">Click Generate Analysis to get a current AI synthesis of the sovereign chess board.</span>
+      </div>
+    </div>
+
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);text-align:right;padding:8px 0;">
+      Data: FRED (US Treasury TIC, BOJ, OECD) · Updated: ${data.updated ? new Date(data.updated).toLocaleString() : '—'} · ${data.seriesCount || 0} series loaded
+    </div>
+  </div>`;
+
+  // Auto-generate AI analysis
+  setTimeout(generateSovereignAI, 500);
+}
+
+async function generateSovereignAI() {
+  const el = document.getElementById('sovereignAIText');
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Generating analysis...</span>';
+
+  const S = _sovereignData?.series || {};
+  const lq = window._macroMD?.quotes || {};
+  const btc = lq['BTC-USD'];
+  const jpyusd = S.DEXJPUS;
+  const japanUST = S.FDHBJA;
+  const chinaUST = S.FDHBCHI;
+  const dxy = S.DTWEXBGS;
+  const jpn10y = S.IRLTLT01JPM156N;
+
+  const context = `Current Sovereign Chess data:
+- Japan US Treasury holdings: $${japanUST?.latest ? (japanUST.latest/1000).toFixed(2) + 'T' : 'N/A'} (trend: ${japanUST?.trend || 'N/A'})
+- China US Treasury holdings: $${chinaUST?.latest ? (chinaUST.latest/1000).toFixed(2) + 'T' : 'N/A'} (trend: ${chinaUST?.trend || 'N/A'})
+- Japan vs China gap: $${japanUST?.latest && chinaUST?.latest ? ((japanUST.latest - chinaUST.latest)/1000).toFixed(2) + 'T Japan lead' : 'N/A'}
+- USD/JPY: ${jpyusd?.latest?.toFixed(2) || 'N/A'} (trend: ${jpyusd?.trend || 'N/A'})
+- Japan 10Y yield: ${jpn10y?.latest?.toFixed(2) || 'N/A'}% (trend: ${jpn10y?.trend || 'N/A'})
+- Trade-weighted dollar: ${dxy?.latest?.toFixed(1) || 'N/A'} (trend: ${dxy?.trend || 'N/A'})
+- Bitcoin: $${btc?.price ? btc.price.toLocaleString('en-US', {maximumFractionDigits:0}) : 'N/A'} (${btc?.pct_change ? (btc.pct_change > 0 ? '+' : '') + btc.pct_change.toFixed(2) + '%' : 'N/A'} today)`;
+
+  try {
+    const resp = await fetch('/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: `You are a geopolitical financial strategist with deep expertise in sovereign debt markets, currency wars, and the strategic use of financial systems as instruments of national power. You understand the long game being played between the US, Japan, and China over Treasury markets and reserve currency dominance. You also understand the crypto endgame thesis — that the US will ultimately use and then replace Bitcoin with a government-backed digital dollar. Write in clear, direct, analytical prose. 3-4 paragraphs. Be specific about what the current data signals. Connect dots that mainstream analysts miss.`,
+        messages: [{ role: 'user', content: `Here is the current sovereign financial data:\n\n${context}\n\nAnalyze the current state of the sovereign chess board. What are the data telling us about the Japan-US alliance, the China displacement from Treasuries, dollar dynamics, and where we are in the crypto endgame? What should a sophisticated investor be watching right now?` }],
+        max_tokens: 1200
+      })
+    });
+    const data = await resp.json();
+    const text = data.content || '';
+    if (el) {
+      el.innerHTML = text.split('\n\n').filter(p => p.trim()).map(p => `<p style="margin-bottom:14px;">${p.trim()}</p>`).join('');
+    }
+  } catch(e) {
+    if (el) el.innerHTML = `<span style="color:var(--text3);">Analysis unavailable: ${e.message}</span>`;
+  }
 }
