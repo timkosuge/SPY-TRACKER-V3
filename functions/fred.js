@@ -67,8 +67,8 @@ const SERIES = {
   CSUSHPISA:      { name: 'Case-Shiller Home Price Index',  cat: 'growth',   unit: 'Index', freq: 'monthly', good_direction: 'stable' },
 
   // MONETARY — additional
-  WSHOMCB:        { name: 'Fed MBS Holdings',               cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
-  WSTSECOUT:      { name: 'Fed Treasury Holdings',          cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
+  WSHOMCG:        { name: 'Fed MBS Holdings',               cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
+  TREAST:      { name: 'Fed Treasury Holdings',          cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
   BOGMBASE:       { name: 'Monetary Base',                  cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
   TOTRESNS:       { name: 'Bank Reserves at Fed',           cat: 'liquidity', unit: '$B', freq: 'monthly', good_direction: 'stable' },
 
