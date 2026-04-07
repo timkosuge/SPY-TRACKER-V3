@@ -532,8 +532,8 @@
 
 /* The actual sidebar panel — slides in/out */
 #rightSidebar {
-  width: 60px;
-  max-width: 60px;
+  width: 68px;
+  max-width: 68px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -544,9 +544,9 @@
   border: 1px solid var(--border);
   border-right: none;
   border-left: none;
-  padding: 10px 0;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
-  transition: max-width 0.25s ease, opacity 0.2s ease, padding 0.25s ease;
+  padding: 12px 0;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.5);
+  transition: max-width 0.28s ease, opacity 0.22s ease, padding 0.28s ease;
   opacity: 1;
   pointer-events: all;
 }
@@ -564,9 +564,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  width: 54px;
-  padding: 12px 4px;
+  gap: 5px;
+  width: 62px;
+  padding: 14px 4px;
   cursor: pointer;
   border-radius: 6px;
   transition: background 0.15s, color 0.15s;
@@ -574,13 +574,18 @@
   position: relative;
   user-select: none;
   flex: 1;
-  max-height: 80px;
+  max-height: 86px;
 }
 .rsb-btn:hover { background: rgba(255,255,255,0.06); color: var(--text2); }
 .rsb-btn.active { background: rgba(0,204,255,0.1); color: var(--cyan); }
 .rsb-btn.ai-active { background: rgba(0,255,136,0.1); color: #00ff88; }
+.rsb-btn.music-active { background: rgba(0,255,136,0.1); color: #00ff88; }
 
-.rsb-icon { font-size: 16px; line-height: 1; }
+.rsb-icon {
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 300;
+}
 .rsb-label {
   font-family: 'Orbitron', monospace;
   font-size: 7px;
@@ -589,10 +594,10 @@
 }
 
 .rsb-divider {
-  width: 36px;
+  width: 40px;
   height: 1px;
   background: var(--border);
-  margin: 3px 0;
+  margin: 4px 0;
 }
 
 /* Unread badge */
@@ -630,31 +635,46 @@
   </div>
 <div id="rightSidebar">
 
-  <!-- Community / tools section -->
+  <!-- Media — play triangle -->
   <div class="rsb-btn" id="rsb-media" onclick="sidebarSwitch('media')" title="Media">
-    <span class="rsb-icon">▶</span>
+    <span class="rsb-icon" style="font-size:20px;font-weight:900;">⊳</span>
     <span class="rsb-label">MEDIA</span>
   </div>
+
+  <!-- Journal — diamond record -->
   <div class="rsb-btn" id="rsb-journal" onclick="sidebarSwitch('journal')" title="Journal">
-    <span class="rsb-icon">⬡</span>
+    <span class="rsb-icon" style="font-size:17px;">◈</span>
     <span class="rsb-label">JOURNAL</span>
   </div>
+
+  <!-- Floor — community signal -->
   <div class="rsb-btn" id="rsb-floor" onclick="sidebarSwitch('floor')" title="The Floor" style="position:relative;">
-    <span class="rsb-icon">⬡</span>
+    <span class="rsb-icon" style="font-size:17px;">⌬</span>
     <span class="rsb-label">FLOOR</span>
     <span class="rsb-badge" id="rsb-floor-badge"></span>
   </div>
-<div class="rsb-divider"></div>
 
-  <!-- AI + Chat -->
+  <div class="rsb-divider"></div>
+
+  <!-- APEX AI — bullseye intelligence -->
   <div class="rsb-btn" id="rsb-ai" onclick="sidebarToggleAI()" title="AI Assistant">
-    <span class="rsb-icon">⬡</span>
+    <span class="rsb-icon" style="font-size:17px;">◉</span>
     <span class="rsb-label">APEX</span>
   </div>
+
+  <!-- Chat — transmission -->
   <div class="rsb-btn" id="rsb-msg" onclick="sidebarToggleMsg()" title="Trading Chat" style="position:relative;">
-    <span class="rsb-icon">💬</span>
+    <span class="rsb-icon" style="font-size:17px;">⌁</span>
     <span class="rsb-label">CHAT</span>
     <span class="rsb-badge" id="rsb-msg-badge"></span>
+  </div>
+
+  <div class="rsb-divider"></div>
+
+  <!-- Music — sine wave -->
+  <div class="rsb-btn" id="rsb-music" onclick="sidebarToggleMusic()" title="Music Player">
+    <span class="rsb-icon" style="font-size:17px;">∿</span>
+    <span class="rsb-label">MUSIC</span>
   </div>
 
 </div>
@@ -5248,22 +5268,8 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
 
   /* ═══════════════ MUSIC PLAYER ═══════════════ */
   #spyMusicBtn {
-    position: fixed;
-    bottom: 80px; right: 0;
-    z-index: 8001;
-    width: 54px; height: 44px;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-right: none;
-    border-radius: 6px 0 0 6px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    color: var(--cyan);
-    font-size: 16px;
-    transition: background 0.15s, color 0.15s;
+    display: none; /* moved into collapsible sidebar */
   }
-  #spyMusicBtn:hover { background: rgba(0,204,255,0.1); }
-  #spyMusicBtn.active { color: #00ff88; background: rgba(0,255,136,0.08); }
 
   #spyMusicPanel {
     position: fixed;
@@ -6051,6 +6057,15 @@ function sidebarSwitch(id) {
     if (btn) btn.classList.add('active');
     switchTab(id);
   }
+}
+
+function sidebarToggleMusic() {
+  spyMusicToggle(); // calls existing music toggle
+  const btn = document.getElementById('rsb-music');
+  setTimeout(() => {
+    const panel = document.getElementById('spyMusicPanel');
+    if (btn) btn.classList.toggle('music-active', panel && panel.classList.contains('open'));
+  }, 60);
 }
 
 function sidebarToggleAI() {
