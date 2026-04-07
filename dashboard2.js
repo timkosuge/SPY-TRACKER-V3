@@ -782,7 +782,7 @@ function renderWEM(md){
   if(cur){
     // ── STATIC WEM — TheoTrade formula recalculated live from friday_close + IV ─────
     const staticMid       = cur.friday_close      || cur.wem_mid;
-    const staticIV        = cur.static_wem_iv     || cur.atm_iv || 0;
+    const staticIV        = cur.static_wem_iv     || cur.atm_iv || md.gex?.atm_iv || 0;
     const _staticHalf     = staticMid && staticIV ? staticMid * staticIV * Math.sqrt(6/365) * 0.70 : null;
     const staticHigh      = _staticHalf ? staticMid + _staticHalf : (cur.static_wem_high || cur.wem_high);
     const staticLow       = _staticHalf ? staticMid - _staticHalf : (cur.static_wem_low  || cur.wem_low);
@@ -795,7 +795,7 @@ function renderWEM(md){
     // Dynamic: recalculate from live IV + remaining DTE.
     // Uses Friday weekly expiry IV (not 0DTE) so it decays naturally as DTE shrinks.
     const dte = cur.dte || 1;
-    const liveIV = (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
+    const liveIV = (md.gex?.atm_iv && md.gex.atm_iv > 0) ? md.gex.atm_iv : (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
     const dynMid = staticMid;
     const _dynHalf = dynMid && liveIV ? dynMid * liveIV * Math.sqrt(dte / 365) * 0.70 : staticHalfRange;
     const lo   = isStatic ? staticLow  : dynMid - _dynHalf;
@@ -823,7 +823,7 @@ function renderWEM(md){
         <div class="wem-big-sub">${price<hi?'+':''}$${fmt(hi-price,2)} from here</div>
       </div>`;
 
-    const atmIV = (cur.atm_iv && cur.atm_iv>0) ? cur.atm_iv : null;
+    const atmIV = md.gex?.atm_iv || (cur.atm_iv && cur.atm_iv>0 ? cur.atm_iv : null);
     // ── Show comparison row if in static mode ──────────────────────────────
     let comparisonHtml = '';
     if (isStatic) {
@@ -910,13 +910,13 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   // Static — uses locked values from set_next_week_static_wem() (Friday close + TheoTrade formula)
   // Dynamic falls back to static when workflow has not run yet for the new week
   const _sMid = cur ? (cur.friday_close    || cur.wem_mid)  : 0;
-  const _sIV  = cur ? (cur.static_wem_iv  || cur.atm_iv || 0) : 0;
+  const _sIV  = cur ? (cur.static_wem_iv  || cur.atm_iv || md.gex?.atm_iv || 0) : 0;
   const _sHalf2 = _sMid && _sIV ? _sMid * _sIV * Math.sqrt(6/365) * 0.70 : null;
   const sHalf = _sHalf2 || (cur ? ((cur.static_wem_range || cur.wem_range) / 2) : 1);
   const _sLo  = _sMid && _sHalf2 ? _sMid - _sHalf2 : (cur ? (cur.static_wem_low  || cur.wem_low)  : 0);
   const _sHi  = _sMid && _sHalf2 ? _sMid + _sHalf2 : (cur ? (cur.static_wem_high || cur.wem_high) : 0);
   const _dte2 = cur ? (cur.dte || 1) : 1;
-  const _liveIV2 = cur ? ((cur.atm_iv && cur.atm_iv > 0 ? cur.atm_iv : _sIV)) : _sIV;
+  const _liveIV2 = cur ? (md.gex?.atm_iv && md.gex.atm_iv > 0 ? md.gex.atm_iv : (cur.atm_iv && cur.atm_iv > 0 ? cur.atm_iv : _sIV)) : _sIV;
   const _dynHalf2 = _sMid && _liveIV2 ? _sMid * _liveIV2 * Math.sqrt(_dte2 / 365) * 0.70 : sHalf;
   const lo2   = cur ? (isStatic2 ? _sLo  : _sMid - _dynHalf2) : 0;
   const hi2   = cur ? (isStatic2 ? _sHi  : _sMid + _dynHalf2) : 0;
