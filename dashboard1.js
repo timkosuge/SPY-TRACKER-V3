@@ -1247,7 +1247,7 @@ function renderDesk(md,sd){
       </div>
       <div style="display:flex;gap:4px;margin-top:2px;font-family:'Orbitron',monospace;font-size:6px;letter-spacing:1px;">
         <div style="flex:5;text-align:center;color:var(--text3);border-top:1px solid rgba(255,255,255,0.1);padding-top:1px;">PREV DAY</div>
-        <div style="flex:3;text-align:center;color:#ffcc00;border-top:1px solid rgba(255,204,0,0.3);padding-top:1px;">PRE-MARKET</div>
+        <div style="flex:3;text-align:center;color:#ffcc00;border-top:1px solid rgba(255,204,0,0.3);padding-top:1px;display:flex;align-items:center;justify-content:center;gap:4px;">PRE-MARKET <span onclick="window._clearPMCache&&window._clearPMCache()" title="Refresh PM levels" style="cursor:pointer;color:#ffcc00;opacity:0.6;font-size:8px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">↻</span></div>
         <div style="flex:7;text-align:center;color:var(--cyan);border-top:1px solid rgba(0,204,255,0.3);padding-top:1px;">TODAY</div>
       </div>
     </div>
@@ -1651,6 +1651,17 @@ function renderDeskSession(md,sd){
       return !isPremarketLocal;
     } catch(e) { return true; }
   })();
+
+  // Expose cache-clear so the ↻ button can force a fresh fetch
+  window._clearPMCache = () => {
+    try { localStorage.removeItem(PM_CACHE_KEY); } catch(e) {}
+    window._pmCache = null;
+    window._pmFetchInFlight = false;
+    setPM(null, null, null);
+    fetch('/premarket?t=' + Date.now()).then(r=>r.ok?r.json():null).then(pm=>{
+      if (pm?.available && pm.high) { savePMCache(pm); setPM(pm.high, pm.mid, pm.low); }
+    }).catch(()=>{});
+  };
 
   const loadPMCache = () => {
     // Only trust localStorage cache if PM session is definitively closed.
