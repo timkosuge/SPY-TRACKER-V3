@@ -478,6 +478,9 @@ window._M = (() => {
       <!-- ── MACRO HEADER STRIP ─────────────────────── -->
       ${buildRegimeHeader(regime)}
 
+      <!-- ── AI MACRO NARRATIVE ────────────────────── -->
+      ${buildNarrativeSection()}
+
       <!-- ── INTEREST RATES & FED ──────────────────── -->
       ${buildFedSection(d)}
 
@@ -498,9 +501,6 @@ window._M = (() => {
 
       <!-- ── HISTORICAL CYCLE COMPARISON ──────────── -->
       ${buildCycleSection()}
-
-      <!-- ── AI MACRO NARRATIVE ────────────────────── -->
-      ${buildNarrativeSection()}
     `;
   }
 
@@ -910,7 +910,17 @@ window._M = (() => {
   /* ── 5g. Money supply & assets ──────────────────────── */
   function buildAssetsSection(d) {
     const m2 = d.m2;
-    const assets = d.assets;
+    // Use live quotes from market_data if available, fall back to static
+    // Try window._md first (set by dashboard), then fall back to static assets
+    const _mdRef = typeof _md !== 'undefined' ? _md : (window._macroMD || null);
+    const liveQ = _mdRef?.quotes || {};
+    const lq = (sym, field, fallback) => liveQ[sym]?.[field] ?? fallback;
+    const assets = {
+      dxy:  { v: lq('DX-Y.NYB','price', d.assets.dxy.v),  chg: lq('DX-Y.NYB','pct_change', d.assets.dxy.chg) },
+      gold: { v: lq('GC=F','price', d.assets.gold.v),      chg: lq('GC=F','pct_change', d.assets.gold.chg) },
+      oil:  { v: lq('CL=F','price', d.assets.oil.v),       chg: lq('CL=F','pct_change', d.assets.oil.chg) },
+      btc:  { v: lq('BTC-USD','price', d.assets.btc.v),    chg: lq('BTC-USD','pct_change', d.assets.btc.chg) },
+    };
     const m2Vals = m2.series.map(s => s.v);
 
     const assetTiles = [
