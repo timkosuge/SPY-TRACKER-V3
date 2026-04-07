@@ -698,7 +698,7 @@
 </div><!-- /sidebarWrap -->
 
 <div class="topbar">
-  <div class="logo" id="spyLogo" onclick="_logoTap()" style="cursor:pointer;user-select:none;">SPY <span>//</span> TRACKER</div>
+  <div class="logo" id="spyLogo" onclick="_logoTap()" onmousedown="_logoLongPressStart()" onmouseup="_logoLongPressCancel()" onmouseleave="_logoLongPressCancel()" ontouchstart="_logoLongPressStart()" ontouchend="_logoLongPressCancel()" style="cursor:pointer;user-select:none;">SPY <span>//</span> TRACKER</div>
   <div class="ticker-tape"><div class="ticker-inner" id="tickerInner"></div></div>
   <div id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">
     <span id="themeLabel">DARK</span>
@@ -6818,6 +6818,140 @@ function openWeatherWindow() {
     }
   }, () => {
     document.getElementById('weatherWinBody').innerHTML = '<div style="color:#ff8800;">Location access denied.</div>';
+  });
+}
+
+// ── Secret Playlist — long press SPY // TRACKER logo (800ms) ────────────────
+const SECRET_TRACKS = [
+  { title: 'DEFAULT AGGRESSIVE',      file: 'SITE PLAYLIST DEFAULT AGGRESSIVE.mp3' },
+  { title: 'DISCIPLINE EQUALS FREEDOM', file: 'SITE PLAYLIST Discipline Equals FREEDOM.mp3' },
+  { title: "DO WHAT OTHERS DON'T",    file: "SITE PLAYLIST Do What Others Don't.mp3" },
+  { title: 'EVERY SECOND COUNTS',     file: 'SITE PLAYLIST EVERY SECOND COUNTS.mp3' },
+  { title: 'I FEEL FINE',             file: 'SITE PLAYLIST I FEEL FINE.mp3' },
+  { title: 'I WAKE UP EARLY',         file: 'SITE PLAYLIST I Wake Up Early.mp3' },
+  { title: 'WHAT ARE YOU GOING TO DO', file: 'SITE PLAYLIST WHAT ARE YOU GOING TO DO.mp3' },
+  { title: 'YOU SHOULD BE A MONSTER', file: 'SITE PLAYLIST You Should Be A Monster.mp3' },
+];
+
+let _logoLongPressTimer = null;
+let _secretTrackIndex = 0;
+let _secretAudio = null;
+let _secretPlaying = false;
+
+function _logoLongPressStart() {
+  _logoLongPressTimer = setTimeout(() => {
+    openSecretPlayer();
+  }, 800);
+}
+
+function _logoLongPressCancel() {
+  clearTimeout(_logoLongPressTimer);
+}
+
+function openSecretPlayer() {
+  const existing = document.getElementById('secretPlayerWindow');
+  if (existing) { existing.remove(); if (_secretAudio) { _secretAudio.pause(); _secretPlaying = false; } return; }
+
+  if (!_secretAudio) {
+    _secretAudio = new Audio();
+    _secretAudio.volume = 0.25;
+    _secretAudio.addEventListener('ended', () => { _secretTrackIndex = (_secretTrackIndex + 1) % SECRET_TRACKS.length; _secretLoadTrack(_secretTrackIndex); _secretAudio.play(); _updateSecretPlayer(); });
+  }
+
+  const win = document.createElement('div');
+  win.id = 'secretPlayerWindow';
+  win.style.cssText = [
+    'position:fixed', 'bottom:20px', 'left:20px', 'width:320px',
+    'background:var(--bg2)', 'border:1px solid var(--border2)', 'border-radius:6px',
+    'box-shadow:0 8px 32px rgba(0,0,0,0.8)', 'z-index:9999',
+    'display:flex', 'flex-direction:column', 'overflow:hidden',
+    "font-family:'Orbitron',monospace"
+  ].join(';');
+
+  win.innerHTML = `
+    <div id="secretPlayerHeader" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);cursor:move;flex-shrink:0;">
+      <span style="font-size:9px;letter-spacing:2px;color:var(--green);">&#x2B21; CLASSIFIED</span>
+      <button onclick="document.getElementById('secretPlayerWindow').remove();if(_secretAudio){_secretAudio.pause();_secretPlaying=false;}" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text3)'">&#xD7;</button>
+    </div>
+    <div style="padding:16px 14px 14px;">
+      <div id="secretTrackTitle" style="font-size:9px;letter-spacing:2px;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${SECRET_TRACKS[_secretTrackIndex].title}</div>
+      <div id="secretTrackNum" style="font-size:9px;color:var(--text3);margin-bottom:14px;">${_secretTrackIndex+1} / ${SECRET_TRACKS.length}</div>
+      <div style="display:flex;justify-content:center;align-items:center;gap:16px;margin-bottom:14px;">
+        <button onclick="_secretPrev()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:4px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text3)'">&#x23EE;</button>
+        <button id="secretPlayBtn" onclick="_secretTogglePlay()" style="background:var(--green);border:none;color:#000;cursor:pointer;font-size:14px;font-family:'Orbitron',monospace;font-weight:900;padding:8px 20px;border-radius:3px;letter-spacing:1px;">&#x25B6; PLAY</button>
+        <button onclick="_secretNext()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:4px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text3)'">&#x23ED;</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px;" id="secretTrackList">
+        ${SECRET_TRACKS.map((t,i) => `<div onclick="_secretSelectTrack(${i})" id="secretTrack_${i}" style="padding:5px 8px;border-radius:3px;cursor:pointer;font-size:9px;letter-spacing:1px;color:${i===_secretTrackIndex?'var(--green)':'var(--text3)'};background:${i===_secretTrackIndex?'rgba(0,255,136,0.08)':'transparent'};" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='${i===_secretTrackIndex?'rgba(0,255,136,0.08)':'transparent'}'">
+          ${String(i+1).padStart(2,'0')}. ${t.title}
+        </div>`).join('')}
+      </div>
+    </div>
+  `;
+
+  // Draggable
+  const header = win.querySelector('#secretPlayerHeader');
+  let dragging = false, ox = 0, oy = 0;
+  header.addEventListener('mousedown', e => { if (e.target.tagName==='BUTTON') return; dragging=true; ox=e.clientX-win.getBoundingClientRect().left; oy=e.clientY-win.getBoundingClientRect().top; });
+  document.addEventListener('mousemove', e => { if (!dragging) return; win.style.left=(e.clientX-ox)+'px'; win.style.top=(e.clientY-oy)+'px'; win.style.bottom='auto'; });
+  document.addEventListener('mouseup', () => { dragging=false; });
+
+  document.body.appendChild(win);
+  _secretLoadTrack(_secretTrackIndex);
+}
+
+function _secretLoadTrack(i) {
+  if (!_secretAudio) return;
+  _secretAudio.src = '/music/' + encodeURIComponent(SECRET_TRACKS[i].file);
+  _secretAudio.load();
+}
+
+function _secretTogglePlay() {
+  if (!_secretAudio) return;
+  if (_secretPlaying) {
+    _secretAudio.pause();
+    _secretPlaying = false;
+  } else {
+    _secretAudio.play();
+    _secretPlaying = true;
+  }
+  _updateSecretPlayer();
+}
+
+function _secretSelectTrack(i) {
+  _secretTrackIndex = i;
+  _secretLoadTrack(i);
+  _secretAudio.play();
+  _secretPlaying = true;
+  _updateSecretPlayer();
+}
+
+function _secretNext() {
+  _secretTrackIndex = (_secretTrackIndex + 1) % SECRET_TRACKS.length;
+  _secretLoadTrack(_secretTrackIndex);
+  if (_secretPlaying) _secretAudio.play();
+  _updateSecretPlayer();
+}
+
+function _secretPrev() {
+  _secretTrackIndex = (_secretTrackIndex - 1 + SECRET_TRACKS.length) % SECRET_TRACKS.length;
+  _secretLoadTrack(_secretTrackIndex);
+  if (_secretPlaying) _secretAudio.play();
+  _updateSecretPlayer();
+}
+
+function _updateSecretPlayer() {
+  const titleEl = document.getElementById('secretTrackTitle');
+  const numEl = document.getElementById('secretTrackNum');
+  const playBtn = document.getElementById('secretPlayBtn');
+  if (titleEl) titleEl.textContent = SECRET_TRACKS[_secretTrackIndex].title;
+  if (numEl) numEl.textContent = `${_secretTrackIndex+1} / ${SECRET_TRACKS.length}`;
+  if (playBtn) playBtn.innerHTML = _secretPlaying ? '&#x23F8; PAUSE' : '&#x25B6; PLAY';
+  SECRET_TRACKS.forEach((t, i) => {
+    const el = document.getElementById('secretTrack_'+i);
+    if (!el) return;
+    el.style.color = i === _secretTrackIndex ? 'var(--green)' : 'var(--text3)';
+    el.style.background = i === _secretTrackIndex ? 'rgba(0,255,136,0.08)' : 'transparent';
   });
 }
 
