@@ -4145,7 +4145,8 @@ async function loadData(){
       if (liveGEX.walls_by_expiry?.length) md.walls_by_expiry = liveGEX.walls_by_expiry;
       // Patch live atm_iv onto md.gex so WEM/EM panels can use it directly
       // gex.js now targets Friday weekly expiry IV so this is correct for EM calcs
-      if (liveGEX.atm_iv) md.gex.atm_iv = liveGEX.atm_iv;
+      console.log('[GEX LOAD] liveGEX.atm_iv:', liveGEX.atm_iv, 'liveGEX.gex keys:', Object.keys(liveGEX.gex||{}));
+      md.gex.atm_iv = liveGEX.atm_iv || liveGEX.gex?.atm_iv || null;
       if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
     }
 
