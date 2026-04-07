@@ -795,7 +795,10 @@ function renderWEM(md){
     // Dynamic: recalculate from live IV + remaining DTE.
     // Uses Friday weekly expiry IV (not 0DTE) so it decays naturally as DTE shrinks.
     const dte = cur.dte || 1;
-    const liveIV = (md.gex?.atm_iv && md.gex.atm_iv > 0) ? md.gex.atm_iv : (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
+    // Use window._md.gex.atm_iv as extra fallback in case md reference is stale
+    const _liveGexIV = md.gex?.atm_iv || window._md?.gex?.atm_iv || null;
+    console.log('[WEM] liveGexIV:', _liveGexIV, 'cur.atm_iv:', cur.atm_iv, 'staticIV:', staticIV);
+    const liveIV = (_liveGexIV && _liveGexIV > 0) ? _liveGexIV : (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
     const dynMid = staticMid;
     const _dynHalf = dynMid && liveIV ? dynMid * liveIV * Math.sqrt(dte / 365) * 0.70 : staticHalfRange;
     const lo   = isStatic ? staticLow  : dynMid - _dynHalf;
@@ -4133,8 +4136,9 @@ async function loadData(){
       if (liveGEX.atm_put_mid)  md.gex.atm_put_mid  = liveGEX.atm_put_mid;
       if (liveGEX.max_pain?.length) md.max_pain = liveGEX.max_pain;
       if (liveGEX.walls_by_expiry?.length) md.walls_by_expiry = liveGEX.walls_by_expiry;
-      // Note: intentionally NOT overriding weekly_em[0].atm_iv with GEX atm_iv
-      // GEX uses nearest expiry IV which can differ from weekly IV used for EM calc
+      // Patch live atm_iv onto md.gex so WEM/EM panels can use it directly
+      // gex.js now targets Friday weekly expiry IV so this is correct for EM calcs
+      if (liveGEX.atm_iv) md.gex.atm_iv = liveGEX.atm_iv;
       if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
     }
 
@@ -4184,6 +4188,7 @@ async function loadData(){
       const fresh = await fetchLiveGEX();
       if (fresh?.gex?.flip_point && _md) {
         _md.gex = fresh.gex;
+        if (fresh.atm_iv) _md.gex.atm_iv = fresh.atm_iv;
         if (fresh.max_pain?.length) _md.max_pain = fresh.max_pain;
         if (fresh.walls_by_expiry?.length) _md.walls_by_expiry = fresh.walls_by_expiry;
         if (fresh.pcr_vol && _md.options_summary) _md.options_summary.pc_ratio_vol = fresh.pcr_vol;
