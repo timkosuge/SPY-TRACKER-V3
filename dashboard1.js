@@ -1453,6 +1453,61 @@ function renderDesk(md,sd){
       </div>`:'<div class="panel"><div class="no-data">IV needed</div></div>'}
     </div>
 
+
+    <!-- MINI GEX MAP -->
+    <div class="panel" style="margin-bottom:10px;">
+      <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ GEX LEVELS</div>
+      ${(()=>{
+        const g = gex;
+        const flip = g.flip_point, sup = g.support, res = g.resistance;
+        const netGex = g.net_gex || 0;
+        const isPos = netGex > 0;
+        const regColor = isPos ? '#00ff88' : '#ff3355';
+        const regime = g.regime || (isPos ? 'POSITIVE' : 'NEGATIVE');
+        const fmtB = n => { if(!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
+        if (!flip && !sup && !res) return '<div class="no-data">GEX data unavailable</div>';
+        // Mini price bar — spot vs flip/sup/res
+        const p = cur || spot;
+        const allPts = [flip,sup,res,p].filter(Boolean);
+        const minPt = Math.min(...allPts) - 3;
+        const maxPt = Math.max(...allPts) + 3;
+        const pctOf = v => v ? ((v-minPt)/(maxPt-minPt)*100).toFixed(1) : null;
+        const pPct = pctOf(p);
+        const flipPct = pctOf(flip);
+        const supPct = pctOf(sup);
+        const resPct = pctOf(res);
+        return \`
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;">
+            <div style="text-align:center;padding:8px;background:rgba(0,204,255,0.07);border:1px solid rgba(0,204,255,0.25);border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-bottom:3px;">FLIP</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);">$\${fmt(flip,2)}</div>
+            </div>
+            <div style="text-align:center;padding:8px;background:rgba(255,51,85,0.07);border:1px solid rgba(255,51,85,0.25);border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">SUPPORT</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#ff3355;">$\${fmt(sup,2)}</div>
+            </div>
+            <div style="text-align:center;padding:8px;background:rgba(0,255,136,0.07);border:1px solid rgba(0,255,136,0.25);border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">RESISTANCE</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#00ff88;">$\${fmt(res,2)}</div>
+            </div>
+            <div style="text-align:center;padding:8px;background:\${regColor}11;border:1px solid \${regColor}44;border-radius:3px;">
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:\${regColor};margin-bottom:3px;">NET GEX</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:\${regColor};">\${fmtB(netGex)}</div>
+            </div>
+          </div>
+          <div style="position:relative;height:32px;background:linear-gradient(90deg,rgba(255,51,85,0.15),rgba(255,136,0,0.08),rgba(0,255,136,0.15));border:1px solid var(--border);border-radius:4px;margin-bottom:6px;">
+            \${supPct  ? \`<div style="position:absolute;left:\${supPct}%;top:0;bottom:0;width:1px;background:#ff3355;opacity:0.7;"><div style="position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-family:'Orbitron',monospace;font-size:7px;color:#ff3355;white-space:nowrap;margin-bottom:2px;">SUP</div></div>\` : ''}
+            \${resPct  ? \`<div style="position:absolute;left:\${resPct}%;top:0;bottom:0;width:1px;background:#00ff88;opacity:0.7;"><div style="position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-family:'Orbitron',monospace;font-size:7px;color:#00ff88;white-space:nowrap;margin-bottom:2px;">RES</div></div>\` : ''}
+            \${flipPct ? \`<div style="position:absolute;left:\${flipPct}%;top:0;bottom:0;width:2px;background:#ffcc00;opacity:0.9;"><div style="position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-family:'Orbitron',monospace;font-size:7px;color:#ffcc00;white-space:nowrap;margin-bottom:2px;">FLIP</div></div>\` : ''}
+            \${pPct    ? \`<div style="position:absolute;left:\${pPct}%;top:50%;transform:translate(-50%,-50%);background:var(--cyan);color:#000;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:bold;padding:1px 5px;border-radius:2px;white-space:nowrap;z-index:2;">$\${fmt(p,2)}</div>\` : ''}
+          </div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;text-align:center;padding:4px 8px;border-radius:3px;color:\${regColor};background:\${regColor}11;">
+            \${regime} GEX — \${isPos ? 'Market makers are long gamma. Expect mean reversion. Moves get dampened.' : 'Market makers are short gamma. Expect acceleration. Moves can expand.'}
+          </div>
+        \`;
+      })()}
+    </div>
+
     <!-- HVN — last 5 days with actual intraday data -->
     <div class="panel" style="margin-bottom:10px;">
       <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ HIGH VOLUME PRICES — LAST 5 SESSIONS WITH DATA</div>
