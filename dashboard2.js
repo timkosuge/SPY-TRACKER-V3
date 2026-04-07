@@ -5153,17 +5153,10 @@ function _renderMacroHTML(data) {
       ${seriesCard('CSUSHPISA', 'Case-Shiller Home Price Index',
         'Nationwide home price index — the gold standard for tracking US housing prices. Includes repeat-sale methodology to track actual price changes.',
         'Home prices rose 40% from 2020-2022 — the largest 2-year gain ever recorded. Fell 5% in 2022-2023 then re-accelerated. Affordability hit the worst levels since records began.')}
-    </div>
-
       ${seriesCard('HOUST', 'Housing Starts',
-        'New residential construction. Housing is 15-18% of GDP when you include construction, real estate services, and furniture. Leading indicator — builders don't break ground unless confident.',
+        'New residential construction. Housing is 15-18% of GDP when you include construction, real estate services, and furniture. Leading indicator — builders rarely break ground unless confident.',
         'Housing starts collapsed 30% in 2022 as mortgage rates spiked. A sustained recovery requires either lower rates or demographic demand overwhelming affordability concerns.')}
-      ${seriesCard('CSUSHPISA', 'Case-Shiller Home Price Index',
-        'The gold standard for US home price data. Covers 20 major metro areas. YoY above 5% = overheating. Near 0% = correction. Negative = crisis.',
-        'Home prices fell 27% nationally in 2006-2012. The 2020-2022 surge of 40%+ in 24 months was historically unprecedented — driven by remote work, low rates, and supply shortage.')}
-      ${seriesCard('DSPIC96', 'Real Disposable Personal Income',
-        'What Americans have left to spend after taxes and inflation. The true purchasing power of households. Declining real DPI = consumers spending on credit or cutting back.',
-        'COVID stimulus briefly pushed real DPI 30% above trend — the rocket fuel for the 2021-2022 inflation surge. The hangover: real DPI fell below pre-COVID trend by 2023.')}
+    </div>
 
     <!-- MONETARY & LIQUIDITY -->
     ${sectionHdr('MONETARY POLICY & LIQUIDITY', '#8855ff', 'Fed balance sheet, money supply, net liquidity')}
@@ -5221,7 +5214,7 @@ function _renderMacroHTML(data) {
         'The 2Y yield inverted below the 10Y in 2022 — the yield curve inversion that historically precedes recessions. Watch for dis-inversion as a recession confirmation signal.')}
       ${seriesCard('MORTGAGE30US', '30-Year Mortgage Rate',
         'The rate most Americans actually pay to buy a home. Peaked above 8% in late 2023 — highest since 2000. Every 1% move = ~$250/month on a $400K loan. Housing affordability destroyed.',
-        'The 2020-2021 rate of 2.7-3% created a "lock-in" effect — millions of homeowners won't sell because they'd lose their rate. This structural supply freeze is keeping home prices elevated.')}
+        'The 2020-2021 rate of 2.7-3% created a "lock-in" effect — millions of homeowners will not sell because they would lose their rate. This structural supply freeze is keeping home prices elevated.')}
       ${seriesCard('BAMLC0A0CM', 'Investment Grade Credit Spread',
         'How much more yield IG corporate bonds pay vs Treasuries. Below 1% = complacency. Above 2% = stress. Above 3% = crisis. IG spreads are tighter than HY and move less dramatically.',
         'IG spreads hit record tights in 2021 at ~0.8%. Widened to 1.6% in 2022 rate shock. Current levels are a key indicator of whether large-cap US companies face funding stress.')}
@@ -5286,7 +5279,7 @@ function _renderMacroHTML(data) {
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
       ${seriesCard('GFDEBTN', 'Federal Debt Outstanding',
         'Total national debt — all Treasury bonds, bills, and notes outstanding. Crossed $36T in 2025. The trajectory matters more than the level: adding $1T every ~100 days.',
-        'Took 200 years to reach $1T (1981). Then $1T every ~18 months in the 2020s. Einstein's "eighth wonder" — compound interest applied to a sovereign.')}
+        'Took 200 years to reach $1T (1981). Then $1T every ~18 months in the 2020s. Einstein noted, "eighth wonder" — compound interest applied to a sovereign.')}
       ${seriesCard('GFDEGDQ188S', 'Federal Debt to GDP',
         'Debt as a percentage of economic output. The most important long-run sustainability metric. Above 100% = debt exceeds annual economic output. Japan is at 260% — the extreme case.',
         'The US crossed 100% for the first time during COVID in 2020. Pre-WWII record was 106%. Current trajectory reaches 130%+ by 2030 without fiscal adjustment.')}
@@ -5301,7 +5294,7 @@ function _renderMacroHTML(data) {
     <!-- DOLLAR & GLOBAL -->
     ${sectionHdr('DOLLAR & GLOBAL FINANCE', '#00ccff', 'Reserve currency · trade · exchange rates')}
     <div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      <strong style="color:var(--text1);">The dollar is the world's reserve currency.</strong> 60% of global foreign exchange reserves are in dollars. Oil is priced in dollars. Most international trade is settled in dollars. This gives the US the "exorbitant privilege" — it can borrow cheaply and run deficits that would destroy any other currency. 
+      <strong style="color:var(--text1);">The dollar is the world reserve currency.</strong> 60% of global foreign exchange reserves are in dollars. Oil is priced in dollars. Most international trade is settled in dollars. This gives the US the "exorbitant privilege" — it can borrow cheaply and run deficits that would destroy any other currency. 
       The trade-weighted dollar tells you the relative strength of the US economy vs its trading partners. DXY strength benefits US consumers (cheaper imports) but hurts US exporters and emerging market debtors.
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
@@ -5310,7 +5303,7 @@ function _renderMacroHTML(data) {
         'The dollar surged 15% in 2022 as the Fed hiked faster than other central banks. A strong dollar exports US inflation to the rest of the world, creating pressure on EM economies with dollar-denominated debt.')}
       ${seriesCard('DEXJPUS', 'USD/JPY Exchange Rate',
         'How many yen per dollar. The most important cross-rate for global macro — the yen carry trade (borrowing cheap yen to buy US assets) is one of the largest capital flows in the world.',
-        'Yen hit 160 per dollar in 2024 — weakest since 1990. BOJ's shift away from ultra-loose policy triggered the largest single-day market crash in decades in August 2024 as carry trades unwound.')}
+        'Yen hit 160 per dollar in 2024 — weakest since 1990. The BOJ shift away from ultra-loose policy triggered the largest single-day market crash in decades in August 2024 as carry trades unwound.')}
     </div>
 
     <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;">
@@ -6050,7 +6043,7 @@ function _renderSovereignHTML(data) {
         </div>
         <div>
           <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:4px;">EQUIPMENT DOMINANCE</div>
-          Tokyo Electron (TEL), Screen Holdings, and Shin-Etsu already supply 20-30% of global semiconductor equipment and materials. Japan doesn't need to build fabs — they control the machines that build the chips. This is leverage the US cannot afford to lose.
+          Tokyo Electron (TEL), Screen Holdings, and Shin-Etsu already supply 20-30% of global semiconductor equipment and materials. Japan does not need to build fabs — they control the machines that build the chips. This is leverage the US cannot afford to lose.
         </div>
       </div>
     </div>
