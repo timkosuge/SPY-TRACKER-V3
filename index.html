@@ -639,6 +639,7 @@
     <div class="subtab active" onclick="switchGroupSub('macro-overview',this)">OVERVIEW</div>
     <div class="subtab" onclick="switchGroupSub('transition',this)">⬡ AI TRANSITION</div>
     <div class="subtab" onclick="switchGroupSub('ignition',this)" style="color:var(--orange);">THE BUILDOUT</div>
+
   </div>
   <!-- Overview subtabs (overview gets bonds/breadth/sentiment) -->
   <div class="subtab-group" id="subtabs-overview" style="display:none;">
@@ -646,6 +647,7 @@
     <div class="subtab" onclick="switchGroupSub('bonds',this)">⬡ BONDS</div>
     <div class="subtab" onclick="switchGroupSub('breadth',this)">BREADTH</div>
     <div class="subtab" onclick="switchGroupSub('sentiment',this)">SENTIMENT</div>
+    <div class="subtab" onclick="switchGroupSub('sovereign-chess',this)" style="color:#ff8800;">⬡ SOVEREIGN CHESS</div>
 
   </div>
   <!-- History subtabs -->
@@ -1159,6 +1161,13 @@
     <div id="cotHistoryChart"><div class="no-data">Loading COT history...</div></div>
   </div>
   </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SOVEREIGN CHESS
+════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-sovereign-chess">
+  <div id="sovereignChessContent"><div class="no-data" style="padding:40px;text-align:center;">Loading Sovereign Chess data...</div></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -1743,6 +1752,8 @@
 <div class="tab-panel" id="panel-macro-overview">
   <div id="macroContent"><div class="no-data" style="padding:40px;text-align:center;">Loading macro data...</div></div>
 </div>
+
+
 
 <div class="tab-panel" id="panel-transition">
   <div id="transitionContent"><div class="no-data" style="padding:40px;text-align:center;">Loading transition data...</div></div>
