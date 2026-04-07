@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -639,6 +640,7 @@
     <div class="subtab active" onclick="switchGroupSub('macro-overview',this)">OVERVIEW</div>
     <div class="subtab" onclick="switchGroupSub('transition',this)">⬡ AI TRANSITION</div>
     <div class="subtab" onclick="switchGroupSub('ignition',this)" style="color:var(--orange);">THE BUILDOUT</div>
+    <div class="subtab" onclick="switchGroupSub('sovereign-chess',this)" style="color:#ff8800;">⬡ SOVEREIGN CHESS</div>
 
   </div>
   <!-- Overview subtabs (overview gets bonds/breadth/sentiment) -->
@@ -647,7 +649,6 @@
     <div class="subtab" onclick="switchGroupSub('bonds',this)">⬡ BONDS</div>
     <div class="subtab" onclick="switchGroupSub('breadth',this)">BREADTH</div>
     <div class="subtab" onclick="switchGroupSub('sentiment',this)">SENTIMENT</div>
-    <div class="subtab" onclick="switchGroupSub('sovereign-chess',this)" style="color:#ff8800;">⬡ SOVEREIGN CHESS</div>
 
   </div>
   <!-- History subtabs -->
@@ -1850,7 +1851,7 @@
 
 #panel-ignition .section-hd{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:3px;color:var(--text3);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
 
-#panel-ignition .cg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;}
+#panel-ignition .cg{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}
 
 #panel-ignition .cc{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;transition:border-color 0.2s;}
 
@@ -1868,11 +1869,11 @@
 
 #panel-ignition .cc-rows{display:flex;flex-direction:column;gap:3px;}
 
-#panel-ignition .cc-row{display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:10px;gap:6px;}
+#panel-ignition .cc-row{display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:10px;gap:4px;min-width:0;}
 
-#panel-ignition .cc-k{color:var(--text3);flex-shrink:0;}
+#panel-ignition .cc-k{color:var(--text3);flex-shrink:1;min-width:0;overflow-wrap:break-word;}
 
-#panel-ignition .cc-v{color:var(--text2);text-align:right;}
+#panel-ignition .cc-v{color:var(--text2);text-align:right;flex-shrink:0;white-space:nowrap;}
 
 #panel-ignition .cc-v.up{color:var(--green);}
 
