@@ -328,15 +328,85 @@ window._M = (() => {
      2.  LIVE DATA — FRED CSV fetches (no key needed)
   ═══════════════════════════════════════════════════════ */
 
-  // Cache for /fred proxy response to avoid multiple calls
+  // Cache for /fred proxy response — localStorage-backed, 4hr TTL
+  const FRED_CACHE_KEY = 'spy_fred_cache';
+  const FRED_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
   let _fredProxyCache = null;
-  async function fetchFRED(seriesId, limit=16) {
+  let _fredFetchPromise = null; // dedup in-flight fetches
+
+  function _fredLoadFromStorage() {
     try {
-      if (!_fredProxyCache) {
+      const raw = localStorage.getItem(FRED_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.ts || !parsed?.data) return null;
+      if (Date.now() - parsed.ts > FRED_CACHE_TTL) return null; // expired
+      return parsed;
+    } catch { return null; }
+  }
+
+  function _fredSaveToStorage(data) {
+    try {
+      localStorage.setItem(FRED_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+    } catch {}
+  }
+
+  function _fredGetCachedTs() {
+    try {
+      const raw = localStorage.getItem(FRED_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed?.ts || null;
+    } catch { return null; }
+  }
+
+  async function _fredFetch() {
+    if (_fredFetchPromise) return _fredFetchPromise;
+    _fredFetchPromise = (async () => {
+      try {
         const r = await fetch('/fred?t=' + Date.now());
         if (!r.ok) return null;
-        _fredProxyCache = await r.json();
-      }
+        const data = await r.json();
+        _fredProxyCache = data;
+        _fredSaveToStorage(data);
+        _updateFredTimestamp();
+        return data;
+      } catch { return null; }
+      finally { _fredFetchPromise = null; }
+    })();
+    return _fredFetchPromise;
+  }
+
+  // Initialize cache from localStorage on load
+  (function() {
+    const stored = _fredLoadFromStorage();
+    if (stored) _fredProxyCache = stored.data;
+  })();
+
+  function _updateFredTimestamp() {
+    const ts = _fredGetCachedTs();
+    const el = document.getElementById('fredCacheTs');
+    if (!el || !ts) return;
+    const d = new Date(ts);
+    el.textContent = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' });
+  }
+
+  // Global refresh function — clears cache and re-renders
+  window.fredRefresh = async function() {
+    const btn = document.getElementById('fredRefreshBtn');
+    if (btn) { btn.textContent = '↻ REFRESHING...'; btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none'; }
+    localStorage.removeItem(FRED_CACHE_KEY);
+    _fredProxyCache = null;
+    _fredFetchPromise = null;
+    await _fredFetch();
+    if (btn) { btn.textContent = '↻ REFRESH'; btn.style.opacity = '1'; btn.style.pointerEvents = 'auto'; }
+    if (typeof _M !== 'undefined') _M.reload();
+  };
+
+  async function fetchFRED(seriesId, limit=16) {
+    try {
+      if (!_fredProxyCache) await _fredFetch();
+      if (!_fredProxyCache) return null;
       const series = _fredProxyCache.series?.[seriesId];
       if (!series?.history) return null;
       return series.history.slice(-limit).map(h => ({ date: h.d, value: h.v })).filter(d => d.value != null);
@@ -468,6 +538,7 @@ window._M = (() => {
 
     el.innerHTML = buildHTML(d, regime);
     bindToggles();
+    _updateFredTimestamp();
     loadLiveData(d);           // async overlay
     loadAINarrative(d, regime); // async Claude narrative
   }
@@ -522,10 +593,11 @@ window._M = (() => {
           <div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:10px;">${regime.desc}</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;">${flagHTML}</div>
         </div>
-        <div style="text-align:center;min-width:80px;">
-          <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">LAST UPDATED</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:8px;">Data: FRED / BLS<br>Static anchors + live overlay</div>
+        <div style="text-align:center;min-width:100px;">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">FRED CACHE</div>
+          <div id="fredCacheTs" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text2);margin-bottom:8px;">—</div>
+          <button id="fredRefreshBtn" onclick="fredRefresh()" style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;padding:4px 10px;background:transparent;border:1px solid var(--border2);color:var(--text3);border-radius:2px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">↻ REFRESH</button>
+          <div style="font-size:10px;color:var(--text3);margin-top:8px;">Data: FRED / BLS<br>4hr local cache</div>
         </div>
       </div>
     </div>`;
