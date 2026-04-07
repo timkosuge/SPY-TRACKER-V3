@@ -171,8 +171,22 @@ export async function onRequest(context) {
     const pcrOI = totalCallOI ? Math.round((totalPutOI / totalCallOI) * 1000) / 1000 : null;
 
     // -- ATM IV ------------------------------------------------------------
+    // Target the Friday weekly expiry for ATM IV — not 0DTE which is massively
+    // inflated on volatile days and gives a misleading WEM calculation.
+    // Find the nearest Friday expiry; fall back to next available expiry if none found.
     let atmIV = null;
-    for (const exp of expiries.slice(0, 3)) {
+    const fridayExp = (() => {
+      const now = new Date();
+      for (const exp of expiries) {
+        const d = new Date(exp + 'T12:00:00Z');
+        if (d.getDay() === 5 && d >= now) return exp; // Friday on or after today
+      }
+      return null;
+    })();
+    const atmExpiries = fridayExp
+      ? [fridayExp, ...expiries.filter(e => e !== fridayExp).slice(0, 2)]
+      : expiries.slice(0, 3);
+    for (const exp of atmExpiries) {
       const nearestOpts = parsed
         .filter((option) => option.exp === exp && option.iv > 0)
         .sort((a, b) => {
