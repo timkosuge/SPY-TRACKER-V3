@@ -586,7 +586,7 @@
 </div>
 
 <div class="topbar">
-  <div class="logo">SPY <span>//</span> TRACKER</div>
+  <div class="logo" id="spyLogo" onclick="_logoTap()" style="cursor:pointer;user-select:none;">SPY <span>//</span> TRACKER</div>
   <div class="ticker-tape"><div class="ticker-inner" id="tickerInner"></div></div>
   <div id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">
     <span id="themeLabel">DARK</span>
@@ -6428,5 +6428,18 @@ async function igLoadData(){
 // auto-call removed - triggered by tab switch
 
 function loadIgnitionData() { if(typeof igLoadData === "function") igLoadData(); }
+
+// Easter egg: triple-click logo opens TOS & Thinkscript Collection
+let _logoTapCount = 0, _logoTapTimer = null;
+function _logoTap() {
+  _logoTapCount++;
+  clearTimeout(_logoTapTimer);
+  if (_logoTapCount >= 3) {
+    _logoTapCount = 0;
+    window.open('TOS & Thinkscript Collection.html', '_blank');
+    return;
+  }
+  _logoTapTimer = setTimeout(() => { _logoTapCount = 0; }, 600);
+}
 
 </script>
