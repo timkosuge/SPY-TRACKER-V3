@@ -352,14 +352,14 @@ function renderHub(md,sd){
     <div class="panel" style="border-left:4px solid ${sessionColor};">
       <div style="display:grid;grid-template-columns:auto auto auto 1fr auto auto auto;gap:16px;align-items:center;">
         <div>
-          <div id="hubSessionLabel" onclick="weatherEasterEggClick()" style="font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:${sessionColor};letter-spacing:2px;cursor:pointer;" title="Click 3x for local weather">${sessionLabel}</div>
+          <div id="hubSessionLabel" style="font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:${sessionColor};letter-spacing:2px;cursor:pointer;" title="Click 3x for local weather">${sessionLabel}</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text2);margin-top:4px;">${dateStr}</div>
         </div>
         <div style="border-left:1px solid var(--border);padding-left:16px;">
           <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);letter-spacing:1px;margin-bottom:2px;">CT TIME</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:var(--text);" id="hubClock">${timeStr}</div>
         </div>
-        <div style="border-left:1px solid var(--border);padding-left:16px;text-align:center;">
+        <div id="hubCountdownBlock" style="border-left:1px solid var(--border);padding-left:16px;text-align:center;cursor:pointer;" title="Click 3x for quote of the day">
           <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:${countdownColor};margin-bottom:4px;">${countdownLabel}</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:${countdownColor};letter-spacing:2px;" id="hubCountdown">${fmtCountdown(countdownSecs)}</div>
         </div>
