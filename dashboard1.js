@@ -355,7 +355,7 @@ function renderHub(md,sd){
           <div id="hubSessionLabel" style="font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:${sessionColor};letter-spacing:2px;cursor:pointer;" title="Click 3x for local weather">${sessionLabel}</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text2);margin-top:4px;">${dateStr}</div>
         </div>
-        <div style="border-left:1px solid var(--border);padding-left:16px;">
+        <div id="hubClockBlock" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click 3x for live news">
           <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);letter-spacing:1px;margin-bottom:2px;">CT TIME</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:var(--text);" id="hubClock">${timeStr}</div>
         </div>
