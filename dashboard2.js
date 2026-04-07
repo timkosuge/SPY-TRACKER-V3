@@ -759,9 +759,19 @@ function renderWEM(md){
   const wems=md.weekly_em||[], stats=md.wem_stats||{};
   const q=md.quotes||{}, spy=q['SPY']||{};
   const cur=wems.find(w=>!w.week_close)||wems[0];
-  // Ensure live atm_iv is always on md.gex — patch from window._md if needed
+  // Ensure live atm_iv is always on md.gex
   if (!md.gex) md.gex = {};
   if (!md.gex.atm_iv && window._md?.gex?.atm_iv) md.gex.atm_iv = window._md.gex.atm_iv;
+  // If still missing, fetch directly from /gex in background and re-render
+  if (!md.gex.atm_iv) {
+    fetch('/gex').then(r=>r.ok?r.json():null).then(d=>{
+      if (d?.atm_iv && _md) {
+        _md.gex = _md.gex || {};
+        _md.gex.atm_iv = d.atm_iv;
+        try { renderWEM(_md); } catch(e) {}
+      }
+    }).catch(()=>{});
+  }
 
   // ── Mode toggle ──────────────────────────────────────────────────────────
   if (!window._wemMode) window._wemMode = 'dynamic';
@@ -800,7 +810,6 @@ function renderWEM(md){
     const dte = cur.dte || 1;
     // Use window._md.gex.atm_iv as extra fallback in case md reference is stale
     const _liveGexIV = md.gex?.atm_iv || window._md?.gex?.atm_iv || null;
-    console.log('[WEM] liveGexIV:', _liveGexIV, 'md.gex:', JSON.stringify(md.gex)?.slice(0,200), 'window._md.gex.atm_iv:', window._md?.gex?.atm_iv);
     const liveIV = (_liveGexIV && _liveGexIV > 0) ? _liveGexIV : (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
     const dynMid = staticMid;
     const _dynHalf = dynMid && liveIV ? dynMid * liveIV * Math.sqrt(dte / 365) * 0.70 : staticHalfRange;
@@ -4135,7 +4144,6 @@ async function loadData(){
     // Patch F&G with CNN value immediately
     if (liveFG) md.fear_greed = liveFG;
     // Patch GEX + max pain with live CBOE data (overrides stale workflow data)
-    console.log('[GEX CHECK] liveGEX:', liveGEX ? JSON.stringify(liveGEX).slice(0,300) : 'null');
     if (liveGEX?.gex?.flip_point) {
       md.gex = liveGEX.gex;
       // Patch atm_straddle into md.gex so daily EM can use real straddle price
@@ -4146,7 +4154,6 @@ async function loadData(){
       if (liveGEX.walls_by_expiry?.length) md.walls_by_expiry = liveGEX.walls_by_expiry;
       // Patch live atm_iv onto md.gex so WEM/EM panels can use it directly
       // gex.js now targets Friday weekly expiry IV so this is correct for EM calcs
-      console.log('[GEX LOAD] liveGEX.atm_iv:', liveGEX.atm_iv, 'liveGEX.gex keys:', Object.keys(liveGEX.gex||{}));
       md.gex.atm_iv = liveGEX.atm_iv || liveGEX.gex?.atm_iv || null;
       if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
     }
