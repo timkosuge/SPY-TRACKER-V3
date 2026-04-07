@@ -6685,8 +6685,14 @@ function weatherEasterEggClick() {
     openWeatherWindow();
     return;
   }
-  _weatherTapTimer = setTimeout(() => { _weatherTapCount = 0; }, 600);
+  _weatherTapTimer = setTimeout(() => { _weatherTapCount = 0; }, 800);
 }
+
+// Use event delegation so re-renders don't break the listener
+document.addEventListener('click', function(e) {
+  const el = e.target.closest('#hubSessionLabel');
+  if (el) weatherEasterEggClick();
+});
 
 function openWeatherWindow() {
   const existing = document.getElementById('weatherWindow');
