@@ -849,13 +849,23 @@ function renderBreadth(md, sd){
 
 function renderSentiment(md){
   const q=md.quotes||{},fg=md.fear_greed||{},pcr=md.options_summary?.pc_ratio_vol,vixQ=q['^VIX']||{};
+  const vvixQ=q['^VVIX']||{}, skewQ=q['^SKEW']||{};
   const fgVal=fg.value!=null?fg.value:fg.score;
   const fgColor=fgVal<=25?'#ff3355':fgVal<=45?'#ff8800':fgVal<=55?'#ffcc00':fgVal<=75?'#88cc00':'#00ff88';
   const fgLbl=fgVal<=25?'EXTREME FEAR':fgVal<=45?'FEAR':fgVal<=55?'NEUTRAL':fgVal<=75?'GREED':'EXTREME GREED';
+
+  // Michigan Consumer Sentiment — pulled async from FRED cache
+  const michiganEl = $('michiganPanel');
+  const vvixVal = vvixQ.price, skewVal = skewQ.price;
+  const vvixColor = vvixVal>130?'#ff3355':vvixVal>100?'#ff8800':'#00ff88';
+  const skewColor = skewVal>150?'#ff3355':skewVal>130?'#ff8800':'#00ff88';
+
   const indicators=[
     {name:'Fear & Greed',val:fgVal!=null?fgVal+'':'—',signal:fgLbl,color:fgColor},
     {name:'VIX Level',val:fmt(vixQ.price,1),signal:vixQ.price<20?'CALM':vixQ.price<30?'ELEVATED':'FEAR',color:vixQ.price<20?'#00ff88':vixQ.price<30?'#ffcc00':'#ff3355'},
     {name:'Put/Call Ratio',val:fmt(pcr,3),signal:pcr<0.7?'BULLISH':pcr<1.0?'NEUTRAL':'BEARISH',color:pcr<0.7?'#00ff88':pcr<1.0?'#ffcc00':'#ff3355'},
+    ...(vvixVal?[{name:'VVIX (vol of vol)',val:fmt(vvixVal,1),signal:vvixVal>130?'PANIC':vvixVal>100?'ELEVATED':'NORMAL',color:vvixColor}]:[]),
+    ...(skewVal?[{name:'CBOE SKEW',val:fmt(skewVal,1),signal:skewVal>150?'EXTREME TAIL RISK':skewVal>130?'ELEVATED HEDGING':skewVal>110?'NORMAL':'LOW PROTECTION',color:skewColor}]:[]),
   ];
   $('sentList').innerHTML=indicators.map(({name,val,signal,color})=>`
     <div class="sent-indicator">
@@ -864,12 +874,14 @@ function renderSentiment(md){
       <span class="sent-val" style="color:${color}">${val}</span>
       <span class="sent-signal" style="color:${color};background:${color}22;border:1px solid ${color}44">${signal}</span>
     </div>`).join('');
-  // Score
+  // Score — max 9 points
   let score=0;
   if(fgVal!=null){if(fgVal>55)score+=2;else if(fgVal>45)score+=1;else if(fgVal<30)score-=2;else score-=1;}
   if(vixQ.price){if(vixQ.price<20)score+=2;else if(vixQ.price<25)score+=1;else if(vixQ.price>30)score-=2;else score-=1;}
   if(pcr){if(pcr<0.7)score+=1;else if(pcr>1.1)score-=1;}
-  const maxScore=5,pct=((score+maxScore)/(maxScore*2))*100;
+  if(vvixVal){if(vvixVal<90)score+=1;else if(vvixVal>130)score-=1;}
+  if(skewVal){if(skewVal>145)score-=1;else if(skewVal<115)score+=1;}
+  const maxScore=9,pct=((score+maxScore)/(maxScore*2))*100;
   const sc=score>=2?'#00ff88':score>=0?'#ffcc00':score>=-2?'#ff8800':'#ff3355';
   const sl=score>=2?'RISK ON':score>=0?'NEUTRAL':score>=-2?'CAUTIOUS':'RISK OFF';
   $('sentScore').innerHTML=`
@@ -897,6 +909,9 @@ function renderSentiment(md){
 
   // Load F&G history chart async
   loadFGHistory();
+  // Load Michigan sentiment + margin debt async
+  loadMichiganSentiment();
+  loadMarginDebtSentiment();
 }
 
 async function loadFGHistory() {
