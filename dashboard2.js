@@ -4447,6 +4447,28 @@ async function renderGEXIntradayMap() {
   const lastSnap = snapshots[snapshots.length-1];
 
   el.innerHTML = kvNotice + `
+    <!-- Explanation panel -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px 20px;margin-bottom:14px;">
+      <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;">⬡ WHAT IS THE GEX MAP?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;font-size:12px;color:var(--text2);line-height:1.7;">
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:2px;margin-bottom:6px;">HOW IT'S BUILT</div>
+          <p style="margin:0 0 8px;">GEX (Gamma Exposure) measures the total dollar gamma that market makers hold across all open SPY options contracts. It's calculated by summing each strike's gamma × open interest × 100 × spot price, separately for calls and puts, then netting them.</p>
+          <p style="margin:0 0 8px;">The data is pulled from live options chains and stored as a snapshot every 5 minutes during market hours. Each bar on the chart represents one snapshot — you're watching dealer positioning evolve in real time.</p>
+        </div>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:2px;margin-bottom:6px;">HOW TO READ IT</div>
+          <div style="margin-bottom:6px;"><span style="color:#ffcc00;font-family:'Share Tech Mono',monospace;">FLIP POINT</span> — The price where net GEX crosses zero. Below this, dealers are short gamma and price can accelerate. Above it, they're long gamma and price gets dampened.</div>
+          <div style="margin-bottom:6px;"><span style="color:#00ff88;font-family:'Share Tech Mono',monospace;">RESISTANCE</span> — Heavy call gamma above spot. Dealers short calls hedge by selling into rallies here, creating a ceiling.</div>
+          <div style="margin-bottom:6px;"><span style="color:#ff3355;font-family:'Share Tech Mono',monospace;">SUPPORT</span> — Heavy put gamma below spot. Dealers short puts hedge by buying dips here, creating a floor.</div>
+          <div><span style="color:var(--cyan);font-family:'Share Tech Mono',monospace;">REGIME</span> — Positive GEX = dealers are long gamma = market stabilizing force. Negative GEX = dealers are short gamma = moves tend to expand and momentum dominates.</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:10px 14px;background:rgba(0,204,255,0.05);border-left:3px solid rgba(0,204,255,0.4);border-radius:3px;font-size:11px;color:var(--text3);line-height:1.6;">
+        Think of positive GEX as a rubber band — price gets pulled back toward equilibrium. Negative GEX is the opposite: a spark plug. When dealers are short gamma, small moves beget larger ones. The flip point is the line between these two regimes.
+      </div>
+    </div>
+
     <!-- Header row -->
     <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:10px;align-items:center;margin-bottom:14px;">
       <div>
