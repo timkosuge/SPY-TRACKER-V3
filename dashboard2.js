@@ -5098,12 +5098,6 @@ function _renderMacroHTML(data) {
       ${seriesCard('U6RATE', 'U-6 Underemployment Rate',
         'The broadest labor market measure — includes part-time workers who want full-time and discouraged workers who stopped looking. Always higher than headline U-3.',
         'U-6 peaked at 22.9% during COVID. Rising U-6 often signals broader slowdown before headline unemployment catches up.')}
-      ${seriesCard('PAYEMS', 'Nonfarm Payrolls (Total)',
-        'Total jobs in the US economy outside of farming — the headline monthly jobs report number. The single most market-moving data release each month.',
-        'Added 20M jobs in just 3 months in 2021 after losing 22M in March-April 2020. The speed of recovery was unprecedented. Monthly pace has decelerated from 500K+ (2021) to ~150-200K (2024).')}
-      ${seriesCard('CCSA', 'Continuing Jobless Claims',
-        'People currently receiving unemployment benefits — not just new filers. Rising continuing claims mean the unemployed are staying unemployed longer. A more durable signal than initial claims.',
-        'Continuing claims hit 5.9M in May 2020. Persistently elevated continuing claims (above 2M) signal structural unemployment, not just cyclical fluctuation.')}
       ${seriesCard('JTSQUL', 'Quits Rate',
         'The percentage of workers voluntarily quitting their jobs. High quits = workers are confident they can find better jobs (tight labor market). Falling quits = workers are nervous about leaving.',
         'The "Great Resignation" pushed quits to a record 3.0% in 2021-2022. The quits rate is a leading indicator of wage growth — workers quit for better pay. Now normalizing signals wage pressure easing.')}
@@ -5268,42 +5262,6 @@ function _renderMacroHTML(data) {
       ${seriesCard('TOTALSL', 'Total Consumer Credit',
         'All consumer debt: credit cards + auto loans + student loans. Measures total household leverage.',
         'Exceeded $5T for the first time in 2024. The quality of this debt (who holds it, at what rates) matters as much as the quantity.')}
-    </div>
-
-    <!-- FISCAL & DEBT -->
-    ${sectionHdr('FISCAL POSITION & NATIONAL DEBT', '#ff3355', 'Deficit · debt level · interest burden')}
-    <div style="background:rgba(255,51,85,0.04);border:1px solid rgba(255,51,85,0.12);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      <strong style="color:var(--text1);">Why does the deficit matter?</strong> The US government spends more than it collects in taxes every year. It borrows the difference by issuing Treasury bonds. When debt is high relative to GDP, more of the budget goes to interest payments — crowding out spending on everything else. 
-      At current rates, interest on the debt is the <strong style="color:#ff3355;">fastest-growing line item in the federal budget</strong> — exceeding defense spending for the first time in US history.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      ${seriesCard('GFDEBTN', 'Federal Debt Outstanding',
-        'Total national debt — all Treasury bonds, bills, and notes outstanding. Crossed $36T in 2025. The trajectory matters more than the level: adding $1T every ~100 days.',
-        'Took 200 years to reach $1T (1981). Then $1T every ~18 months in the 2020s. Einstein noted, "eighth wonder" — compound interest applied to a sovereign.')}
-      ${seriesCard('GFDEGDQ188S', 'Federal Debt to GDP',
-        'Debt as a percentage of economic output. The most important long-run sustainability metric. Above 100% = debt exceeds annual economic output. Japan is at 260% — the extreme case.',
-        'The US crossed 100% for the first time during COVID in 2020. Pre-WWII record was 106%. Current trajectory reaches 130%+ by 2030 without fiscal adjustment.')}
-      ${seriesCard('FYFSD', 'Federal Budget Surplus/Deficit',
-        'Annual difference between government revenue and spending. Negative = deficit. The US has run a deficit every year since 2001 except 2000.',
-        'The 2023 deficit was $1.7T — 6.3% of GDP — during a non-recessionary year. Structural deficits of this size are historically associated with either crisis or currency devaluation.')}
-      ${seriesCard('INTGSTUSESM193N', 'Interest Payments as % of GDP',
-        'What the government pays to service its debt as a share of economic output. Rising fast as old low-rate debt matures and gets refinanced at higher rates.',
-        'Crossed 3% of GDP in 2024 — exceeding the entire defense budget. At current projections, interest payments consume 20% of all federal revenue by 2030.')}
-    </div>
-
-    <!-- DOLLAR & GLOBAL -->
-    ${sectionHdr('DOLLAR & GLOBAL FINANCE', '#00ccff', 'Reserve currency · trade · exchange rates')}
-    <div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      <strong style="color:var(--text1);">The dollar is the world reserve currency.</strong> 60% of global foreign exchange reserves are in dollars. Oil is priced in dollars. Most international trade is settled in dollars. This gives the US the "exorbitant privilege" — it can borrow cheaply and run deficits that would destroy any other currency. 
-      The trade-weighted dollar tells you the relative strength of the US economy vs its trading partners. DXY strength benefits US consumers (cheaper imports) but hurts US exporters and emerging market debtors.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      ${seriesCard('DTWEXBGS', 'Trade-Weighted Dollar Index',
-        'Broad measure of the dollar against all US trading partners, weighted by trade volume. More comprehensive than DXY (which only tracks 6 currencies).',
-        'The dollar surged 15% in 2022 as the Fed hiked faster than other central banks. A strong dollar exports US inflation to the rest of the world, creating pressure on EM economies with dollar-denominated debt.')}
-      ${seriesCard('DEXJPUS', 'USD/JPY Exchange Rate',
-        'How many yen per dollar. The most important cross-rate for global macro — the yen carry trade (borrowing cheap yen to buy US assets) is one of the largest capital flows in the world.',
-        'Yen hit 160 per dollar in 2024 — weakest since 1990. The BOJ shift away from ultra-loose policy triggered the largest single-day market crash in decades in August 2024 as carry trades unwound.')}
     </div>
 
     <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;">
