@@ -2206,6 +2206,10 @@
     <div class="adm-title"><span>⬡ GREAT BUILDOUT — QUARTERLY UPDATE</span><button class="adm-close" onclick="closeAdmin()">✕ CLOSE</button></div>
     <div class="adm-note-text">Update constraint scores and capex data each quarter. All values persist in localStorage. Hit SAVE &amp; APPLY when done.</div>
     <div class="adm-section">CONSTRAINT SCORES (0 = unsolved · 100 = fully resolved)</div>
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+      <button id="aiGenBtn" onclick="adminAIGenerate()" style="background:rgba(136,85,255,0.15);border:1px solid rgba(136,85,255,0.5);color:#8855ff;padding:8px 18px;border-radius:3px;cursor:pointer;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;">⬡ AI GENERATE SCORES</button>
+      <span id="aiGenStatus" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);">Uses Grok to assess current constraint status from market data</span>
+    </div>
     <div id="adminConstraintForms"></div>
     <div class="adm-section">HYPERSCALER CAPEX vs AI REVENUE ($B annual)</div>
     <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;margin-bottom:6px;font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">
@@ -6341,6 +6345,71 @@ function renderThesis(){
       <div class="thesis-body">${t.body}</div>
       <div class="thesis-signal">↳ ${t.signal}</div>
     </div>`).join('');
+}
+
+// ── Admin AI Generate ────────────────────────────────────────────────────────
+async function adminAIGenerate() {
+  const btn = document.getElementById('aiGenBtn');
+  const status = document.getElementById('aiGenStatus');
+  btn.disabled = true;
+  btn.textContent = '⬡ GENERATING...';
+  status.textContent = 'Asking Grok to assess each constraint...';
+
+  const constraintNames = STATE.constraints.map(c => c.name).join(', ');
+  const prompt = `You are assessing the current state of the AI/tech buildout constraints as of today. For each of the following constraints, provide:
+1. A score from 0-100 (0 = completely unresolved/critical, 100 = fully resolved)
+2. A status: critical, constrained, easing, or resolving
+3. 3-5 current metrics with values and direction (up/dn/warn/neutral)
+
+Constraints to assess: ${constraintNames}
+
+Respond ONLY with a JSON array in this exact format, no other text:
+[
+  {
+    "name": "POWER & GRID",
+    "score": 22,
+    "status": "critical",
+    "metrics": [
+      {"key": "Grid queue backlog", "val": "-2,600 GW", "cls": "dn"},
+      {"key": "DC power demand YoY", "val": "+26%", "cls": "warn"}
+    ]
+  }
+]
+Use current real-world data. Be specific with numbers.`;
+
+  try {
+    const resp = await fetch('/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: 'You are a technology sector analyst with deep knowledge of AI infrastructure, semiconductors, energy, and industrial automation. Always respond with valid JSON only.',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000
+      })
+    });
+    const data = await resp.json();
+    const text = (data.content || '').replace(/```json|```/g, '').trim();
+    const results = JSON.parse(text);
+
+    // Apply results to STATE and rebuild forms
+    results.forEach(r => {
+      const idx = STATE.constraints.findIndex(c => c.name === r.name);
+      if (idx >= 0) {
+        STATE.constraints[idx].score = r.score;
+        STATE.constraints[idx].status = r.status;
+        if (r.metrics && r.metrics.length) STATE.constraints[idx].metrics = r.metrics;
+      }
+    });
+
+    buildAdminForms();
+    status.textContent = '✓ Scores generated — review and adjust before saving';
+    status.style.color = 'var(--green)';
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+    status.style.color = '#ff3355';
+  }
+  btn.disabled = false;
+  btn.textContent = '⬡ AI GENERATE SCORES';
 }
 
 // ── Admin ────────────────────────────────────────────────────────────────────
