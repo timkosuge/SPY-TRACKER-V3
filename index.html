@@ -3577,6 +3577,13 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   <table class="es-tbl"><thead><tr><th>Week</th><th>Avg Return</th><th>Median</th><th>Win Rate</th><th>Best Week</th><th>Worst Week</th><th>Sample</th><th>Edge vs Avg</th></tr></thead><tbody id="es-wom-tbody"></tbody></table>
   <div class="es-section">KEY INSIGHT</div>
   <div class="es-insight" id="es-wom-insight"></div>
+
+  <!-- NEW: 12-MONTH WEEK-OF-MONTH BREAKDOWN -->
+  <div class="es-section" style="margin-top:24px;">WEEK-OF-MONTH BY CALENDAR MONTH</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;" id="wom-lb-btns"></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;" id="wom-filter-btns"></div>
+  <div id="wom-month-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"></div>
+
   <p class="es-foot">* Week 1 = days 1–7, Week 2 = 8–14, Week 3 = 15–21, Week 4 = 22–28, Week 5 = 29+. Turn-of-month effect: last days of month + first days of next month historically strongest.</p>
 </div>
 
