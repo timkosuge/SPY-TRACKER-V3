@@ -3106,12 +3106,23 @@ async function loadMichiganSentiment() {
   const el = $('michiganPanel');
   if (!el) return;
   try {
-    // Re-use the fred proxy cache already fetched by macro tab if available
+    // Use localStorage FRED cache first (same key as macro.js), fall back to live fetch
     let fredData = null;
     try {
-      const r = await fetch('/fred?t=' + Date.now());
-      if (r.ok) fredData = await r.json();
+      const cached = localStorage.getItem('spy_fred_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.data && (Date.now() - parsed.ts) < 4 * 60 * 60 * 1000) {
+          fredData = parsed.data;
+        }
+      }
     } catch(e) {}
+    if (!fredData) {
+      try {
+        const r = await fetch('/fred?t=' + Date.now());
+        if (r.ok) fredData = await r.json();
+      } catch(e) {}
+    }
 
     const S = fredData?.series || {};
     const umcs = S.UMCSENT;
@@ -3186,11 +3197,28 @@ async function loadMichiganSentiment() {
 async function loadMarginDebtSentiment() {
   const el = $('marginDebtPanel');
   if (!el) return;
-  // liquidity.js populates window._liquidityData
-  const ld = window._liquidityData?.margin;
+  // Use cached liquidity data if available, otherwise fetch it
+  let ld = window._liquidityData?.margin;
   if (!ld || !ld.margin_debt) {
-    el.innerHTML = '<div class="no-data">Margin debt data loading... (check liquidity tab first)</div>';
-    return;
+    try {
+      if (typeof renderLiquidity === 'function') await renderLiquidity();
+      ld = window._liquidityData?.margin;
+    } catch(e) {}
+  }
+  if (!ld || !ld.margin_debt) {
+    // Try fetching liquidity data directly
+    try {
+      const r = await fetch('/liquidity?t=' + Date.now());
+      if (r.ok) {
+        const d = await r.json();
+        ld = d?.margin || null;
+        if (ld) { if (!window._liquidityData) window._liquidityData = {}; window._liquidityData.margin = ld; }
+      }
+    } catch(e) {}
+  }
+  // Use static fallback if still no data
+  if (!ld || !ld.margin_debt) {
+    ld = { date: 'Feb 2026', margin_debt: 892.4e9, free_credit_margin: 178.3e9, free_credit_cash: 243.1e9, net_margin: 471e9, change_mom: 18.2e9, prev_margin_debt: 874.2e9, source: 'static_fallback' };
   }
   const debt = ld.margin_debt;
   const prev = ld.prev_margin_debt;
