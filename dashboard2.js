@@ -4073,7 +4073,7 @@ async function refreshLiveData() {
         if (_md.max_pain?.length) freshMd.max_pain = _md.max_pain;
         _md = freshMd; window._macroMD = _md;
       }
-      if (freshSd && freshSd.length) { _sd = freshSd; window._sd = freshSd; }
+      if (freshSd && freshSd.length) _sd = freshSd;
       _lastStaticRefresh = now;
       updateStaticTimestamp();
       fetchWeekOpen(); // refresh week open from fresh sd data
@@ -4233,7 +4233,7 @@ async function loadData(){
       if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
     }
 
-    _md=md; _sd=sd; window._sd=sd;
+    _md=md; _sd=sd;
     if (spyOHLC?.available) { _spyIntraday = spyOHLC; saveIntradayCache(spyOHLC); } // store live intraday for desk volume box
     const safeRender = (fn, ...args) => { try { fn(...args); } catch(e) { console.error(fn.name, e); } };
     safeRender(renderHub, md, sd);
@@ -4494,11 +4494,31 @@ async function renderGEXIntradayMap() {
 
   let snapshots = [];
   let intradayErr = null;
+  let intradayDate = null;
   try {
     const r = await fetch('/gex-history?type=intraday');
     const d = await r.json();
     snapshots = d.snapshots || [];
+    intradayDate = d.date || null;
     if (d.error) intradayErr = d.error;
+    // If today has no data, try yesterday (market may not be open yet)
+    if (!snapshots.length && !intradayErr) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      // Walk back up to 4 days to find last trading day with data
+      for (let i = 1; i <= 4; i++) {
+        const d2 = new Date(); d2.setDate(d2.getDate() - i);
+        if (d2.getDay() === 0 || d2.getDay() === 6) continue; // skip weekends
+        const dateStr = d2.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        const r2 = await fetch(`/gex-history?type=intraday&date=${dateStr}`);
+        const j2 = await r2.json();
+        if (j2.snapshots?.length) {
+          snapshots = j2.snapshots;
+          intradayDate = j2.date || dateStr;
+          break;
+        }
+      }
+    }
   } catch(e) { intradayErr = e.message; }
 
   // Also get current live GEX to show latest state even if KV is empty
@@ -4578,7 +4598,7 @@ async function renderGEXIntradayMap() {
     <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:10px;align-items:center;margin-bottom:14px;">
       <div>
         <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);">⬡ GEX INTERVAL MAP — INTRADAY</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px;">${snapshots.length} snapshots · updates every 5 min · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'})} ET</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">${snapshots.length} snapshots · ${intradayDate ? intradayDate : 'today'} · updates every 5 min during market hours</div>
       </div>
       <div style="text-align:center;padding:8px 14px;background:rgba(0,204,255,0.07);border:1px solid rgba(0,204,255,0.25);border-radius:4px;">
         <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-bottom:3px;">FLIP</div>
@@ -4818,11 +4838,12 @@ async function renderGEXDailyHistory() {
     </div>
   `;
 
-  requestAnimationFrame(() => {
+  const _drawDailyCanvas = () => {
     const canvas = document.getElementById('gexDailyCanvas');
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const W = canvas.parentElement.clientWidth - 24;
+    const W = (canvas.parentElement?.clientWidth || 800) - 24;
+    if (W < 10) { setTimeout(_drawDailyCanvas, 200); return; }
     const H = Math.max(220, Math.round(W * 0.22));
     canvas.width  = W * dpr;
     canvas.height = H * dpr;
@@ -4898,7 +4919,8 @@ async function renderGEXDailyHistory() {
       ctx.beginPath(); ctx.arc(lx,ly,4,0,Math.PI*2);
       ctx.fillStyle='#00ccff'; ctx.fill();
     }
-  });
+  };
+  setTimeout(_drawDailyCanvas, 100);
 }
 
 // ─── MACRO DASHBOARD ─────────────────────────────────────────────────────────
