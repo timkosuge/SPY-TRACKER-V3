@@ -4464,7 +4464,8 @@ function renderFloorTab() {
           <div style="flex:1;position:relative;">
             <textarea id="floor-input" rows="1" placeholder="Message the floor… or paste an image / GIF / video URL"
               style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text1);font-family:'Share Tech Mono',monospace;font-size:13px;padding:9px 80px 9px 12px;resize:none;outline:none;max-height:100px;line-height:1.45;box-sizing:border-box;transition:border-color 0.15s;"
-              onkeydown="floorInputKey(event)" oninput="floorInputResize(this)" onfocus="this.style.borderColor='var(--cyan)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+              onkeydown="floorInputKey(event)" oninput="floorInputResize(this)" onfocus="this.style.borderColor='var(--cyan)'" onblur="this.style.borderColor='var(--border)'"
+              onpaste="handleImagePaste(event,'floor')"></textarea>
             <div id="floor-char-count" style="position:absolute;bottom:8px;right:50px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text3);"></div>
           </div>
           <button onclick="floorSend()" style="background:rgba(0,204,255,0.12);border:1px solid var(--cyan);border-radius:4px;color:var(--cyan);cursor:pointer;padding:9px 14px;font-size:16px;line-height:1;transition:background 0.15s;flex-shrink:0;" onmouseover="this.style.background='rgba(0,204,255,0.25)'" onmouseout="this.style.background='rgba(0,204,255,0.12)'">➤</button>
@@ -4778,6 +4779,9 @@ function floorBuildReactions(msgId, reactions) {
 }
 
 function floorRenderContent(content, type) {
+  if (content && content.startsWith('data:image')) {
+    return `<img src="${content}" alt="screenshot" loading="lazy" style="max-width:100%;max-height:320px;border-radius:6px;cursor:zoom-in;display:block;border:1px solid var(--border);" onclick="chatLightbox(this.src)">`;
+  }
   if (type==='image'||type==='gif') {
     return `<img src="${esc(content)}" alt="${type}" loading="lazy" style="max-width:100%;max-height:320px;border-radius:6px;cursor:zoom-in;display:block;border:1px solid var(--border);" onclick="chatLightbox(this.src)" onerror="this.outerHTML='<a style=color:var(--cyan);text-decoration:none;font-size:11px; href=\\'${esc(content)}\\' target=\\'_blank\\'>🔗 ${esc(content)}</a>'">`;
   }
@@ -5540,7 +5544,8 @@ function floorScrollBottom() { const c=document.getElementById('floor-messages')
       <div id="chat-input-row">
         <button class="chat-ibtn" onclick="chatToggleGiphy()" title="GIF picker">GIF</button>
         <textarea id="chat-input" rows="1" placeholder="Message… or paste an image URL"
-          onkeydown="chatInputKey(event)" oninput="chatInputResize(this)"></textarea>
+          onkeydown="chatInputKey(event)" oninput="chatInputResize(this)"
+          onpaste="handleImagePaste(event,'chat')"></textarea>
         <button id="chat-send-btn" onclick="chatSend()">➤</button>
       </div>
       <div id="chat-input-hint">Enter to send · Shift+Enter for newline · paste any image/GIF/video URL</div>
@@ -6019,11 +6024,44 @@ async function chatSendContent(content) {
 }
 
 function chatInputKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();chatSend();} }
+
+// ── Paste image handler (floor + chat) ───────────────────────────────────
+function handleImagePaste(e, target) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (!file) continue;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        // Warn if too large for DB (>500KB base64)
+        if (dataUrl.length > 600000) {
+          alert('Image is too large to send (max ~450KB). Try a screenshot of a smaller area or compress it first.');
+          return;
+        }
+        if (target === 'floor') {
+          floorSendContent(dataUrl);
+        } else {
+          chatSendContent(dataUrl);
+        }
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
+  // Not an image — let normal paste happen (text)
+}
 function chatInputResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,80)+'px'; }
 function chatScrollBottom() { const c=document.getElementById('chat-messages'); c.scrollTop=c.scrollHeight; }
 
 // ── Content rendering ─────────────────────────────────────────────────────
 function renderContent(content, type) {
+  if (content && content.startsWith('data:image')) {
+    return `<img class="chat-media-img" src="${content}" alt="screenshot" style="max-width:100%;max-height:400px;border-radius:6px;border:1px solid var(--border);cursor:zoom-in;display:block;" onclick="chatLightbox(this.src)">`;
+  }
   if (type==='image'||type==='gif') {
     return `<img class="chat-media-img" src="${esc(content)}" alt="${type}" loading="lazy" onclick="chatLightbox(this.src)" onerror="this.outerHTML='<a class=chat-media-link href=\\'${esc(content)}\\' target=\\'_blank\\'>🔗 ${esc(content)}</a>'">`;
   }
