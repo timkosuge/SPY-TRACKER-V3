@@ -7289,6 +7289,20 @@ document.addEventListener('click', function(e) {
   if (e.target.closest('#tickerInner') || e.target.closest('.ticker-tape')) _quoteTap('market');
 });
 
+// ── Max Pain easter egg — triple-click CALL/PUT WALLS header ─────────────────
+let _maxPainTapCount = 0, _maxPainTapTimer = null;
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#deskWallsHeader')) return;
+  _maxPainTapCount++;
+  clearTimeout(_maxPainTapTimer);
+  if (_maxPainTapCount >= 3) {
+    _maxPainTapCount = 0;
+    window.open('https://optioncharts.io/options/SPY/max-pain', '_blank');
+    return;
+  }
+  _maxPainTapTimer = setTimeout(() => { _maxPainTapCount = 0; }, 800);
+});
+
 // ── City Live Cam floating window ────────────────────────────────────────────
 const CITY_CAMS = {
   london:  { label: 'LONDON',   src: 'https://www.youtube.com/embed/WKGK_hYnlGE?si=3LSv3OCvLXXvCCf7&autoplay=1&mute=1' },
