@@ -7445,7 +7445,7 @@ function vegaDrawFace(){
   vfx.bezierCurveTo(vcx+104,vyBrow-8,vcx+80,vyHair-12,vcx,vyHair-10);
   vfx.closePath();
   const skinG=vfx.createRadialGradient(vcx,vyEye,5,vcx,vyEye+50,180);
-  skinG.addColorStop(0,'#182838');skinG.addColorStop(0.25,'#0e1e2e');skinG.addColorStop(0.6,'#060f1a');skinG.addColorStop(1,'#020810');
+  skinG.addColorStop(0,'rgba(24,40,56,0.7)');skinG.addColorStop(0.25,'rgba(14,30,46,0.65)');skinG.addColorStop(0.6,'rgba(6,15,26,0.6)');skinG.addColorStop(1,'rgba(2,8,16,0.55)');
   vfx.fillStyle=skinG;vfx.fill();vfx.clip();
   // forehead glow
   const fhG=vfx.createRadialGradient(vcx,vyHair+36,4,vcx,vyHair+55,85);
@@ -7494,7 +7494,7 @@ function vegaDrawFace(){
 const VCHARS='アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン01101001010111000110100101';
 function vGetMask(xpos){const dx=Math.abs(xpos-vcx);if(dx>106)return 0.48;if(Math.abs(xpos-(vcx-46))<26||Math.abs(xpos-(vcx+46))<26)return 0.15;if(dx<18)return 0.18;return 0.20+(dx/106)*0.28;}
 function vMakeLayer(n,szFn,spFn,lenFn,off){return Array.from({length:n},(_,i)=>{const xpos=off+(i/(n-1))*(VW-off*2),base=vGetMask(xpos);return{x:xpos,y:-Math.random()*900,speed:spFn(),len:lenFn(),chars:Array.from({length:48},()=>VCHARS[Math.floor(Math.random()*VCHARS.length)]),rate:1+Math.floor(Math.random()*5),timer:Math.floor(Math.random()*30),base,bright:base*(0.6+Math.random()*0.7),sz:szFn(),lead:Math.random()>0.22};});}
-const vDrops=[...vMakeLayer(160,()=>Math.random()>0.75?11:9,()=>0.3+Math.random()*2.8,()=>10+Math.floor(Math.random()*34),0.5),...vMakeLayer(130,()=>9,()=>0.25+Math.random()*2.2,()=>8+Math.floor(Math.random()*24),1.2),...vMakeLayer(120,()=>8,()=>0.4+Math.random()*3.0,()=>6+Math.floor(Math.random()*20),0.8),...vMakeLayer(110,()=>10,()=>0.2+Math.random()*1.8,()=>12+Math.floor(Math.random()*28),1.8)];
+const vDrops=[...vMakeLayer(320,()=>Math.random()>0.75?11:9,()=>0.3+Math.random()*2.8,()=>10+Math.floor(Math.random()*34),0.5),...vMakeLayer(260,()=>9,()=>0.25+Math.random()*2.2,()=>8+Math.floor(Math.random()*24),1.2),...vMakeLayer(240,()=>8,()=>0.4+Math.random()*3.0,()=>6+Math.floor(Math.random()*20),0.8),...vMakeLayer(220,()=>10,()=>0.2+Math.random()*1.8,()=>12+Math.floor(Math.random()*28),1.8)];
 function vegaDrawRain(){
   const vrx=vegaCtx('vega-r');if(!vrx)return;
   vrx.clearRect(0,0,VW,VH);
@@ -7548,7 +7548,7 @@ function vegaLoop(){
     if(!overlay){VEGA.open=!VEGA.open;return;}
     if(VEGA.open){
       overlay.style.display='flex';
-      requestAnimationFrame(()=>{overlay.style.opacity='0.92';});
+      requestAnimationFrame(()=>{overlay.style.opacity='0.65';});
       vegaDrawFace();
       if(!vegaAnimRunning){vegaAnimRunning=true;vegaLoop();}
       vegaSetStatus('VEGA — ONLINE');
