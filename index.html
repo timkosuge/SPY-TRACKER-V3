@@ -7476,8 +7476,8 @@ function vegaDrawFace(){
     const blinkScale=1-blink;   // 0=closed, 1=fully open
     const irx=ecx+(isLeft?1.5:-1.5)+eo.x,iry=ecy+0.5+eo.y,s=isLeft?-1:1,ew=24,eh=10*blinkScale;
     const icx=ecx-s*ew,ocx=ecx+s*ew,icy=ecy+2,ocy=ecy+3;
-    const sg=vfx.createRadialGradient(ecx,ecy+2,2,ecx,ecy+2,38);sg.addColorStop(0,'rgba(0,10,25,0.96)');sg.addColorStop(0.6,'rgba(0,8,20,0.7)');sg.addColorStop(1,'rgba(0,0,0,0)');
-    vfx.fillStyle=sg;vfx.beginPath();vfx.ellipse(ecx,ecy+2,40,22,0,0,Math.PI*2);vfx.fill();
+    const sg=vfx.createRadialGradient(ecx,ecy+2,2,ecx,ecy+2,38);sg.addColorStop(0,'rgba(0,10,25,0.45)');sg.addColorStop(0.6,'rgba(0,8,20,0.25)');sg.addColorStop(1,'rgba(0,0,0,0)');
+    vfx.fillStyle=sg;vfx.beginPath();vfx.ellipse(ecx,ecy+2,40,22*blinkScale,0,0,Math.PI*2);vfx.fill();
     vfx.save();vfx.beginPath();vfx.moveTo(icx,icy);vfx.bezierCurveTo(icx+s*8,ecy-eh-2,ecx+s*4,ecy-eh-6,ocx,ocy-2);vfx.bezierCurveTo(ecx+s*2,ecy+eh+1,icx+s*6,ecy+eh-2,icx,icy);vfx.closePath();vfx.clip();vfx.fillStyle='rgba(2,14,26,0.93)';vfx.fill();vfx.restore();
     const irR=9.5;vfx.beginPath();vfx.ellipse(irx,iry,irR+0.9,irR+0.9,0,0,Math.PI*2);vfx.fillStyle='rgba(0,12,28,0.92)';vfx.fill();
     const iG=vfx.createRadialGradient(irx-1.5,iry-2,0.5,irx,iry,irR);iG.addColorStop(0,'#00f4ff');iG.addColorStop(0.08,'#00d0f0');iG.addColorStop(0.25,'#0098cc');iG.addColorStop(0.5,'#004e88');iG.addColorStop(0.75,'#001e44');iG.addColorStop(1,'#000a1a');
@@ -7567,15 +7567,15 @@ function vegaLoop(){
 
   // ── Idle eye drift — subtle random saccades ───────────────────────────────
   VEGA.driftTimer++;
-  if(VEGA.driftTimer>120+Math.random()*180){
+  if(VEGA.driftTimer>60+Math.random()*90){
     VEGA.driftTimer=0;
-    VEGA.driftNextX=(Math.random()-0.5)*3;
-    VEGA.driftNextY=(Math.random()-0.5)*2;
+    VEGA.driftNextX=(Math.random()-0.5)*8;
+    VEGA.driftNextY=(Math.random()-0.5)*5;
   }
   // Only drift when no commanded shift
   if(Math.abs(VEGA.eyeTarget.x)<0.5&&Math.abs(VEGA.eyeTarget.y)<0.5){
-    VEGA.driftX+=(VEGA.driftNextX-VEGA.driftX)*0.03;
-    VEGA.driftY+=(VEGA.driftNextY-VEGA.driftY)*0.03;
+    VEGA.driftX+=(VEGA.driftNextX-VEGA.driftX)*0.06;
+    VEGA.driftY+=(VEGA.driftNextY-VEGA.driftY)*0.06;
     VEGA.eyeTarget.x=VEGA.driftX;
     VEGA.eyeTarget.y=VEGA.driftY;
   }
@@ -7614,14 +7614,8 @@ function vegaLoop(){
   VEGA.browLift+=(VEGA.browTarget-VEGA.browLift)*0.06;
 
   // ── Redraw face ───────────────────────────────────────────────────────────
-  const needsRedraw =
-    Math.abs(VEGA.eyeOffset.x-VEGA.eyeTarget.x)>0.01 ||
-    Math.abs(VEGA.eyeOffset.y-VEGA.eyeTarget.y)>0.01 ||
-    blinkVal>0.01 ||
-    Math.abs(VEGA.mouthOpen)>0.01 ||
-    Math.abs(VEGA.browLift)>0.01 ||
-    isSpeaking;
-  if(needsRedraw) vegaDrawFace();
+  // Always redraw — face is animated
+  vegaDrawFace();
 
   vegaDrawRain();vegaDoGlitch();requestAnimationFrame(vegaLoop);
 }
