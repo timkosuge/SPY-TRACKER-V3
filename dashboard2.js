@@ -4567,11 +4567,12 @@ async function renderGEXIntradayMap() {
   `;
 
   // ── Draw canvas ──────────────────────────────────────────────────────────
-  requestAnimationFrame(() => {
+  const _drawGexCanvas = () => {
     const canvas = document.getElementById('gexIntradayCanvas');
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const W = canvas.parentElement.clientWidth - 24;
+    const W = (canvas.parentElement.clientWidth || canvas.closest('[style]')?.clientWidth || 800) - 24;
+    if (W < 10) { setTimeout(_drawGexCanvas, 200); return; }
     const H = Math.max(260, Math.round(W * 0.28));
     canvas.width  = W * dpr;
     canvas.height = H * dpr;
@@ -4677,7 +4678,8 @@ async function renderGEXIntradayMap() {
       ctx.font = `bold 11px 'Share Tech Mono', monospace`;
       ctx.fillText('$' + fmt(spot,2), lx+8, ly+4);
     }
-  });
+  };
+  setTimeout(_drawGexCanvas, 100);
 }
 
 // ─── GEX DAILY HISTORY CHART (added to GEX tab) ──────────────────────────────
