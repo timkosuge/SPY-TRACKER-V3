@@ -7425,7 +7425,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const VEGA={open:false,listening:false,speaking:true,recognition:null,synth:window.speechSynthesis||null,
   eyeOffset:{x:0,y:0},eyeTarget:{x:0,y:0},
   // Blink state
-  blinkT:0, blinkNext:Math.random()*180+60, blinkPhase:0,
+  blinkT:0, blinkNext:Math.random()*180+60, blinkPhase:0, blinkAmt:0,
   // Idle eye drift
   driftT:0, driftX:0, driftY:0, driftNextX:0, driftNextY:0, driftTimer:0,
   // Mouth state (0=closed, 1=open)
@@ -7441,7 +7441,7 @@ function vegaDrawFace(){
   const fc=document.getElementById('vega-f'),vfx=fc?fc.getContext('2d'):null;
   if(!vfx)return;
   const eo=VEGA.eyeOffset;
-  const blink=VEGA.blinkPhase>0?VEGA.blinkPhase:-VEGA.blinkPhase; // 0=open, 1=fully closed
+  const blink=VEGA.blinkAmt||0; // 0=open, 1=fully closed
   const mouth=VEGA.mouthOpen;    // 0=closed, 1=open ~8px
   const brow=VEGA.browLift;      // -1 to +1
   vfx.clearRect(0,0,VW,VH);vfx.fillStyle='#000';vfx.fillRect(0,0,VW,VH);
@@ -7581,19 +7581,22 @@ function vegaLoop(){
   }
 
   // ── Blink ─────────────────────────────────────────────────────────────────
+  // ── Blink state machine ──────────────────────────────────────────────────
+  // blinkPhase: 0=idle, 1=closing, 2=opening
   VEGA.blinkT++;
-  if(VEGA.blinkT>=VEGA.blinkNext){
+  if(VEGA.blinkPhase===0 && VEGA.blinkT>=VEGA.blinkNext){
     VEGA.blinkT=0;
-    VEGA.blinkNext=Math.random()*240+80; // blink every 1.5-5 sec at 60fps
-    VEGA.blinkPhase=1; // start closing
+    VEGA.blinkNext=Math.random()*240+80;
+    VEGA.blinkPhase=1; VEGA.blinkAmt=0; // start closing
   }
-  if(VEGA.blinkPhase>0){
-    // Close in 4 frames, open in 8 frames
-    if(VEGA.blinkPhase>0.1) VEGA.blinkPhase=Math.min(VEGA.blinkPhase+0.25, 1);
-    if(VEGA.blinkPhase>=1) VEGA.blinkPhase=-1; // pivot to opening
-    if(VEGA.blinkPhase<0) VEGA.blinkPhase=Math.min(VEGA.blinkPhase+0.14, 0);
+  if(VEGA.blinkPhase===1){
+    VEGA.blinkAmt+=0.28; // close in ~4 frames
+    if(VEGA.blinkAmt>=1){ VEGA.blinkAmt=1; VEGA.blinkPhase=2; } // pivot to open
+  } else if(VEGA.blinkPhase===2){
+    VEGA.blinkAmt-=0.16; // open in ~7 frames
+    if(VEGA.blinkAmt<=0){ VEGA.blinkAmt=0; VEGA.blinkPhase=0; } // done
   }
-  const blinkVal=VEGA.blinkPhase>0?VEGA.blinkPhase:-VEGA.blinkPhase;
+  const blinkVal = VEGA.blinkAmt||0;
 
   // ── Mouth animation ───────────────────────────────────────────────────────
   const isSpeaking=_vegaAudio&&!_vegaAudio.paused&&!_vegaAudio.ended;
