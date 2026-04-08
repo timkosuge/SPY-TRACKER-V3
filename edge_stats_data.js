@@ -171,7 +171,7 @@ function esRenderDOW(){
     ${d.map(x=>`<tr><td>${x.day}</td><td>${esFmt(x.after_green_avg)}</td><td>${esFmt(x.after_red_avg)}</td>
       <td style="text-align:left;color:var(--text3);font-size:12px;">${x.after_red_avg>(x.after_green_avg+0.02)?'Mean reversion — red days tend to bounce here':x.after_green_avg>(x.after_red_avg+0.02)?'Momentum — up days tend to follow up days':'No significant bias'}</td></tr>`).join('')}
     </tbody>`;
-  const ds=ES().daily_streaks||{};
+  const ds=ES().streaks?.daily||{};
   document.getElementById('es-daily-mom-cards').innerHTML=`
     <div class="es-card"><div class="es-card-label">GREEN AFTER GREEN DAY</div><div class="es-card-val ${parseFloat(ds.p_green_after_green||0)>=55?'up':'neu'}">${esN(ds.p_green_after_green||0,1)}%</div><div class="es-card-sub">prob next day up</div></div>
     <div class="es-card"><div class="es-card-label">GREEN AFTER RED DAY</div><div class="es-card-val ${parseFloat(ds.p_green_after_red||0)>=55?'up':'neu'}">${esN(ds.p_green_after_red||0,1)}%</div><div class="es-card-sub">mean reversion signal</div></div>
