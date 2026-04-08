@@ -39,6 +39,7 @@ def main():
     rows   = cur.fetchall()
     conn.close()
 
+    rows   = [r for r in rows if r[4] is not None]  # drop rows with null close
     dates  = [r[0] for r in rows]
     closes = [r[4] for r in rows]
     today  = dates[-1]
@@ -55,12 +56,12 @@ def main():
         for ai in range(a_start, min(a_end, ti-win+1)):
             cp = closes[ai:ai+win]
             if len(cp) < win: continue
-            cp_pct = [(c/cp[0]-1)*100 for c in cp]
+            cp_pct = [(c/cp[0]-1)*100 for c in cp if c is not None]
             lim = ai - 252
             for hi in range(0, lim-win):
                 hc = closes[hi:hi+win]
                 if len(hc) < win or hc[0]==0: continue
-                hp = [(c/hc[0]-1)*100 for c in hc]
+                hp = [(c/hc[0]-1)*100 for c in hc if c is not None]
                 sc = score(pearson(cp_pct, hp), rmse(cp_pct, hp))
                 if sc > best_sc:
                     best_sc = sc
@@ -73,7 +74,7 @@ def main():
     win     = ti - anc_idx + 1
     cp      = closes[anc_idx:ti+1]
     anc_px  = cp[0]
-    cp_pct  = [(c/anc_px-1)*100 for c in cp]
+    cp_pct  = [(c/anc_px-1)*100 for c in cp if c is not None]
 
     # ── Step 3: Top 5 distinct analogs ───────────────────────────────────────
     results = []
@@ -81,7 +82,7 @@ def main():
     for hi in range(0, lim-win):
         hc = closes[hi:hi+win]
         if len(hc) < win or hc[0]==0: continue
-        hp = [(c/hc[0]-1)*100 for c in hc]
+        hp = [(c/hc[0]-1)*100 for c in hc if c is not None]
         co = pearson(cp_pct, hp)
         rm = rmse(cp_pct, hp)
         results.append((score(co,rm), dates[hi], hi, co, rm))
