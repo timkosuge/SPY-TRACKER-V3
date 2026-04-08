@@ -413,21 +413,90 @@ function renderWOMMonthGrid() {
   // Build all 12 month panels
   const totalWeeks = filtered.length;
   const yearSet = [...new Set(filtered.map(w => w.yr))].sort();
-  const sampleInfo = document.getElementById('wom-sample-info');
+
+  // Helper: narrative for a month
+  const buildNarrative = (mo) => {
+    const wkStats = [0,1,2,3,4].map(wk => {
+      const rets = stats[mo][wk];
+      return { wk, avg: avg(rets), wr: winRate(rets), n: rets.length };
+    }).filter(w => w.n >= 2);
+
+    if (wkStats.length < 2) return '';
+
+    const bestW  = wkStats.reduce((a,b) => (b.avg > a.avg ? b : a));
+    const worstW = wkStats.reduce((a,b) => (b.avg < a.avg ? b : a));
+    const allPos = wkStats.every(w => w.avg > 0);
+    const allNeg = wkStats.every(w => w.avg < 0);
+    const edge   = (bestW.avg - worstW.avg).toFixed(2);
+    const wkName = ['W1','W2','W3','W4','W5'];
+    const bestCol  = bestW.avg  >= 0 ? '#00ff88' : '#ff3355';
+    const worstCol = worstW.avg >= 0 ? '#00ff88' : '#ff3355';
+
+    // Detect turn-of-month pattern (W1 best or W4/W5 best)
+    let pattern = '';
+    if (bestW.wk === 0) pattern = 'Turn-of-month strength — W1 leads.';
+    else if (bestW.wk >= 3) pattern = 'Late-month strength — institutional rebalancing effect.';
+    else if (bestW.wk === 1) pattern = 'W2 tends to carry momentum from month open.';
+    else pattern = 'Mid-month strength — W3 is the edge week.';
+
+    if (allPos) pattern = 'All weeks positive — broad monthly tailwind.';
+    if (allNeg) pattern = 'All weeks negative — broad monthly headwind.';
+
+    // Consistency note
+    const wrSpread = bestW.wr - worstW.wr;
+    const consistency = wrSpread > 30 ? 'High week-to-week variance.' : wrSpread > 15 ? 'Moderate variance across weeks.' : 'Relatively consistent across weeks.';
+
+    return `<div style="margin-top:6px;padding:5px 6px;background:rgba(0,204,255,0.04);border-left:2px solid var(--border2);border-radius:2px;">
+      <div style="font-size:8px;color:var(--text2);font-family:'Share Tech Mono',monospace;line-height:1.6;">
+        Best: <span style="color:${bestCol};font-weight:bold;">${wkName[bestW.wk]} ${bestW.avg>=0?'+':''}${bestW.avg.toFixed(2)}% · ${bestW.wr.toFixed(0)}%WR</span>
+        &nbsp;|&nbsp;
+        Worst: <span style="color:${worstCol};">${wkName[worstW.wk]} ${worstW.avg>=0?'+':''}${worstW.avg.toFixed(2)}% · ${worstW.wr.toFixed(0)}%WR</span>
+        &nbsp;|&nbsp;
+        Edge: <span style="color:var(--cyan);">${edge}%</span>
+      </div>
+      <div style="font-size:8px;color:var(--text3);font-family:'Share Tech Mono',monospace;margin-top:2px;">${pattern} ${consistency}</div>
+    </div>`;
+  };
+
+  // Build summary insight across all months for the current filter
+  const buildSummary = () => {
+    const monthAvgs = MONTHS.map((mon, mo) => {
+      const wkStats = [0,1,2,3,4].map(wk => ({ wk, a: avg(stats[mo][wk]), n: stats[mo][wk].length })).filter(w => w.n >= 2);
+      const best = wkStats.length ? wkStats.reduce((a,b) => b.a > a.a ? b : a) : null;
+      return { mon, mo, best };
+    }).filter(m => m.best);
+
+    const w1Months = monthAvgs.filter(m => m.best.wk === 0).map(m => m.mon);
+    const w4Months = monthAvgs.filter(m => m.best.wk >= 3).map(m => m.mon);
+
+    // Which week wins most often across all months?
+    const wkWins = [0,1,2,3,4].map(wk => monthAvgs.filter(m => m.best.wk === wk).length);
+    const topWk = wkWins.indexOf(Math.max(...wkWins));
+    const wkName = ['W1 (days 1–7)','W2 (days 8–14)','W3 (days 15–21)','W4 (days 22–28)','W5 (days 29+)'];
+
+    let summary = `Across ${yearSet.length} year${yearSet.length!==1?'s':''} of data, `;
+    summary += `<strong style="color:var(--cyan);">${wkName[topWk]}</strong> is the strongest week in the most calendar months (${wkWins[topWk]}/12). `;
+    if (w1Months.length >= 4) summary += `Turn-of-month effect is prominent — W1 leads in <strong>${w1Months.join(', ')}</strong>. `;
+    if (w4Months.length >= 3) summary += `Late-month strength shows up in <strong>${w4Months.join(', ')}</strong>. `;
+    summary += `Edge labels show avg return spread between best and worst week within each month.`;
+    return summary;
+  };
+
+  const summaryEl = document.getElementById('wom-summary');
+  if (summaryEl) summaryEl.innerHTML = buildSummary();
 
   grid.innerHTML = MONTHS.map((mon, mo) => {
     const moWeeks = filtered.filter(w => w.mo === mo);
-    const best = Math.max(...[0,1,2,3,4].map(wk => avg(stats[mo][wk]) || -99));
-    const bestWk = [0,1,2,3,4].findIndex(wk => Math.abs((avg(stats[mo][wk])||0) - best) < 0.001);
 
     return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:10px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);">${mon}</div>
-        <div style="font-size:9px;color:var(--text3);font-family:'Share Tech Mono',monospace;">${moWeeks.length} weeks · ${yearSet.length}yr</div>
+        <div style="font-size:9px;color:var(--text3);font-family:'Share Tech Mono',monospace;">${moWeeks.length}wk · ${yearSet.length}yr</div>
       </div>
       ${buildChart(mo)}
-      <div style="font-size:8px;color:var(--text3);margin-top:4px;font-family:'Share Tech Mono',monospace;">win% shown · cumulative drift →</div>
+      <div style="font-size:8px;color:var(--text3);margin-top:3px;font-family:'Share Tech Mono',monospace;">win% · cumul drift →</div>
       ${buildLine(mo)}
+      ${buildNarrative(mo)}
     </div>`;
   }).join('');
 }
