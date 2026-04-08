@@ -4693,7 +4693,7 @@ async function renderGEXDailyHistory() {
   try {
     const r = await fetch('/gex-history?type=daily&days=90');
     const d = await r.json();
-    history = d.history || [];
+    history = d.snapshots || d.history || [];
     if (d.error) err = d.error;
   } catch(e) { err = e.message; }
 
