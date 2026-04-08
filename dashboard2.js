@@ -4073,7 +4073,7 @@ async function refreshLiveData() {
         if (_md.max_pain?.length) freshMd.max_pain = _md.max_pain;
         _md = freshMd; window._macroMD = _md;
       }
-      if (freshSd && freshSd.length) _sd = freshSd;
+      if (freshSd && freshSd.length) { _sd = freshSd; window._sd = freshSd; }
       _lastStaticRefresh = now;
       updateStaticTimestamp();
       fetchWeekOpen(); // refresh week open from fresh sd data
@@ -4233,7 +4233,7 @@ async function loadData(){
       if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
     }
 
-    _md=md; _sd=sd;
+    _md=md; _sd=sd; window._sd=sd;
     if (spyOHLC?.available) { _spyIntraday = spyOHLC; saveIntradayCache(spyOHLC); } // store live intraday for desk volume box
     const safeRender = (fn, ...args) => { try { fn(...args); } catch(e) { console.error(fn.name, e); } };
     safeRender(renderHub, md, sd);
