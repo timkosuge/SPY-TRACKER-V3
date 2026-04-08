@@ -4863,11 +4863,31 @@ async function renderMacro() {
   if (!el) return;
   if (_macroLoading) return;
 
-  if (_macroData) {
-    const count = Object.keys(_macroData.series || {}).length;
-    if (count >= 50) { _renderMacroHTML(_macroData); return; }
-    _macroData = null; // partial response — re-fetch
+  // If already rendered with any data, skip re-render (preserve state across tab switches)
+  if (_macroData && el.children.length > 3 && !window._macroForceRefresh) {
+    return;
   }
+  if (window._macroForceRefresh) { _macroData = null; try { localStorage.removeItem('spy_fred_cache'); } catch(e) {} }
+  window._macroForceRefresh = false;
+
+  // Use in-memory cache if we have it (any series count — accept partial)
+  if (_macroData && Object.keys(_macroData.series || {}).length > 0) {
+    _renderMacroHTML(_macroData);
+    return;
+  }
+
+  // Try localStorage cache first (shared with macro.js, 4hr TTL)
+  try {
+    const cached = localStorage.getItem('spy_fred_cache');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed?.data && (Date.now() - parsed.ts) < 4 * 60 * 60 * 1000) {
+        _macroData = parsed.data;
+        _renderMacroHTML(_macroData);
+        return;
+      }
+    }
+  } catch(e) {}
 
   _macroLoading = true;
   el.innerHTML = `<div style="padding:60px;text-align:center;color:var(--text3);">
@@ -4879,6 +4899,8 @@ async function renderMacro() {
     const r = await fetch('/fred?t=' + Date.now());
     if (!r.ok) throw new Error('FRED endpoint returned ' + r.status);
     _macroData = await r.json();
+    // Save to localStorage cache
+    try { localStorage.setItem('spy_fred_cache', JSON.stringify({ ts: Date.now(), data: _macroData })); } catch(e) {}
     _macroLoading = false;
     _renderMacroHTML(_macroData);
   } catch(e) {
