@@ -1574,7 +1574,7 @@
   <!-- Row 3: Overlay chart -->
   <div class="panel" style="margin-bottom:10px;">
     <div class="panel-label">⬡ ANALOG OVERLAY — % RETURN FROM CYCLE ANCHOR · SOLID = HISTORICAL · DASHED = PROJECTED</div>
-    <div id="analogChart" style="position:relative;height:560px;"></div>
+    <div id="analogChart" style="position:relative;height:380px;"></div>
   </div>
 
   <!-- Row 4: Day by day table (updates with active analog) -->
@@ -3581,8 +3581,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   <!-- NEW: 12-MONTH WEEK-OF-MONTH BREAKDOWN -->
   <div class="es-section" style="margin-top:24px;">WEEK-OF-MONTH BY CALENDAR MONTH</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;" id="wom-lb-btns"></div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;" id="wom-filter-btns"></div>
-  <div id="wom-summary" style="background:rgba(0,204,255,0.05);border:1px solid rgba(0,204,255,0.2);border-radius:4px;padding:10px 14px;font-size:12px;color:var(--text2);line-height:1.7;font-family:'Share Tech Mono',monospace;margin-bottom:14px;"></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;" id="wom-filter-btns"></div>
   <div id="wom-month-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"></div>
 
   <p class="es-foot">* Week 1 = days 1–7, Week 2 = 8–14, Week 3 = 15–21, Week 4 = 22–28, Week 5 = 29+. Turn-of-month effect: last days of month + first days of next month historically strongest.</p>
@@ -7388,4 +7387,278 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     VEGA — Cinematic AI Overlay
+══════════════════════════════════════════════════════════════════ -->
+<div id="vegaOverlay" style="
+  position:fixed;top:0;right:0;width:380px;height:100vh;z-index:99990;
+  pointer-events:none;opacity:0;
+  transition:opacity 0.6s cubic-bezier(0.22,1,0.36,1);
+  display:none;flex-direction:column;align-items:stretch;
+">
+  <div id="vegaFaceWrap" style="position:relative;width:380px;height:540px;flex-shrink:0;pointer-events:none;">
+    <canvas id="vega-f" width="380" height="540" style="position:absolute;inset:0;z-index:1;"></canvas>
+    <canvas id="vega-r" width="380" height="540" style="position:absolute;inset:0;z-index:2;"></canvas>
+    <canvas id="vega-g" width="380" height="540" style="position:absolute;inset:0;z-index:3;"></canvas>
+    <button onclick="toggleChat()" style="position:absolute;top:14px;left:14px;z-index:10;pointer-events:all;background:rgba(0,0,0,0.6);border:1px solid rgba(0,204,255,0.3);color:rgba(0,204,255,0.7);font-family:'Orbitron',monospace;font-size:8px;letter-spacing:2px;padding:4px 8px;border-radius:2px;cursor:pointer;">DISSOLVE</button>
+    <div id="vegaStatus" style="position:absolute;bottom:8px;left:0;right:0;text-align:center;z-index:10;pointer-events:none;font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,204,255,0.5);letter-spacing:2px;">VEGA — STANDING BY</div>
+    <div id="vegaVoiceRing" onclick="vegaToggleVoice()" style="position:absolute;bottom:16px;right:14px;z-index:10;width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(0,204,255,0.3);display:flex;align-items:center;justify-content:center;pointer-events:all;cursor:pointer;background:rgba(0,0,0,0.5);">
+      <span id="vegaMicIcon" style="font-size:12px;">🎤</span>
+    </div>
+    <div id="vegaSpeakToggle" onclick="vegaToggleSpeak()" title="Toggle voice output" style="position:absolute;bottom:16px;right:50px;z-index:10;width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(0,204,255,0.15);display:flex;align-items:center;justify-content:center;pointer-events:all;cursor:pointer;background:rgba(0,0,0,0.5);">
+      <span id="vegaSpeakIcon" style="font-size:12px;opacity:0.4;">🔊</span>
+    </div>
+  </div>
+  <div id="vegaChatPanel" style="flex:1;background:rgba(4,8,18,0.92);border-top:1px solid rgba(0,204,255,0.15);border-left:1px solid rgba(0,204,255,0.1);display:flex;flex-direction:column;pointer-events:all;backdrop-filter:blur(4px);min-height:0;max-height:calc(100vh - 540px);">
+    <div id="vegaMessages" style="flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-family:'Share Tech Mono',monospace;font-size:11px;min-height:0;"></div>
+    <div style="display:flex;gap:6px;padding:8px 10px;border-top:1px solid rgba(0,204,255,0.1);flex-shrink:0;">
+      <input id="vegaInput" type="text" placeholder="transmit..." style="flex:1;background:rgba(0,0,0,0.6);border:1px solid rgba(0,204,255,0.2);color:#00ccff;padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:11px;border-radius:2px;outline:none;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();vegaSend();}" />
+      <button onclick="vegaSend()" style="background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);color:#00ccff;padding:6px 10px;font-family:'Orbitron',monospace;font-size:8px;border-radius:2px;cursor:pointer;letter-spacing:1px;">TX</button>
+    </div>
+  </div>
+</div>
+
+</script>
+<script>
+// ══ VEGA ENGINE ═══════════════════════════════════════════════════════════
+const VEGA={open:false,listening:false,speaking:false,recognition:null,synth:window.speechSynthesis||null,eyeOffset:{x:0,y:0},eyeTarget:{x:0,y:0}};
+const VW=380,VH=540,vcx=190,vyHair=95,vyBrow=185,vyEye=204,vyNoseB=278,vyLip=310,vyChin=370;
+
+function vegaCtx(id){const c=document.getElementById(id);return c?c.getContext('2d'):null;}
+
+function vegaDrawFace(){
+  const fc=document.getElementById('vega-f'),vfx=fc?fc.getContext('2d'):null;
+  if(!vfx)return;
+  const eo=VEGA.eyeOffset;
+  vfx.clearRect(0,0,VW,VH);vfx.fillStyle='#000';vfx.fillRect(0,0,VW,VH);
+  vfx.save();
+  vfx.beginPath();
+  vfx.moveTo(vcx,vyHair-10);
+  vfx.bezierCurveTo(vcx-80,vyHair-12,vcx-104,vyBrow-8,vcx-102,vyEye+8);
+  vfx.bezierCurveTo(vcx-100,vyNoseB-18,vcx-90,vyNoseB+14,vcx-76,vyNoseB+44);
+  vfx.bezierCurveTo(vcx-64,vyNoseB+72,vcx-46,vyChin+2,vcx-28,vyChin+18);
+  vfx.bezierCurveTo(vcx-16,vyChin+26,vcx-6,vyChin+30,vcx,vyChin+30);
+  vfx.bezierCurveTo(vcx+6,vyChin+30,vcx+16,vyChin+26,vcx+28,vyChin+18);
+  vfx.bezierCurveTo(vcx+46,vyChin+2,vcx+64,vyNoseB+72,vcx+76,vyNoseB+44);
+  vfx.bezierCurveTo(vcx+90,vyNoseB+14,vcx+100,vyNoseB-18,vcx+102,vyEye+8);
+  vfx.bezierCurveTo(vcx+104,vyBrow-8,vcx+80,vyHair-12,vcx,vyHair-10);
+  vfx.closePath();
+  const skinG=vfx.createRadialGradient(vcx,vyEye,5,vcx,vyEye+50,180);
+  skinG.addColorStop(0,'#182838');skinG.addColorStop(0.25,'#0e1e2e');skinG.addColorStop(0.6,'#060f1a');skinG.addColorStop(1,'#020810');
+  vfx.fillStyle=skinG;vfx.fill();vfx.clip();
+  // forehead glow
+  const fhG=vfx.createRadialGradient(vcx,vyHair+36,4,vcx,vyHair+55,85);
+  fhG.addColorStop(0,'rgba(0,130,195,0.22)');fhG.addColorStop(1,'rgba(0,0,0,0)');
+  vfx.fillStyle=fhG;vfx.beginPath();vfx.ellipse(vcx,vyHair+50,75,56,0,0,Math.PI*2);vfx.fill();
+  // contour lines
+  vfx.lineWidth=0.28;
+  for(let i=0;i<=18;i++){const y=vyHair+i*(vyChin+30-vyHair)/18,t=(y-vyHair)/(vyChin+30-vyHair),sprd=Math.sin(t*Math.PI)*100+4;vfx.beginPath();vfx.moveTo(vcx-sprd,y);vfx.quadraticCurveTo(vcx,y-sprd*0.055,vcx+sprd,y);vfx.strokeStyle=`rgba(0,148,208,${0.052+0.022*Math.sin(i*0.9)})`;vfx.stroke();}
+  vfx.restore();
+  // brows
+  function vegaBrow(sign){const pts=[[vcx+sign*20,vyBrow+2],[vcx+sign*36,vyBrow-4],[vcx+sign*52,vyBrow-13],[vcx+sign*66,vyBrow-7],[vcx+sign*80,vyBrow+3]];for(let w=2.6;w>=0.3;w-=0.5){vfx.beginPath();vfx.moveTo(pts[0][0],pts[0][1]+w*0.3);vfx.bezierCurveTo(pts[1][0],pts[1][1]+w*0.2,pts[2][0],pts[2][1],pts[3][0],pts[3][1]);vfx.bezierCurveTo(pts[3][0],pts[3][1],pts[4][0]-sign*3,pts[4][1]+1,pts[4][0],pts[4][1]);vfx.strokeStyle=`rgba(0,168,228,${(0.40-(2.6-w)*0.07).toFixed(2)})`;vfx.lineWidth=w;vfx.stroke();}}
+  vegaBrow(-1);vegaBrow(1);
+  // eyes with offset
+  function vegaEye(ecx,ecy,isLeft){
+    const irx=ecx+(isLeft?1.5:-1.5)+eo.x,iry=ecy+0.5+eo.y,s=isLeft?-1:1,ew=24,eh=10;
+    const icx=ecx-s*ew,ocx=ecx+s*ew,icy=ecy+2,ocy=ecy+3;
+    const sg=vfx.createRadialGradient(ecx,ecy+2,2,ecx,ecy+2,38);sg.addColorStop(0,'rgba(0,10,25,0.96)');sg.addColorStop(0.6,'rgba(0,8,20,0.7)');sg.addColorStop(1,'rgba(0,0,0,0)');
+    vfx.fillStyle=sg;vfx.beginPath();vfx.ellipse(ecx,ecy+2,40,22,0,0,Math.PI*2);vfx.fill();
+    vfx.save();vfx.beginPath();vfx.moveTo(icx,icy);vfx.bezierCurveTo(icx+s*8,ecy-eh-2,ecx+s*4,ecy-eh-6,ocx,ocy-2);vfx.bezierCurveTo(ecx+s*2,ecy+eh+1,icx+s*6,ecy+eh-2,icx,icy);vfx.closePath();vfx.clip();vfx.fillStyle='rgba(2,14,26,0.93)';vfx.fill();vfx.restore();
+    const irR=9.5;vfx.beginPath();vfx.ellipse(irx,iry,irR+0.9,irR+0.9,0,0,Math.PI*2);vfx.fillStyle='rgba(0,12,28,0.92)';vfx.fill();
+    const iG=vfx.createRadialGradient(irx-1.5,iry-2,0.5,irx,iry,irR);iG.addColorStop(0,'#00f4ff');iG.addColorStop(0.08,'#00d0f0');iG.addColorStop(0.25,'#0098cc');iG.addColorStop(0.5,'#004e88');iG.addColorStop(0.75,'#001e44');iG.addColorStop(1,'#000a1a');
+    vfx.beginPath();vfx.ellipse(irx,iry,irR,irR,0,0,Math.PI*2);vfx.fillStyle=iG;vfx.fill();
+    vfx.beginPath();vfx.ellipse(irx,iry,4.8,5.2,0,0,Math.PI*2);vfx.fillStyle='#000508';vfx.fill();
+    const spG=vfx.createRadialGradient(irx+3.2,iry-3.5,0,irx+3.2,iry-3.5,2.8);spG.addColorStop(0,'rgba(230,248,255,0.95)');spG.addColorStop(1,'rgba(180,230,255,0)');
+    vfx.beginPath();vfx.ellipse(irx+3.2,iry-3.5,2.8,2.0,-0.3,0,Math.PI*2);vfx.fillStyle=spG;vfx.fill();
+    vfx.beginPath();vfx.moveTo(icx,icy);vfx.bezierCurveTo(icx+s*10,ecy-eh,ecx+s*5,ecy-eh-7,ocx,ocy-3);vfx.strokeStyle='rgba(0,200,250,0.72)';vfx.lineWidth=1.1;vfx.stroke();
+    vfx.beginPath();vfx.moveTo(icx,icy);vfx.bezierCurveTo(icx+s*8,ecy+eh-1,ecx,ecy+eh+2,ocx,ocy+1);vfx.strokeStyle='rgba(0,140,195,0.38)';vfx.lineWidth=0.55;vfx.stroke();
+  }
+  vegaEye(vcx-46,vyEye,true);vegaEye(vcx+46,vyEye,false);
+  // nose
+  const yNT=vyNoseB-8;
+  [[vcx-9,vcx-11,vcx-14,vcx-16],[vcx+9,vcx+11,vcx+14,vcx+16]].forEach(([x0,x1,x2,x3])=>{vfx.beginPath();vfx.moveTo(x0,vyBrow+14);vfx.bezierCurveTo(x1,vyBrow+50,x2,yNT-18,x3,yNT);vfx.strokeStyle='rgba(0,110,170,0.18)';vfx.lineWidth=0.6;vfx.stroke();});
+  // mouth
+  const mw=36,mCorner=vyLip+1;
+  vfx.beginPath();vfx.moveTo(vcx-mw+4,mCorner);vfx.bezierCurveTo(vcx-16,mCorner+3,vcx-4,mCorner+4,vcx,mCorner+4);vfx.bezierCurveTo(vcx+4,mCorner+4,vcx+16,mCorner+3,vcx+mw-4,mCorner);vfx.fillStyle='rgba(0,4,14,0.55)';vfx.fill();
+  vfx.beginPath();vfx.moveTo(vcx-mw,mCorner+2);vfx.bezierCurveTo(vcx-26,mCorner-4,vcx-14,mCorner-7,vcx-5,mCorner-5);vfx.bezierCurveTo(vcx-2,mCorner-6,vcx+2,mCorner-6,vcx+5,mCorner-5);vfx.bezierCurveTo(vcx+14,mCorner-7,vcx+26,mCorner-4,vcx+mw,mCorner+2);vfx.closePath();
+  const ulG=vfx.createLinearGradient(vcx,mCorner-7,vcx,mCorner+2);ulG.addColorStop(0,'rgba(0,120,185,0.50)');ulG.addColorStop(1,'rgba(0,60,100,0.22)');vfx.fillStyle=ulG;vfx.fill();
+  // jaw fade
+  vfx.beginPath();vfx.moveTo(-10,VH+10);vfx.bezierCurveTo(40,VH-38,102,VH-68,vcx-40,vyChin+92);vfx.lineTo(vcx+40,vyChin+92);vfx.bezierCurveTo(VW-102,VH-68,VW-40,VH-38,VW+10,VH+10);
+  const shG=vfx.createLinearGradient(0,vyChin+92,0,VH);shG.addColorStop(0,'rgba(0,18,34,0.55)');shG.addColorStop(1,'rgba(0,4,10,0.95)');vfx.fillStyle=shG;vfx.fill();
+  // edge fades
+  [[0,VH-110,VW,110,'rgba(0,0,0,0)','rgba(0,0,0,0.9)',true],[0,0,VW,vyHair+25,'rgba(0,0,0,0.75)','rgba(0,0,0,0)',true],[0,0,42,VH,'rgba(0,0,0,0.8)','rgba(0,0,0,0)',false,42],[VW-42,0,42,VH,'rgba(0,0,0,0)','rgba(0,0,0,0.8)',false,VW]].forEach(([x,y,w,h,c0,c1,vert,x2])=>{let g;if(vert===undefined){g=vfx.createLinearGradient(x,0,x2||x+w,0);}else if(vert){g=vfx.createLinearGradient(0,y,0,y+h);}else{g=vfx.createLinearGradient(x,0,x+w,0);}g.addColorStop(0,c0);g.addColorStop(1,c1);vfx.fillStyle=g;vfx.fillRect(x,y,w,h);});
+}
+
+// ── Code Rain ──────────────────────────────────────────────────────────────
+const VCHARS='アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン01101001010111000110100101';
+function vGetMask(xpos){const dx=Math.abs(xpos-vcx);if(dx>106)return 0.48;if(Math.abs(xpos-(vcx-46))<26||Math.abs(xpos-(vcx+46))<26)return 0.15;if(dx<18)return 0.18;return 0.20+(dx/106)*0.28;}
+function vMakeLayer(n,szFn,spFn,lenFn,off){return Array.from({length:n},(_,i)=>{const xpos=off+(i/(n-1))*(VW-off*2),base=vGetMask(xpos);return{x:xpos,y:-Math.random()*900,speed:spFn(),len:lenFn(),chars:Array.from({length:48},()=>VCHARS[Math.floor(Math.random()*VCHARS.length)]),rate:1+Math.floor(Math.random()*5),timer:Math.floor(Math.random()*30),base,bright:base*(0.6+Math.random()*0.7),sz:szFn(),lead:Math.random()>0.22};});}
+const vDrops=[...vMakeLayer(160,()=>Math.random()>0.75?11:9,()=>0.3+Math.random()*2.8,()=>10+Math.floor(Math.random()*34),0.5),...vMakeLayer(130,()=>9,()=>0.25+Math.random()*2.2,()=>8+Math.floor(Math.random()*24),1.2),...vMakeLayer(120,()=>8,()=>0.4+Math.random()*3.0,()=>6+Math.floor(Math.random()*20),0.8),...vMakeLayer(110,()=>10,()=>0.2+Math.random()*1.8,()=>12+Math.floor(Math.random()*28),1.8)];
+function vegaDrawRain(){
+  const vrx=vegaCtx('vega-r');if(!vrx)return;
+  vrx.clearRect(0,0,VW,VH);
+  vDrops.forEach(d=>{
+    d.timer++;if(d.timer%d.rate===0)d.chars[Math.floor(Math.random()*d.chars.length)]=VCHARS[Math.floor(Math.random()*VCHARS.length)];
+    vrx.font=`${d.sz}px "Courier New"`;vrx.textAlign='center';
+    for(let j=0;j<d.len;j++){const yy=d.y-j*13;if(yy<-13||yy>VH+13)continue;const fade=Math.pow(1-j/d.len,0.60);let r,g,b,a;if(j===0&&d.lead){r=222;g=252;b=255;a=d.bright*1.4;}else if(j<=1){r=65;g=215;b=255;a=d.bright*fade*1.1;}else{r=0;g=Math.floor(125*fade);b=Math.floor(205*fade);a=fade*d.bright*0.88;}a=Math.min(a,0.48);vrx.fillStyle=`rgba(${r},${g},${b},${a.toFixed(2)})`;vrx.fillText(d.chars[j%d.chars.length],d.x,yy);}
+    d.y+=d.speed;if(d.y-d.len*13>VH){d.y=-10-Math.random()*600;d.speed=0.2+Math.random()*3.0;d.bright=d.base*(0.6+Math.random()*0.7);}
+  });
+}
+
+// ── Glitch ─────────────────────────────────────────────────────────────────
+let vgt=0,vegaGlitchBurst=0;
+const vGW=[{s:4,e:22,m:false},{s:8,e:14,m:true},{s:80,e:84,m:false},{s:160,e:174,m:false},{s:163,e:168,m:true},{s:310,e:322,m:false},{s:313,e:318,m:true},{s:450,e:462,m:false}];
+function vegaDoGlitch(){
+  const fc=document.getElementById('vega-f'),vgx=vegaCtx('vega-g');if(!vgx||!fc)return;
+  vgx.clearRect(0,0,VW,VH);const t=vgt%580;
+  vgx.fillStyle='rgba(0,210,255,0.03)';vgx.fillRect(0,vyHair+(vgt*0.26%(vyChin+30-vyHair)),VW,1.5);
+  vgx.fillStyle='rgba(0,180,255,0.015)';vgx.fillRect(0,vyHair+(vgt*0.58%(vyChin+30-vyHair)),VW,1);
+  let inB=vegaGlitchBurst>0,inM=vegaGlitchBurst>5;
+  vGW.forEach(w=>{if(t>=w.s&&t<=w.e){inB=true;if(w.m)inM=true;}});
+  if(vegaGlitchBurst>0)vegaGlitchBurst--;
+  if(inB){const n=inM?14:5;for(let s=0;s<n;s++){const sy=30+Math.random()*470,sh=1.2+Math.random()*(inM?30:12),dx=(Math.random()>0.5?1:-1)*Math.random()*36;try{const id=fc.getContext('2d').getImageData(0,sy,VW,Math.ceil(sh));vgx.putImageData(id,dx,sy+(Math.random()*3-1.5));}catch(e){}if(inM){vgx.globalCompositeOperation='screen';vgx.fillStyle=`rgba(255,0,50,${0.06+Math.random()*0.1})`;vgx.fillRect(dx-4,sy,VW,sh);vgx.fillStyle=`rgba(0,255,180,${0.05+Math.random()*0.09})`;vgx.fillRect(dx+4,sy,VW,sh);vgx.globalCompositeOperation='source-over';}}}
+  for(let p=0;p<(inM?8:3);p++){if(Math.random()>0.5){vgx.fillStyle=`rgba(0,${150+Math.floor(Math.random()*105)},255,${0.01+Math.random()*0.04})`;vgx.fillRect(5+Math.random()*370,10+Math.random()*520,Math.random()*5,1);}}
+  vgt++;
+}
+
+// ── Eye shift + glitch API ─────────────────────────────────────────────────
+window._vegaEyeShift=function(dir){if(!VEGA.open)return;const dirs={left:[-4,0],right:[4,0],up:[0,-3],down:[0,3],center:[0,0]};const [tx,ty]=dirs[dir]||dirs.center;VEGA.eyeTarget={x:tx,y:ty};vegaSetStatus('SCANNING...');setTimeout(()=>{VEGA.eyeTarget={x:0,y:0};vegaSetStatus('VEGA — ONLINE');},1200);};
+window._vegaGlitch=function(intensity=1){vegaGlitchBurst=Math.floor(intensity*18);vegaSetStatus(intensity>1.5?'DATA STORM':'SIGNAL UPDATE');setTimeout(()=>vegaSetStatus('VEGA — ONLINE'),1500);};
+function vegaSetStatus(t){const el=document.getElementById('vegaStatus');if(el)el.textContent=t;}
+
+// ── Animation loop ─────────────────────────────────────────────────────────
+let vegaAnimRunning=false;
+function vegaLoop(){
+  if(!VEGA.open){vegaAnimRunning=false;return;}
+  VEGA.eyeOffset.x+=(VEGA.eyeTarget.x-VEGA.eyeOffset.x)*0.08;
+  VEGA.eyeOffset.y+=(VEGA.eyeTarget.y-VEGA.eyeOffset.y)*0.08;
+  if(Math.abs(VEGA.eyeOffset.x-VEGA.eyeTarget.x)>0.02||Math.abs(VEGA.eyeOffset.y-VEGA.eyeTarget.y)>0.02)vegaDrawFace();
+  else if(Math.random()<0.02)vegaDrawFace();
+  vegaDrawRain();vegaDoGlitch();requestAnimationFrame(vegaLoop);
+}
+
+// ── Override toggleChat ────────────────────────────────────────────────────
+(function(){
+  const _orig=window.toggleChat;
+  window.toggleChat=function(){
+    VEGA.open=!VEGA.open;
+    const overlay=document.getElementById('vegaOverlay');
+    const btn=document.getElementById('rsb-ai');
+    if(VEGA.open){
+      overlay.style.display='flex';
+      requestAnimationFrame(()=>{overlay.style.opacity='0.92';});
+      vegaDrawFace();
+      if(!vegaAnimRunning){vegaAnimRunning=true;vegaLoop();}
+      vegaSetStatus('VEGA — ONLINE');
+      setTimeout(()=>{document.getElementById('vegaInput')?.focus();},400);
+      if(btn)btn.classList.add('ai-active');
+      window._vegaGlitch(1.2);
+    } else {
+      overlay.style.opacity='0';
+      setTimeout(()=>{overlay.style.display='none';},650);
+      if(btn)btn.classList.remove('ai-active');
+      if(VEGA.listening)vegaStopListening();
+    }
+  };
+  // Also override sidebarToggleAI to not double-toggle
+  const _origSAI=window.sidebarToggleAI;
+  window.sidebarToggleAI=function(){toggleChat();};
+})();
+
+// ── VEGA chat ──────────────────────────────────────────────────────────────
+async function vegaSend(){
+  const input=document.getElementById('vegaInput');if(!input)return;
+  const msg=input.value.trim();if(!msg)return;
+  input.value='';vegaAppendMsg('user',msg);vegaSetStatus('PROCESSING...');window._vegaGlitch(0.5);
+  try{
+    const history=(window.AI?.history||[]).slice(-8);
+    const messages=[...history,{role:'user',content:msg}];
+    if(window.AI)window.AI.history=messages;
+    const resp=await fetch('/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:window.AI?.systemPrompt||'You are VEGA, an AI analyst in a financial trading dashboard. Be concise and analytical. Reference SPY levels and market data when relevant. Keep responses under 150 words.',messages,max_tokens:400})});
+    const data=await resp.json();
+    const reply=data.content||data.error||'Signal lost.';
+    vegaAppendMsg('vega',reply);vegaSetStatus('VEGA — ONLINE');
+    if(VEGA.speaking)vegaSpeak(reply);
+  }catch(e){vegaAppendMsg('vega','Transmission error: '+e.message);vegaSetStatus('ERROR');}
+}
+function vegaAppendMsg(role,text){
+  const el=document.getElementById('vegaMessages');if(!el)return;
+  const div=document.createElement('div');
+  div.style.cssText=role==='user'?'padding:4px 8px;color:rgba(0,204,255,0.9);text-align:right;font-size:11px;line-height:1.5;':'padding:4px 8px 4px 10px;color:rgba(0,220,180,0.9);border-left:2px solid rgba(0,220,180,0.3);font-size:11px;line-height:1.5;';
+  div.textContent=(role==='vega'?'⬡ ':'')+text;
+  el.appendChild(div);el.scrollTop=el.scrollHeight;
+}
+
+// ── Voice ──────────────────────────────────────────────────────────────────
+function vegaToggleVoice(){if(VEGA.listening)vegaStopListening();else vegaStartListening();}
+function vegaStartListening(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){vegaSetStatus('VOICE UNSUPPORTED');return;}
+  VEGA.recognition=new SR();VEGA.recognition.continuous=false;VEGA.recognition.interimResults=false;VEGA.recognition.lang='en-US';
+  VEGA.recognition.onstart=()=>{VEGA.listening=true;const r=document.getElementById('vegaVoiceRing'),m=document.getElementById('vegaMicIcon');if(r)r.style.borderColor='rgba(0,255,136,0.8)';if(m)m.textContent='🔴';vegaSetStatus('LISTENING...');window._vegaGlitch(0.4);};
+  VEGA.recognition.onresult=(e)=>{const t=e.results[0][0].transcript;const inp=document.getElementById('vegaInput');if(inp)inp.value=t;vegaSetStatus('RECEIVED: '+t.slice(0,28));vegaSend();};
+  VEGA.recognition.onerror=(e)=>{vegaSetStatus('VOICE ERR: '+e.error);vegaStopListening();};
+  VEGA.recognition.onend=()=>vegaStopListening();
+  VEGA.recognition.start();
+}
+function vegaStopListening(){
+  VEGA.listening=false;if(VEGA.recognition){try{VEGA.recognition.stop();}catch(e){}}
+  const r=document.getElementById('vegaVoiceRing'),m=document.getElementById('vegaMicIcon');
+  if(r)r.style.borderColor='rgba(0,204,255,0.3)';if(m)m.textContent='🎤';vegaSetStatus('VEGA — ONLINE');
+}
+function vegaToggleSpeak(){
+  VEGA.speaking=!VEGA.speaking;
+  const icon=document.getElementById('vegaSpeakIcon');
+  const ring=document.getElementById('vegaSpeakToggle');
+  if(VEGA.speaking){
+    if(icon)icon.style.opacity='1';
+    if(ring)ring.style.borderColor='rgba(0,204,255,0.5)';
+    vegaSetStatus('VOICE OUTPUT ON');
+  } else {
+    if(icon)icon.style.opacity='0.4';
+    if(ring)ring.style.borderColor='rgba(0,204,255,0.15)';
+    if(VEGA.synth)VEGA.synth.cancel();
+    vegaSetStatus('VOICE OUTPUT OFF');
+  }
+  setTimeout(()=>vegaSetStatus('VEGA — ONLINE'),1200);
+}
+function vegaSpeak(text){
+  if(!VEGA.synth)return;VEGA.synth.cancel();
+  const utt=new SpeechSynthesisUtterance(text.slice(0,300));utt.rate=0.9;utt.pitch=0.8;utt.volume=0.8;
+  const voices=VEGA.synth.getVoices();const pref=voices.find(v=>v.name.includes('Google')&&v.lang==='en-US')||voices[0];if(pref)utt.voice=pref;
+  utt.onstart=()=>{VEGA.speaking=true;vegaSetStatus('TRANSMITTING...');window._vegaGlitch(0.3);};
+  utt.onend=()=>{VEGA.speaking=false;vegaSetStatus('VEGA — ONLINE');};
+  VEGA.synth.speak(utt);
+}
+
+// ── Wire to dashboard events ───────────────────────────────────────────────
+// Tab switches → eye shift
+(function(){
+  const _os=window.switchTab;
+  window.switchTab=function(id){
+    if(VEGA.open){const dirs={macro:'left',sentiment:'right',bonds:'up',breadth:'down',trading:'center',derivatives:'right',analog:'left',options:'right'};window._vegaEyeShift(dirs[id]||'center');}
+    return _os&&_os.apply(this,arguments);
+  };
+  const _og=window.switchGroupTab;
+  window.switchGroupTab=function(g,id){
+    if(VEGA.open)window._vegaEyeShift(['left','right','up','down','center'][Math.floor(Math.random()*5)]);
+    return _og&&_og.apply(this,arguments);
+  };
+})();
+// Data refresh → glitch
+(function(){
+  const _or=window.fredRefresh;
+  window.fredRefresh=function(){if(window._vegaGlitch)window._vegaGlitch(1.0);return _or&&_or.apply(this,arguments);};
+  // Also hook fetch() to glitch on /gex and market data calls
+  const _origFetch=window.fetch;
+  window.fetch=function(url,...args){
+    const result=_origFetch.apply(this,[url,...args]);
+    if(typeof url==='string'&&(url.includes('/gex')||url.includes('market_data.json')||url.includes('/fred'))){
+      result.then(()=>{if(window._vegaGlitch)window._vegaGlitch(0.4);}).catch(()=>{});
+    }
+    return result;
+  };
+})();
 </script>
