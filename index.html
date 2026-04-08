@@ -7387,7 +7387,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-
+</script>
 
 <!-- ══════════════════════════════════════════════════════════════════
      VEGA — Cinematic AI Overlay
@@ -7420,7 +7420,6 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 
-</script>
 <script>
 // ══ VEGA ENGINE ═══════════════════════════════════════════════════════════
 const VEGA={open:false,listening:false,speaking:false,recognition:null,synth:window.speechSynthesis||null,eyeOffset:{x:0,y:0},eyeTarget:{x:0,y:0}};
@@ -7546,6 +7545,7 @@ function vegaLoop(){
     VEGA.open=!VEGA.open;
     const overlay=document.getElementById('vegaOverlay');
     const btn=document.getElementById('rsb-ai');
+    if(!overlay){VEGA.open=!VEGA.open;return;}
     if(VEGA.open){
       overlay.style.display='flex';
       requestAnimationFrame(()=>{overlay.style.opacity='0.92';});
