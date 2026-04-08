@@ -4502,22 +4502,25 @@ async function renderGEXIntradayMap() {
     intradayDate = d.date || null;
     if (d.error) intradayErr = d.error;
     console.log('[GEX-MAP] today fetch:', intradayDate, 'count:', snapshots.length, 'err:', intradayErr);
-    // If today has no data, try yesterday (market may not be open yet)
+    // If today has no data, use KV list to find most recent date with data
     if (!snapshots.length && !intradayErr) {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      // Walk back up to 4 days to find last trading day with data
-      for (let i = 1; i <= 4; i++) {
-        const d2 = new Date(); d2.setDate(d2.getDate() - i);
-        if (d2.getDay() === 0 || d2.getDay() === 6) continue; // skip weekends
-        const dateStr = d2.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-        const r2 = await fetch(`/gex-history?type=intraday&date=${dateStr}`);
-        const j2 = await r2.json();
-        if (j2.snapshots?.length) {
-          snapshots = j2.snapshots;
-          intradayDate = j2.date || dateStr;
-          break;
+      try {
+        const listR = await fetch('/gex-history?type=list');
+        const listD = await listR.json();
+        const dates = listD.dates || [];
+        console.log('[GEX-MAP] available dates:', dates);
+        for (const dateStr of dates) {
+          const r2 = await fetch(`/gex-history?type=intraday&date=${dateStr}`);
+          const j2 = await r2.json();
+          if (j2.snapshots?.length) {
+            snapshots = j2.snapshots;
+            intradayDate = j2.date || dateStr;
+            console.log('[GEX-MAP] found data for', dateStr, 'count:', snapshots.length);
+            break;
+          }
         }
+      } catch(e2) {
+        console.warn('[GEX-MAP] list fallback failed:', e2.message);
       }
     }
   } catch(e) { intradayErr = e.message; }
