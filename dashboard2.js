@@ -4501,6 +4501,7 @@ async function renderGEXIntradayMap() {
     snapshots = d.snapshots || [];
     intradayDate = d.date || null;
     if (d.error) intradayErr = d.error;
+    console.log('[GEX-MAP] today fetch:', intradayDate, 'count:', snapshots.length, 'err:', intradayErr);
     // If today has no data, try yesterday (market may not be open yet)
     if (!snapshots.length && !intradayErr) {
       const yesterday = new Date();
@@ -4520,6 +4521,7 @@ async function renderGEXIntradayMap() {
       }
     }
   } catch(e) { intradayErr = e.message; }
+  console.log('[GEX-MAP] final snapshots:', snapshots.length, 'date:', intradayDate, 'err:', intradayErr);
 
   // Also get current live GEX to show latest state even if KV is empty
   let liveGex = null;
