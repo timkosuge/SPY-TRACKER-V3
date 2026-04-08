@@ -7292,7 +7292,11 @@ document.addEventListener('click', function(e) {
 // ── Max Pain easter egg — triple-click CALL/PUT WALLS header ─────────────────
 let _maxPainTapCount = 0, _maxPainTapTimer = null;
 document.addEventListener('click', function(e) {
-  if (!e.target.closest('#deskWallsHeader')) return;
+  if (!e.target.closest('#deskWallsPanel')) return;
+  // Only trigger if clicking the header area (top portion of panel)
+  const panel = e.target.closest('#deskWallsPanel');
+  const header = panel?.querySelector('#deskWallsHeader');
+  if (!header || !header.contains(e.target)) return;
   _maxPainTapCount++;
   clearTimeout(_maxPainTapTimer);
   if (_maxPainTapCount >= 3) {
