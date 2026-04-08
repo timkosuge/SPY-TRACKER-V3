@@ -1580,7 +1580,7 @@ function renderDesk(md,sd){
 
     <!-- CALL / PUT WALLS BY EXPIRY -->
     <div class="panel" style="margin-bottom:10px;" id="deskWallsPanel">
-      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ CALL / PUT WALLS BY EXPIRY</div>
+      <div id="deskWallsHeader" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;cursor:pointer;" title="Click 3x for SPY Max Pain chart">⬡ CALL / PUT WALLS BY EXPIRY</div>
       <div id="deskWallsByExpiry"><div style="font-size:12px;color:var(--text3);">Loading walls...</div></div>
     </div>
 
