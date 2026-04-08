@@ -7407,8 +7407,8 @@ document.addEventListener('DOMContentLoaded', () => {
     <div id="vegaVoiceRing" onclick="vegaToggleVoice()" style="position:absolute;bottom:16px;right:14px;z-index:10;width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(0,204,255,0.3);display:flex;align-items:center;justify-content:center;pointer-events:all;cursor:pointer;background:rgba(0,0,0,0.5);">
       <span id="vegaMicIcon" style="font-size:12px;">🎤</span>
     </div>
-    <div id="vegaSpeakToggle" onclick="vegaToggleSpeak()" title="Toggle voice output" style="position:absolute;bottom:16px;right:50px;z-index:10;width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(0,204,255,0.15);display:flex;align-items:center;justify-content:center;pointer-events:all;cursor:pointer;background:rgba(0,0,0,0.5);">
-      <span id="vegaSpeakIcon" style="font-size:12px;opacity:0.4;">🔊</span>
+    <div id="vegaSpeakToggle" onclick="vegaToggleSpeak()" title="Toggle voice output" style="position:absolute;bottom:16px;right:50px;z-index:10;width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(0,204,255,0.5);display:flex;align-items:center;justify-content:center;pointer-events:all;cursor:pointer;background:rgba(0,0,0,0.5);">
+      <span id="vegaSpeakIcon" style="font-size:12px;opacity:1;">🔊</span>
     </div>
   </div>
   <div id="vegaChatPanel" style="flex:1;background:rgba(4,8,18,0.92);border-top:1px solid rgba(0,204,255,0.15);border-left:1px solid rgba(0,204,255,0.1);display:flex;flex-direction:column;pointer-events:all;backdrop-filter:blur(4px);min-height:0;max-height:calc(100vh - 540px);">
@@ -7422,7 +7422,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <script>
 // ══ VEGA ENGINE ═══════════════════════════════════════════════════════════
-const VEGA={open:false,listening:false,speaking:false,recognition:null,synth:window.speechSynthesis||null,eyeOffset:{x:0,y:0},eyeTarget:{x:0,y:0}};
+const VEGA={open:false,listening:false,speaking:true,recognition:null,synth:window.speechSynthesis||null,eyeOffset:{x:0,y:0},eyeTarget:{x:0,y:0}};
 const VW=380,VH=540,vcx=190,vyHair=95,vyBrow=185,vyEye=204,vyNoseB=278,vyLip=310,vyChin=370;
 
 function vegaCtx(id){const c=document.getElementById(id);return c?c.getContext('2d'):null;}
@@ -7624,13 +7624,44 @@ function vegaToggleSpeak(){
   }
   setTimeout(()=>vegaSetStatus('VEGA — ONLINE'),1200);
 }
-function vegaSpeak(text){
-  if(!VEGA.synth)return;VEGA.synth.cancel();
-  const utt=new SpeechSynthesisUtterance(text.slice(0,300));utt.rate=0.9;utt.pitch=0.8;utt.volume=0.8;
-  const voices=VEGA.synth.getVoices();const pref=voices.find(v=>v.name.includes('Google')&&v.lang==='en-US')||voices[0];if(pref)utt.voice=pref;
-  utt.onstart=()=>{VEGA.speaking=true;vegaSetStatus('TRANSMITTING...');window._vegaGlitch(0.3);};
-  utt.onend=()=>{VEGA.speaking=false;vegaSetStatus('VEGA — ONLINE');};
-  VEGA.synth.speak(utt);
+let _vegaAudio = null;
+async function vegaSpeak(text){
+  if(!VEGA.speaking) return;
+  // Cancel any current audio
+  if(_vegaAudio){ _vegaAudio.pause(); _vegaAudio = null; }
+  vegaSetStatus('TRANSMITTING...');
+  window._vegaGlitch(0.3);
+  try {
+    const resp = await fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text.slice(0, 400), voice_id: 'eve' })
+    });
+    if (!resp.ok) throw new Error('TTS failed: ' + resp.status);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    _vegaAudio = new Audio(url);
+    _vegaAudio.volume = 0.85;
+    _vegaAudio.onended = () => {
+      vegaSetStatus('VEGA — ONLINE');
+      URL.revokeObjectURL(url);
+      _vegaAudio = null;
+    };
+    _vegaAudio.onerror = () => {
+      vegaSetStatus('VEGA — ONLINE');
+      _vegaAudio = null;
+    };
+    await _vegaAudio.play();
+  } catch(e) {
+    console.warn('VEGA TTS error:', e.message);
+    vegaSetStatus('VEGA — ONLINE');
+    // Fall back to browser speech synthesis
+    if(window.speechSynthesis){
+      const utt=new SpeechSynthesisUtterance(text.slice(0,300));
+      utt.rate=0.9;utt.pitch=0.8;
+      window.speechSynthesis.speak(utt);
+    }
+  }
 }
 
 // ── Wire to dashboard events ───────────────────────────────────────────────
