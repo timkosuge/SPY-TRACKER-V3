@@ -1,6342 +1,3578 @@
-function renderPriceHistory(sd){
-  _phAllData = sd; // cache for filter/sort
-  const meta = document.getElementById('phFilterMeta');
-  if(meta) meta.textContent = (sd.length).toLocaleString() + ' sessions shown';
-  if(!sd||!sd.length){$('priceHistBody').innerHTML='<tr><td colspan="14" class="no-data">No data</td></tr>';return;}
+const fmt=(n,d=2)=>n==null||isNaN(n)?'—':Number(n).toFixed(d);
+const fmtK=n=>n>=1e9?(n/1e9).toFixed(1)+'B':n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'K':String(Math.round(n));
+const clr=n=>n>0?'up':n<0?'dn':'neu';
+const sign=n=>n>0?'+':'';
+const fmt12=t=>{if(!t||!t.includes(':'))return t||'—';const[h,m]=t.split(':').map(Number);const ampm=h>=12?'PM':'AM';const h12=h%12||12;return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;};
+const $=id=>document.getElementById(id);
 
-  // Shared helpers (also used by phRenderFiltered)
-  const _phHelpers = _buildPhHelpers();
+// Group tab mapping
+const GROUP_TABS = {
+  desk:        ['desk','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol'],
+  derivatives: ['options','gex','gex-intraday','wem','volatility'],
+  macro:       ['macro-overview','transition','ignition','sovereign-chess'],
+  history:     ['pricehistory','volhistory','edgestats','events','volstats','analog'],
+  overview:    ['overview','bonds','breadth','sentiment']
+};
+const TAB_TO_GROUP = {};
+Object.entries(GROUP_TABS).forEach(([g,tabs]) => tabs.forEach(t => TAB_TO_GROUP[t]=g));
+let _activeGroup = null;
 
-  // Stats comparison panel — rendered by phRenderFiltered (so it updates on filter toggle)
-  // phRenderFiltered is called below; it will render the comparison against all-time baseline
-
-  // Weekly gap stats (uses wem_stats from md, not sd-filterable)
-    const gapStatsEl = $('gapStats');
-  if(gapStatsEl) {
-    const stats2 = _md?.wem_stats || {};
-    if(stats2.pct_gap_weeks != null) {
-      gapStatsEl.innerHTML = [
-        {l:'% Weeks w/ Gap',  v:fmt(stats2.pct_gap_weeks,1)+'%'},
-        {l:'% Gaps Filled',   v:fmt(stats2.pct_gaps_filled,1)+'%'},
-        {l:'Avg Gap Up',      v:'+$'+fmt(stats2.avg_gap_up,2),       c:'#00ff88'},
-        {l:'Avg Gap Down',    v:'-$'+fmt(Math.abs(stats2.avg_gap_down||0),2), c:'#ff3355'},
-      ].map(i=>`<div style="display:flex;justify-content:space-between;padding:6px 8px;background:var(--bg3);border-radius:3px;margin-bottom:3px;">
-        <span style="font-size:12px;color:var(--text2);">${i.l}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${i.c||'var(--text)'};">${i.v}</span>
-      </div>`).join('');
-    } else {
-      gapStatsEl.innerHTML = '<div class="no-data">Run workflow to populate WEM stats</div>';
-    }
+function switchGroupTab(group, firstTab) {
+  _activeGroup = group;
+  // Activate group tab button
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const groupBtn = document.querySelector(`.tab.group-tab[onclick*="${group}"]`);
+  if(groupBtn) groupBtn.classList.add('active');
+  // Show subtab bar, hide other groups
+  const bar = $('subtabBar');
+  if(bar) bar.style.display = 'flex';
+  document.querySelectorAll('.subtab-group').forEach(g => g.style.display='none');
+  const grp = $('subtabs-'+group);
+  if(grp) grp.style.display = 'flex';
+  // Reset subtab active states
+  if(grp) {
+    grp.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
+    grp.querySelector('.subtab')?.classList.add('active');
   }
-
-  // ── DAILY GAP ANALYSIS ──────────────────────────────────────────────────
-
-  // Render all filterable sections with full data on initial load
-  phRenderFiltered(sd);
+  // Switch to first tab of group
+  _switchPanelOnly(firstTab);
 }
 
-// Build shared helper functions for price history rendering
-function _buildPhHelpers() {
-  const keyMap = {oc_pts:'open_to_close',range_pts:'day_range',oh_pts:'open_to_high',ol_pts:'open_to_low',hc_pts:'high_to_close',lc_pts:'low_to_close'};
-  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
-  const pct2 = (arr,fn) => arr.length ? (arr.filter(fn).length/arr.length*100) : 0;
-  const getVals = (subset,k) => subset.map(d=>{const m=d.measurements||{};const v=m[k]!=null?m[k]:m[keyMap[k]];return v!=null?v:null;}).filter(v=>v!=null);
-  function calcStats(subset){
-    const ocVals=getVals(subset,'oc_pts'),rngVals=getVals(subset,'range_pts');
-    const ohVals=getVals(subset,'oh_pts'),olVals=getVals(subset,'ol_pts');
-    const hcVals=getVals(subset,'hc_pts'),lcVals=getVals(subset,'lc_pts');
-    const upVals=ocVals.filter(v=>v>0),dnVals=ocVals.filter(v=>v<0);
-    return{n:subset.length,avgRng:avg(rngVals),avgOC:avg(ocVals),
-      pctUp:pct2(ocVals,v=>v>0),avgUp:avg(upVals),avgDn:avg(dnVals),
-      avgOH:avg(ohVals),avgOL:avg(olVals),avgHC:avg(hcVals),avgLC:avg(lcVals),
-      maxUp:ocVals.length?Math.max(...ocVals):0,maxDn:ocVals.length?Math.min(...ocVals):0,
-      rngVals,ocVals,ohVals,olVals};
+function switchGroupSub(id, el) {
+  // Update subtab active state
+  if(el) {
+    el.closest('.subtab-group')?.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
+    el.classList.add('active');
   }
-  return { keyMap, avg, pct:pct2, getVals, calcStats };
+  _switchPanelOnly(id);
 }
 
-// Render all filterable price history sections with a given dataset
-function phRenderFiltered(sd) {
-  if(!sd||!sd.length) return;
-  const { keyMap, avg, pct, getVals, calcStats } = _buildPhHelpers();
-  const days = sd.filter(d=>d.measurements);
-  const all = calcStats(days);
-  const rngVals = all.rngVals, ocVals = all.ocVals, ohVals = all.ohVals, olVals = all.olVals;
-  const avgOC = all.avgOC, avgRng = all.avgRng, pctUp = all.pctUp, avgUp = all.avgUp, avgDn = all.avgDn;
-  const vals = (k) => getVals(days, k);
-
-  // ── Analytics header cards ──
-  const aRow = $('priceAnalyticsRow');
-  if(aRow) aRow.innerHTML = [
-    {l:'AVG DAY RANGE',  v:'$'+fmt(all.avgRng,2),  sub:`${all.n} sessions`,          c:'var(--cyan)'},
-    {l:'% DAYS UP',      v:fmt(all.pctUp,1)+'%',   sub:`avg +$${fmt(all.avgUp,2)} up days`,   c:'#00ff88'},
-    {l:'% DAYS DOWN',    v:fmt(100-all.pctUp,1)+'%',sub:`avg -$${fmt(Math.abs(all.avgDn),2)} dn days`, c:'#ff3355'},
-    {l:'AVG O\u2192C',   v:(all.avgOC>=0?'+':'')+'$'+fmt(all.avgOC,2),sub:'open to close avg',c:all.avgOC>=0?'#00ff88':'#ff3355'},
-  ].map(({l,v,sub,c})=>`<div class="panel" style="text-align:center;border-top:3px solid ${c};">
-    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">${l}</div>
-    <div style="font-family:'Share Tech Mono',monospace;font-size:24px;font-weight:bold;color:${c};">${v}</div>
-    <div style="font-size:11px;color:var(--text3);margin-top:4px;">${sub}</div>
-  </div>`).join('');
-
-  // ── Stats comparison table (filtered period vs all-time baseline) ──
-  const ytdEl2 = $('priceYTDPanel');
-  if(ytdEl2 && _phAllData) {
-    const allDays2 = _phAllData.filter(d=>d.measurements);
-    const allStats = calcStats(allDays2);
-    const curYear2 = new Date().getFullYear();
-    // Label the comparison columns based on what data is active
-    const isFiltered = days.length < allDays2.length * 0.95;
-    const filterLabel = days.length === allDays2.length ? `ALL HISTORY (${all.n}d)` :
-      days.length < 70 ? `${curYear2} YTD (${all.n}d)` :
-      days.length < 1600 ? `SINCE 2020 (${all.n}d)` : `FILTERED (${all.n}d)`;
-    const $d2 = v=>'$'+fmt(Math.abs(v),2);
-    const $p2 = v=>fmt(v,1)+'%';
-    const row2=(label,av,fv,fmtFn,hib)=>{
-      if(!isFiltered){
-        // When showing all data, compare all-time vs current year
-        const ytdDays2=allDays2.filter(d=>d.date&&d.date.startsWith(String(curYear2)));
-        const ytdStats=calcStats(ytdDays2);
-        av=fv=null; // handled separately below
-      }
-      const diff=av!=null&&fv!=null?fv-av:null;
-      const dc=diff===null?'var(--text2)':(diff===0?'var(--text2)':(diff>0)===hib?'#00ff88':'#ff3355');
-      return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:13px;color:var(--text2);">${label}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;text-align:right;">${fmtFn(av)}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--cyan);text-align:right;">${fmtFn(fv)}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${dc};text-align:right;">${diff!=null?(diff>=0?'+':'')+fmtFn(diff):'—'}</span>
-      </div>`;
-    };
-    // Simpler: always compare all-time baseline against the currently filtered data
-    const base = allStats; // all-time is always left column
-    const cur3 = all;      // currently filtered data is right column
-    ytdEl2.innerHTML=`
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;padding:5px 0;margin-bottom:2px;">
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">METRIC</span>
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);text-align:right;">ALL HISTORY (${base.n}d)</span>
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);text-align:right;">${filterLabel}</span>
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);text-align:right;">DIFF</span>
-      </div>
-      ${[
-        ['Avg Day Range',    base.avgRng,              cur3.avgRng,              $d2, false],
-        ['% Days Up',        base.pctUp,               cur3.pctUp,               $p2, true],
-        ['Avg Up Day',       base.avgUp,               cur3.avgUp,               $d2, true],
-        ['Avg Down Day',     Math.abs(base.avgDn),     Math.abs(cur3.avgDn),     $d2, false],
-        ['Avg O→C',     base.avgOC,               cur3.avgOC,               $d2, true],
-        ['Avg O→H',     base.avgOH,               cur3.avgOH,               $d2, true],
-        ['Avg O→L',     Math.abs(base.avgOL),     Math.abs(cur3.avgOL),     $d2, false],
-        ['Avg H→C',     base.avgHC,               cur3.avgHC,               $d2, true],
-        ['Avg L→C',     base.avgLC,               cur3.avgLC,               $d2, true],
-        ['Largest Up Day',   base.maxUp,               cur3.maxUp,               $d2, true],
-        ['Largest Down Day', Math.abs(base.maxDn),     Math.abs(cur3.maxDn),     $d2, false],
-      ].map(([label,av,fv,fmtFn,hib])=>{
-        const diff=fv-av;
-        const dc=diff===0?'var(--text2)':(diff>0)===hib?'#00ff88':'#ff3355';
-        return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">
-          <span style="font-size:13px;color:var(--text2);">${label}</span>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:13px;text-align:right;">${fmtFn(av)}</span>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--cyan);text-align:right;">${fmtFn(fv)}</span>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${dc};text-align:right;">${(diff>=0?'+':'')+fmtFn(diff)}</span>
-        </div>`;
-      }).join('')}
-    `;
+function _switchPanelOnly(id) {
+  // Hide all panels
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const p = $('panel-'+id);
+  if(p) p.classList.add('active');
+  // Tab-specific renders
+  if(id==='analog') { if(typeof renderAnalog==='function') renderAnalog(); }
+  if(id==='media') initMediaTab();
+  if(id==='journal') renderJournalEntries();
+  if(id==='floor') {
+    if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50);
+    if(typeof FLOOR!=='undefined') FLOOR.tabUnread=0;
+    const b=document.getElementById('floor-tab-badge');
+    if(b){b.style.display='none';b.textContent='';}
   }
-
-  // Range distribution bar chart
-  const rngEl = $('rangeDistChart');
-  if(rngEl && rngVals.length) {
-    const bins = [0,5,10,15,20,25,30,999];
-    const labels = ['0-5','5-10','10-15','15-20','20-25','25-30','30+'];
-    const counts = Array(7).fill(0);
-    rngVals.forEach(v => {
-      for(let i=0;i<bins.length-1;i++) if(v>=bins[i]&&v<bins[i+1]) { counts[i]++; break; }
-    });
-    const maxC = Math.max(...counts,1);
-    rngEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:4px;">`+
-      labels.map((l,i)=>`<div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);width:36px;">${l}</span>
-        <div style="flex:1;height:16px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-          <div style="width:${(counts[i]/maxC*100).toFixed(1)}%;height:100%;background:var(--cyan);opacity:0.7;border-radius:2px;"></div>
-        </div>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);width:24px;text-align:right;">${counts[i]}</span>
-        <span style="font-size:10px;color:var(--text3);width:32px;">${(counts[i]/rngVals.length*100).toFixed(0)}%</span>
-      </div>`).join('')+'</div>';
-  }
-
-  // Unfilled gaps — all history
-  const gapHistEl = $('priceHistGaps');
-  if(gapHistEl) {
-    const cur2 = _md?.quotes?.['SPY']?.price || 0;
-    const gaps = [];
-    for(let i=0;i<sd.length-1;i++){
-      const t=sd[i], p=sd[i+1];
-      if(!t.open||!p.close) continue;
-      const gs=t.open-p.close;
-      if(Math.abs(gs)<0.20) continue;
-      let filled=false;
-      for(let j=i-1;j>=0;j--){
-        const c=sd[j];
-        if(!c.low||!c.high) continue;
-        if(gs>0&&c.low<=p.close){filled=true;break;}
-        if(gs<0&&c.high>=p.close){filled=true;break;}
-      }
-      if(!filled) gaps.push({fillLevel:p.close,gapDate:p.date,gapSize:gs,dist:cur2-p.close});
-    }
-    gaps.sort((a,b)=>Math.abs(a.dist)-Math.abs(b.dist));
-    if(!gaps.length) {
-      gapHistEl.innerHTML='<div class="no-data">No unfilled gaps found</div>';
-    } else {
-      gapHistEl.innerHTML=`<div style="display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto;">`+
-        gaps.map(g=>{
-          const c=g.dist>0?'#00ff88':'#ff3355';
-          const d=new Date(g.gapDate+'T12:00:00');
-          const dl=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${c};border-radius:0 3px 3px 0;">
-            <span style="font-size:12px;color:var(--text2);">${dl}</span>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:14px;font-weight:bold;color:${c};">$${fmt(g.fillLevel,2)}</span>
-            <span style="font-family:'Orbitron',monospace;font-size:9px;color:${c};">${g.gapSize>0?'↑ UP':'↓ DN'} ${Math.abs(g.gapSize).toFixed(2)}pts</span>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${c};">${g.dist>0?'+':''}${fmt(g.dist,2)} away</span>
-          </div>`;
-        }).join('')+`</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:6px;">${gaps.length} unfilled gaps · sorted by distance from current price</div>`;
-    }
-  }
-
-  // Measurements averages
-  const measEl = $('measAvgPanel');
-  if(measEl) {
-    const items = [
-      {l:'Avg Open→High',  v:'+$'+fmt(avg(ohVals),2),  c:'#00ff88'},
-      {l:'Avg Open→Low',   v:'-$'+fmt(Math.abs(avg(olVals)),2), c:'#ff3355'},
-      {l:'Avg High→Close', v:(avg(vals('hc_pts'))>=0?'+':'')+'$'+fmt(avg(vals('hc_pts')),2), c:'var(--text)'},
-      {l:'Avg Low→Close',  v:'+$'+fmt(avg(vals('lc_pts')),2), c:'var(--text)'},
-      {l:'Avg Day Range',  v:'$'+fmt(avgRng,2), c:'var(--cyan)'},
-      {l:'Largest Up Day', v:'+$'+fmt(Math.max(...ocVals),2), c:'#00ff88'},
-      {l:'Largest Dn Day', v:'-$'+fmt(Math.abs(Math.min(...ocVals)),2), c:'#ff3355'},
-      {l:'Avg Vol',        v:fmtK(avg(sd.map(d=>d.volume||0).filter(Boolean))), c:'var(--text2)'},
-    ];
-    measEl.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">`+
-      items.map(i=>`<div style="display:flex;justify-content:space-between;padding:6px 8px;background:var(--bg3);border-radius:3px;">
-        <span style="font-size:12px;color:var(--text2);">${i.l}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${i.c};">${i.v}</span>
-      </div>`).join('')+'</div>';
-  }
-
-  // DoD historical
-  const dodEl = $('dodHistPanel');
-  if(dodEl && sd.length>1) {
-    const gaps2 = [], gapUps = [], gapDns = [];
-    for(let i=0;i<sd.length-1;i++){
-      const t=sd[i],p=sd[i+1];
-      if(t.open&&p.close){const g=t.open-p.close;if(Math.abs(g)>0.1){gaps2.push(g);g>0?gapUps.push(g):gapDns.push(g);}}
-    }
-    const ocPairs = sd.slice(0,-1).map((t,i)=>({cc:t.close-sd[i+1].close})).filter(x=>x.cc);
-    dodEl.innerHTML=`<div style="display:flex;flex-direction:column;gap:4px;">`+[
-      {l:'% Days Gapped Up',    v:fmt(pct(gaps2,v=>v>0),1)+'%', c:'#00ff88'},
-      {l:'% Days Gapped Down',  v:fmt(pct(gaps2,v=>v<0),1)+'%', c:'#ff3355'},
-      {l:'Avg Gap Up Size',     v:'+$'+fmt(avg(gapUps),2), c:'#00ff88'},
-      {l:'Avg Gap Dn Size',     v:'-$'+fmt(Math.abs(avg(gapDns)),2), c:'#ff3355'},
-      {l:'% C-to-C Positive',   v:fmt(pct(ocPairs.map(x=>x.cc),v=>v>0),1)+'%', c:'#00ff88'},
-      {l:'% C-to-C Negative',   v:fmt(pct(ocPairs.map(x=>x.cc), v=>v<0),1)+'%', c:'#ff4444'},
-      {l:'Avg C-to-C Move',     v:(avg(ocPairs.map(x=>x.cc))>=0?'+':'')+'$'+fmt(avg(ocPairs.map(x=>x.cc)),2), c:'var(--text)'},
-    ].map(i=>`<div style="display:flex;justify-content:space-between;padding:6px 8px;background:var(--bg3);border-radius:3px;">
-      <span style="font-size:12px;color:var(--text2);">${i.l}</span>
-      <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${i.c};">${i.v}</span>
-    </div>`).join('')+'</div>';
-  }
-
-  // Weekly gap stats — pulled from _md if available
-
-  // Gap OHLC analysis — rendered by _renderGapOHLCBlocks (called from gap-stats tab and on load)
-  _renderGapOHLCBlocks(sd);
-  // ── Raw table ──
-  // Raw table — price history
-  $('priceHistBody').innerHTML=sd.map(day=>{
-    const m=day.measurements||{};
-    const oc=m.oc_pts??m.open_to_close, ocp=m.oc_pct??m.pct_open_to_close;
-    const rng=m.range_pts??m.day_range, rngp=m.range_pct??m.pct_day_range;
-    const oh=m.oh_pts??m.open_to_high, ol=m.ol_pts??m.open_to_low;
-    const hc=m.hc_pts??m.high_to_close, lc=m.lc_pts??m.low_to_close;
-    return `<tr>
-    <td>${day.date}</td>
-    <td>${fmt(day.open,2)}</td><td class="up">${fmt(day.high,2)}</td><td class="dn">${fmt(day.low,2)}</td>
-    <td class="${day.close>=day.open?'up':'dn'}">${fmt(day.close,2)}</td>
-    <td>${fmtK(day.volume)}</td>
-    <td class="${clr(oc)}">${sign(oc)}${fmt(oc,2)}</td>
-    <td class="${clr(ocp)}">${sign(ocp)}${fmt(ocp,2)}%</td>
-    <td>${fmt(rng,2)}</td><td>${fmt(rngp,2)}%</td>
-    <td class="${clr(oh)}">${sign(oh)}${fmt(oh,2)}</td>
-    <td class="${clr(ol)}">${sign(ol)}${fmt(ol,2)}</td>
-    <td class="${clr(hc)}">${sign(hc)}${fmt(hc,2)}</td>
-    <td class="${clr(lc)}">${sign(lc)}${fmt(lc,2)}</td>
-  </tr>`;}).join('');
+  if(id==='overview' && typeof _md!=='undefined' && _md) { try { renderOverview(_md); } catch(e){ console.warn('overview:',e); } }
+  if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
+  if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
+  if(id==='macro-overview') { try { if(typeof renderMacro==='function' && !window._macroRendered) { window._macroRendered=true; renderMacro(); } } catch(e){ console.warn('macro:',e); } }
+  if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
+  if(id==='ignition') { try { if(typeof loadIgnitionData==='function') loadIgnitionData(); } catch(e){ console.warn('ignition:',e); } }
+  if(id==='sovereign'||id==='sovereign-chess') { try { if(typeof renderSovereign==='function') renderSovereign(); } catch(e){ console.warn('sovereign:',e); } }
+  if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
+  if(id==='volstats') { try { renderVolStats(); } catch(e){ console.warn('volstats:',e); } }
+  if(id==='gex' && _md) { try { renderGEX(_md); renderGEXAdditions(_md); renderGEXDailyHistory(); } catch(e){ console.warn('gex:',e); } }
+  if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
+  if(id==='edgestats') { if(typeof renderEdgeStats==='function') renderEdgeStats(); }
+  if(id==='breadth' && _md && _sd) { try { renderBreadth(_md,_sd); } catch(e){} }
+  if(id==='volatility' && _md) { try { renderVolatility(_md); } catch(e){} }
+  if(id==='bonds' && _md) { try { renderBonds(_md); } catch(e){} }
+  if(id==='sentiment' && _md) { try { renderSentiment(_md); } catch(e){} }
+  if(id==='live-chart') { setTimeout(renderLiveChart, 50); }
+  if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
+  if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); }, 50); }
+  if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }
+  if(id==='gap-stats') { setTimeout(renderGapStats, 50); setTimeout(renderGapOHLCSections, 80); setTimeout(renderLargeGapStats, 100); }
+  if(id==='session-vol') { setTimeout(renderSessionVolStats, 50); }
+  if(id==='gex-intraday') { setTimeout(renderGEXIntradayMap, 50); }
+  if(id==='time-of-day') { setTimeout(renderTimeOfDay, 50); }
 }
 
+function switchTab(id){
+  const group = TAB_TO_GROUP[id];
+  if(group) { switchGroupTab(group, id); return; }
 
-// ─── PRICE HISTORY FILTER + SORT ─────────────────────────────────────────────
-let _phAllData = null;
+  // Hide subtab bar for non-group tabs
+  _activeGroup = null;
+  const bar = $('subtabBar');
+  if(bar) bar.style.display = 'none';
 
-function phSetFilter(mode, btn) {
-  document.querySelectorAll('#phFilterBtns .ph-fb').forEach(b => b.classList.remove('active'));
-  if(btn) btn.classList.add('active');
-  phApplyFilter(mode);
-}
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
-// ── DOW filter state ─────────────────────────────────────────────────────
-let _phActiveDows = new Set([1,2,3,4,5]); // Mon=1 … Fri=5 (JS getDay())
-
-function phToggleDow(dow, btn) {
-  if (_phActiveDows.has(dow)) {
-    _phActiveDows.delete(dow);
-    btn.classList.remove('active');
-  } else {
-    _phActiveDows.add(dow);
-    btn.classList.add('active');
-  }
-  phApplyFilter();
-}
-
-function phDowAll() {
-  _phActiveDows = new Set([1,2,3,4,5]);
-  document.querySelectorAll('#phDowBtns .ph-dow[data-dow]').forEach(b => {
-    if (!isNaN(Number(b.dataset.dow))) b.classList.add('active');
-    else b.classList.remove('active');
-  });
-  phApplyFilter();
-}
-
-function phDowNone() {
-  _phActiveDows = new Set();
-  document.querySelectorAll('#phDowBtns .ph-dow[data-dow]').forEach(b => {
-    b.classList.remove('active');
-  });
-  phApplyFilter();
-}
-
-function _getDow(dateStr) {
-  // Returns 1=Mon … 5=Fri. Use noon UTC to avoid timezone edge cases.
-  return new Date(dateStr + 'T12:00:00').getDay();
-}
-
-function phApplyFilter(mode) {
-  if(!_phAllData) return;
-  const sd = _phAllData;
-  const curYear = new Date().getFullYear();
-
-  if(!mode || typeof mode !== 'string') {
-    const active = document.querySelector('#phFilterBtns .ph-fb.active');
-    mode = active ? (active.textContent.includes('2020') ? '2020' : active.textContent.includes('YTD') ? 'ytd' : 'all') : 'all';
-  }
-
-  let filtered;
-  if(mode === '2020')     filtered = sd.filter(d => d.date && d.date >= '2020-01-01');
-  else if(mode === 'ytd') filtered = sd.filter(d => d.date && d.date.startsWith(String(curYear)));
-  else                    filtered = sd;
-
-  // DOW filter — skip if all 5 days selected (no-op)
-  if (_phActiveDows.size > 0 && _phActiveDows.size < 5) {
-    filtered = filtered.filter(d => d.date && _phActiveDows.has(_getDow(d.date)));
-  } else if (_phActiveDows.size === 0) {
-    filtered = []; // none selected — show nothing
-  }
-
-  // Sort
-  const sortVal = (document.getElementById('phSortCol') || {}).value || 'date_desc';
-  const km = {oc_pts:'open_to_close', range_pts:'day_range'};
-  const getM = (day, k) => { const m=day.measurements||{}; return m[k]!=null?m[k]:(m[km[k]]!=null?m[km[k]]:0); };
-  const sorted = [...filtered].sort((a,b) => {
-    switch(sortVal) {
-      case 'date_desc':  return (b.date||'').localeCompare(a.date||'');
-      case 'date_asc':   return (a.date||'').localeCompare(b.date||'');
-      case 'oc_desc':    return getM(b,'oc_pts') - getM(a,'oc_pts');
-      case 'oc_asc':     return getM(a,'oc_pts') - getM(b,'oc_pts');
-      case 'range_desc': return getM(b,'range_pts') - getM(a,'range_pts');
-      case 'range_asc':  return getM(a,'range_pts') - getM(b,'range_pts');
-      case 'vol_desc':   return (b.volume||0) - (a.volume||0);
-      case 'close_desc': return (b.close||0) - (a.close||0);
-      case 'close_asc':  return (a.close||0) - (b.close||0);
-      default: return 0;
+  // Find and activate tab button by onclick content — index lookup breaks with group-tabs in the list
+  document.querySelectorAll('.tab').forEach(t => {
+    const oc = t.getAttribute('onclick') || '';
+    if (oc.includes("switchTab('" + id + "')") || oc.includes('switchTab("' + id + '")')) {
+      t.classList.add('active');
     }
   });
 
-  const meta = document.getElementById('phFilterMeta');
-  if(meta) meta.textContent = sorted.length.toLocaleString() + ' sessions shown';
-
-  // Re-render ALL filterable sections with the sorted/filtered data
-  phRenderFiltered(sorted);
+  const p=$('panel-'+id); if(p)p.classList.add('active');
+  if(id==='media') initMediaTab();
+  if(id==='journal') renderJournalEntries();
+  if(id==='floor') {
+    if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50);
+    if(typeof FLOOR!=='undefined') FLOOR.tabUnread=0;
+    const b=document.getElementById('floor-tab-badge');
+    if(b){b.style.display='none';b.textContent='';}
+  }
+  if(id==='analog') { renderAnalog(); }
+  if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
+  if(id==='macro-overview') { try { if(typeof renderMacro==='function' && !window._macroRendered) { window._macroRendered=true; renderMacro(); } } catch(e){ console.warn('macro:',e); } }
+  if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
+  if(id==='ignition') { try { if(typeof loadIgnitionData==='function') loadIgnitionData(); } catch(e){ console.warn('ignition:',e); } }
+  if(id==='sovereign'||id==='sovereign-chess') { try { if(typeof renderSovereign==='function') renderSovereign(); } catch(e){ console.warn('sovereign:',e); } }
+  if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
 }
 
+// ── VIX bar marker ──
+function setVixNeedle(vix){
+  const pct=Math.min(Math.max((vix-10)/(45-10),0),1)*100;
+  const marker=$('vixBarMarker');
+  if(marker)marker.style.left=pct.toFixed(1)+'%';
+  let color,regime,bg;
+  if(vix<15){color='#00ff88';regime='LOW VOL';bg='rgba(0,255,136,0.12)';}
+  else if(vix<20){color='#88cc00';regime='CALM';bg='rgba(136,204,0,0.12)';}
+  else if(vix<25){color='#ffcc00';regime='ELEVATED';bg='rgba(255,204,0,0.12)';}
+  else if(vix<35){color='#ff8800';regime='HIGH VOL';bg='rgba(255,136,0,0.12)';}
+  else{color='#ff3355';regime='EXTREME';bg='rgba(255,51,85,0.15)';}
+  const v=$('vixValue'),r=$('vixRegime');
+  if(v){v.style.color=color;}
+  if(r){r.textContent=regime;r.style.color=color;r.style.background=bg;r.style.border=`1px solid ${color}44`;}
+}
 
-// ── TIME OF DAY STATS ─────────────────────────────────────────────────────────
-function renderTODStats() {
-  if (typeof TOD_STATS === 'undefined') return;
-  const T = TOD_STATS;
+// ── F&G bar marker ──
+function setFGNeedle(val){
+  const pct=Math.min(Math.max(val/100,0),1)*100;
+  const marker=$('fgBarMarker');
+  if(marker)marker.style.left=pct.toFixed(1)+'%';
+  let color,label;
+  if(val<=25){color='#ff3355';label='EXTREME FEAR';}
+  else if(val<=45){color='#ff8800';label='FEAR';}
+  else if(val<=55){color='#ffcc00';label='NEUTRAL';}
+  else if(val<=75){color='#88cc00';label='GREED';}
+  else{color='#00ff88';label='EXTREME GREED';}
+  const num=$('fgNumber'),lbl=$('fgLabel');
+  if(num){num.textContent=val;num.style.color=color;}
+  if(lbl){lbl.textContent=label;lbl.style.color=color;}
+}
 
-  // Map TOD_STATS shape → normalized locals
-  const totalDays    = T.days;
-  const dateRange    = T.date_range;
-  const hodBuckets   = T.hod.by_bucket;   // [{label, count, pct}, ...]
-  const lodBuckets   = T.lod.by_bucket;
-  const hodByDow     = T.hod.by_dow;      // [{dow, counts:[], pcts:[]}, ...]
-  const lodByDow     = T.lod.by_dow;
-  const seq          = T.sequence;        // {hod_before_lod, hod_after_lod, hod_same_lod}
+function setRegime(vix,fg,pcr){
+  let score=0;
+  if(vix<20)score+=2;else if(vix<25)score+=1;else if(vix>30)score-=2;else score-=1;
+  if(fg>55)score+=2;else if(fg>45)score+=1;else if(fg<30)score-=2;else score-=1;
+  if(pcr&&pcr<0.7)score+=1;else if(pcr&&pcr>1.1)score-=1;
+  let label,color;
+  if(score>=3){label='RISK ON';color='#00ff88';}
+  else if(score>=1){label='LEANING BULLISH';color='#88cc00';}
+  else if(score===0){label='NEUTRAL';color='#ffcc00';}
+  else if(score>=-2){label='CAUTIOUS';color='#ff8800';}
+  else{label='RISK OFF';color='#ff3355';}
+  const ring=$('regimeRing'),lbl=$('regimeLabel'),txt=$('regimeText');
+  if(ring){ring.style.borderColor=color;ring.style.boxShadow=`0 0 20px ${color}33`;}
+  if(lbl){lbl.textContent=label;lbl.style.color=color;}
+  if(txt){txt.textContent=score>=0?'▲':'▼';txt.style.color=color;txt.style.fontSize='28px';}
+  const sigs=$('regimeSignals');
+  if(sigs)sigs.innerHTML=`
+    <div class="sig-pill"><span class="sig-name">VIX</span><span class="sig-val ${vix<20?'up':vix>30?'dn':'neu'}">${fmt(vix,1)}</span></div>
+    <div class="sig-pill"><span class="sig-name">F&G</span><span class="sig-val ${fg>55?'up':fg<35?'dn':'neu'}">${fg||'—'}</span></div>
+    <div class="sig-pill"><span class="sig-name">PCR</span><span class="sig-val ${pcr&&pcr<0.7?'up':pcr&&pcr>1.1?'dn':'neu'}">${pcr?fmt(pcr,2):'—'}</span></div>
+    <div class="sig-pill"><span class="sig-name">SCORE</span><span class="sig-val ${score>0?'up':score<0?'dn':'neu'}">${score>0?'+'+score:score}</span></div>`;
+}
 
-  // Header meta
-  const daysEl = document.getElementById('todDays');
-  const rangeEl = document.getElementById('todRange');
-  if (daysEl) daysEl.textContent = totalDays + ' days';
-  if (rangeEl) rangeEl.textContent = dateRange.start + ' → ' + dateRange.end;
+function sectorColor(pct){
+  if(pct>=2)return{bg:'rgba(0,255,136,0.25)',border:'rgba(0,255,136,0.5)',text:'#00ff88'};
+  if(pct>=0.5)return{bg:'rgba(0,255,136,0.12)',border:'rgba(0,255,136,0.25)',text:'#88cc44'};
+  if(pct>=-0.5)return{bg:'rgba(255,255,255,0.04)',border:'rgba(255,255,255,0.1)',text:'#888899'};
+  if(pct>=-2)return{bg:'rgba(255,51,85,0.12)',border:'rgba(255,51,85,0.25)',text:'#cc4455'};
+  return{bg:'rgba(255,51,85,0.25)',border:'rgba(255,51,85,0.5)',text:'#ff3355'};
+}
 
-  // Color ramp
-  const bucketColors = [
-    '#ff8800', // 8:30-9:00   Open Auction
-    '#ffcc00', // 9:00-9:30   Early Open
-    '#00ff88', // 9:30-10:30  First Hour
-    '#00ccff', // 10:30-12:00 Mid Morning
-    '#8855ff', // 12:00-1:00  Lunch
-    '#00ccff', // 1:00-2:00   Early Afternoon
-    '#ffcc00', // 2:00-2:30   Pre-Close
-    '#ff5500', // 2:30-3:00   Close
+const SECTOR_NAMES={XLK:'Technology',XLF:'Financials',XLE:'Energy',XLV:'Health Care',XLI:'Industrials',XLY:'Cons. Discret.',XLP:'Cons. Staples',XLB:'Materials',XLRE:'Real Estate',XLU:'Utilities',XLC:'Comm. Svcs.'};
+
+function setPCR(pcr){
+  const el=$('pcrNumber'),lbl=$('pcrLabel'),fill=$('pcrFill');if(!el)return;
+  el.textContent=fmt(pcr,2);
+  let color,label,fillH;
+  if(pcr<0.7){color='#00ff88';label='BULLISH SIGNAL';fillH=Math.min(pcr/2*100,50);}
+  else if(pcr<1.0){color='#ffcc00';label='NEUTRAL';fillH=50;}
+  else{color='#ff3355';label='BEARISH SIGNAL';fillH=Math.min(pcr/2*100,100);}
+  el.style.color=color;
+  if(lbl){lbl.textContent=label;lbl.style.color=color;}
+  if(fill){fill.style.height=fillH+'%';fill.style.background=`linear-gradient(to top,${color}88,${color}33)`;}
+}
+
+// ─────────────────────────────────────────────
+// RENDER FUNCTIONS
+// ─────────────────────────────────────────────
+
+function renderHub(md,sd){
+  const q=md.quotes||{},spy=q['SPY']||{},fg=md.fear_greed||{},vixQ=q['^VIX']||{},vix=vixQ.price||0;
+
+  // Top bar
+  const topP=$('topPrice');
+  topP.textContent=spy.price?'$'+fmt(spy.price,2):'—';
+  topP.className='spy-price '+(spy.change<0?'dn':'');
+  $('topDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+
+  // Ticker
+  const tSym=['SPY','QQQ','IWM','DIA','^VIX','BTC-USD','GC=F','CL=F','DX-Y.NYB','^TNX'];
+  const tLbl={'BTC-USD':'BTC','GC=F':'GOLD','CL=F':'OIL','DX-Y.NYB':'DXY','^VIX':'VIX','^TNX':'10YR'};
+  let th=tSym.map(s=>{const d=q[s]||{};if(!d.price)return '';const l=tLbl[s]||s;const c=d.change>=0?'up':'dn';return `<span class="tick-item"><span class="tick-sym">${l}</span><span class="tick-price">$${fmt(d.price,2)}</span><span class="tick-chg ${c}">${sign(d.change)}${fmt(d.pct_change,2)}%</span></span>`;}).join('');
+  const inner=$('tickerInner');inner.innerHTML=th+th;
+
+  // Trading Day Tracker
+  const now = new Date();
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const dayName = days[now.getDay()];
+  const isWeekend = now.getDay()===0||now.getDay()===6;
+
+  // Get times in each timezone
+  const etNow  = new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const ctNow  = new Date(now.toLocaleString('en-US',{timeZone:'America/Chicago'}));
+  const lonNow = new Date(now.toLocaleString('en-US',{timeZone:'Europe/London'}));
+  const tokyoNow = new Date(now.toLocaleString('en-US',{timeZone:'Asia/Tokyo'}));
+
+  const etH = etNow.getHours(), etM = etNow.getMinutes();
+  const ctH = ctNow.getHours(), ctM = ctNow.getMinutes(), ctS = ctNow.getSeconds();
+
+  // US session times (ET)
+  // Pre-market: 4:00 AM - 9:30 AM ET
+  // Regular:    9:30 AM - 4:00 PM ET
+  // After-hours:4:00 PM - 8:00 PM ET
+  // Overnight:  8:00 PM - 4:00 AM ET
+  const etMins = etH*60+etM;
+  const isPremarket  = !isWeekend && etMins >= 4*60   && etMins < 9*60+30;
+  const isMarketHours= !isWeekend && etMins >= 9*60+30 && etMins < 16*60;
+  const isAfterHours = !isWeekend && etMins >= 16*60   && etMins < 20*60;
+  const isOvernight  = !isMarketHours && !isPremarket && !isAfterHours;
+
+  let sessionLabel, sessionColor;
+  if(isWeekend)      {sessionLabel='WEEKEND';     sessionColor='#606080';}
+  else if(isPremarket)   {sessionLabel='PRE-MARKET';  sessionColor='#ffcc00';}
+  else if(isMarketHours) {sessionLabel='MARKET OPEN'; sessionColor='#00ff88';}
+  else if(isAfterHours)  {sessionLabel='AFTER HOURS'; sessionColor='#ff8800';}
+  else                   {sessionLabel='OVERNIGHT';   sessionColor='#606080';}
+
+  // Global sessions (all times local to each city)
+  const lonH = lonNow.getHours(), lonM = lonNow.getMinutes();
+  const lonMins = lonH*60+lonM;
+  const lonDow = lonNow.getDay();
+  const lonWeekend = lonDow===0||lonDow===6;
+  // London: 8:00 AM - 4:30 PM London time
+  const lonOpen = 8*60, lonClose = 16*60+30;
+  const lonIsOpen = !lonWeekend && lonMins>=lonOpen && lonMins<lonClose;
+  const lonIsPremarket = !lonWeekend && lonMins>=7*60 && lonMins<lonOpen;
+  const lonStatus = lonWeekend?'CLOSED':lonIsOpen?'OPEN':lonIsPremarket?'PRE':'CLOSED';
+  const lonColor = lonIsOpen?'#00ff88':lonIsPremarket?'#ffcc00':'#606080';
+  const lonTimeStr = lonNow.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+
+  const tokyoH = tokyoNow.getHours(), tokyoM = tokyoNow.getMinutes();
+  const tokyoMins = tokyoH*60+tokyoM;
+  const tokyoDow = tokyoNow.getDay();
+  const tokyoWeekend = tokyoDow===0||tokyoDow===6;
+  // Tokyo: 9:00 AM - 3:00 PM Tokyo time (closed 11:30-12:30 lunch)
+  const tokyoOpen = 9*60, tokyoClose = 15*60;
+  const tokyoLunch = tokyoMins>=11*60+30 && tokyoMins<12*60+30;
+  const tokyoIsOpen = !tokyoWeekend && tokyoMins>=tokyoOpen && tokyoMins<tokyoClose && !tokyoLunch;
+  const tokyoIsPremarket = !tokyoWeekend && tokyoMins>=8*60 && tokyoMins<tokyoOpen;
+  const tokyoStatus = tokyoWeekend?'CLOSED':tokyoIsOpen?'OPEN':tokyoIsPremarket?'PRE':tokyoLunch?'LUNCH':'CLOSED';
+  const tokyoColor = tokyoIsOpen?'#00ff88':tokyoIsPremarket?'#ffcc00':tokyoLunch?'#ff8800':'#606080';
+  const tokyoTimeStr = tokyoNow.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+
+  // Countdown helper
+  const secsUntilMins = (targetMins) => {
+    const nowMins = ctH*60+ctM;
+    const diff = (targetMins - nowMins)*60 - ctS;
+    return Math.max(0, diff);
+  };
+
+  // Market holidays 2026
+  const holidays = [
+    { date: '2026-01-01', name: "New Year's Day" },
+    { date: '2026-01-19', name: 'MLK Day' },
+    { date: '2026-02-16', name: "Presidents' Day" },
+    { date: '2026-04-03', name: 'Good Friday' },
+    { date: '2026-05-25', name: 'Memorial Day' },
+    { date: '2026-06-19', name: 'Juneteenth' },
+    { date: '2026-07-04', name: 'Independence Day' },
+    { date: '2026-07-03', name: 'Independence Day (observed)' },
+    { date: '2026-09-07', name: 'Labor Day' },
+    { date: '2026-11-26', name: 'Thanksgiving' },
+    { date: '2026-11-27', name: 'Thanksgiving (half day)' },
+    { date: '2026-12-25', name: 'Christmas' },
   ];
+  const todayStr = now.toISOString().split('T')[0];
+  const upcomingHolidays = holidays
+    .filter(h => h.date >= todayStr)
+    .sort((a,b) => a.date.localeCompare(b.date))
+    .slice(0, 4);
 
-  function buildBucketChart(containerId, buckets) {
-    const el = document.getElementById(containerId);
-    if (!el) return;
-    const maxPct = Math.max(...buckets.map(b => b.pct), 1);
-    const topBucket = buckets.reduce((a, b) => b.pct > a.pct ? b : a, buckets[0]);
+  // Next holiday
+  const nextHol = upcomingHolidays[0];
+  const nextHolDays = nextHol ? Math.round((new Date(nextHol.date+'T12:00:00') - now) / 86400000) : null;
 
-    el.innerHTML = buckets.map((b, i) => {
-      const barW = Math.round(b.pct / maxPct * 100);
-      const isTop = b.label === topBucket.label;
-      const c = bucketColors[i];
-      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;${isTop ? 'background:rgba(255,255,255,0.03);border-radius:3px;padding:1px 3px;' : 'padding:1px 3px;'}">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isTop ? c : 'var(--text3)'};width:78px;flex-shrink:0;white-space:nowrap;">${b.label}${isTop ? ' ★' : ''}</div>
-        <div style="flex:1;height:18px;background:var(--bg3);border-radius:2px;overflow:hidden;position:relative;">
-          <div style="width:${barW}%;height:100%;background:${c}${isTop ? 'ee' : '77'};border-radius:2px;"></div>
+  // Countdown to next US market event
+  let countdownSecs = 0;
+  let countdownLabel = '';
+  let countdownColor = '#606080';
+  const marketOpenCT = 8*60+30, marketCloseCT = 15*60, nowMins = ctH*60+ctM;
+
+  if(isMarketHours){
+    countdownSecs = Math.max(0, (marketCloseCT - nowMins)*60 - ctS);
+    countdownLabel = 'CLOSES IN';
+    countdownColor = '#00ff88';
+  } else if(isPremarket){
+    countdownSecs = Math.max(0, (marketOpenCT - nowMins)*60 - ctS);
+    countdownLabel = 'OPENS IN';
+    countdownColor = '#ffcc00';
+  } else {
+    // Find next 8:30 CT on a weekday
+    const target = new Date(ctNow);
+    target.setHours(8, 30, 0, 0);
+    if(target <= ctNow) target.setDate(target.getDate() + 1);
+    while(target.getDay()===0||target.getDay()===6) target.setDate(target.getDate()+1);
+    countdownSecs = Math.max(0, Math.floor((target - ctNow)/1000));
+    countdownLabel = 'OPENS IN';
+    countdownColor = '#ffcc00'; // always yellow for OPENS IN
+  }
+
+  const dateStr = now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  const timeStr = ctNow.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZoneName:'short'});
+
+  const fmtCountdown = s => {
+    s = Math.max(0, Math.floor(s));
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+    if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  };
+
+  $('hubDayTracker').innerHTML=`
+    <div class="panel" style="border-left:4px solid ${sessionColor};">
+      <div style="display:grid;grid-template-columns:auto auto auto 1fr auto auto auto;gap:16px;align-items:center;">
+        <div>
+          <div id="hubSessionLabel" style="font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:${sessionColor};letter-spacing:2px;cursor:pointer;" title="Click 3x for local weather">${sessionLabel}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text2);margin-top:4px;cursor:default;">${dateStr}</div>
         </div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${isTop ? c : 'var(--text2)'};width:42px;text-align:right;font-weight:${isTop ? 'bold' : 'normal'};">${b.pct.toFixed(1)}%</div>
-        <div style="font-size:10px;color:var(--text3);width:28px;text-align:right;">${b.count}</div>
-      </div>`;
-    }).join('') +
-    `<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-top:4px;padding:0 3px;">
-      <span>★ Most common: <span style="color:${bucketColors[buckets.indexOf(topBucket)]};">${topBucket.label}</span></span>
-      <span>${topBucket.pct.toFixed(1)}% of days</span>
+        <div id="hubClockBlock" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click 3x for live news">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);letter-spacing:1px;margin-bottom:2px;">CT TIME</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:var(--text);" id="hubClock">${timeStr}</div>
+        </div>
+        <div id="hubCountdownBlock" style="border-left:1px solid var(--border);padding-left:16px;text-align:center;cursor:pointer;" title="Click 3x for quote of the day">
+          <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:${countdownColor};margin-bottom:4px;">${countdownLabel}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:${countdownColor};letter-spacing:2px;" id="hubCountdown">${fmtCountdown(countdownSecs)}</div>
+        </div>
+        <div></div>
+        <!-- LONDON SESSION -->
+        <div style="border-left:1px solid var(--border);padding-left:16px;">
+        <div id="hubLonBlock" onclick="openCityCam('london')" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for London live cam">
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${lonIsOpen?'#00ff88':lonStatus==='CLOSED'?'#ff3355':'var(--text3)'};">LONDON</span>
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${lonColor};background:${lonColor}22;">${lonStatus}</span>
+          </div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${lonIsOpen?'#00ff88':lonStatus==='CLOSED'?'#ff3355':lonColor};" id="hubLonClock">${lonTimeStr}</div>
+          <div style="font-size:11px;color:${lonIsOpen?'#00ff88':lonIsPremarket?'#ffcc00':'#ff3355'};margin-top:2px;">${lonIsOpen?`Closes in ${Math.floor((lonClose-lonMins)/60)}h ${(lonClose-lonMins)%60}m`:lonIsPremarket?`Opens in ${Math.floor((lonOpen-lonMins)/60)}h ${(lonOpen-lonMins)%60}m`:'Closed'}</div>
+        </div>
+        <!-- TOKYO SESSION -->
+        <div style="border-left:1px solid var(--border);padding-left:16px;">
+        <div id="hubTokyoBlock" onclick="openCityCam('tokyo')" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for Tokyo live cam">
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${tokyoIsOpen?'#00ff88':tokyoStatus==='CLOSED'?'#ff3355':'var(--text3)'};">TOKYO</span>
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${tokyoColor};background:${tokyoColor}22;">${tokyoStatus}</span>
+          </div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${tokyoIsOpen?'#00ff88':tokyoStatus==='CLOSED'?'#ff3355':tokyoColor};" id="hubTokyoClock">${tokyoTimeStr}</div>
+          <div style="font-size:11px;color:${tokyoIsOpen?'#00ff88':tokyoIsPremarket?'#ffcc00':tokyoLunch?'#ff8800':'#ff3355'};margin-top:2px;">${tokyoIsOpen?`Closes in ${Math.floor((tokyoClose-tokyoMins)/60)}h ${(tokyoClose-tokyoMins)%60}m`:tokyoIsPremarket?`Opens in ${Math.floor((tokyoOpen-tokyoMins)/60)}h ${(tokyoOpen-tokyoMins)%60}m`:tokyoLunch?'Lunch break':'Closed'}</div>
+        </div>
+        <!-- NEW YORK SESSION STATUS -->
+        <div style="border-left:1px solid var(--border);padding-left:16px;">
+        <div id="hubNYBlock" onclick="openCityCam('newyork')" onmousedown="_nyLongPressStart()" onmouseup="_nyLongPressCancel()" onmouseleave="_nyLongPressCancel()" ontouchstart="_nyLongPressStart()" ontouchend="_nyLongPressCancel()" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for New York live cam | Hold for music">
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${isMarketHours?'#00ff88':(!isMarketHours&&!isPremarket&&!isAfterHours)?'#ff3355':'var(--text3)'};">NEW YORK</span>
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${sessionColor};background:${sessionColor}22;">${isMarketHours?'OPEN':isPremarket?'PRE':'CLOSED'}</span>
+          </div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${isMarketHours?'#00ff88':(!isMarketHours&&!isPremarket&&!isAfterHours)?'#ff3355':sessionColor};" id="hubEtClock">${etNow.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})}</div>
+          <div style="font-size:11px;color:${isMarketHours?'#00ff88':isPremarket?'#ffcc00':'#ff3355'};margin-top:2px;">9:30–16:00 ET · 8:30–15:00 CT</div>
+        </div>
+      </div>
+      ${upcomingHolidays.length ? `
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#ffcc00;">UPCOMING CLOSURES:</span>
+        ${upcomingHolidays.map(h=>{
+          const d=new Date(h.date+'T12:00:00');
+          const dstr=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+          const days=Math.round((d-now)/86400000);
+          const halfDay=h.name.includes('half');
+          const c=days<=7?'#ff8800':days<=14?'#ffcc00':'#ffcc00';
+          return `<div style="background:var(--bg3);border:1px solid ${days<=7?'rgba(255,136,0,0.3)':'rgba(255,204,0,0.2)'};border-radius:3px;padding:4px 10px;display:flex;gap:8px;align-items:center;">
+            <span style="font-family:'Orbitron',monospace;font-size:9px;color:${c};">${dstr}</span>
+            <span style="font-size:12px;color:#ffcc00;">${h.name}</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${c};">${days}d</span>
+            ${halfDay?`<span style="font-family:'Orbitron',monospace;font-size:8px;color:#ff8800;padding:1px 4px;background:rgba(255,136,0,0.15);border-radius:2px;">HALF</span>`:''}
+          </div>`;
+        }).join('')}
+      </div>` : ''}
     </div>`;
+
+  // Live clock + countdown ticker
+  // Guard: only create one interval ever — renderHub is called on every refresh
+  // cycle (every 15s) so without this guard we'd stack up dozens of competing
+  // intervals all flashing different countdown values simultaneously.
+  window._hubCountdownSecs = countdownSecs; // always resync to current time on renderHub call
+  if (!window._hubClockInterval) {
+    window._hubClockInterval = setInterval(()=>{
+      const t = new Date();
+      const c=$('hubClock');
+      if(c) c.textContent=new Date(t.toLocaleString('en-US',{timeZone:'America/Chicago'}))
+        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});
+      const lc=$('hubLonClock');
+      if(lc) lc.textContent=new Date(t.toLocaleString('en-US',{timeZone:'Europe/London'}))
+        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'});
+      const tc=$('hubTokyoClock');
+      if(tc) tc.textContent=new Date(t.toLocaleString('en-US',{timeZone:'Asia/Tokyo'}))
+        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Tokyo'});
+      const ec=$('hubEtClock');
+      if(ec) ec.textContent=new Date(t.toLocaleString('en-US',{timeZone:'America/New_York'}))
+        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/New_York'});
+      const cd=$('hubCountdown');
+      if(cd && window._hubCountdownSecs>0){
+        window._hubCountdownSecs--;
+        cd.textContent=fmtCountdown(window._hubCountdownSecs);
+        if(window._hubCountdownSecs<=300) cd.style.color='#ff3355';
+      }
+    },1000);
   }
 
-  buildBucketChart('todHodChart', hodBuckets);
-  buildBucketChart('todLodChart', lodBuckets);
-
-  // Sequence panel — derive stats from TOD_STATS.sequence + hod/lod bucket data
-  const seqEl = document.getElementById('todSequencePanel');
-  if (seqEl && seq) {
-    const hodBeforeLodPct = seq.hod_before_lod ? seq.hod_before_lod.pct : 0;
-    const hodAfterLodPct  = seq.hod_after_lod  ? seq.hod_after_lod.pct  : 0;
-    const lodBeforeHodPct = hodAfterLodPct; // LOD before HOD = HOD after LOD
-    // first/last 30-min pcts come from the bucket arrays directly
-    const hodFirst30 = T.hod.pct_first30 != null ? T.hod.pct_first30 : hodBuckets[0].pct;
-    const hodLast30  = T.hod.pct_last30  != null ? T.hod.pct_last30  : hodBuckets[hodBuckets.length-1].pct;
-    const lodFirst30 = T.lod.pct_first30 != null ? T.lod.pct_first30 : lodBuckets[0].pct;
-    const lodLast30  = T.lod.pct_last30  != null ? T.lod.pct_last30  : lodBuckets[lodBuckets.length-1].pct;
-
-    const hodTopBucket = hodBuckets.reduce((a, b) => b.pct > a.pct ? b : a);
-    const lodTopBucket = lodBuckets.reduce((a, b) => b.pct > a.pct ? b : a);
-
-    seqEl.innerHTML = `
-      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.7;font-family:'Share Tech Mono',monospace;">
-        Based on ${totalDays} days of 1-minute SPY bars (CT time).
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">
-        ${[
-          {l:'LOD sets before HOD', v: lodBeforeHodPct.toFixed(1)+'%', c:'#ff3355'},
-          {l:'HOD sets before LOD', v: hodBeforeLodPct.toFixed(1)+'%', c:'#00ff88'},
-          {l:'HOD in first 30 min', v: hodFirst30.toFixed(1)+'%',      c:'#ffcc00'},
-          {l:'LOD in first 30 min', v: lodFirst30.toFixed(1)+'%',      c:'#ffcc00'},
-          {l:'HOD in last 30 min',  v: hodLast30.toFixed(1)+'%',       c:'#ff8800'},
-          {l:'LOD in last 30 min',  v: lodLast30.toFixed(1)+'%',       c:'#ff8800'},
-        ].map(x => `<div style="background:var(--bg3);border-radius:3px;padding:7px 9px;">
-          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">${x.l}</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${x.c};">${x.v}</div>
-        </div>`).join('')}
-      </div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.6;background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:3px solid var(--cyan);">
-        <strong style="color:var(--text2);">Key insight:</strong>
-        Most common HOD window: <strong style="color:#00ff88;">${hodTopBucket.label} (${hodTopBucket.pct.toFixed(1)}%)</strong>.
-        Most common LOD window: <strong style="color:#ff3355;">${lodTopBucket.label} (${lodTopBucket.pct.toFixed(1)}%)</strong>.
-        LOD is set before HOD ${lodBeforeHodPct.toFixed(0)}% of the time — meaning the day tends to find its low first, then rally.
-        ${hodFirst30 > 15 || lodFirst30 > 15
-          ? `The first 30 min (8:30–9:00 CT) sets the HOD ${hodFirst30.toFixed(0)}% of the time and LOD ${lodFirst30.toFixed(0)}% — the open auction is the single most important window.`
-          : ''}
-      </div>`;
+  // VIX + F&G (compact versions in hub)
+  if(vix){
+    $('hubVixVal').textContent=fmt(vix,1);
+    $('hubVixVal').style.color=vix<15?'#00ff88':vix<20?'#88cc00':vix<25?'#ffcc00':vix<35?'#ff8800':'#ff3355';
+    $('hubVixMarker').style.left=Math.min((vix-10)/35*100,98)+'%';
+    $('hubVixRegime').textContent=vix<15?'LOW VOL':vix<20?'CALM':vix<25?'ELEVATED':vix<35?'HIGH VOL':'EXTREME';
+    $('hubVixRegime').style.color=vix<15?'#00ff88':vix<20?'#88cc00':vix<25?'#ffcc00':vix<35?'#ff8800':'#ff3355';
+    setVixNeedle(vix);
   }
+  const fgVal=fg.value!=null?fg.value:fg.score;
+  if(fgVal!=null) setFGNeedle(fgVal);
 
-  // DOW panel — derive top bucket per day from by_dow arrays
-  const dowEl = document.getElementById('todDowPanel');
-  if (dowEl && hodByDow && lodByDow) {
-    const bucketLabels = T.buckets;
-    const dowRows = hodByDow.map((hd, i) => {
-      const ld = lodByDow[i];
-      // Find index of max pct for HOD
-      const hodMaxIdx = hd.pcts.indexOf(Math.max(...hd.pcts));
-      const lodMaxIdx = ld.pcts.indexOf(Math.max(...ld.pcts));
-      const hodTopLabel = bucketLabels[hodMaxIdx] || '—';
-      const lodTopLabel = bucketLabels[lodMaxIdx] || '—';
-      const hodTopPct   = hd.pcts[hodMaxIdx] || 0;
-      const lodTopPct   = ld.pcts[lodMaxIdx] || 0;
-      const nDays = hd.counts.reduce((a, b) => a + b, 0);
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)22;">
-        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--text2);width:30px;">${hd.dow}</div>
-        <div style="flex:1;">
-          <div style="font-size:10px;color:#00ff88;margin-bottom:2px;">HOD: <strong>${hodTopLabel}</strong> <span style="color:var(--text3);">(${hodTopPct.toFixed(0)}%)</span></div>
-          <div style="font-size:10px;color:#ff3355;">LOD: <strong>${lodTopLabel}</strong> <span style="color:var(--text3);">(${lodTopPct.toFixed(0)}%)</span></div>
-        </div>
-        <div style="text-align:right;font-size:9px;color:var(--text3);">${nDays} days</div>
+  // PCR + Regime
+  const pcr=md.options_summary?.pc_ratio_vol;
+  setRegime(vix||20,fgVal||50,pcr);
+  if(pcr) setPCR(pcr);
+
+  // Calendar
+  const cal=md.econ_calendar||[];
+  const renderCal = (events) => {
+    if (!events || !events.length) { $('calList').innerHTML='<div class="cal-empty">No data</div>'; return; }
+    const impactRank = i => { const s=(i||'').toLowerCase(); return s==='high'?0:s==='medium'||s==='med'?1:2; };
+    const toShow = [...events].sort((a,b) => {
+      const dateTimeCmp = (a.date+a.time).localeCompare(b.date+b.time);
+      if (dateTimeCmp !== 0) return dateTimeCmp;
+      return impactRank(a.impact) - impactRank(b.impact);
+    });
+    const etToCt = t => { if(!t||!t.includes(':'))return t; const [h,m]=t.split(':').map(Number); return `${String(h-1).padStart(2,'0')}:${String(m).padStart(2,'0')} CT`; };
+    const dayN = d => { if(!d)return ''; return ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date(d+'T12:00:00').getDay()]; };
+    const shortD = d => { if(!d)return ''; const [y,mo,dd]=d.split('-'); return `${mo}/${dd}`; };
+    $('calList').style.maxHeight='320px';
+    $('calList').style.overflowY='auto';
+    $('calList').innerHTML=toShow.map(ev=>{
+      const ic=ev.impact==='High'||ev.impact==='high'?'#ff3355':ev.impact==='Medium'||ev.impact==='med'?'#ffcc00':'#606060';
+      return `<div style="display:grid;grid-template-columns:70px 60px 60px 1fr;gap:6px;align-items:center;padding:6px 8px;border-left:3px solid ${ic};background:var(--bg3);border-radius:0 3px 3px 0;margin-bottom:4px;font-size:13px;">
+        <span style="font-family:'Share Tech Mono',monospace;color:var(--cyan);font-size:11px;">${dayN(ev.date)} ${shortD(ev.date)}</span>
+        <span style="font-family:'Share Tech Mono',monospace;color:var(--text2);font-size:11px;">${etToCt(ev.time)}</span>
+        <span style="font-family:'Orbitron',monospace;font-size:8px;color:${ic};padding:2px 4px;background:${ic}22;border-radius:2px;">${ev.impact||'LOW'}</span>
+        <span style="color:var(--text)">${ev.event||ev.title||'—'}</span>
       </div>`;
     }).join('');
-    dowEl.innerHTML = `
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-family:'Share Tech Mono',monospace;">Most common bucket for HOD and LOD by day of week.</div>
-      ${dowRows}`;
+  };
+  renderCal(cal);
+  // Initial fetch + re-fetch every 30 min so calendar stays current across week boundary
+  const _doCalFetch = () => fetch('/cal?t='+Date.now()).then(r=>r.ok?r.json():null).then(d=>{ if(d&&d.events&&d.events.length>0) renderCal(d.events); }).catch(()=>{});
+  _doCalFetch();
+  if(!window._calRefreshTimer) window._calRefreshTimer = setInterval(_doCalFetch, 30 * 60 * 1000);
+
+  // News feed + narrative + radar
+  loadHubNews();
+  loadFuturesChart();
+  try { renderHubEventInsight(); } catch(e) { console.warn('eventInsight:', e); }
+}
+
+async function loadHubNews() {
+  const el = $('hubNews');
+  if(!el) return;
+  try {
+    const r = await fetch('/news?t='+Date.now());
+    if(!r.ok) throw new Error('News fetch failed');
+    const d = await r.json();
+    if(!d.items || d.items.length===0) throw new Error('No items');
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px;">
+        ${d.items.slice(0,8).map(item => `
+          <div style="padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;border-left:3px solid var(--border2);">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--cyan);margin-bottom:3px;">${item.source} · ${item.timeAgo}</div>
+            <div style="font-size:13px;color:var(--text);line-height:1.4;font-weight:600;">${item.title}</div>
+          </div>`).join('')}
+      </div>
+      <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:6px;">
+        ${d.sources.join(' · ')} · Refreshes every 5 min
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="no-data">News unavailable — deploy functions/news.js to enable</div>`;
   }
 }
 
-// ─── VOLUME HISTORY FILTER + DOW ─────────────────────────────────────────────
-let _vhAllData  = null;
-let _vhActiveDows = new Set([1,2,3,4,5]);
 
-function vhSetFilter(mode, btn) {
-  document.querySelectorAll('#vhFilterBtns .ph-fb').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  vhApplyFilter(mode);
+// ── Hub Narrator — live scrolling market feed ─────────────────────────────
+function initHubRadar() {
+  const canvas = $('hubRadar');
+  if(!canvas) return;
+  const md = _md || {};
+  const q = md.quotes || {};
+  const spy = q['SPY'] || {};
+  const gex = md.gex || {};
+  const wems = md.weekly_em || [];
+  const wem = wems.find(w => !w.week_close) || wems[0];
+  const vix = q['^VIX']?.price || 20;
+  const fg = md.fear_greed || {};
+  const fgVal = fg.value != null ? fg.value : fg.score || 50;
+
+  const size = Math.min(canvas.parentElement.offsetWidth, 200);
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const cx = size/2, cy = size/2, maxR = size/2 - 16;
+
+  // Key price levels mapped to radar rings
+  const spot = spy.price || wem?.wem_mid || 650;
+  const wemLow = wem?.wem_low || spot * 0.98;
+  const wemHigh = wem?.wem_high || spot * 1.02;
+  const gexFlip = gex.flip_point || spot;
+  const gexSup = gex.support || spot * 0.99;
+  const gexRes = gex.resistance || spot * 1.01;
+
+  // Price range for radar (WEM range + 20% buffer)
+  const priceRange = (wemHigh - wemLow) * 1.4;
+  const priceMin = spot - priceRange/2;
+  const priceToR = p => Math.max(0, Math.min(maxR, ((p - priceMin) / priceRange) * maxR * 1.8));
+
+  // Regime color
+  const regimeColor = vix < 20 ? '#00ff88' : vix < 30 ? '#ffcc00' : '#ff3355';
+  const fgColor = fgVal > 55 ? '#00ff88' : fgVal > 45 ? '#ffcc00' : '#ff3355';
+
+  let angle = 0;
+  let sweepAngle = 0;
+  let blips = [];
+
+  // Generate blips from real levels
+  const addBlip = (price, label, color, size2) => {
+    const r = priceToR(price);
+    const a = Math.random() * Math.PI * 2;
+    blips.push({ r, a, label, color, size: size2, alpha: 0, maxAlpha: 0.9, born: sweepAngle });
+  };
+
+  addBlip(spot,    'SPY',  '#ffffff', 5);
+  addBlip(gexFlip, 'FLIP', '#00ccff', 4);
+  addBlip(gexSup,  'SUP',  '#00ff88', 3.5);
+  addBlip(gexRes,  'RES',  '#ff3355', 3.5);
+  addBlip(wemLow,  'WEM-', '#ff335588', 3);
+  addBlip(wemHigh, 'WEM+', '#00ff8888', 3);
+  if(md.max_pain?.[0]?.max_pain) addBlip(md.max_pain[0].max_pain, 'PAIN', '#ff8800', 3.5);
+
+  const draw = () => {
+    ctx.clearRect(0, 0, size, size);
+
+    // Background
+    ctx.fillStyle = '#050508';
+    ctx.fillRect(0, 0, size, size);
+
+    // Radar rings
+    for(let i=1; i<=4; i++) {
+      const r = (maxR/4)*i;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(0,204,255,${0.06 + i*0.02})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Cross hairs
+    ctx.strokeStyle = 'rgba(0,204,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx-maxR, cy); ctx.lineTo(cx+maxR, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy-maxR); ctx.lineTo(cx, cy+maxR); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx-maxR*0.7, cy-maxR*0.7); ctx.lineTo(cx+maxR*0.7, cy+maxR*0.7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+maxR*0.7, cy-maxR*0.7); ctx.lineTo(cx-maxR*0.7, cy+maxR*0.7); ctx.stroke();
+
+    // Sweep gradient
+    const sweepGrad = ctx.createConicalGradient ? null : null;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(sweepAngle);
+    const grad = ctx.createLinearGradient(0, -maxR, 0, 0);
+    grad.addColorStop(0, `${regimeColor}00`);
+    grad.addColorStop(0.7, `${regimeColor}15`);
+    grad.addColorStop(1, `${regimeColor}35`);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, maxR, -Math.PI/2, -Math.PI/2 + Math.PI*0.35);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Sweep line
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -maxR);
+    ctx.strokeStyle = regimeColor;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = regimeColor;
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Blips — fade in when sweep passes, fade out over time
+    blips.forEach(b => {
+      let angleDiff = ((sweepAngle - b.a) % (Math.PI*2) + Math.PI*2) % (Math.PI*2);
+      if(angleDiff < 0.3) b.alpha = Math.min(b.maxAlpha, b.alpha + 0.15);
+      else b.alpha = Math.max(0, b.alpha - 0.005);
+
+      if(b.alpha <= 0) return;
+
+      const bx = cx + Math.cos(b.a) * b.r;
+      const by = cy + Math.sin(b.a) * b.r;
+
+      // Blip glow
+      ctx.beginPath();
+      ctx.arc(bx, by, b.size*2.5, 0, Math.PI*2);
+      ctx.fillStyle = b.color.replace(/[\d.]+\)$/, `${b.alpha*0.3})`).replace(/^#/, '').length > 6 ?
+        b.color : `${b.color}${Math.round(b.alpha*0.3*255).toString(16).padStart(2,'0')}`;
+      ctx.fill();
+
+      // Blip dot
+      ctx.beginPath();
+      ctx.arc(bx, by, b.size, 0, Math.PI*2);
+      ctx.fillStyle = b.color.length === 7 ? b.color + Math.round(b.alpha*255).toString(16).padStart(2,'0') : b.color;
+      ctx.shadowColor = b.color;
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Label
+      if(b.alpha > 0.3) {
+        ctx.font = `bold 8px 'Orbitron', monospace`;
+        ctx.fillStyle = `rgba(255,255,255,${b.alpha * 0.9})`;
+        ctx.fillText(b.label, bx + b.size + 3, by + 3);
+      }
+    });
+
+    // Center dot — SPY position
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3, 0, Math.PI*2);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Price label at center
+    ctx.font = `bold 10px 'Share Tech Mono', monospace`;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.textAlign = 'center';
+    ctx.fillText(`$${spot.toFixed(2)}`, cx, cy - 8);
+    ctx.textAlign = 'left';
+
+    // VIX label bottom
+    ctx.font = `9px 'Orbitron', monospace`;
+    ctx.fillStyle = `${regimeColor}88`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`VIX ${vix.toFixed(1)}  ·  F&G ${fgVal}`, cx, size - 4);
+    ctx.textAlign = 'left';
+
+    sweepAngle = (sweepAngle + 0.025) % (Math.PI*2);
+    requestAnimationFrame(draw);
+  };
+
+  draw();
 }
 
-function vhToggleDow(dow, btn) {
-  if (_vhActiveDows.has(dow)) {
-    _vhActiveDows.delete(dow);
-    btn.classList.remove('active');
-  } else {
-    _vhActiveDows.add(dow);
-    btn.classList.add('active');
-  }
-  vhApplyFilter();
+
+function startWeatherScroll(el, text) {
+  el.style.display = 'inline-block';
+  el.innerHTML = `<span style="padding-right:60px;">${text}</span>`;
+  // Animate
+  let pos = 0;
+  const speed = 0.4;
+  const totalW = el.scrollWidth / 2; // text is doubled so we loop at half
+  if(window._weatherScrollInterval) clearInterval(window._weatherScrollInterval);
+  el.parentElement.style.overflow = 'hidden';
+  window._weatherScrollInterval = setInterval(() => {
+    pos += speed;
+    if(pos >= totalW) pos = 0;
+    el.style.transform = `translateX(-${pos}px)`;
+  }, 16);
 }
 
-function vhDowAll() {
-  _vhActiveDows = new Set([1,2,3,4,5]);
-  document.querySelectorAll('#vhDowBtns .ph-dow[data-dow]').forEach(b => {
-    if (!isNaN(Number(b.dataset.dow))) b.classList.add('active');
-    else b.classList.remove('active');
+async function _fetchFuturesBars() {
+  // Try 1: /futures Cloudflare function (server-side, no CORS — uses Polygon or Yahoo)
+  try {
+    const r = await fetch('/futures?t=' + Date.now());
+    if (r.ok) {
+      const d = await r.json();
+      if (d.bars && d.bars.length >= 2) return { bars: d.bars, symbol: d.symbol || 'ES=F', source: 'futures' };
+    }
+  } catch(e) {}
+
+  // Try 2: /spyintraday Cloudflare function (server-side, no CORS — already used by Trading Desk)
+  // Returns SPY 1m bars which we resample to 5m for the chart
+  try {
+    const r = await fetch('/spyintraday?t=' + Date.now());
+    if (r.ok) {
+      const d = await r.json();
+      if (d.bars && d.bars.length >= 2) {
+        // Resample 1m bars to 5m
+        const bars5 = [];
+        for(let i = 0; i < d.bars.length; i += 5) {
+          const slice = d.bars.slice(i, i + 5).filter(b => b.close);
+          if(!slice.length) continue;
+          bars5.push({
+            t: slice[0].t,
+            o: slice[0].open,
+            h: Math.max(...slice.map(b => b.high || b.close)),
+            l: Math.min(...slice.map(b => b.low  || b.close)),
+            c: slice[slice.length - 1].close,
+            v: slice.reduce((s, b) => s + (b.vol || 0), 0)
+          });
+        }
+        if(bars5.length >= 2) return { bars: bars5, symbol: 'SPY', source: 'spyintraday' };
+        // Fall back to raw 1m bars if resampling fails
+        const raw = d.bars.filter(b => b.close).map(b => ({ t: b.t, o: b.open, h: b.high, l: b.low, c: b.close, v: b.vol }));
+        if(raw.length >= 2) return { bars: raw, symbol: 'SPY', source: 'spyintraday_1m' };
+      }
+    }
+  } catch(e) {}
+
+  return null;
+}
+
+async function loadFuturesChart() {
+  const el = $('hubFuturesChart');
+  if(!el) return;
+
+  // Show loading state immediately
+  el.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;">LOADING CHART...</div>`;
+
+  // Fetch data in parallel while we wait for layout
+  const barsPromise = _fetchFuturesBars();
+
+  // Use rAF loop to wait for real dimensions — no arbitrary timeout
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'display:block;width:100%;height:100%;';
+  el.innerHTML = '';
+  el.appendChild(canvas);
+
+  await new Promise(resolve => {
+    let attempts = 0;
+    function checkSize() {
+      attempts++;
+      const w = canvas.offsetWidth || el.offsetWidth || el.parentElement?.offsetWidth;
+      const h = canvas.offsetHeight || el.offsetHeight;
+      if((w > 10 && h > 10) || attempts > 60) { resolve(); return; }
+      requestAnimationFrame(checkSize);
+    }
+    requestAnimationFrame(checkSize);
   });
-  vhApplyFilter();
-}
 
-function vhDowNone() {
-  _vhActiveDows = new Set();
-  document.querySelectorAll('#vhDowBtns .ph-dow[data-dow]').forEach(b => {
-    b.classList.remove('active');
-  });
-  vhApplyFilter();
-}
+  let bars, symbol = 'ES=F', source = '';
+  try {
+    const result = await barsPromise;
+    if(result) { bars = result.bars; symbol = result.symbol || 'ES=F'; source = result.source || ''; }
+  } catch(e) { bars = null; }
 
-function vhApplyFilter(mode) {
-  if (!_vhAllData) return;
-  const sd = _vhAllData;
-  const curYear = new Date().getFullYear();
-
-  if (!mode || typeof mode !== 'string') {
-    const active = document.querySelector('#vhFilterBtns .ph-fb.active');
-    mode = active ? (active.textContent.includes('2020') ? '2020' : active.textContent.includes('YTD') ? 'ytd' : 'all') : 'all';
-  }
-
-  let filtered;
-  if (mode === '2020')     filtered = sd.filter(d => d.date && d.date >= '2020-01-01');
-  else if (mode === 'ytd') filtered = sd.filter(d => d.date && d.date.startsWith(String(curYear)));
-  else                     filtered = sd;
-
-  // DOW filter
-  if (_vhActiveDows.size > 0 && _vhActiveDows.size < 5) {
-    filtered = filtered.filter(d => d.date && _vhActiveDows.has(_getDow(d.date)));
-  } else if (_vhActiveDows.size === 0) {
-    filtered = [];
-  }
-
-  const meta = document.getElementById('vhFilterMeta');
-  if (meta) {
-    const dowNote = _vhActiveDows.size < 5 ? ` · ${_vhActiveDows.size} day${_vhActiveDows.size !== 1 ? 's' : ''} selected` : '';
-    meta.textContent = filtered.length.toLocaleString() + ' sessions shown' + dowNote;
-  }
-
-  renderVolHistory(filtered);
-}
-
-function renderVolHistory(sd){
-  // Cache full dataset and update meta on direct calls (from data load)
-  if (sd && (!_vhAllData || sd.length > _vhAllData.length)) {
-    _vhAllData = sd;
-    const meta = document.getElementById('vhFilterMeta');
-    if (meta) meta.textContent = sd.length.toLocaleString() + ' sessions shown';
-  }
-
-  if(!sd||!sd.length){
-    $('volHistBody').innerHTML='<tr><td colspan="9" class="no-data">No data</td></tr>';
-    // Still update analytics with empty
-    const vaRow = $('volAnalyticsRow');
-    if (vaRow) vaRow.innerHTML = '';
+  if(!bars || bars.length < 2) {
+    el.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;">
+      <div style="font-size:13px;color:var(--text3);">Chart unavailable</div>
+      <div style="font-size:11px;color:var(--text3);">/futures and /spyintraday both returned no data</div>
+    </div>`;
     return;
   }
 
-  const vdays = sd.filter(d=>d.volume_analysis&&d.volume>100000);
-  const avgVol = vdays.reduce((a,d)=>a+d.volume,0)/(vdays.length||1);
-  const vols = vdays.map(d=>d.volume);
-  const maxVol = vols.length ? Math.max(...vols) : 0;
-  const minVol = vols.length ? Math.min(...vols) : 0;
+  // Get real pixel dimensions from the canvas element
+  const W = canvas.offsetWidth || el.offsetWidth || 600;
+  const H = canvas.offsetHeight || el.offsetHeight || 360;
+  canvas.width  = W;
+  canvas.height = H;
 
-      // Volume analytics cards - 5 boxes in one row
-  const vaRow = $('volAnalyticsRow');
-  if (vaRow) {
-    const prevDay = sd[1] || {};                    // Previous full trading day
-    const prevVol = prevDay.volume || 0;
+  const ctx = canvas.getContext('2d');
+  const pad = { l:56, r:16, t:32, b:36 };
+  const cw = W - pad.l - pad.r;
+  const ch = H - pad.t - pad.b;
 
-    // Calculate true 30-day average separately
-    const last30 = sd.slice(0, 30).filter(d => d.volume > 0);
-    const avg30 = last30.length 
-      ? Math.round(last30.reduce((a, d) => a + d.volume, 0) / last30.length) 
-      : avgVol;
+  const highs = bars.map(b => b.h).filter(Boolean);
+  const lows  = bars.map(b => b.l).filter(Boolean);
+  const minP  = Math.min(...lows)  * 0.9997;
+  const maxP  = Math.max(...highs) * 1.0003;
+  const range = maxP - minP || 1;
 
-    vaRow.innerHTML = [
-      {l:'FULL HISTORY AVG', v:fmtK(avgVol), sub:`${vdays.length} sessions`, c:'var(--cyan)'},
-      {l:'30 DAY AVG', v:fmtK(avg30), sub:`${last30.length} sessions`, c:'var(--cyan)'},
-      {l:'PREVIOUS DAY VOLUME', v:fmtK(prevVol), sub:prevDay.date || '—', c:'#00ccff'},
-      {l:'HIGHEST VOLUME DAY', v:fmtK(maxVol), sub:vdays.find(d=>d.volume===maxVol)?.date||'', c:'#ff8800'},
-      {l:'LOWEST VOLUME DAY', v:fmtK(minVol), sub:vdays.find(d=>d.volume===minVol)?.date||'', c:'var(--text2)'},
-    ].map(({l,v,sub,c}) => `
-      <div class="panel" style="text-align:center;border-top:3px solid ${c}; flex: 1 1 160px; min-width: 145px; padding: 10px 8px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8.5px;letter-spacing:1px;color:var(--text3);margin-bottom:5px;">${l}</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${c};">${v}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:4px;">${sub}</div>
-      </div>
-    `).join('');
-  }
-  
-  // Volume trend chart — last 30 sessions as bar chart
-  const trendEl = $('volTrendChart');
-  if(trendEl) {
-    const recent = vdays.slice(0,30).reverse();
-    const mxV = Math.max(...recent.map(d=>d.volume),1);
-    trendEl.innerHTML = `<div style="display:flex;align-items:flex-end;gap:2px;height:120px;padding:4px 0;">`+
-      recent.map(d=>{
-        const h = (d.volume/mxV*100).toFixed(1);
-        const isHigh = d.volume > avgVol*1.3;
-        const isLow  = d.volume < avgVol*0.7;
-        const c = isHigh?'#ff8800':isLow?'#404060':'#00ff8866';
-        return `<div style="flex:1;height:${h}%;background:${c};border-radius:1px 1px 0 0;min-width:4px;"
-          title="${d.date}: ${fmtK(d.volume)}"></div>`;
-      }).join('')+
-      `</div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);">
-        <span>${recent[0]?.date?.slice(5)||''}</span>
-        <span style="color:#ff8800;">■ >130% avg</span>
-        <span>${recent[recent.length-1]?.date?.slice(5)||''}</span>
-      </div>`;
+  const px = i => pad.l + (i / Math.max(bars.length - 1, 1)) * cw;
+  const py = p => pad.t + ch - ((p - minP) / range) * ch;
+
+  const last   = bars[bars.length - 1].c;
+  const open   = bars[0].c;
+  const chg    = last - open;
+  const chgPct = chg / open * 100;
+  const isUp   = chg >= 0;
+  const lineC  = isUp ? '#00ff88' : '#ff3355';
+
+  // Clear
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = 'rgba(12,12,20,0)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid lines + price labels
+  const gridCount = 5;
+  for(let i = 0; i <= gridCount; i++) {
+    const p = minP + (range / gridCount) * i;
+    const y = py(p);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.fillStyle = '#505070';
+    ctx.font = '9px "Share Tech Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(p.toFixed(0), pad.l - 4, y + 3);
   }
 
-  // Session breakdown averages
-  const sessEl = $('volSessionAvg');
-  if(sessEl) {
-    // Use ALL available history with bucket data (minimal filtering)
-    console.log("[Session Debug] Total days in sd:", sd ? sd.length : 0);
-    console.log("[Session Debug] Days with any volume_analysis:", sd ? sd.filter(d => d.volume_analysis).length : 0);
-    console.log("[Session Debug] Days with full buckets:", sd ? sd.filter(d => d.volume_analysis?.buckets?.length >= 8).length : 0);
-    const withVol = sd.filter(d => d.volume_analysis?.buckets?.length);
-    const n = withVol.length || 1;
-    const bucketMeta = [
-      {key:'vol_830_900',  label:'8:30-9:00  Open Auction',  c:'#ff5500'},
-      {key:'vol_900_930',  label:'9:00-9:30  Early AM',      c:'#ff8800'},
-      {key:'vol_930_1030', label:'9:30-10:30 Late Open',     c:'#ffcc00'},
-      {key:'vol_1030_1200',label:'10:30-12:00 Mid AM',       c:'#88cc44'},
-      {key:'vol_1200_1300',label:'12:00-1:00  Lunch',        c:'#6688aa'},
-      {key:'vol_1300_1400',label:'1:00-2:00   Mid PM',       c:'#4499cc'},
-      {key:'vol_1400_1430',label:'2:00-2:30   Pre-Close',    c:'#00ccff'},
-      {key:'vol_1430_1500',label:'2:30-3:00   Close',        c:'#00ff88'},
-    ];
-    const hasBuckets = withVol.length > 0;
-    let avgPcts;
-    if(hasBuckets) {
-      avgPcts = bucketMeta.map((bm, idx) => {
-        const sum = withVol.reduce((a,d) => {
-          // Match by key first (new data has key), then by index position (older data)
-          const bkts = d.volume_analysis.buckets || [];
-          const bkt = bkts.find(b => b.key === bm.key) || bkts[idx];
-          return a + (bkt?.pct||0);
-        }, 0);
-        return {label:bm.label, c:bm.c, pct: sum/n};
-      });
-    } else {
-      const fallback = vdays.filter(d=>d.volume_analysis);
-      const fn2 = fallback.length || 1;
-      const aOpen2  = fallback.reduce((a,d)=>a+(d.volume_analysis.open_1h_pct||0),0)/fn2;
-      const aClose2 = fallback.reduce((a,d)=>a+(d.volume_analysis.close_1h_pct||0),0)/fn2;
-      avgPcts = [
-        {label:'Open (8:30-9:30)',  c:'#ff8800', pct:aOpen2},
-        {label:'Mid Session',       c:'#88cc44', pct:100-aOpen2-aClose2},
-        {label:'Close (2:00-3:00)', c:'#00ccff', pct:aClose2},
-      ];
+  // Open price dashed line
+  const openY = py(open);
+  ctx.strokeStyle = 'rgba(255,204,0,0.4)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(pad.l, openY); ctx.lineTo(W - pad.r, openY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Session dividers
+  bars.forEach((b, i) => {
+    if(!b.t) return;
+    const d2 = new Date(b.t * 1000);
+    const ctStr = d2.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Chicago'});
+    const [ctH, ctM] = ctStr.split(':').map(Number);
+    if(ctH === 8 && ctM >= 28 && ctM <= 35) {
+      const x = px(i);
+      ctx.strokeStyle = 'rgba(0,204,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ch); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(0,204,255,0.5)';
+      ctx.font = '7px "Orbitron", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('OPEN', x + 3, pad.t + 10);
     }
-    const maxPct = Math.max(...avgPcts.map(b=>b.pct), 1);
-        // Most common peak volume times
-    const peakTimes = {};
-    const peakSrc = hasBuckets ? withVol : sd.filter(d => d.volume_analysis);
-    
-    peakSrc.forEach(d => {
-      let rawTime = d.volume_analysis.peak_time;
-      if (!rawTime) return;
+  });
 
-      // Clean and normalize the time
-      let t = rawTime.trim();
-      
-      // If it is a full timestamp, extract HH:MM
-      if (t.includes('T') || t.includes(' ')) {
-        const match = t.match(/(\d{1,2}):(\d{2})/);
-        if (match) t = `${match[1].padStart(2,'0')}:${match[2]}`;
-      }
+  // Area fill (gradient)
+  const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
+  grad.addColorStop(0, lineC + '40');
+  grad.addColorStop(1, lineC + '04');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(px(0), py(bars[0].c));
+  bars.forEach((b, i) => { if(b.c) ctx.lineTo(px(i), py(b.c)); });
+  ctx.lineTo(px(bars.length - 1), pad.t + ch);
+  ctx.lineTo(px(0), pad.t + ch);
+  ctx.closePath();
+  ctx.fill();
 
-      if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return;
+  // Price line
+  ctx.strokeStyle = lineC;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  let started = false;
+  bars.forEach((b, i) => {
+    if(!b.c) return;
+    if(!started) { ctx.moveTo(px(i), py(b.c)); started = true; }
+    else ctx.lineTo(px(i), py(b.c));
+  });
+  ctx.stroke();
 
-      const [ph, pm] = t.split(':').map(Number);
-      const pmins = ph*60 + pm;
+  // Current price dot
+  const lastX = px(bars.length - 1);
+  const lastY = py(last);
+  ctx.fillStyle = lineC + '28';
+  ctx.beginPath(); ctx.arc(lastX, lastY, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = lineC;
+  ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2); ctx.fill();
 
-      // Only count regular session (8:30 - 15:00)
-      if (pmins < 8*60 + 30 || pmins >= 15*60) return;
+  // Current price dashed line
+  ctx.strokeStyle = lineC + '50';
+  ctx.lineWidth = 0.5;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.moveTo(pad.l, lastY); ctx.lineTo(W - pad.r, lastY); ctx.stroke();
+  ctx.setLineDash([]);
 
-      peakTimes[t] = (peakTimes[t] || 0) + 1;
-    });
+  // Time labels
+  const timeStep = Math.max(1, Math.floor(bars.length / 6));
+  ctx.fillStyle = '#404060';
+  ctx.font = '9px "Share Tech Mono", monospace';
+  ctx.textAlign = 'center';
+  bars.forEach((b, i) => {
+    if(i % timeStep !== 0 || !b.t) return;
+    const d2 = new Date(b.t * 1000);
+    const lbl = d2.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Chicago'});
+    ctx.fillText(lbl, px(i), pad.t + ch + 14);
+  });
 
-    const sortedPeaks = Object.entries(peakTimes)
-      .sort((a,b) => b[1] - a[1])
-      .slice(0,5);
-
-    const peakTotal = Object.values(peakTimes).reduce((a,b) => a + b, 0) || 1;
-    const bucketLabel = hasBuckets ? (n + ' sessions') : (n + ' sessions - legacy 3-bucket');
-    let html = '<div style="margin-bottom:14px;">';
-    html += '<div style="font-size:12px;color:var(--text3);margin-bottom:8px;">Avg volume % by bucket - regular session (8:30-3:00 CT) - ' + bucketLabel + '</div>';
-    avgPcts.forEach(i => {
-      html += '<div style="margin-bottom:5px;display:flex;align-items:center;gap:8px;">';
-      html += '<div style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text3);white-space:nowrap;width:160px;">' + i.label + '</div>';
-      html += '<div style="flex:1;height:14px;background:var(--bg3);border-radius:2px;overflow:hidden;">';
-      html += '<div style="width:' + (i.pct/maxPct*100).toFixed(1) + '%;height:100%;background:' + i.c + ';border-radius:2px;"></div></div>';
-      html += '<div style="font-family:Share Tech Mono,monospace;font-size:12px;color:' + i.c + ';width:42px;text-align:right;">' + fmt(i.pct,1) + '%</div>';
-      html += '</div>';
-    });
-    html += '</div><div>';
-    html += '<div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Most common peak volume times (regular session only)</div>';
-    if(sortedPeaks.length) {
-      sortedPeaks.forEach(([t,c]) => {
-        html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">';
-        html += '<span style="font-family:Share Tech Mono,monospace;font-size:13px;">' + fmt12(t) + ' CT</span>';
-        html += '<span style="font-size:12px;color:var(--text2);">' + c + ' days (' + fmt(c/peakTotal*100,0) + '%)</span></div>';
-      });
-    } else {
-      html += '<div style="color:var(--text3);font-size:12px;padding:8px 0;">Run workflow to populate bucket data</div>';
-    }
-    html += '</div>';
-    sessEl.innerHTML = html;
-  }
-
-  // Raw table
-  $('volHistBody').innerHTML=sd.map(day=>{const v=day.volume_analysis||{};return `<tr>
-    <td>${day.date}</td>
-    <td>${fmtK(day.volume)}</td>
-    <td>${v.open_1h?fmtK(v.open_1h):'—'}</td>
-    <td>${v.open_1h_pct?fmt(v.open_1h_pct,1)+'%':'—'}</td>
-    <td>${v.close_1h?fmtK(v.close_1h):'—'}</td>
-    <td>${v.close_1h_pct?fmt(v.close_1h_pct,1)+'%':'—'}</td>
-    <td>${v.peak_time||'—'}</td>
-    <td>${v.peak_volume?fmtK(v.peak_volume):'—'}</td>
-    <td>${v.hvn_price?'$'+fmt(v.hvn_price,2):'—'}</td>
-  </tr>`;}).join('');
+  // Header overlay (price + change)
+  const hdrDiv = document.createElement('div');
+  hdrDiv.style.cssText = 'position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:baseline;padding:0 4px;pointer-events:none;';
+  hdrDiv.innerHTML = `
+    <div>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${lineC};">${last.toFixed(2)}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${lineC};margin-left:8px;">${isUp?'+':''}${chg.toFixed(2)} (${isUp?'+':''}${chgPct.toFixed(2)}%)</span>
+    </div>
+    <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;">${symbol} · ${bars.length} BARS · ${source.includes('1m')?'1MIN':'5MIN'}</div>`;
+  el.style.position = 'relative';
+  el.appendChild(hdrDiv);
 }
 
-function renderWEM(md){
-  const wems=md.weekly_em||[], stats=md.wem_stats||{};
-  const q=md.quotes||{}, spy=q['SPY']||{};
-  const cur=wems.find(w=>!w.week_close)||wems[0];
-  // Ensure live atm_iv is always on md.gex
-  if (!md.gex) md.gex = {};
-  if (!md.gex.atm_iv && window._md?.gex?.atm_iv) md.gex.atm_iv = window._md.gex.atm_iv;
-  // If still missing, fetch directly from /gex in background and re-render
-  if (!md.gex.atm_iv) {
-    fetch('/gex').then(r=>r.ok?r.json():null).then(d=>{
-      if (d?.atm_iv && _md) {
-        _md.gex = _md.gex || {};
-        _md.gex.atm_iv = d.atm_iv;
-        try { renderWEM(_md); } catch(e) {}
-      }
-    }).catch(()=>{});
-  }
 
-  // ── Mode toggle ──────────────────────────────────────────────────────────
-  if (!window._wemMode) window._wemMode = 'dynamic';
-  window._wemSetMode = function(m) {
-    window._wemMode = m;
-    const dynBtn    = $('wemModeDyn');
-    const staticBtn = $('wemModeStatic');
-    const desc      = $('wemModeDesc');
-    if (dynBtn)    { dynBtn.style.background    = m==='dynamic'?'var(--cyan)':'transparent'; dynBtn.style.color    = m==='dynamic'?'#000':'var(--text2)'; dynBtn.style.borderColor    = m==='dynamic'?'var(--cyan)':'var(--border)'; }
-    if (staticBtn) { staticBtn.style.background = m==='static' ?'var(--cyan)':'transparent'; staticBtn.style.color = m==='static' ?'#000':'var(--text2)'; staticBtn.style.borderColor = m==='static' ?'var(--cyan)':'var(--border)'; }
-    if (desc) desc.textContent = m==='static'
-      ? 'Fixed range set at Friday close · doesn\'t change during week'
-      : 'Range shrinks as DTE decays · updates daily';
-    const lbl = $('wemZScoreLabel');
-    if (lbl) lbl.textContent = m==='static'
-      ? '⬡ STATIC WEM POSITION — Z-SCORE'
-      : '⬡ WEM POSITION — Z-SCORE';
-    renderWEM(md);
+
+
+function renderDesk(md,sd){
+  const el=$('deskContent');
+  if(!el)return;
+  const q=md.quotes||{},spy=q['SPY']||{};
+  const wems=md.weekly_em||[];
+  const wem=wems.find(w=>!w.week_close)||wems[0];
+  const gex=md.gex||{};
+  const pcr=md.options_summary?.pc_ratio_vol;
+  const vix=q['^VIX']?.price||0;
+  const fg=md.fear_greed||{};
+  const fgVal=fg.value!=null?fg.value:fg.score;
+
+  // Price levels from historical data
+  const rows=sd||[];
+  // Always use CT for date calculations — avoids UTC midnight boundary issues
+  const ctNowDesk = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+  const ctY=ctNowDesk.getFullYear(), ctM=String(ctNowDesk.getMonth()+1).padStart(2,'0'), ctD=String(ctNowDesk.getDate()).padStart(2,'0');
+  const today=`${ctY}-${ctM}-${ctD}`;
+  const todayRow=rows.find(r=>r.date===today)||null;
+  const prevRow=rows.find(r=>r.date!==today)||null;
+
+  // Previous week — computed in CT
+  const getWeekOf = (dateStr) => {
+    // Parse as noon UTC to avoid DST/timezone day-shift issues
+    const d=new Date(dateStr+'T18:00:00Z'); const day=d.getUTCDay();
+    const mon=new Date(d); mon.setUTCDate(d.getUTCDate()-(day===0?6:day-1));
+    return mon.toISOString().split('T')[0];
+  };
+  const thisWeek=getWeekOf(today);
+  const prevWeekRows=rows.filter(r=>r.date<thisWeek);
+  const pwDates=prevWeekRows.map(r=>r.date);
+  const pwStart=pwDates.length?pwDates[pwDates.length-1]:null;
+  const pwEnd=pwDates.length?pwDates[0]:null;
+  const pwOpen=pwStart?prevWeekRows.find(r=>r.date===pwStart)?.open:null;
+  const pwClose=pwEnd?prevWeekRows.find(r=>r.date===pwEnd)?.close:null;
+  const pwHigh=pwDates.length?Math.max(...prevWeekRows.map(r=>r.high||0)):null;
+  const pwLow=pwDates.length?Math.min(...prevWeekRows.filter(r=>r.low).map(r=>r.low)):null;
+
+  // Current month
+  const thisMonth=today.substring(0,7);
+  const monthRows=rows.filter(r=>r.date.startsWith(thisMonth));
+  const mOpen=monthRows.length?monthRows[monthRows.length-1]?.open:null;
+  const mHigh=monthRows.length?Math.max(...monthRows.map(r=>r.high||0)):null;
+  const mLow=monthRows.length?Math.min(...monthRows.filter(r=>r.low).map(r=>r.low)):null;
+  const mClose=monthRows.length?monthRows[0]?.close:null;
+
+  const fmtP = n => n?'$'+fmt(n,2):'—';
+  const levelRow = (label,val,current) => {
+    if(!val) return '';
+    const dist=current?current-val:null;
+    const dc=dist>0?'#00ff88':dist<0?'#ff3355':'var(--text2)';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:13px;color:var(--text2);">${label}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:15px;color:var(--text);">${fmtP(val)}</span>
+      ${dist!=null?`<span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${dc};">${dist>0?'+':''}${fmt(dist,2)}</span>`:''}
+    </div>`;
   };
 
-  if(cur){
-    // ── STATIC WEM — TheoTrade formula recalculated live from friday_close + IV ─────
-    const staticMid       = cur.friday_close      || cur.wem_mid;
-    const staticIV        = cur.static_wem_iv     || cur.atm_iv || md.gex?.atm_iv || 0;
-    const _staticHalf     = staticMid && staticIV ? staticMid * staticIV * Math.sqrt(6/365) * 0.70 : null;
-    const staticHigh      = _staticHalf ? staticMid + _staticHalf : (cur.static_wem_high || cur.wem_high);
-    const staticLow       = _staticHalf ? staticMid - _staticHalf : (cur.static_wem_low  || cur.wem_low);
-    const staticHalfRange = _staticHalf || (cur.static_wem_range ? cur.static_wem_range / 2 : cur.wem_range / 2);
-    const staticRange     = staticHalfRange * 2;
+  const cur=spy.price||0;
+  const vColor=vix<15?'#00ff88':vix<20?'#88cc00':vix<25?'#ffcc00':vix<35?'#ff8800':'#ff3355';
+  const fgColor=!fgVal?'#ffcc00':fgVal<=25?'#ff3355':fgVal<=45?'#ff8800':fgVal<=55?'#ffcc00':fgVal<=75?'#88cc00':'#00ff88';
 
-    // ── Select active mode values ──────────────────────────────────────────
-    // Dynamic falls back to static when workflow has not run yet for the new week
-    const isStatic = window._wemMode === 'static';
-    // Dynamic: recalculate from live IV + remaining DTE.
-    // Uses Friday weekly expiry IV (not 0DTE) so it decays naturally as DTE shrinks.
-    const dte = cur.dte || 1;
-    // Use window._md.gex.atm_iv as extra fallback in case md reference is stale
-    const _liveGexIV = md.gex?.atm_iv || window._md?.gex?.atm_iv || null;
-    const liveIV = (_liveGexIV && _liveGexIV > 0) ? _liveGexIV : (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
-    const dynMid = staticMid;
-    const _dynHalf = dynMid && liveIV ? dynMid * liveIV * Math.sqrt(dte / 365) * 0.70 : staticHalfRange;
-    const lo   = isStatic ? staticLow  : dynMid - _dynHalf;
-    const hi   = isStatic ? staticHigh : dynMid + _dynHalf;
-    const mid  = isStatic ? staticMid  : dynMid;
-    const halfRange = isStatic ? staticHalfRange : _dynHalf;
-    const price = spy.price || mid || 0;
+  // ATH — computed dynamically from all historical data
+  const SPY_ATH = rows.length ? Math.max(...rows.map(r=>r.high||0)) : 697.84;
 
-    $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}${isStatic?' · STATIC RANGE':' · DYNAMIC RANGE'}`;
+  // Key price levels from history
+  const thisYear  = today.substring(0,4);
+  const prevYear  = String(parseInt(thisYear)-1);
+  const prevMonth = today.substring(0,7) === rows.filter(r=>r.date<today)[0]?.date.substring(0,7)
+    ? null : (() => { const d=new Date(today+'T12:00:00'); d.setMonth(d.getMonth()-1); return d.toISOString().substring(0,7); })();
+  const prevMonthStr = (() => { const d=new Date(today+'T12:00:00'); d.setMonth(d.getMonth()-1); return d.toISOString().substring(0,7); })();
 
-    $('wemCurrentHeader').innerHTML=`
-      <div class="wem-big-card">
-        <div class="wem-big-lbl">WEM LOW${isStatic?' (STATIC)':''}</div>
-        <div class="wem-big-val dn">$${fmt(lo,2)}</div>
-        <div class="wem-big-sub">${price>lo?'+':''}$${fmt(price-lo,2)} from here</div>
-      </div>
-      <div class="wem-big-card">
-        <div class="wem-big-lbl">${isStatic?'ANCHOR (FRI CLOSE)':'MID (ANCHOR)'}</div>
-        <div class="wem-big-val">$${fmt(mid,2)}</div>
-        <div class="wem-big-sub">±$${fmt(halfRange,2)} range</div>
-      </div>
-      <div class="wem-big-card">
-        <div class="wem-big-lbl">WEM HIGH${isStatic?' (STATIC)':''}</div>
-        <div class="wem-big-val up">$${fmt(hi,2)}</div>
-        <div class="wem-big-sub">${price<hi?'+':''}$${fmt(hi-price,2)} from here</div>
-      </div>`;
+  // Current week open = first trading day of this week
+  // Prefer live value set by fetchWeekOpen() which uses /spyintraday or Monday's Yahoo open
+  const thisWeekRows = rows.filter(r=>r.date>=thisWeek&&r.date<=today);
+  // First trading day of week = oldest date in thisWeekRows (array is newest-first)
+  const weekOpenFromSd = thisWeekRows.length ? thisWeekRows[thisWeekRows.length-1]?.open : null;
+  // _spyWeekOpen is set by fetchWeekOpen() and is the authoritative live value
+  const weekOpen = window._spyWeekOpen || weekOpenFromSd || null;
 
-    const atmIV = md.gex?.atm_iv || (cur.atm_iv && cur.atm_iv>0 ? cur.atm_iv : null);
-    // ── Show comparison row if in static mode ──────────────────────────────
-    let comparisonHtml = '';
-    if (isStatic) {
-      const dynHalf = _dynHalf;
-      const decay = dynHalf < staticHalfRange ? (1 - dynHalf/staticHalfRange)*100 : 0;
-      comparisonHtml = `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--bg3);border-radius:3px;margin-top:8px;font-size:11px;font-family:'Share Tech Mono',monospace;">
-        <span style="color:var(--text3);">STATIC ±$${fmt(staticHalfRange,2)}</span>
-        <span style="color:var(--text3);">→</span>
-        <span style="color:var(--cyan);">DYNAMIC ±$${fmt(dynHalf,2)}</span>
-        <span style="color:var(--text3);">·</span>
-        <span style="color:#ff8800;">${decay.toFixed(0)}% decay · ${cur.dte||'?'} DTE remaining</span>
-        <span style="color:var(--text3);">·</span>
-        <span style="color:var(--text3);">Fri IV ${staticIV?fmt(staticIV*100,1)+'%':'—'} → Live IV ${atmIV?fmt(atmIV*100,1)+'%':'—'}</span>
-      </div>`;
-    }
+  // Prev week close = last day of previous week
+  const prevWeekClose = pwClose;
 
-    const pct = hi>lo ? Math.min(Math.max((price-lo)/(hi-lo)*100,2),98) : 50;
-    $('wemTabNeedle').style.left = pct+'%';
-    const nlbl = $('wemTabNeedleLabel'); if(nlbl) nlbl.textContent = '$'+fmt(price,2);
-    $('wemTabLowLbl').textContent  = '$'+fmt(lo,2);
-    $('wemTabMidLbl').textContent  = (isStatic?'FRI CLOSE ':'MID ')+'$'+fmt(mid,2);
-    $('wemTabHighLbl').textContent = '$'+fmt(hi,2);
-    $('wemTabPosText').textContent = `SPY $${fmt(price,2)} · ${price>=lo&&price<=hi?'INSIDE WEM ✓':'OUTSIDE WEM ⚠'} · ±$${fmt(halfRange,2)} · DTE ${cur.dte||'—'}${isStatic?' · STATIC':''}`;
+  // Prev month close = last trading day of previous month
+  const prevMonthRows = rows.filter(r=>r.date.startsWith(prevMonthStr));
+  const prevMonthClose = prevMonthRows.length ? prevMonthRows[0]?.close : null;
 
-    // Insert comparison row if static
-    const compEl = $('wemCompareRow');
-    if (compEl) compEl.innerHTML = comparisonHtml;
+  // Prev year close = last trading day of previous year
+  const prevYearRows = rows.filter(r=>r.date.startsWith(prevYear));
+  const prevYearClose = prevYearRows.length ? prevYearRows[0]?.close : null;
 
-    // Use halfRange (already mode-aware: static or dynamic) as the basis for all EM boxes
-    const iv = halfRange / (mid * Math.sqrt(6/365) * 0.70);
-    const dailyEM   = mid * iv * Math.sqrt(1/365)  * 0.70;
-    const weeklyEM  = halfRange;
-    const monthlyEM = mid * iv * Math.sqrt(21/365) * 0.70;
+  // Current year open = first trading day of this year
+  const thisYearRows = rows.filter(r=>r.date.startsWith(thisYear));
+  const yearOpen = thisYearRows.length ? thisYearRows[thisYearRows.length-1]?.open : null;
 
-    const emBox = (label, em, subLabel) => {
-      const hiP = mid+em, loP = mid-em;
-      return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:14px;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:8px;">${label}</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:26px;font-weight:bold;color:var(--cyan);">±$${fmt(em,2)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">${subLabel}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;">
-          <div style="background:var(--bg2);border:1px solid #00ff8833;border-radius:3px;padding:6px;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;">HIGH</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#00ff88;">$${fmt(hiP,2)}</div>
-          </div>
-          <div style="background:var(--bg2);border:1px solid #ff335533;border-radius:3px;padding:6px;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;">LOW</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#ff3355;">$${fmt(loP,2)}</div>
-          </div>
+  // Store levels on window so updateLevelBar() can access them without re-computing
+  window._spyLevels = {
+    cur, SPY_ATH,
+    ath10: SPY_ATH * 0.90,
+    ath20: SPY_ATH * 0.80,
+    prevWeekClose, weekOpen, prevMonthClose, prevYearClose, yearOpen
+  };
+
+  // Previous close + gap
+  const prevClose = spy.prev_close || spy.previous_close || prevRow?.close || 0;
+  const changeAmt = cur && prevClose ? cur - prevClose : null;
+  const changePct = changeAmt && prevClose ? changeAmt / prevClose * 100 : null;
+  const todayOpen = spy.open || todayRow?.open || 0;
+  const gapAmt    = todayOpen && prevClose ? todayOpen - prevClose : null;
+  const gapPct    = gapAmt && prevClose ? gapAmt / prevClose * 100 : null;
+  const changeFromOpen = cur && todayOpen ? cur - todayOpen : null;
+  const changeFOPct    = changeFromOpen && todayOpen ? changeFromOpen / todayOpen * 100 : null;
+  const dayHigh = spy.high || todayRow?.high || 0;
+  const dayLow  = spy.low  || todayRow?.low  || 0;
+
+  // Ratios
+  const spx = q['^GSPC']?.price || q['SPX']?.price || 0;
+  const es  = q['ES=F']?.price  || 0;
+  const spxSpyRatio = spx && cur ? spx / cur : null;
+  const esSpyRatio  = es  && cur ? es  / cur : null;
+
+  // IV from WEM
+  const atmIV = (md.gex?.atm_iv || wem?.atm_iv) ? (md.gex?.atm_iv || wem?.atm_iv) * 100 : null;
+
+  // GEX summary for gauge
+  const gexFlip    = gex.flip_point || null;
+  const gexRegime  = gex.regime || null;
+  const gexAbove   = gexFlip && cur ? cur > gexFlip : null;
+  const gexColor   = gex.net_gex > 0 ? '#00ff88' : gex.net_gex < 0 ? '#ff3355' : 'var(--cyan)';
+
+  const cc = n => n >= 0 ? '#00ff88' : '#ff3355';
+  const cs = n => n >= 0 ? '+' : '';
+
+  el.innerHTML=`
+    <!-- HEADER ROW 1: Ratios + MAs + date -->
+    <div style="display:flex;gap:0;align-items:stretch;margin-bottom:6px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;overflow:hidden;font-family:'Share Tech Mono',monospace;font-size:11px;">
+
+      <!-- Ratios -->
+      <div style="display:flex;flex-direction:column;justify-content:center;gap:3px;padding:5px 10px;border-right:1px solid var(--border);flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">SPX:SPY</span>
+          <span style="color:var(--cyan);font-weight:bold;font-size:11px;">${spxSpyRatio?fmt(spxSpyRatio,4):(spx&&(cur||prevClose)?fmt(spx/(cur||prevClose),4):'—')}</span>
         </div>
-      </div>`;
-    };
-
-    const emRow = $('emBoxRow');
-    if(emRow) emRow.innerHTML =
-      emBox('DAILY EXPECTED MOVE',   dailyEM,   '1 trading day') +
-      emBox(`${isStatic?'STATIC ':''}WEEKLY EXPECTED MOVE`,  weeklyEM,  isStatic?`Fixed from Fri close · IV ${fmt(atmIV*100,1)}%`:`${cur.dte||'—'} DTE · IV ${fmt(iv*100,1)}%`) +
-      emBox('MONTHLY EXPECTED MOVE', monthlyEM, '21 trading days');
-  }
-
-  if(stats.total_weeks){
-    $('wemStatsGrid').innerHTML=[
-      {l:'TOTAL WEEKS',    v:stats.total_weeks},
-      {l:'AVG RANGE ±',   v:'$'+fmt(stats.avg_range/2,2)},
-      {l:'% INSIDE',      v:fmt(stats.pct_inside,1)+'%'},
-      {l:'% OUTSIDE',     v:fmt(stats.pct_outside,1)+'%'},
-      {l:'HIGH BREACH',   v:fmt(stats.pct_high_breach,1)+'%', sub: stats.avg_high_breach_amt!=null?'avg +$'+fmt(stats.avg_high_breach_amt,2):null, c:'#00ff88'},
-      {l:'LOW BREACH',    v:fmt(stats.pct_low_breach,1)+'%',  sub: stats.avg_low_breach_amt !=null?'avg $'+fmt(stats.avg_low_breach_amt,2):null,  c:'#ff3355'},
-    ].map(({l,v,sub,c})=>`<div class="wem-stat"><div class="ws-lbl">${l}</div><div class="ws-val"${c?` style="color:${c}"`:''}}>${v}</div>${sub?`<div style="font-size:11px;color:${c||'var(--text3)'};margin-top:3px;">${sub}</div>`:''}</div>`).join('');
-  }
-
-  if(stats.breach_by_day){
-    const days=['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY'];
-    $('breachGrid').innerHTML=days.map(d=>`<div class="breach-day"><div class="bd-name">${d}</div><div class="bd-val ${(stats.breach_by_day[d]||0)>0?'dn':''}">
-${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">breaches</span></div></div>`).join('');
-  }
-
-  // ── Z-Score + thermometer/bell (uses active mode's lo/hi/mid) ─────────────
-  const dotEl = $('wemDotPlot');
-  const zEl   = $('wemZScore');
-  if(!dotEl && !zEl) return;
-
-  const isStatic2  = window._wemMode === 'static';
-  // Static — uses locked values from set_next_week_static_wem() (Friday close + TheoTrade formula)
-  // Dynamic falls back to static when workflow has not run yet for the new week
-  const _sMid = cur ? (cur.friday_close    || cur.wem_mid)  : 0;
-  const _sIV  = cur ? (cur.static_wem_iv  || cur.atm_iv || md.gex?.atm_iv || 0) : 0;
-  const _sHalf2 = _sMid && _sIV ? _sMid * _sIV * Math.sqrt(6/365) * 0.70 : null;
-  const sHalf = _sHalf2 || (cur ? ((cur.static_wem_range || cur.wem_range) / 2) : 1);
-  const _sLo  = _sMid && _sHalf2 ? _sMid - _sHalf2 : (cur ? (cur.static_wem_low  || cur.wem_low)  : 0);
-  const _sHi  = _sMid && _sHalf2 ? _sMid + _sHalf2 : (cur ? (cur.static_wem_high || cur.wem_high) : 0);
-  const _dte2 = cur ? (cur.dte || 1) : 1;
-  const _liveIV2 = cur ? (md.gex?.atm_iv && md.gex.atm_iv > 0 ? md.gex.atm_iv : (cur.atm_iv && cur.atm_iv > 0 ? cur.atm_iv : _sIV)) : _sIV;
-  const _dynHalf2 = _sMid && _liveIV2 ? _sMid * _liveIV2 * Math.sqrt(_dte2 / 365) * 0.70 : sHalf;
-  const lo2   = cur ? (isStatic2 ? _sLo  : _sMid - _dynHalf2) : 0;
-  const hi2   = cur ? (isStatic2 ? _sHi  : _sMid + _dynHalf2) : 0;
-  const mid2  = cur ? _sMid : 0;
-  const price2 = (spy.price || mid2 || 0);
-  const halfRange2 = isStatic2 ? sHalf : _dynHalf2;
-  const z = halfRange2 > 0 ? (price2 - mid2) / halfRange2 : 0;
-  const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
-  const zLabel = Math.abs(z)>1.0?'OUTSIDE WEM':Math.abs(z)>0.75?'NEAR BOUNDARY':Math.abs(z)>0.4?'ELEVATED':'NEAR MID';
-
-  // Exclude current week from historical dots — it shows as NOW dot only
-  const curWeekStart = cur ? cur.week_start : null;
-  const histWeeks = wems
-    .filter(w => w.week_close != null && w.wem_low && w.wem_high && w.wem_mid && w.week_start !== curWeekStart)
-    .slice().reverse();
-  const total = histWeeks.length;
-
-  let histZ;
-  if (isStatic2) {
-    // Recompute Z-scores using static ranges for historical weeks
-    histZ = histWeeks.map(w => {
-      const fC   = w.friday_close || w.wem_mid;
-      const aIV  = w.atm_iv || w.vix_iv || 0;
-      const sH   = fC * aIV * Math.sqrt(6/365) * 0.70;
-      const sLo  = fC - sH, sHi = fC + sH;
-      const sRng = sH;
-      return sRng > 0 ? (w.week_close - fC) / sRng : 0;
-    });
-  } else {
-    histZ = histWeeks.map(w => (w.week_close - w.wem_mid) / (w.wem_range / 2));
-  }
-
-  const aboveCount  = isStatic2
-    ? histWeeks.filter((w,i) => w.week_close > (w.friday_close||w.wem_mid) + histWeeks.map((_,j)=>{ const f=histWeeks[j].friday_close||histWeeks[j].wem_mid, a=histWeeks[j].atm_iv||0; return f*a*Math.sqrt(6/365)*0.70; })[i]).length
-    : histWeeks.filter(w => w.week_close > w.wem_high).length;
-  const belowCount  = isStatic2
-    ? histWeeks.filter((w,i) => w.week_close < (w.friday_close||w.wem_mid) - histWeeks.map((_,j)=>{ const f=histWeeks[j].friday_close||histWeeks[j].wem_mid, a=histWeeks[j].atm_iv||0; return f*a*Math.sqrt(6/365)*0.70; })[i]).length
-    : histWeeks.filter(w => w.week_close < w.wem_low).length;
-  const insideCount = total - aboveCount - belowCount;
-
-  const avgZ  = histZ.length ? histZ.reduce((a,b)=>a+b,0)/histZ.length : 0;
-  const stdZ  = histZ.length > 1 ? Math.sqrt(histZ.reduce((a,b)=>a+(b-avgZ)**2,0)/histZ.length) : 0.5;
-  const pctBeyond = histZ.length ? histZ.filter(z2=>Math.abs(z2)>Math.abs(z)).length/histZ.length*100 : null;
-
-  // ── DOT PLOT ──────────────────────────────────────────────────────────────
-  if(dotEl) {
-    const dW = 700;
-    const dH = 340;
-    const padX = 24, padY = 20;
-    const dotR   = 8;
-    const rectH  = 140;
-    const rectY  = dH/2 - rectH/2 + 10;
-    const overY  = 50;
-    const plotW  = dW - padX*2;
-    const slotW  = plotW / Math.max(total + 1, 2);
-
-    const step = Math.max(1, Math.floor(total/6));
-    const timeLabels = histWeeks
-      .map((w,i) => ({i, label: w.week_start?.slice(2,7)||''}))
-      .filter((_,i) => i % step === 0);
-
-    const dotsSVG = histWeeks.map((w,i) => {
-      const cx = padX + (i + 0.5) * slotW;
-      // Use static or dynamic range for dot positioning
-      let wLo, wHi;
-      if (isStatic2) {
-        const fC  = w.friday_close || w.wem_mid;
-        const aIV = w.atm_iv || w.vix_iv || 0;
-        const sH  = fC * aIV * Math.sqrt(6/365) * 0.70;
-        wLo = fC - sH; wHi = fC + sH;
-      } else {
-        wLo = w.wem_low; wHi = w.wem_high;
-      }
-      const wRange = wHi - wLo;
-      let cy, color;
-      if(w.week_close > wHi) {
-        const excess = Math.min((w.week_close - wHi) / (wRange * 0.5), 1);
-        cy = rectY - excess * (overY - 4) - dotR;
-        color = '#00ff88';
-      } else if(w.week_close < wLo) {
-        const excess = Math.min((wLo - w.week_close) / (wRange * 0.5), 1);
-        cy = rectY + rectH + excess * (overY - 4) + dotR;
-        color = '#ff3355';
-      } else {
-        const pct2 = (w.week_close - wLo) / wRange;
-        cy = rectY + rectH - pct2 * rectH;
-        color = '#ffcc00';
-      }
-      const isNewest = i === total - 1;
-      return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${isNewest?dotR+2:dotR}"
-        fill="${color}" opacity="${isNewest?1:0.72}"
-        stroke="${isNewest?'white':'none'}" stroke-width="${isNewest?1.5:0}"/>`;
-    }).join('');
-
-    var _cwDot = '';
-    if (lo2 && hi2 && price2 && (hi2 - lo2) > 0) {
-      var _cwRange = hi2 - lo2;
-      var _cwX = (padX + (total + 0.5) * slotW).toFixed(1);
-      var _cwCy, _cwCol;
-      if (price2 > hi2) {
-        _cwCy = (rectY - Math.min((price2 - hi2) / (_cwRange * 0.5), 1) * (overY - 4) - dotR).toFixed(1);
-        _cwCol = '#00ff88';
-      } else if (price2 < lo2) {
-        _cwCy = (rectY + rectH + Math.min((lo2 - price2) / (_cwRange * 0.5), 1) * (overY - 4) + dotR).toFixed(1);
-        _cwCol = '#ff3355';
-      } else {
-        _cwCy = (rectY + rectH - ((price2 - lo2) / _cwRange) * rectH).toFixed(1);
-        _cwCol = '#ffcc00';
-      }
-      var _cwLY = (parseFloat(_cwCy) - dotR - 5).toFixed(1);
-      _cwDot = '<circle cx="' + _cwX + '" cy="' + _cwCy + '" r="' + (dotR+3) + '" fill="none" stroke="' + _cwCol + '" stroke-width="1.5" opacity="0.4"/>'
-             + '<circle cx="' + _cwX + '" cy="' + _cwCy + '" r="' + dotR + '" fill="' + _cwCol + '" opacity="0.95" stroke="white" stroke-width="2"/>'
-             + '<text x="' + _cwX + '" y="' + _cwLY + '" text-anchor="middle" fill="' + _cwCol + '" font-size="8" font-family="Orbitron,monospace" letter-spacing="1">NOW</text>';
-    }
-
-    dotEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px;">
-        <span style="color:#00ff88;">▲ Above: ${aboveCount} (${fmt(aboveCount/Math.max(total,1)*100,0)}%)</span>
-        <span style="color:#ffcc00;">● Inside: ${insideCount} (${fmt(insideCount/Math.max(total,1)*100,0)}%)</span>
-        <span style="color:#ff3355;">▼ Below: ${belowCount} (${fmt(belowCount/Math.max(total,1)*100,0)}%)</span>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">ES:SPY</span>
+          <span style="color:#ffcc00;font-weight:bold;font-size:11px;">${esSpyRatio?fmt(esSpyRatio,4):(es&&(cur||prevClose)?fmt(es/(cur||prevClose),4):'—')}</span>
+        </div>
       </div>
-      <svg width="100%" height="${dH}" viewBox="0 0 ${dW} ${dH}" preserveAspectRatio="xMidYMid meet" style="display:block;">
-        <defs>
-          <linearGradient id="rg3" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stop-color="#00ff88" stop-opacity="0.1"/>
-            <stop offset="50%"  stop-color="#ffcc00" stop-opacity="0.06"/>
-            <stop offset="100%" stop-color="#ff3355" stop-opacity="0.1"/>
-          </linearGradient>
-        </defs>
-        <text x="${padX}" y="${rectY-overY-6}" fill="#00ff8866" font-size="8" font-family="Orbitron,monospace">ABOVE RANGE</text>
-        <text x="${padX}" y="${rectY+rectH+overY+18}" fill="#ff335566" font-size="8" font-family="Orbitron,monospace">BELOW RANGE</text>
-        <rect x="${padX}" y="${rectY}" width="${plotW}" height="${rectH}" rx="3" fill="url(#rg3)"/>
-        <rect x="${padX}" y="${rectY}" width="${plotW}" height="${rectH}" rx="3" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
-        <text x="${padX+6}" y="${rectY+12}" fill="rgba(0,255,136,0.45)" font-size="8" font-family="Orbitron,monospace">HIGH</text>
-        <text x="${padX+6}" y="${rectY+rectH/2+4}" fill="rgba(255,255,255,0.22)" font-size="8" font-family="Orbitron,monospace">MID</text>
-        <text x="${padX+6}" y="${rectY+rectH-4}" fill="rgba(255,51,85,0.45)" font-size="8" font-family="Orbitron,monospace">LOW</text>
-        <line x1="${padX}" y1="${rectY+rectH/2}" x2="${padX+plotW}" y2="${rectY+rectH/2}" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="3,4"/>
-        ${dotsSVG}
-        ${timeLabels.map(({i,label}) => {
-          const tx = padX + (i+0.5)*slotW;
-          return `<text x="${tx.toFixed(1)}" y="${rectY+rectH+overY+32}" text-anchor="middle" fill="rgba(255,255,255,0.2)" font-size="8" font-family="Share Tech Mono,monospace">${label}</text>`;
-        }).join('')}
-        <line x1="${padX}" y1="${rectY+rectH+overY+24}" x2="${padX+plotW}" y2="${rectY+rectH+overY+24}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-        ${_cwDot}
-      </svg>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px;">Oldest → Newest · newest dot has white ring · ${total} weeks${isStatic2?' · Using STATIC ranges':''}</div>`;
-  }
 
-  // ── THERMOMETER + BELL ────────────────────────────────────────────────────
-  if(zEl) {
-    const W = Math.max(zEl.offsetWidth||500, 380);
-    const H = 380;
-    const col = Math.floor(W / 3);
-    const tX  = 32;
-    const eX  = col + 16;
-    const bX  = col * 2 + 8;
-    const bW  = W - bX - 12;
-    const tW  = 44;
-    const tCx = tX + tW/2;
-    const tH  = H - 100;
-    const tY  = 40;
-    const toY = v => tY + tH - ((v + 1.5) / 3) * tH;
-    const zCl = Math.max(-1.5, Math.min(1.5, z));
-    // Fill from center (z=0) outward — up for positive z, down for negative z
-    const midY = toY(0); // pixel Y of center line
-    const fillTop    = zCl >= 0 ? toY(zCl) : midY;
-    const fillBottom = zCl <  0 ? toY(zCl) : midY;
-    const fY = fillTop;
-    const fH = fillBottom - fillTop;
+      <!-- Daily SMAs -->
+      ${(()=>{
+        const c=cur||prevClose||0;
+        if(!c||!sd||sd.length<20) return '<div style="padding:5px 10px;color:var(--text3);font-size:10px;">Loading MAs...</div>';
+        const cl=sd.map(d=>parseFloat(d.close)).filter(v=>v>0);
+        const sma=n=>cl.length>=n?cl.slice(0,n).reduce((a,b)=>a+b,0)/n:null;
+        const wc=cl.filter((_,i)=>i%5===0);
+        const wsma=n=>wc.length>=n?wc.slice(0,n).reduce((a,b)=>a+b,0)/n:null;
+        const daily=[{n:'20',v:sma(20)},{n:'50',v:sma(50)},{n:'100',v:sma(100)},{n:'200',v:sma(200)}];
+        const weekly=[{n:'20',v:wsma(20)},{n:'50',v:wsma(50)},{n:'100',v:wsma(100)}];
+        const maCell=(m)=>{
+          if(!m.v) return '';
+          const diff=c-m.v, pc=diff/m.v*100, col=diff>=0?'#00ff88':'#ff3355';
+          return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;border-right:1px solid var(--border)22;min-width:72px;">'+
+            '<span style="font-family:Orbitron,monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:1px;">'+m.n+'</span>'+
+            '<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text2);">$'+fmt(m.v,2)+'</span>'+
+            '<span style="font-size:10px;font-weight:bold;color:'+col+';">'+(pc>=0?'+':'')+fmt(pc,2)+'%</span>'+
+            '</div>';
+        };
+        return '<div style="display:flex;align-items:stretch;border-right:1px solid var(--border);">'+
+            '<div style="display:flex;flex-direction:column;justify-content:center;padding:4px 8px;border-right:1px solid var(--border);background:rgba(0,204,255,0.04);">'+
+              '<span style="font-family:Orbitron,monospace;font-size:7px;color:var(--cyan);letter-spacing:1px;writing-mode:horizontal-tb;white-space:nowrap;">DAILY SMAs</span>'+
+            '</div>'+
+            daily.map(maCell).join('')+
+          '</div>'+
+          '<div style="display:flex;align-items:stretch;">'+
+            '<div style="display:flex;flex-direction:column;justify-content:center;padding:4px 8px;border-right:1px solid var(--border);background:rgba(255,204,0,0.04);">'+
+              '<span style="font-family:Orbitron,monospace;font-size:7px;color:#ffcc00;letter-spacing:1px;writing-mode:horizontal-tb;white-space:nowrap;">WEEKLY SMAs</span>'+
+            '</div>'+
+            weekly.map(maCell).join('')+
+          '</div>';
+      })()}
 
-    const bH = tH, bY = tY;
-    // Bell curve always centered at z=0 (neutral midpoint), stdZ sets spread
-    // avgZ line drawn separately to show where historical avg falls
-    const bellSigma = Math.max(stdZ, 0.3); // do not let it go too narrow
-    const bLine = Array.from({length: bW+1}, (_,i) => {
-      const zv = -1.8 + (i/bW)*3.6;
-      const y  = bY + bH - Math.exp(-0.5*(zv/bellSigma)**2) * bH * 0.82;
-      return `${i===0?'M':'L'}${(bX+i).toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-    const bFill = bLine + ` L${bX+bW},${bY+bH} L${bX},${bY+bH} Z`;
-
-    // Shade from center to NOW position
-    const shade = (() => {
-      const pts = [];
-      for(let i=0;i<=bW;i++){
-        const zv=-1.8+(i/bW)*3.6;
-        if(z>=0 ? zv<=zCl && zv>=0 : zv>=zCl && zv<=0){
-          const y=bY+bH-Math.exp(-0.5*(zv/bellSigma)**2)*bH*0.82;
-          if(!pts.length) pts.push(`M${(bX+i).toFixed(1)},${(bY+bH).toFixed(1)}`);
-          pts.push(`L${(bX+i).toFixed(1)},${y.toFixed(1)}`);
+      <!-- Closest Gap Above & Below -->
+      ${(()=>{
+        if(!sd || sd.length < 2 || !cur) return '';
+        let gapAbove = null, gapBelow = null;
+        for(let i=0;i<sd.length-1;i++){
+          const todayR=sd[i], prevR=sd[i+1];
+          if(!todayR.open||!prevR.close) continue;
+          const gap=parseFloat(todayR.open)-parseFloat(prevR.close);
+          if(Math.abs(gap)<0.05) continue;
+          const fillPrice=parseFloat(prevR.close);
+          // Skip already filled gaps
+          let filled=false;
+          const lo0=parseFloat(todayR.low),hi0=parseFloat(todayR.high);
+          if(gap>0&&lo0&&lo0<=fillPrice) filled=true;
+          if(gap<0&&hi0&&hi0>=fillPrice) filled=true;
+          if(!filled){
+            for(let k=0;k<i;k++){
+              const lo=parseFloat(sd[k].low),hi=parseFloat(sd[k].high);
+              if(gap>0&&lo<=fillPrice){filled=true;break;}
+              if(gap<0&&hi>=fillPrice){filled=true;break;}
+            }
+          }
+          if(filled) continue;
+          if(fillPrice>cur){ if(gapAbove===null||fillPrice<gapAbove) gapAbove=fillPrice; }
+          else if(fillPrice<cur){ if(gapBelow===null||fillPrice>gapBelow) gapBelow=fillPrice; }
         }
-      }
-      if(pts.length) {
-        const lastX = pts[pts.length-1].split(',')[0].slice(1);
-        pts.push(`L${lastX},${bY+bH} Z`);
-      }
-      return pts.join(' ');
-    })();
-    const zBX  = bX + ((zCl+1.8)/3.6)*bW;   // NOW line x position
-    const z0BX = bX + (1.8/3.6)*bW;          // z=0 center x position
+        const distAbove = gapAbove ? gapAbove-cur : null;
+        const distBelow = gapBelow ? cur-gapBelow : null;
+        const pctA = distAbove&&cur ? distAbove/cur*100 : null;
+        const pctB = distBelow&&cur ? distBelow/cur*100 : null;
+        const aVal = gapAbove ? '$'+gapAbove.toFixed(2) : '—';
+        const bVal = gapBelow ? '$'+gapBelow.toFixed(2) : '—';
+        const aSub = distAbove ? '+$'+distAbove.toFixed(2)+' (+'+pctA.toFixed(2)+'%)' : '';
+        const bSub = distBelow ? '-$'+distBelow.toFixed(2)+' (-'+pctB.toFixed(2)+'%)' : '';
+        return '<div style="display:flex;border-left:1px solid var(--border);border-right:1px solid var(--border);">'+
+          '<div style="display:flex;flex-direction:column;justify-content:center;padding:4px 10px;gap:2px;border-right:1px solid rgba(0,255,136,0.2);min-width:90px;">'+
+            '<div style="font-family:Orbitron,monospace;font-size:7px;color:#00ff88;letter-spacing:1px;margin-bottom:1px;">GAP ABOVE</div>'+
+            '<div style="font-family:Share Tech Mono,monospace;font-size:13px;color:#00ff88;">'+aVal+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">'+aSub+'</div>'+
+          '</div>'+
+          '<div style="display:flex;flex-direction:column;justify-content:center;padding:4px 10px;gap:2px;min-width:90px;">'+
+            '<div style="font-family:Orbitron,monospace;font-size:7px;color:#ff3355;letter-spacing:1px;margin-bottom:1px;">GAP BELOW</div>'+
+            '<div style="font-family:Share Tech Mono,monospace;font-size:13px;color:#ff3355;">'+bVal+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">'+bSub+'</div>'+
+          '</div>'+
+        '</div>';
+      })()}
 
-    const modeNote = isStatic2
-      ? `Static ±$${fmt(halfRange2,2)} · fixed from Fri close`
-      : `Dynamic ±$${fmt(halfRange2,2)} · ${cur?.dte||'?'} DTE`;
-
-    zEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
-        <div>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:34px;font-weight:bold;color:${zColor};">${z>=0?'+':''}${fmt(z,3)}</span>
-          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-left:8px;letter-spacing:2px;">Z-SCORE</span>
+      <!-- VWAP panels (populated live by renderDeskSession) -->
+      <div style="display:flex;align-items:stretch;border-left:1px solid var(--border);">
+        <div style="display:flex;flex-direction:column;justify-content:center;padding:4px 8px;border-right:1px solid var(--border);background:rgba(255,100,200,0.04);">
+          <span style="font-family:Orbitron,monospace;font-size:7px;color:#ff66cc;letter-spacing:1px;writing-mode:horizontal-tb;white-space:nowrap;">VWAP</span>
         </div>
-        <div style="text-align:right;">
-          <div style="font-family:'Orbitron',monospace;font-size:11px;color:${zColor};letter-spacing:3px;">${zLabel}</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);margin-top:3px;">${modeNote}</div>
+        <div style="display:flex;align-items:stretch;">
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 10px;border-right:1px solid var(--border)22;min-width:80px;">
+            <span style="font-family:Orbitron,monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:1px;">D-VWAP</span>
+            <span id="deskDVwap" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">—</span>
+            <span id="deskDVwapDiff" style="font-size:10px;font-weight:bold;color:var(--text3);">—</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 10px;min-width:80px;">
+            <span style="font-family:Orbitron,monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:1px;">W-VWAP</span>
+            <span id="deskWVwap" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">—</span>
+            <span id="deskWVwapDiff" style="font-size:10px;font-weight:bold;color:var(--text3);">—</span>
+          </div>
         </div>
       </div>
-      <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;">
 
-        <!-- THERMOMETER -->
-        <rect x="${tX}" y="${tY}" width="${tW}" height="${tH}" rx="${tW/2}"
-          fill="var(--bg2)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
-        <clipPath id="tc8">
-          <rect x="${tX}" y="${tY}" width="${tW}" height="${tH}" rx="${tW/2}"/>
-        </clipPath>
-        <rect x="${tX}" y="${fY}" width="${tW}" height="${fH}"
-          fill="${zColor}" opacity="0.8" clip-path="url(#tc8)"/>
+      <!-- Date -->
+      <div style="display:flex;align-items:center;padding:5px 10px;margin-left:auto;flex-shrink:0;">
+        <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);white-space:nowrap;">${new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
+      </div>
+    </div>
 
-        ${[-1.5,-1,-0.5,0,0.5,1,1.5].map(v=>{
-          const ty=toY(v), maj=v===Math.round(v);
-          const c=Math.abs(v)>=1?'#ff335566':v===0?'#00ff88aa':'rgba(255,255,255,0.15)';
-          return `<line x1="${tX-(maj?14:6)}" y1="${ty}" x2="${tX}" y2="${ty}"
-              stroke="${c}" stroke-width="${maj?1.5:1}"/>
-            ${maj?`<text x="${tX-17}" y="${ty+4}" text-anchor="end"
-              fill="${c}" font-size="10" font-family="Orbitron,monospace">${v>0?'+':''}${v}</text>`:''}`;
+    <!-- HEADER ROW 2: Key price levels — all update live via updateLevelBar() -->
+    <div id="deskLevelBar" style="display:grid;grid-template-columns:repeat(8,1fr);gap:1px;margin-bottom:8px;background:var(--border);border:1px solid var(--border);border-radius:3px;overflow:hidden;font-family:'Share Tech Mono',monospace;"></div>
+
+    <!-- PRICE PANEL: Equal cells,  L→R -->
+    <div class="panel" style="margin-bottom:10px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ SPY PRICE DATA </div>
+      <div style="display:grid;grid-template-columns:repeat(15,1fr);gap:4px;">
+        ${[
+          {lbl:'PREV OPEN',  val:prevRow?.open,   clr:'var(--text2)', grp:'PREV DAY'},
+          {lbl:'PREV HIGH',  val:prevRow?.high,   clr:'#00ff88',      grp:'PREV DAY'},
+          {lbl:'PREV LOW',   val:prevRow?.low,    clr:'#ff3355',      grp:'PREV DAY'},
+          {lbl:'PREV CLOSE', val:prevClose,       clr:'var(--text2)', grp:'PREV DAY'},
+          {lbl:'PREV HVN',   val:(prevRow?.volume_analysis?.hvn_price||null), clr:'var(--cyan)', grp:'PREV DAY'},
+          {lbl:'PM HIGH',    val:null, clr:'#00ff88', grp:'PRE-MKT', id:'deskPMH'},
+          {lbl:'PM MID',     val:null, clr:'var(--text2)', grp:'PRE-MKT', id:'deskPMM'},
+          {lbl:'PM LOW',     val:null, clr:'#ff3355', grp:'PRE-MKT', id:'deskPML'},
+          {lbl:'GAP',        val:'gap', clr:gapAmt!=null?cc(gapAmt):'var(--text2)', grp:'TODAY', isGap:true},
+          {lbl:'OPEN',       val:todayOpen, clr:'var(--text2)', grp:'TODAY'},
+          {lbl:'HIGH',       val:dayHigh,   clr:'#00ff88',      grp:'TODAY'},
+          {lbl:'LOW',        val:dayLow,    clr:'#ff3355',      grp:'TODAY'},
+          {lbl:'LAST',       val:cur,       clr:changeAmt!=null?cc(changeAmt):'#fff', grp:'TODAY', big:true},
+          {lbl:'CHG/CLOSE',  val:'chg', clr:changeAmt!=null?cc(changeAmt):'var(--text2)', grp:'TODAY', isChg:true},
+          {lbl:'CHG/OPEN',   val:null, clr:changeFromOpen!=null?cc(changeFromOpen):'var(--text2)', grp:'TODAY', isChgOpen:true},
+        ].map((cell,i,arr)=>{
+          const sameGrp = i>0 && arr[i-1].grp===cell.grp;
+          const bg = cell.grp==='TODAY'?'rgba(0,204,255,0.04)':cell.grp==='PRE-MKT'?'rgba(255,204,0,0.04)':'';
+          const bl = !sameGrp?'border-left:2px solid rgba(255,255,255,0.1);':'';
+          let val = '—';
+          if(cell.id) {
+            val = `<span id="${cell.id}" style="font-family:'Share Tech Mono',monospace;font-size:14px;font-weight:bold;color:${cell.clr};">—</span>`;
+          } else if(cell.isGap) {
+            val = gapAmt!=null
+              ? `<div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${cell.clr};">${cs(gapAmt)}${fmt(gapAmt,2)}</div><div style="font-size:10px;color:${cell.clr};">${cs(gapPct)}${fmt(gapPct,2)}%</div>`
+              : '—';
+          } else if(cell.isChg) {
+            val = changeAmt!=null
+              ? `<div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${cell.clr};">${cs(changeAmt)}${fmt(changeAmt,2)}</div><div style="font-size:10px;color:${cell.clr};">${cs(changePct)}${fmt(changePct,2)}%</div>`
+              : '—';
+          } else if(cell.isChgOpen) {
+            val = changeFromOpen!=null
+              ? `<div id="deskChgOpen" style="color:${cell.clr};"><div style="font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;">${cs(changeFromOpen)}${fmt(changeFromOpen,2)}</div><div style="font-size:10px;">${cs(changeFOPct)}${fmt(changeFOPct,2)}%</div></div>`
+              : `<div id="deskChgOpen" style="color:var(--text3);">—</div>`;
+          } else if(cell.val!=null && cell.val!==0 && cell.val!=='gap' && cell.val!=='chg') {
+            val = `<span style="font-family:'Share Tech Mono',monospace;font-size:${cell.big?'16px':'14px'};font-weight:${cell.big?'900':'bold'};color:${cell.clr};">$${fmt(cell.val,2)}</span>`;
+          }
+          return `<div style="padding:6px 3px;border:1px solid var(--border);border-radius:2px;text-align:center;${bl}background:${bg};">
+            <div style="font-family:'Orbitron',monospace;font-size:6px;letter-spacing:0.3px;color:var(--text3);margin-bottom:3px;white-space:nowrap;overflow:hidden;">${cell.lbl}</div>
+            ${val}
+          </div>`;
         }).join('')}
+      </div>
+      <div style="display:flex;gap:4px;margin-top:2px;font-family:'Orbitron',monospace;font-size:6px;letter-spacing:1px;">
+        <div style="flex:5;text-align:center;color:var(--text3);border-top:1px solid rgba(255,255,255,0.1);padding-top:1px;">PREV DAY</div>
+        <div style="flex:3;text-align:center;color:#ffcc00;border-top:1px solid rgba(255,204,0,0.3);padding-top:1px;display:flex;align-items:center;justify-content:center;gap:4px;">PRE-MARKET <span onclick="window._clearPMCache&&window._clearPMCache()" title="Refresh PM levels" style="cursor:pointer;color:#ffcc00;opacity:0.6;font-size:8px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">↻</span></div>
+        <div style="flex:7;text-align:center;color:var(--cyan);border-top:1px solid rgba(0,204,255,0.3);padding-top:1px;">TODAY</div>
+      </div>
+    </div>
 
-        <!-- Center line at z=0 always visible -->
-        <line x1="${tX-4}" y1="${midY}" x2="${tX+tW+4}" y2="${midY}"
-          stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="3,3"/>
-        <!-- Fill indicator arrow -->
-        <polygon points="${tX+tW+3},${toY(zCl)} ${tX+tW+14},${toY(zCl)-7} ${tX+tW+14},${toY(zCl)+7}"
-          fill="${zColor}"/>
-        <text x="${tX+tW+18}" y="${toY(zCl)-10}"
-          fill="${zColor}" font-size="10" font-family="Share Tech Mono,monospace" font-weight="bold">
-          $${fmt(price2,2)}</text>
-        <text x="${tX+tW+18}" y="${toY(zCl)+4}"
-          fill="${zColor}" font-size="8" font-family="Orbitron,monospace">NOW</text>
+    <!-- INTRADAY PATTERN RECOGNITION — directly under SPY PRICE DATA -->
+    <div class="panel" style="margin-bottom:10px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ TODAY'S INTRADAY PATTERN</div>
+      <div id="deskPatternPanel"><div style="padding:10px;font-size:12px;color:var(--text3);">Initializing pattern data...</div></div>
+    </div>
 
-        <text x="${tX+tW+18}" y="${toY(1)+4}"
-          fill="#00ff8855" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(hi2,2)} hi</text>
-        <text x="${tX+tW+18}" y="${toY(0)+4}"
-          fill="rgba(255,255,255,0.2)" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(mid2,2)} mid</text>
-        <text x="${tX+tW+18}" y="${toY(-1)+4}"
-          fill="#ff335544" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(lo2,2)} lo</text>
+    <!-- BREADTH STRIP -->
+    <div style="display:grid;grid-template-columns:180px 1px 190px 1px 220px 1px 1fr;align-items:stretch;margin-bottom:10px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;overflow:hidden;min-height:80px;">
+      <div style="padding:12px 14px;" id="deskBreadthAD"></div>
+      <div style="background:var(--border);"></div>
+      <div style="padding:12px 14px;" id="deskBreadthRatios"></div>
+      <div style="background:var(--border);"></div>
+      <div style="padding:12px 14px;" id="deskBreadthMag7"></div>
+      <div style="background:var(--border);"></div>
+      <div style="padding:12px 14px;" id="deskBreadthSectors"></div>
+    </div>
 
-        <!-- EXPLANATION -->
-        <text x="${eX}" y="${tY+2}" fill="rgba(255,255,255,0.5)"
-          font-size="9" font-family="Orbitron,monospace" letter-spacing="1">HOW TO READ</text>
+    <!-- GAUGES: VIX · F&G · IV · PCR · GEX · MAX PAIN -->
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:10px;">
+      <div class="panel" style="text-align:center;border-top:3px solid ${vColor};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${vColor};margin-bottom:6px;">VIX</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:${vColor};">${fmt(vix,1)}</div>
+        <div style="height:8px;border-radius:3px;background:linear-gradient(90deg,#00ff88,#ffcc00,#ff3355);position:relative;margin:8px 0;">
+          <div style="position:absolute;top:-3px;width:3px;height:14px;background:white;border-radius:2px;transform:translateX(-50%);left:${Math.min((vix-10)/35*100,98)}%;"></div>
+        </div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${vColor};">${vix<15?'LOW VOL':vix<20?'CALM':vix<25?'ELEVATED':vix<35?'HIGH VOL':'EXTREME'}</div>
+      </div>
+      <div class="panel" style="text-align:center;border-top:3px solid ${fgColor};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${fgColor};margin-bottom:6px;">FEAR & GREED</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:${fgColor};">${fgVal!=null?fgVal:'—'}</div>
+        <div style="height:8px;border-radius:3px;background:linear-gradient(90deg,#ff3355,#ffcc00,#00ff88);position:relative;margin:8px 0;">
+          ${fgVal!=null?`<div style="position:absolute;top:-3px;width:3px;height:14px;background:white;border-radius:2px;transform:translateX(-50%);left:${fgVal}%;"></div>`:''}
+        </div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${fgColor};">${!fgVal?'—':fgVal<=25?'EXT FEAR':fgVal<=45?'FEAR':fgVal<=55?'NEUTRAL':fgVal<=75?'GREED':'EXT GREED'}</div>
+      </div>
+      <div class="panel" style="text-align:center;border-top:3px solid ${atmIV?'#8855ff':'var(--border)'};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#8855ff;margin-bottom:6px;">SPY IV</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:${atmIV>25?'#ff3355':atmIV>18?'#ff8800':atmIV>12?'#ffcc00':'#00ff88'};">${atmIV?fmt(atmIV,1)+'%':'—'}</div>
+        <div style="height:8px;border-radius:3px;background:linear-gradient(90deg,#00ff88,#ffcc00,#ff3355);position:relative;margin:8px 0;">
+          <div style="position:absolute;top:-3px;width:3px;height:14px;background:white;border-radius:2px;transform:translateX(-50%);left:${atmIV?Math.min(Math.max((atmIV-8)/35*100,2),98):50}%;"></div>
+        </div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#8855ff;">${atmIV?'ATM IMPLIED VOL':'NO IV DATA'}</div>
+      </div>
+      <div class="panel" style="text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;">PCR</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:${pcr>1?'#ff3355':pcr<0.7?'#00ff88':'#ffcc00'};">${pcr?fmt(pcr,3):'—'}</div>
+        <div style="height:8px;border-radius:3px;background:linear-gradient(90deg,#00ff88,#ffcc00,#ff3355);position:relative;margin:8px 0;">
+          <div style="position:absolute;top:-3px;width:3px;height:14px;background:white;border-radius:2px;transform:translateX(-50%);left:${Math.min(Math.max((pcr||0)/2*100,2),98)}%;"></div>
+        </div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${pcr>1?'#ff3355':pcr<0.7?'#00ff88':'#ffcc00'};">${pcr>1?'BEARISH':pcr<0.7?'BULLISH':'NEUTRAL'}</div>
+      </div>
+      <div class="panel" style="text-align:center;border-top:3px solid ${gexColor};cursor:pointer;" onclick="switchTab('gex')" title="Full GEX on GEX tab">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${gexColor};margin-bottom:4px;">GEX</div>
+        ${gexFlip?`
+        <div style="font-family:'Orbitron',monospace;font-size:8px;padding:2px 6px;border-radius:2px;margin:2px auto;display:inline-block;color:${gexAbove?'#00ff88':'#ff3355'};background:${gexAbove?'rgba(0,255,136,0.12)':'rgba(255,51,85,0.12)'};">${gexAbove?'▲ ABOVE FLIP':'▼ BELOW FLIP'}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:bold;color:${gexColor};margin-top:4px;">$${fmt(gexFlip,2)}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-top:1px;">${gex.net_gex?(gex.net_gex/1e9).toFixed(1)+'B net':''}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-top:2px;">tap for full GEX ↗</div>
+        `:`<div style="font-size:10px;color:var(--text3);margin-top:12px;">Loading...</div>`}
+      </div>
+      <!-- MAX PAIN: nearest big, all expiries listed below -->
+      ${(()=>{
+        const mp=md.max_pain||[];
+        const nearest=mp[0];
+        if(!nearest) return `<div class="panel" style="text-align:center;border-top:3px solid var(--cyan);">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);">MAX PAIN</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:14px;">Loading...</div></div>`;
+        const nd=cur?nearest.max_pain-cur:null;
+        const ndc=nd>0?'#00ff88':nd<0?'#ff3355':'var(--text2)';
+        const rows2=mp.slice(0,5).map((m,i)=>{
+          const d=new Date(m.expiry+'T12:00:00');
+          const dl=['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()];
+          const isFri=d.getDay()===5;
+          const dist=cur?m.max_pain-cur:null;
+          const dc=dist>0?'#00ff88':dist<0?'#ff3355':'var(--text2)';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <span style="font-size:9px;color:${isFri?'#ffcc00':'var(--text3)'};">${dl} ${m.expiry?.slice(5)}</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${i===0?'#fff':'var(--text2)'};">$${fmt(m.max_pain,2)}</span>
+            <span style="font-size:9px;color:${dc};">${dist!=null?(dist>0?'+':'')+fmt(dist,1):''}</span>
+          </div>`;
+        }).join('');
+        return `<div class="panel" style="border-top:3px solid var(--cyan);padding:8px 10px;">
+          <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);margin-bottom:2px;">MAX PAIN</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;text-align:center;">$${fmt(nearest.max_pain,2)}</div>
+          <div style="font-size:9px;color:${ndc};text-align:center;margin-bottom:4px;">${nd!=null?(nd>0?'+':'')+fmt(nd,2)+' from spot':''}</div>
+          ${rows2}
+        </div>`;
+      })()}
+    </div>
+
+    <!-- EXPECTED MOVES -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      ${wem?(()=>{
+        const midP  = wem.wem_mid || wem.friday_close || cur || prevClose || 700;
+        // Use last known IV: atm_iv (live) → static_wem_iv (last close) → nothing
+        const iv    = (md.gex?.atm_iv&&md.gex.atm_iv>0) ? md.gex.atm_iv
+                    : (wem.atm_iv&&wem.atm_iv>0) ? wem.atm_iv
+                    : (wem.static_wem_iv&&wem.static_wem_iv>0) ? wem.static_wem_iv : null;
+        const em    = midP>0 && iv>0 ? midP*iv/Math.sqrt(252) : 0;
+        // Detect if market is currently open using ET time
+        const _etNow = new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}));
+        const _etDow = _etNow.getDay(); // 0=Sun,6=Sat
+        const _etMins = _etNow.getHours()*60+_etNow.getMinutes();
+        const mktOpen = _etDow>=1 && _etDow<=5 && _etMins>=570 && _etMins<960; // 9:30am-4:00pm ET weekdays
+        // When closed, use sd[0].close as anchor — most reliable last trading day close
+        // Find last row with a real close (skip holidays/missing data)
+        // friday_close in wem is the official EOD close from the database
+        const lastClose = wem.friday_close || (sd && sd.find(r => r.close > 0))?.close || prevClose || cur || midP;
+        const openAnchor = mktOpen ? (todayOpen || cur || midP) : lastClose;
+        const price = mktOpen ? (cur||midP) : lastClose;
+        const histRanges = sd.filter(r=>r.measurements?.day_range>0).map(r=>r.measurements.day_range);
+        const avgR  = histRanges.length ? histRanges.reduce((a,b)=>a+b,0)/histRanges.length : em;
+        const stdR  = histRanges.length>1 ? Math.sqrt(histRanges.reduce((a,b)=>a+(b-avgR)**2,0)/histRanges.length) : avgR*0.3;
+        // If market hasn't traded yet today, center z=0 (EM is a forecast, not realized)
+        const mktClosed = !mktOpen;
+        // z = how far price has moved from today's open, normalized by the daily EM
+        // This shows intraday position on the bell curve (same logic as weekly WEM)
+        const dayOpenPrice = todayOpen || lastClose;
+        const intraMove = (mktOpen && cur && dayOpenPrice) ? cur - dayOpenPrice : 0;
+        const z     = mktClosed ? 0 : (em>0 ? intraMove/em : 0);
+        const zRange = 1.8;
+        const zCl   = mktClosed ? 0 : Math.max(-zRange, Math.min(zRange, z));
+        const zCol  = mktClosed ? 'var(--cyan)' : Math.abs(z)>1.2?'#ff3355':Math.abs(z)>0.7?'#ff8800':Math.abs(z)>0.3?'#ffcc00':'#00ff88';
+        const zLbl  = mktClosed ? 'NEXT SESSION' : Math.abs(z)>1.5?'EXTREME':Math.abs(z)>1?'HIGH':Math.abs(z)>0.5?'ELEVATED':'NORMAL';
+        const pctBeyond = histRanges.filter(r=>r>em).length/Math.max(histRanges.length,1)*100;
+        // Compute bellSigma from historical z-score distribution (same as weekly)
+        const histZ    = histRanges.map(r=>stdR>0?(r-avgR)/stdR:0);
+        const avgHistZ = histZ.length ? histZ.reduce((a,b)=>a+b,0)/histZ.length : 0;
+        const bellSigma = Math.max(
+          histZ.length>1 ? Math.sqrt(histZ.reduce((a,b)=>a+(b-avgHistZ)**2,0)/histZ.length) : 0.5,
+          0.3
+        );
+        // Layout matching weekly WEM proportions
+        const W=500, H=300, tX=28, tW=44, tH=H-80, tY=30;
+        const toY = v => tY + tH - ((v+zRange)/(zRange*2))*tH;
+        const midY = toY(0);
+        const fillTop    = zCl>=0 ? toY(zCl) : midY;
+        const fillBottom = zCl<0  ? toY(zCl) : midY;
+        const fY=fillTop, fH=fillBottom-fillTop;
+        const bX=tX+tW+50, bW=W-bX-16, bH=tH, bY=tY;
+        // Bell curve using bellSigma (same formula as weekly)
+        const bLine = Array.from({length:bW+1},(_,i)=>{
+          const zv=-zRange+(i/bW)*(zRange*2);
+          const y=bY+bH-Math.exp(-0.5*(zv/bellSigma)**2)*bH*0.85;
+          return (i===0?'M':'L')+(bX+i).toFixed(1)+','+y.toFixed(1);
+        }).join(' ');
+        // Shade center→NOW only
+        const shadePts=[];
+        for(let i=0;i<=bW;i++){
+          const zv=-zRange+(i/bW)*(zRange*2);
+          const inShade = zCl>=0?(zv>=0&&zv<=zCl):(zv<=0&&zv>=zCl);
+          if(inShade){
+            const y=bY+bH-Math.exp(-0.5*(zv/bellSigma)**2)*bH*0.85;
+            if(!shadePts.length) shadePts.push('M'+(bX+i).toFixed(1)+','+(bY+bH));
+            shadePts.push('L'+(bX+i).toFixed(1)+','+y.toFixed(1));
+          }
+        }
+        if(shadePts.length){const lx=shadePts[shadePts.length-1].split(',')[0].slice(1);shadePts.push('L'+lx+','+(bY+bH)+' Z');}
+        const shade=shadePts.join(' ');
+        const zBX  = bX+((zCl+zRange)/(zRange*2))*bW;
+        const z0BX = bX+((0+zRange)/(zRange*2))*bW;
+        const tTicks=[-1.5,-1,-0.5,0,0.5,1,1.5].map(v=>{
+          const ty=toY(v), maj=(v===Math.round(v));
+          const col=v===0?'rgba(255,255,255,0.35)':Math.abs(v)>=1?'rgba(255,51,85,0.5)':'rgba(255,255,255,0.12)';
+          return '<line x1="'+(tX-(maj?14:6))+'" y1="'+ty+'" x2="'+tX+'" y2="'+ty+'" stroke="'+col+'" stroke-width="'+(maj?1.5:1)+'"/>'            +(maj?'<text x="'+(tX-17)+'" y="'+(ty+4)+'" text-anchor="end" fill="'+col+'" font-size="9" font-family="Orbitron,monospace">'+(v>0?'+':'')+v+'</text>':'');
+        }).join('');
+        const bTicks=[-1,0,1].map(v=>{
+          const bx=bX+((v+zRange)/(zRange*2))*bW;
+          const col=v===0?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.12)';
+          return '<line x1="'+bx+'" y1="'+(bY+bH)+'" x2="'+bx+'" y2="'+(bY+bH+5)+'" stroke="'+col+'" stroke-width="'+(v===0?1.5:1)+'"/>'            +'<text x="'+bx+'" y="'+(bY+bH+14)+'" text-anchor="middle" fill="'+col+'" font-size="9" font-family="Orbitron,monospace">'+(v>0?'+':'')+v+'</text>';
+        }).join('');
+        return '<div class="panel">'          +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">'            +'<div>'              +'<div style="font-family:\'Orbitron\',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:4px;">⬡ DAILY EXPECTED MOVE</div>'              +'<span style="font-family:\'Share Tech Mono\',monospace;font-size:26px;font-weight:bold;">±$'+fmt(em,2)+'</span>'              +(mktClosed?'<span style="font-family:\'Orbitron\',monospace;font-size:9px;color:var(--cyan);margin-left:8px;">NEXT SESSION</span>':'')              +'<span style="font-family:\'Share Tech Mono\',monospace;font-size:11px;color:var(--text3);margin-left:6px;">H:$'+fmt(openAnchor+em,2)+' · L:$'+fmt(openAnchor-em,2)+'</span>'            +'</div>'            +'<div style="text-align:right;">'              +(mktClosed?'<div style="font-family:\'Share Tech Mono\',monospace;font-size:13px;color:var(--cyan);">anchor: $'+fmt(price,2)+'</div>':'<div style="font-family:\'Share Tech Mono\',monospace;font-size:22px;font-weight:bold;color:'+zCol+';">'+(z>=0?'+':'')+fmt(z,2)+'σ</div>')              +'<div style="font-family:\'Orbitron\',monospace;font-size:9px;color:'+zCol+';letter-spacing:1px;">'+zLbl+'</div>'            +'</div>'          +'</div>'          +'<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" style="display:block;">'            +'<rect x="'+tX+'" y="'+tY+'" width="'+tW+'" height="'+tH+'" rx="'+(tW/2)+'" fill="var(--bg2)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>'            +'<clipPath id="demClip"><rect x="'+tX+'" y="'+tY+'" width="'+tW+'" height="'+tH+'" rx="'+(tW/2)+'"/></clipPath>'            +(fH>0?'<rect x="'+tX+'" y="'+fY+'" width="'+tW+'" height="'+fH+'" fill="'+zCol+'" opacity="0.85" clip-path="url(#demClip)"/>':'')            +'<line x1="'+(tX-5)+'" y1="'+midY+'" x2="'+(tX+tW+5)+'" y2="'+midY+'" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="2,2"/>'            +tTicks            +'<polygon points="'+(tX+tW+3)+','+toY(zCl)+' '+(tX+tW+13)+','+(toY(zCl)-6)+' '+(tX+tW+13)+','+(toY(zCl)+6)+'" fill="'+zCol+'"/>'            +'<text x="'+(tX+tW+16)+'" y="'+(toY(zCl)-8)+'" fill="'+zCol+'" font-size="10" font-family="Share Tech Mono,monospace" font-weight="bold">$'+fmt(price,2)+'</text>'            +'<text x="'+(tX+tW+16)+'" y="'+(toY(zCl)+5)+'" fill="'+zCol+'" font-size="8" font-family="Orbitron,monospace">NOW</text>'            +'<text x="'+(tX+tW+16)+'" y="'+(toY(1)+4)+'" fill="rgba(255,255,255,0.2)" font-size="9" font-family="Share Tech Mono,monospace">+1σ</text>'            +'<text x="'+(tX+tW+16)+'" y="'+(toY(0)+4)+'" fill="rgba(255,255,255,0.2)" font-size="9" font-family="Share Tech Mono,monospace">  0</text>'            +'<text x="'+(tX+tW+16)+'" y="'+(toY(-1)+4)+'" fill="rgba(255,255,255,0.2)" font-size="9" font-family="Share Tech Mono,monospace">-1σ</text>'            +(shade?'<path d="'+shade+'" fill="'+zCol+'" opacity="0.45"/>':'')            +'<path d="'+bLine+'" fill="none" stroke="'+zCol+'" stroke-width="1.8" opacity="0.8"/>'            +'<line x1="'+bX+'" y1="'+(bY+bH)+'" x2="'+(bX+bW)+'" y2="'+(bY+bH)+'" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>'            +bTicks            +'<line x1="'+z0BX+'" y1="'+(bY+bH-2)+'" x2="'+z0BX+'" y2="'+(bY+bH+5)+'" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>'            +'<line x1="'+zBX+'" y1="'+bY+'" x2="'+zBX+'" y2="'+(bY+bH)+'" stroke="'+zCol+'" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.9"/>'            +'<text x="'+zBX+'" y="'+(bY-6)+'" text-anchor="middle" fill="'+zCol+'" font-size="10" font-family="Share Tech Mono,monospace" font-weight="bold">NOW</text>'            +'<text x="'+(bX+4)+'" y="'+(bY+16)+'" fill="rgba(255,255,255,0.2)" font-size="8" font-family="Orbitron,monospace">Z-SCORE DISTRIBUTION · '+histRanges.length+'d</text>'          +'</svg>'          +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;text-align:center;">'            +'<div style="background:var(--bg3);border-radius:3px;padding:6px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">HIST AVG RANGE</div><div style="font-family:\'Share Tech Mono\',monospace;font-size:13px;color:var(--text2);">$'+fmt(avgR,2)+'</div></div>'            +'<div style="background:var(--bg3);border-radius:3px;padding:6px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">TODAY EM</div><div style="font-family:\'Share Tech Mono\',monospace;font-size:13px;color:'+zCol+';">$'+fmt(em,2)+'</div></div>'            +'<div style="background:var(--bg3);border-radius:3px;padding:6px;"><div style="font-family:\'Orbitron\',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">% DAYS WIDER</div><div style="font-family:\'Share Tech Mono\',monospace;font-size:13px;color:var(--text2);">'+fmt(pctBeyond,0)+'%</div></div>'          +'</div>'        +'</div>';
+      })():'<div class="panel"><div class="no-data">IV needed</div></div>'}
+      ${wem?`<div class="panel">
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ WEEKLY EXPECTED MOVE</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+          ${(()=>{
+            const wLo  = wem.wem_low  || wem.static_wem_low  || null;
+            const wHi  = wem.wem_high || wem.static_wem_high || null;
+            const wMid = wem.wem_mid  || wem.friday_close    || null;
+            const p    = cur || wMid  || 0;
+            const pct2 = wHi>wLo ? Math.min(Math.max((p-wLo)/(wHi-wLo)*100,2),98) : 50;
+            const outside = p>wHi || p<wLo;
+            const labelColor = outside?'#ff3355':'#000';
+            const labelBg    = outside?'#ff3355':'var(--cyan)';
+            return `
+          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;">LOW</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#ff3355;">$${fmt(wLo,2)}</div></div>
+          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">ANCHOR</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;">$${fmt(wMid,2)}</div></div>
+          <div style="text-align:center;"><div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;">HIGH</div><div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:#00ff88;">$${fmt(wHi,2)}</div></div>
+        </div>
+        <div style="position:relative;height:44px;background:linear-gradient(90deg,rgba(255,51,85,0.55),rgba(255,136,0,0.2),rgba(0,255,136,0.4),rgba(255,136,0,0.2),rgba(255,51,85,0.55));border-radius:4px;overflow:visible;margin-bottom:8px;">
+          <div style="position:absolute;left:${pct2}%;top:0;bottom:0;width:2px;background:${outside?'#ff3355':'var(--cyan)'};transform:translateX(-50%);box-shadow:0 0 6px ${outside?'#ff335588':'var(--cyan)'};border-radius:2px;z-index:2;"></div>
+          <div style="position:absolute;left:${pct2}%;top:50%;transform:translate(-50%,-50%);background:${labelBg};color:${labelColor};font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;padding:2px 7px;border-radius:3px;white-space:nowrap;z-index:3;box-shadow:0 2px 6px rgba(0,0,0,0.5);">$${fmt(p,2)}</div>
+          <div style="position:absolute;left:4px;bottom:4px;font-family:'Orbitron',monospace;font-size:7px;color:rgba(255,80,80,0.9);">$${fmt(wLo,2)}</div>
+          <div style="position:absolute;right:4px;bottom:4px;font-family:'Orbitron',monospace;font-size:7px;color:rgba(0,255,136,0.9);">$${fmt(wHi,2)}</div>
+        </div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;text-align:center;padding:4px;border-radius:3px;color:${outside?'#ff3355':'#00ff88'};background:${outside?'rgba(255,51,85,0.1)':'rgba(0,255,136,0.1);'};">${p>wHi?'▲ ABOVE WEM HIGH':p<wLo?'▼ BELOW WEM LOW':'✓ INSIDE WEM RANGE'}</div>
+        ${(()=>{
+          const g = gex;
+          const gFlip = g.flip_point, gSup = g.support, gRes = g.resistance;
+          const netGex = g.net_gex || 0;
+          const isPos = netGex > 0;
+          const regColor = isPos ? '#00ff88' : '#ff3355';
+          const regime = g.regime || (isPos ? 'POSITIVE' : 'NEGATIVE');
+          const fmtB = n => { if(!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
+          if (!gFlip && !gSup && !gRes) return '';
+          const canvasId = 'miniGexCanvas';
+          const _drawMiniGex = () => {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const dpr = window.devicePixelRatio || 1;
+            const W = canvas.parentElement?.clientWidth || canvas.closest?.('.panel')?.clientWidth || 600;
+            if (!W || W < 10) { setTimeout(_drawMiniGex, 200); return; }
+            const H = 160;
+            canvas.width  = W * dpr; canvas.height = H * dpr;
+            canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            const spot = window._md && window._md.quotes && window._md.quotes['SPY'] ? window._md.quotes['SPY'].price : (p || 0);
+            const levels = [gFlip, gSup, gRes, spot].filter(Boolean);
+            if (!levels.length) return;
+            const minP = Math.min(...levels) - 4;
+            const maxP = Math.max(...levels) + 4;
+            const pad = { l: 48, r: 12, t: 14, b: 18 };
+            const cw = W - pad.l - pad.r;
+            const ch = H - pad.t - pad.b;
+            const toX = v => pad.l + ((v - minP) / (maxP - minP)) * cw;
+            const midY = pad.t + ch / 2;
+            ctx.fillStyle = '#0c0c14'; ctx.fillRect(0, 0, W, H);
+            // Regime gradient
+            const flipX = Math.max(0,Math.min(1,(gFlip-minP)/(maxP-minP)));
+            const grad = ctx.createLinearGradient(pad.l, 0, pad.l+cw, 0);
+            grad.addColorStop(0, 'rgba(255,51,85,0.07)');
+            grad.addColorStop(flipX, 'rgba(255,51,85,0.07)');
+            grad.addColorStop(flipX, 'rgba(0,255,136,0.07)');
+            grad.addColorStop(1, 'rgba(0,255,136,0.07)');
+            ctx.fillStyle = grad; ctx.fillRect(pad.l, pad.t, cw, ch);
+            // Subtle price grid
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+            ctx.font = "9px 'Share Tech Mono',monospace"; ctx.fillStyle = '#606080'; ctx.textAlign = 'right';
+            const step = (maxP - minP) > 20 ? 5 : 2;
+            for (let pv = Math.ceil(minP/step)*step; pv <= maxP; pv += step) {
+              const y = pad.t + ch - ((pv-minP)/(maxP-minP))*ch;
+              ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+cw, y); ctx.stroke();
+              ctx.fillText('$'+pv.toFixed(0), pad.l-4, y+3);
+            }
+            // Support
+            if (gSup) {
+              const x = toX(gSup);
+              ctx.strokeStyle='#ff3355'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+              ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke(); ctx.setLineDash([]);
+              ctx.fillStyle='#ff3355'; ctx.textAlign='center'; ctx.font="bold 8px 'Share Tech Mono',monospace";
+              ctx.fillText('SUP', x, pad.t+ch+12); ctx.fillText('$'+gSup.toFixed(0), x, pad.t-3);
+            }
+            // Resistance
+            if (gRes) {
+              const x = toX(gRes);
+              ctx.strokeStyle='#00ff88'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+              ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke(); ctx.setLineDash([]);
+              ctx.fillStyle='#00ff88'; ctx.textAlign='center'; ctx.font="bold 8px 'Share Tech Mono',monospace";
+              ctx.fillText('RES', x, pad.t+ch+12); ctx.fillText('$'+gRes.toFixed(0), x, pad.t-3);
+            }
+            // Flip
+            if (gFlip) {
+              const x = toX(gFlip);
+              ctx.strokeStyle='#ffcc00'; ctx.lineWidth=2; ctx.setLineDash([5,3]);
+              ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke(); ctx.setLineDash([]);
+              ctx.fillStyle='#ffcc00'; ctx.textAlign='center'; ctx.font="bold 8px 'Share Tech Mono',monospace";
+              ctx.fillText('FLIP', x, pad.t+ch+12); ctx.fillText('$'+gFlip.toFixed(0), x, pad.t-3);
+            }
+            // Spot
+            if (spot) {
+              const x = toX(spot);
+              ctx.strokeStyle='rgba(0,204,255,0.9)'; ctx.lineWidth=2.5; ctx.setLineDash([]);
+              ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke();
+              ctx.beginPath(); ctx.arc(x,midY,5,0,Math.PI*2);
+              ctx.fillStyle='#00ccff'; ctx.fill();
+              ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
+              ctx.fillStyle='#00ccff'; ctx.textAlign='left'; ctx.font="bold 11px 'Share Tech Mono',monospace";
+              ctx.fillText('$'+spot.toFixed(2), x+8, midY+4);
+            }
+          };
+          setTimeout(_drawMiniGex, 150);
+          let html = '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">';
+          html += '<div style="font-family:\'Orbitron\',monospace;font-size:8px;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;">⬡ GEX LEVELS</div>';
+          html += '<canvas id="miniGexCanvas" style="width:100%;display:block;border-radius:3px;"></canvas>';
+          html += '<div style="display:flex;gap:14px;margin-top:5px;font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--text3);">';
+          html += '<span><span style="color:var(--cyan);">│</span> SPOT</span>';
+          html += '<span><span style="color:#ffcc00;">┅</span> FLIP</span>';
+          html += '<span><span style="color:#ff3355;">┅</span> SUPPORT</span>';
+          html += '<span><span style="color:#00ff88;">┅</span> RESISTANCE</span>';
+          html += '<span style="margin-left:auto;color:'+regColor+';">'+regime+' · '+fmtB(netGex)+'</span>';
+          html += '</div></div>';
+          return html;
+        })()}
+            `;
+          })()}
+      </div>`:'<div class="panel"><div class="no-data">IV needed</div></div>'}
+    </div>
+
+    <!-- HVN — last 5 days with actual intraday data -->
+    <div class="panel" style="margin-bottom:10px;">
+      <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ HIGH VOLUME PRICES — LAST 5 SESSIONS WITH DATA</div>
+      ${(()=>{
+        const hvnRows = rows.filter(r => r.volume_analysis?.hvn_price).slice(0,5);
+        const todayStr = new Date().toISOString().split('T')[0];
+        // Debug: show row count info
+        const debugInfo = `<div style="font-size:10px;color:var(--text3);margin-bottom:6px;">${rows.length} days in history · ${hvnRows.length} with HVN data</div>`;
+        if(!hvnRows.length) return debugInfo + `<div id="deskHvnLive"><div style="font-size:12px;color:var(--text3);padding:8px;">HVN data requires intraday bars (Polygon API). Populates after workflow runs. Run workflow manually to backfill.</div></div>`;
+        return debugInfo + `<div id="deskHvnLive"></div><div style="display:grid;grid-template-columns:repeat(${Math.min(hvnRows.length,5)},1fr);gap:8px;" id="deskHvnGrid">
+          ${hvnRows.map(r=>{
+            const va=r.volume_analysis||{};const hvn=va.hvn_price;
+            const dist=hvn&&cur?cur-hvn:null;const dc=dist>0?'#00ff88':dist<0?'#ff3355':'var(--text2)';
+            const d=new Date(r.date+'T12:00:00');const dayLabel=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+            const isToday = r.date===todayStr;
+            return `<div style="background:var(--bg3);border:1px solid ${isToday?'var(--cyan)':'var(--border)'};border-radius:3px;padding:10px;text-align:center;">
+              <div style="font-family:'Orbitron',monospace;font-size:9px;color:${isToday?'var(--cyan)':'var(--text3)'};margin-bottom:4px;">${dayLabel} ${r.date?.slice(5)}</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:var(--cyan);">$${fmt(hvn,2)}</div>
+              ${dist!=null?`<div style="font-size:12px;color:${dc};margin-top:4px;">${dist>0?'+':''}${fmt(dist,2)}</div>`:''}
+              ${va.peak_time?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">Peak: ${va.peak_time?.slice(0,5)}</div>`:''}
+            </div>`;
+          }).join('')}
+        </div>`;
+      })()}
+    </div>
+
+    <!-- CALL / PUT WALLS BY EXPIRY -->
+    <div class="panel" style="margin-bottom:10px;" id="deskWallsPanel">
+      <div id="deskWallsHeader" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;cursor:pointer;" title="Click 3x for SPY Max Pain chart">⬡ CALL / PUT WALLS BY EXPIRY</div>
+      <div id="deskWallsByExpiry"><div style="font-size:12px;color:var(--text3);">Loading walls...</div></div>
+    </div>
+
+    <!-- SESSION + DOD + VOL + SESSION VOL + GAPS -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 2fr;gap:10px;margin-bottom:10px;">
+      <div class="panel">
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ TODAY'S SESSION</div>
+        <div id="deskOhlcv"></div>
+      </div>
+      <div class="panel">
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ DAY OVER DAY</div>
+        <div id="deskDod"></div>
+      </div>
+      <div class="panel">
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ VOLUME — LIVE</div>
+        <div id="deskVolSummary"></div>
+      </div>
+      <div class="panel">
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ SESSION VOLATILITY</div>
+        <div id="deskSessionVol"></div>
+      </div>
+      <div class="panel">
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ UNFILLED GAPS — ALL HISTORY</div>
+        <div id="deskGaps"></div>
+      </div>
+    </div>
+
+    <!-- TIMESTAMP BAR -->
+    <div id="deskUpdateBar" style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:11px;flex-wrap:wrap;">
+      <span style="color:var(--text3);">Initializing...</span>
+    </div>`;
+
+  // Fill today's session from live quotes
+  renderDeskSession(md,sd);
+  // Intraday pattern recognition
+  try { renderIntradayPattern(md, sd); } catch(e) { console.warn('pattern:', e); }
+}
+
+function renderDeskSession(md,sd){
+  const q=md.quotes||{},spy=q['SPY']||{};
+  const cur=spy.price||0;
+  const fmtRow=(l,v,c)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+    <span style="font-size:13px;color:var(--text2);">${l}</span>
+    <span style="font-family:'Share Tech Mono',monospace;font-size:14px;${c?`color:${c}`:''}">${v}</span>
+  </div>`;
+
+  // Premarket — populate the PM cells in the price panel
+  const setPM = (h,m,l) => {
+    const pmh=$('deskPMH'), pmm=$('deskPMM'), pml=$('deskPML');
+    if(pmh) pmh.textContent = h ? '$'+fmt(h,2) : '—';
+    if(pmm) pmm.textContent = m ? '$'+fmt(m,2) : '—';
+    if(pml) pml.textContent = l ? '$'+fmt(l,2) : '—';
+  };
+  // PM cache — memory + localStorage keyed to today's date (ET)
+  // IMPORTANT: we only hard-lock the cache once the PM window is CLOSED (>= 9:30 ET).
+  // During pre-market we always re-fetch so bad early-session ticks don't get permanently
+  // baked in as the PM Low before the session has finished.
+  const _pmToday = (() => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+    } catch(e) { return new Date().toISOString().slice(0,10); }
+  })();
+  const PM_CACHE_KEY = 'spy_pm_cache_v2';
+  // PM session is final once we're at or past 9:30 ET — compute locally (isPremarket is in renderHub scope)
+  const _pmSessionClosed = (() => {
+    try {
+      const etNowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const etMinsLocal = etNowLocal.getHours() * 60 + etNowLocal.getMinutes();
+      const isWeekendLocal = etNowLocal.getDay() === 0 || etNowLocal.getDay() === 6;
+      const isPremarketLocal = !isWeekendLocal && etMinsLocal >= 4*60 && etMinsLocal < 9*60+30;
+      return !isPremarketLocal;
+    } catch(e) { return true; }
+  })();
+
+  // Expose cache-clear so the ↻ button can force a fresh fetch
+  window._clearPMCache = () => {
+    try { localStorage.removeItem(PM_CACHE_KEY); } catch(e) {}
+    window._pmCache = null;
+    window._pmFetchInFlight = false;
+    setPM(null, null, null);
+    fetch('/premarket?t=' + Date.now()).then(r=>r.ok?r.json():null).then(pm=>{
+      if (pm?.available && pm.high) { savePMCache(pm); setPM(pm.high, pm.mid, pm.low); }
+    }).catch(()=>{});
+  };
+
+  const loadPMCache = () => {
+    // Only trust localStorage cache if PM session is definitively closed.
+    // During pre-market, skip the cache so we always get a fresh fetch.
+    if (!_pmSessionClosed) return null;
+    // 1. In-memory (fastest)
+    if (window._pmCache && window._pmCache.high && window._pmCache.date === _pmToday) {
+      return window._pmCache;
+    }
+    // 2. localStorage (survives page refresh)
+    try {
+      const stored = JSON.parse(localStorage.getItem(PM_CACHE_KEY) || 'null');
+      if (stored && stored.date === _pmToday && stored.high) {
+        window._pmCache = stored;
+        return stored;
+      }
+    } catch(e) {}
+    return null;
+  };
+
+  const savePMCache = (pm) => {
+    // Always update in-memory so the display stays current this session.
+    // Only persist to localStorage once PM session is closed — during pre-market
+    // we don't lock the values to disk until the session is complete.
+    const entry = { date: _pmToday, high: pm.high, mid: pm.mid, low: pm.low };
+    window._pmCache = entry;
+    if (_pmSessionClosed) {
+      try { localStorage.setItem(PM_CACHE_KEY, JSON.stringify(entry)); } catch(e) {}
+    }
+  };
+
+  const cached = loadPMCache();
+  if (cached) {
+    setPM(cached.high, cached.mid, cached.low);
+  } else {
+    // Reset stuck flag if it's been more than 30s (handles page-reload edge cases)
+    const _pmNow = Date.now();
+    if (window._pmFetchInFlight && (_pmNow - (window._pmFetchStart || 0)) > 30000) {
+      window._pmFetchInFlight = false;
+    }
+    if (!window._pmFetchInFlight) {
+      // Guard: only one fetch in flight at a time — renderDeskSession runs on every
+      // refresh tick so without this we'd fire a new /premarket request every 15s
+      window._pmFetchInFlight = true;
+      window._pmFetchStart = _pmNow;
+      fetch('/premarket?t=' + _pmNow).then(r=>r.ok?r.json():null).then(pm=>{
+        window._pmFetchInFlight = false;
+        if (pm?.available && pm.high) {
+          savePMCache(pm);
+          setPM(pm.high, pm.mid, pm.low);
+        } else {
+          // Not available yet (pre-4am ET) or PM window closed with no data
+          // Do NOT clear — keep any existing display from earlier in session
+          const still = loadPMCache();
+          if (still) setPM(still.high, still.mid, still.low);
+        }
+      }).catch(() => {
+        window._pmFetchInFlight = false;
+        const still = loadPMCache();
+        if (still) setPM(still.high, still.mid, still.low);
+      });
+    }
+  }
+
+  // ── VWAP panels update ───────────────────────────────────────────────────
+  // D-VWAP: comes from /spyintraday response (server-computed, RTH bars only)
+  // W-VWAP: approximated from this week's daily bars in sd (typical price × volume, Mon–today)
+  (()=>{
+    const dvEl=$('deskDVwap'), dvDiff=$('deskDVwapDiff');
+    const wvEl=$('deskWVwap'), wvDiff=$('deskWVwapDiff');
+
+    // Daily VWAP — from cached _spyIntraday if available
+    const lv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
+    const dv = lv?.vwap || null;
+    if (dvEl) dvEl.textContent = dv ? '$'+fmt(dv,2) : '—';
+    if (dvDiff && dv && cur) {
+      const diff = cur - dv, pct = diff/dv*100;
+      dvDiff.textContent = (diff>=0?'+':'')+fmt(diff,2)+'%';
+      dvDiff.style.color = diff>=0?'#00ff88':'#ff3355';
+    } else if (dvDiff) { dvDiff.textContent='—'; dvDiff.style.color='var(--text3)'; }
+
+    // Weekly VWAP — accumulate typical price × volume from Mon–today using sd
+    if (sd && sd.length) {
+      // Find Mon of current week (ET date)
+      const etToday = new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());
+      const dow = new Date(etToday+'T12:00:00Z').getDay(); // 0=Sun,1=Mon...
+      const daysFromMon = dow===0?6:dow-1;
+      const monDate = new Date(etToday+'T12:00:00Z');
+      monDate.setUTCDate(monDate.getUTCDate()-daysFromMon);
+      const monStr = monDate.toISOString().slice(0,10);
+
+      // Grab this week's completed daily rows from sd (they have OHLCV)
+      const weekRows = sd.filter(r => r.date >= monStr && r.date <= etToday);
+      let cumTPV=0, cumVol=0;
+      for (const r of weekRows) {
+        const h=parseFloat(r.high||0), l=parseFloat(r.low||0), c=parseFloat(r.close||0), v=parseFloat(r.volume||0);
+        if(!c||!v) continue;
+        const tp=(h+l+c)/3;
+        cumTPV+=tp*v; cumVol+=v;
+      }
+      // If today is in progress (live), blend in the D-VWAP × today's volume
+      if (lv?.vwap && lv?.volume && lv.volume > 0) {
+        // Today not yet in sd — add it
+        const todayInSd = weekRows.some(r => r.date === etToday);
+        if (!todayInSd) { cumTPV += lv.vwap * lv.volume; cumVol += lv.volume; }
+      }
+      const wv = cumVol>0 ? Math.round(cumTPV/cumVol*100)/100 : null;
+      if (wvEl) wvEl.textContent = wv ? '$'+fmt(wv,2) : '—';
+      if (wvDiff && wv && cur) {
+        const diff=cur-wv, pct=diff/wv*100;
+        wvDiff.textContent=(diff>=0?'+':'')+fmt(diff,2)+'%';
+        wvDiff.style.color=diff>=0?'#00ff88':'#ff3355';
+      } else if(wvDiff) { wvDiff.textContent='—'; wvDiff.style.color='var(--text3)'; }
+    }
+  })();
+
+  // OHLCV
+  const ohlcvEl=$('deskOhlcv');
+  if(ohlcvEl){
+    ohlcvEl.innerHTML=[
+      {l:'Open',   v:spy.open?'$'+fmt(spy.open,2):'—'},
+      {l:'High',   v:spy.high?'$'+fmt(spy.high,2):'—', c:'#00ff88'},
+      {l:'Low',    v:spy.low?'$'+fmt(spy.low,2):'—',   c:'#ff3355'},
+      {l:'Last',   v:cur?'$'+fmt(cur,2):'—'},
+      {l:'Change', v:`${sign(spy.change)}${fmt(spy.change,2)} (${sign(spy.pct_change)}${fmt(spy.pct_change,2)}%)`, c:clr(spy.change)},
+      {l:'Volume', v:spy.volume?fmtK(spy.volume):'—'},
+    ].map(i=>fmtRow(i.l,i.v,i.c)).join('');
+  }
+
+  // Volume Summary — prefer live intraday data for today, fall back to sd[0] (prior completed day)
+  const volSumEl=$('deskVolSummary');
+  if(volSumEl){
+    // Prefer live data; fall back to today's cached snapshot so panel stays current
+    // after market close and before next day's Python workflow runs
+    let lv = typeof _spyIntraday !== 'undefined' ? _spyIntraday : null;
+    if (!lv?.available && typeof loadIntradayCache === 'function') {
+      const cached = loadIntradayCache();
+      if (cached?.volume) lv = { ...cached, _fromCache: true };
+    }
+    const day0 = sd?.[0]||{}, va = day0.volume_analysis||{};
+    const isLive = lv?.available || lv?._fromCache;
+    const last30 = (sd||[]).slice(0,30).filter(d=>d.volume>0);
+    const avg30 = last30.length ? Math.round(last30.reduce((a,d)=>a+d.volume,0)/last30.length) : 85000000;
+
+    if(!isLive) {
+      // Pre-market or no data: show yesterday + pace context
+      const vol = day0.volume || 0;
+      const volPct = vol&&avg30 ? vol/avg30*100 : 0;
+      const vc = volPct>130?'#ff8800':volPct>100?'#00ff88':'#ffcc00';
+      volSumEl.innerHTML = `
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:8px;letter-spacing:1px;">
+          PRIOR SESSION · ${day0.date||''} · 30D AVG: ${fmtK(avg30)}
+        </div>
+        <div style="text-align:center;margin-bottom:10px;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:24px;font-weight:bold;color:${vc};">${fmtK(vol)}</div>
+          <div style="font-size:11px;color:${vc};margin-top:2px;">${fmt(volPct,1)}% of 30d avg</div>
+        </div>
+        <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:10px;">
+          <div style="width:${Math.min(volPct,100).toFixed(1)}%;height:100%;background:${vc};border-radius:3px;"></div>
+        </div>
         ${[
-          {c:'#00ff88', t:'Z = 0  ·  at midpoint ($'+fmt(mid2,2)+')'},
-          {c:'#ffcc00', t:'Z ±0.25  ·  elevated'},
-          {c:'#ff8800', t:'Z ±0.5  ·  near boundary'},
-          {c:'#ff3355', t:'Z ±1.0  ·  at WEM edge ($'+fmt(hi2,2)+' / $'+fmt(lo2,2)+')'},
-          {c:'#ff3355', t:'Z > ±1.0  ·  outside WEM'},
-        ].map(({c,t},i)=>`
-          <rect x="${eX}" y="${tY+18+i*20}" width="8" height="8" rx="1"
-            fill="${c}" opacity="0.8"/>
-          <text x="${eX+12}" y="${tY+26+i*20}"
-            fill="rgba(255,255,255,0.5)" font-size="9" font-family="Share Tech Mono,monospace">${t}</text>
-        `).join('')}
+          {l:'Open 1H',  v: va.open_1h  ? fmtK(va.open_1h)+'  '+fmt(va.open_1h_pct||0,1)+'%'  : '—'},
+          {l:'Close 1H', v: va.close_1h ? fmtK(va.close_1h)+'  '+fmt(va.close_1h_pct||0,1)+'%' : '—'},
+          {l:'Peak Time',v: va.peak_time ? va.peak_time.slice(0,5)+'  '+fmtK(va.peak_volume||0) : '—'},
+          {l:'HVN Price',v: va.hvn_price ? '$'+fmt(va.hvn_price,2)+'  '+fmtK(va.hvn_volume||0) : '—'},
+        ].map(i=>fmtRow(i.l,i.v)).join('')}
+        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-top:8px;text-align:center;">LIVE DATA AT MARKET OPEN</div>`;
+    } else {
+      // LIVE — full intraday breakdown
+      const vol = lv.volume||0;
+      const volPct = vol&&avg30 ? vol/avg30*100 : 0;
+      const vc = volPct>130?'#ff8800':volPct>100?'#00ff88':volPct>70?'#ffcc00':'var(--text3)';
+      const buckets = lv.buckets||[];
+      const maxBkt = Math.max(...buckets.map(b=>b.volume),1);
+      // Current CT time for highlighting active bucket
+      const nowCT = new Date(new Date().toLocaleString('en-US', {timeZone:'America/Chicago'}));
+      const nowMins = nowCT.getHours()*60+nowCT.getMinutes();
 
-        <line x1="${eX}" y1="${tY+128}" x2="${eX+col-24}" y2="${tY+128}"
-          stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-        <text x="${eX}" y="${tY+146}" fill="rgba(255,255,255,0.5)"
-          font-size="9" font-family="Orbitron,monospace" letter-spacing="1">THIS WEEK</text>
+      // Pace projection: extrapolate total from current pace
+      const elapsed = Math.max(lv.bars||1, 1);
+      const totalMins = 6.5*60; // full session
+      const paceTotal = Math.round(vol / elapsed * totalMins);
+      const pacePct = paceTotal/avg30*100;
+      const paceColor = pacePct>130?'#ff8800':pacePct>100?'#00ff88':'#ffcc00';
+
+      volSumEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+          <div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${vc};">${fmtK(vol)}</div>
+            <div style="font-size:10px;color:${vc};">${fmt(volPct,1)}% of 30d avg</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">PACE →</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${paceColor};">${fmtK(paceTotal)}</div>
+            <div style="font-size:9px;color:${paceColor};">${fmt(pacePct,0)}% proj</div>
+          </div>
+        </div>
+        <div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:10px;">
+          <div style="width:${Math.min(volPct,100).toFixed(1)}%;height:100%;background:${vc};border-radius:3px;transition:width 1s;"></div>
+        </div>
+
+        <!-- Bucket breakdown -->
+        <div style="margin-bottom:8px;">
+          ${buckets.map(b=>{
+            const bPct = b.pct||0;
+            const barW = maxBkt>0?Math.round(b.volume/maxBkt*100):0;
+            const [sh,sm] = b.label.split('-')[0].split(':').map(Number);
+            const [eh,em] = (b.label.split('-')[1]||'').replace(/[ap]m/,'').split(':').map(Number)||[0,0];
+            const bStart = sh*60+(sm||0), bEnd = eh*60+(em||0);
+            const isActive = nowMins >= bStart && nowMins < bEnd;
+            const bc = isActive?'var(--cyan)':bPct>20?'#00ff88':bPct>10?'#ffcc00':'var(--text3)';
+            return `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;${isActive?'background:rgba(0,204,255,0.05);border-radius:2px;':''}">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isActive?'var(--cyan)':'var(--text3)'};width:62px;flex-shrink:0;">${b.label}${isActive?' ◀':''}</span>
+              <div style="flex:1;height:8px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+                <div style="width:${barW}%;height:100%;background:${bc};border-radius:2px;"></div>
+              </div>
+              <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${bc};width:38px;text-align:right;">${fmt(bPct,1)}%</span>
+              <span style="font-size:9px;color:var(--text3);width:44px;text-align:right;">${fmtK(b.volume)}</span>
+            </div>`;
+          }).join('')}
+        </div>
+
+        <!-- Key stats row -->
         ${[
-          {t:`Z = ${z>=0?'+':''}${fmt(z,3)}  ·  ${zLabel}`, c:zColor},
-          {t:`$${fmt(price2,2)} is ${fmt(Math.abs(z)*100,1)}% into range`, c:'rgba(255,255,255,0.5)'},
-          {t:`${z>=0?'Above':'Below'} mid by $${fmt(Math.abs(price2-mid2),2)}`, c:'rgba(255,255,255,0.4)'},
-          {t:isStatic2?'Using static (fixed) range':'Using dynamic (DTE-adjusted) range', c:'rgba(255,255,255,0.3)'},
-        ].map(({t,c},i)=>`
-          <text x="${eX}" y="${tY+164+i*16}"
-            fill="${c}" font-size="9" font-family="Share Tech Mono,monospace">${t}</text>
-        `).join('')}
+          {l:'30D Avg',  v:fmtK(avg30)},
+          {l:'Open 1H',  v:lv.open_1h  ? fmtK(lv.open_1h)+'  '+fmt(lv.open_1h_pct,1)+'%'  : '—'},
+          {l:'Close 1H', v:lv.close_1h ? fmtK(lv.close_1h)+'  '+fmt(lv.close_1h_pct,1)+'%' : '—'},
+          {l:'Peak Bar',  v:lv.peak_time ? lv.peak_time+'  '+fmtK(lv.peak_volume||0) : '—'},
+          {l:'HVN Price', v:lv.hvn_price ? '$'+fmt(lv.hvn_price,2)+'  '+fmtK(lv.hvn_volume||0) : '—'},
+        ].map(i=>fmtRow(i.l,i.v)).join('')}
 
-        <line x1="${eX}" y1="${tY+230}" x2="${eX+col-24}" y2="${tY+230}"
-          stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-        <text x="${eX}" y="${tY+248}" fill="rgba(255,255,255,0.5)"
-          font-size="9" font-family="Orbitron,monospace" letter-spacing="1">BELL CURVE</text>
-        ${[
-          {t:'Distribution of where',      c:'rgba(255,255,255,0.4)'},
-          {t:'each week closed within',    c:'rgba(255,255,255,0.4)'},
-          {t:`its own ${isStatic2?'STATIC':'dynamic'} WEM range.`, c:'rgba(255,255,255,0.4)'},
-          {t:`Hist avg Z: ${avgZ>=0?'+':''}${fmt(avgZ,2)}  ·  σ: ${fmt(stdZ,2)}`, c:'rgba(255,255,255,0.4)'},
-          {t:`NOW: top ${pctBeyond!=null?fmt(100-pctBeyond,0):'-'}% historically`, c:zColor},
-          {t:`${pctBeyond!=null?fmt(pctBeyond,0):'-'}% of weeks more extreme`, c:'rgba(255,255,255,0.35)'},
-        ].map(({t,c},i)=>`
-          <text x="${eX}" y="${tY+266+i*15}"
-            fill="${c}" font-size="9" font-family="Share Tech Mono,monospace">${t}</text>
-        `).join('')}
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-top:6px;text-align:right;">
+          ${lv._fromCache ? '◎ FINAL' : '● LIVE'} · ${lv.bars} bars · ${lv.asOf?.slice(11,16)} UTC
+        </div>`;
+    }
+  }
 
-        <!-- BELL CURVE -->
-        <text x="${bX}" y="${bY-8}" fill="rgba(255,255,255,0.25)"
-          font-size="9" font-family="Orbitron,monospace">Z-SCORE DISTRIBUTION${isStatic2?' (STATIC)':''}</text>
-        ${shade?`<path d="${shade}" fill="${zColor}" opacity="0.25"/>`:''}
-        <path d="${bLine}" fill="none" stroke="${zColor}" stroke-width="1.5" opacity="0.6"/>
-        <line x1="${bX}" y1="${bY+bH}" x2="${bX+bW}" y2="${bY+bH}"
-          stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-        ${[-1.5,-1,0,1,1.5].map(v=>{
-          const bx=bX+((v+1.8)/3.6)*bW;
-          return `<line x1="${bx}" y1="${bY+bH}" x2="${bx}" y2="${bY+bH+4}"
-              stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-            <text x="${bx}" y="${bY+bH+13}" text-anchor="middle"
-              fill="rgba(255,255,255,0.2)" font-size="8" font-family="Orbitron,monospace">
-              ${v>0?'+':''}${v}</text>`;
+  // Unfilled gaps within $20 of current price
+  const gapsEl=$('deskGaps');
+  if(gapsEl){
+    if(!sd || sd.length < 2){
+      gapsEl.innerHTML=`<div class="no-data">Need historical data · sd=${sd?.length||0} rows loaded</div>`;
+    } else {
+      const cur2 = spy.price || 0;
+      const above=[], below=[];
+      let skippedFilled=0;
+
+      for(let i=0; i<sd.length-1; i++){
+        const today2=sd[i], prev2=sd[i+1];
+        if(!today2.open || !prev2.close) continue;
+        const gap = parseFloat(today2.open) - parseFloat(prev2.close);
+        if(Math.abs(gap) < 0.05) continue;
+
+        const fillPrice = parseFloat(prev2.close);
+
+        // Gap fills when regular session price TRADES THROUGH the fill level
+        // Check today2 itself first (gap can fill same day it opens), then all subsequent days
+        let filled = false;
+        const lo0 = parseFloat(today2.low), hi0 = parseFloat(today2.high);
+        if(gap>0 && lo0 && lo0 <= fillPrice) filled = true;
+        if(gap<0 && hi0 && hi0 >= fillPrice) filled = true;
+        if(!filled){
+          for(let j=i-1; j>=0; j--){
+            const lo = parseFloat(sd[j].low), hi = parseFloat(sd[j].high);
+            if(!lo || !hi) continue;
+            if(gap>0 && lo <= fillPrice){ filled=true; break; }
+            if(gap<0 && hi >= fillPrice){ filled=true; break; }
+          }
+        }
+        if(filled){ skippedFilled++; continue; }
+
+        const dist = cur2 - fillPrice;
+        const entry = { price:fillPrice, date:prev2.date, gap, dist, pct: cur2?Math.abs(dist)/cur2*100:0 };
+        if(dist < 0) above.push(entry);
+        else         below.push(entry);
+      }
+
+      const total = above.length + below.length;
+      const debugLine = `<div style="font-size:10px;color:var(--text3);padding:3px 6px;border-bottom:1px solid var(--border);">
+        ${sd.length} sessions · ${total} unfilled gaps · ${skippedFilled} filled
+      </div>`;
+
+      if(!total){
+        gapsEl.innerHTML=debugLine+`<div style="padding:10px;font-size:12px;color:var(--text3);">No unfilled gaps found in ${sd.length} sessions</div>`;
+      } else {
+        above.sort((a,b)=>b.dist-a.dist);
+        below.sort((a,b)=>a.dist-b.dist);
+        const row = g => {
+          const up=g.dist<0, c=up?'#ff3355':'#00ff88';
+          const d=new Date(g.date+'T12:00:00');
+          const lbl=(d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2);
+          return `<div style="display:flex;align-items:center;gap:5px;padding:4px 6px;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);width:44px;flex-shrink:0;">${lbl}</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:bold;color:${c};flex:1;">$${fmt(g.price,2)}</span>
+            <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">${g.pct.toFixed(1)}%</span>
+          </div>`;
+        };
+        gapsEl.innerHTML=debugLine+`
+          <div style="display:flex;font-family:'Orbitron',monospace;font-size:7px;padding:3px 6px;border-bottom:1px solid var(--border);">
+            <span style="flex:1;color:#ff3355;">▲ ABOVE (${above.length})</span>
+            <span style="color:var(--text3);">SPY $${fmt(cur2,2)}</span>
+            <span style="flex:1;text-align:right;color:#00ff88;">BELOW (${below.length}) ▼</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;max-height:280px;overflow-y:auto;">
+            <div style="border-right:1px solid rgba(255,255,255,0.08);">
+              ${above.length?above.map(row).join(''):'<div style="padding:10px;font-size:11px;color:var(--text3);">None</div>'}
+            </div>
+            <div>
+              ${below.length?below.map(row).join(''):'<div style="padding:10px;font-size:11px;color:var(--text3);">None</div>'}
+            </div>
+          </div>`;
+      }
+    }
+  }
+
+  // ── Compact Breadth Strip ────────────────────────────────────────────────
+  const adEl2     = $('deskBreadthAD');
+  const secEl2    = $('deskBreadthSectors');
+  const ratioEl2  = $('deskBreadthRatios');
+
+  const bLabel = (txt, color='var(--text3)') =>
+    `<div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${color};margin-bottom:4px;">${txt}</div>`;
+  const bVal = (txt, color='var(--text1)') =>
+    `<div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${color};">${txt}</div>`;
+  const bSub = (txt, color='var(--text3)') =>
+    `<div style="font-size:12px;color:${color};margin-top:3px;">${txt}</div>`;
+
+  // ── ADVANCE / DECLINE ──────────────────────────────────────────────────────
+  if(adEl2) {
+    const advD = q['^ADVN'], decD = q['^DECN'];
+    if(advD?.price && decD?.price && advD.price > 100) {
+      const adv = Math.round(advD.price), dec = Math.round(decD.price);
+      const total = adv + dec;
+      const advPct = adv / total * 100;
+      const adRatio = adv / dec;
+      const adc = adRatio > 2 ? '#00ff88' : adRatio > 1 ? '#88cc00' : adRatio > 0.5 ? '#ff8800' : '#ff3355';
+      adEl2.innerHTML = `
+        ${bLabel('ADVANCE / DECLINE')}
+        <div style="display:flex;gap:10px;align-items:center;margin:6px 0;">
+          <span style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#00ff88;">${fmtK(adv)}</span>
+          <div style="flex:1;height:10px;background:var(--bg3);border-radius:4px;overflow:hidden;min-width:60px;">
+            <div style="height:100%;width:${advPct.toFixed(0)}%;background:linear-gradient(90deg,#00ff88,#88cc44);border-radius:4px;"></div>
+          </div>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:#ff3355;">${fmtK(dec)}</span>
+        </div>
+        ${bSub('ratio ' + fmt(adRatio,2) + ' · ' + advPct.toFixed(0) + '% advancing', adc)}`;
+    } else {
+      const secs = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU','XLC'];
+      const up = secs.filter(s => (q[s]?.pct_change||0) > 0).length;
+      const adc = up > 6 ? '#00ff88' : up > 4 ? '#ffcc00' : '#ff3355';
+      adEl2.innerHTML = `${bLabel('ADV / DEC')}${bVal(up+' / '+(secs.length-up), adc)}${bSub('sector proxy')}`;
+    }
+  }
+
+
+  // ── SPY vs RSP BREADTH ────────────────────────────────────────────────────
+  if(ratioEl2) {
+    const spyPct = q['SPY']?.pct_change||0;
+    const rspPct = q['RSP']?.pct_change||0;
+    const diff = rspPct - spyPct;
+    const breadthBias = diff > 0.2 ? 'BROAD' : diff > -0.2 ? 'MIXED' : 'NARROW';
+    const bbColor = breadthBias==='BROAD'?'#00ff88':breadthBias==='MIXED'?'#ffcc00':'#ff3355';
+    ratioEl2.innerHTML =
+      bLabel('SPY vs RSP')
+      +'<div style="display:flex;gap:16px;margin:5px 0;align-items:flex-end;">'
+      +'<div>'+bLabel('SPY','var(--text3)')+'<span style="font-family:\'Share Tech Mono\',monospace;font-size:22px;font-weight:bold;color:'+(spyPct>=0?'#00ff88':'#ff3355')+';">'+(spyPct>=0?'+':'')+fmt(spyPct,2)+'%</span></div>'
+      +'<div>'+bLabel('RSP','var(--text3)')+'<span style="font-family:\'Share Tech Mono\',monospace;font-size:22px;font-weight:bold;color:'+(rspPct>=0?'#00ff88':'#ff3355')+';">'+(rspPct>=0?'+':'')+fmt(rspPct,2)+'%</span></div>'
+      +'</div>'
+      +bSub(breadthBias+' · spread '+(diff>=0?'+':'')+fmt(diff,2)+'%', bbColor);
+  }
+
+  // ── MAG7 vs MARKET ──────────────────────────────────────────────────────────
+  const mag7El2 = $('deskBreadthMag7');
+  if(mag7El2) {
+    const MAG7 = ['AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA'];
+    const spyPct2 = q['SPY']?.pct_change||0;
+    const mag7vals = MAG7.map(s=>q[s]?.pct_change||0);
+    const mag7avg = mag7vals.reduce((a,b)=>a+b,0)/MAG7.length;
+    const diff = mag7avg - spyPct2;
+    const signal = diff > 1 ? 'MAG7 CARRYING' : diff > 0.3 ? 'MAG7 LEADING' : diff < -1 ? 'BROAD LEADS' : diff < -0.3 ? 'MAG7 LAGGING' : 'IN LINE';
+    const sc = diff > 0.3 ? '#ff8800' : diff < -0.3 ? '#00ff88' : '#ffcc00';
+    const stm = "font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;";
+    mag7El2.innerHTML =
+      bLabel('MAG7 vs MARKET')
+      + '<div style="display:flex;gap:14px;margin:5px 0;align-items:flex-end;">'
+      + '<div>' + bLabel('MAG7 AVG','var(--text3)') + '<span style="' + stm + 'color:' + (mag7avg>=0?'#00ff88':'#ff3355') + ';">' + (mag7avg>=0?'+':'') + fmt(mag7avg,2) + '%</span></div>'
+      + '<div>' + bLabel('SPY','var(--text3)') + '<span style="' + stm + 'color:' + (spyPct2>=0?'#00ff88':'#ff3355') + ';">' + (spyPct2>=0?'+':'') + fmt(spyPct2,2) + '%</span></div>'
+      + '</div>'
+      + bSub(signal + ' · ' + (diff>=0?'+':'') + fmt(diff,2) + '% vs SPY', sc);
+  }
+
+  // ── SECTOR HEATMAP ──────────────────────────────────────────────────────────
+  if(secEl2) {
+    const SECS = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU','XLC'];
+    const NAMES= ['Tech','Fins','Engy','Hlth','Inds','Disc','Stpl','Matl','RE','Util','Comm'];
+    const up   = SECS.filter(s => (q[s]?.pct_change||0) > 0).length;
+    const dn   = SECS.length - up;
+    const scoreColor = up >= 8?'#00ff88':up>=6?'#88cc00':up>=4?'#ffcc00':up>=2?'#ff8800':'#ff3355';
+    secEl2.innerHTML = `
+      ${bLabel('SECTORS  ' + up + ' ▲ · ' + dn + ' ▼', scoreColor)}
+      <div style="display:flex;gap:3px;align-items:center;margin-top:3px;flex-wrap:nowrap;">
+        ${SECS.map((s,i) => {
+          const pc = q[s]?.pct_change||0;
+          const intensity = Math.min(Math.abs(pc)/2,1);
+          const bg = pc >= 0
+            ? `rgba(0,${Math.round(150+intensity*105)},80,${0.25+intensity*0.55})`
+            : `rgba(${Math.round(180+intensity*75)},30,40,${0.25+intensity*0.55})`;
+          
+          return `<div style="background:${bg};border:1px solid rgba(255,255,255,0.1);border-radius:3px;padding:6px 5px;min-width:0;flex:1;text-align:center;" title="${s}: ${pc>=0?'+':''}${fmt(pc,2)}%">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;font-weight:600;color:rgba(255,255,255,0.75);margin-bottom:2px;">${NAMES[i]}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:bold;color:#ffffff;">${pc>=0?'+':''}${fmt(pc,1)}%</div>
+          </div>`;
         }).join('')}
-        <line x1="${zBX}" y1="${bY}" x2="${zBX}" y2="${bY+bH}"
-          stroke="${zColor}" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.8"/>
-        <text x="${zBX}" y="${bY-4}" text-anchor="middle"
-          fill="${zColor}" font-size="10" font-family="Share Tech Mono,monospace" font-weight="bold">NOW</text>
-        <!-- z=0 center tick always at midpoint of bell -->
-        <line x1="${z0BX}" y1="${bY+bH}" x2="${z0BX}" y2="${bY+bH+5}"
-          stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
-        <text x="${z0BX}" y="${bY+bH+14}" text-anchor="middle"
-          fill="rgba(255,255,255,0.3)" font-size="8" font-family="Orbitron,monospace">0</text>
-        <!-- avgZ indicator if meaningfully off center -->
-        ${Math.abs(avgZ) > 0.05 ? (()=>{
-          const ax=bX+((Math.max(-1.8,Math.min(1.8,avgZ))+1.8)/3.6)*bW;
-          return `<line x1="${ax}" y1="${bY+bH-5}" x2="${ax}" y2="${bY+bH+4}"
-              stroke="#556688" stroke-width="1.5" stroke-dasharray="2,2"/>
-            <text x="${ax}" y="${bY+bH+22}" text-anchor="middle"
-              fill="#556688" font-size="8" font-family="Share Tech Mono,monospace">
-              μ${avgZ>=0?'+':''}${fmt(avgZ,2)}</text>`;
-        })() : ''}
-      </svg>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:8px;">
-        ${[
-          {l:'FROM MID',         v:(z>=0?'+':'')+'$'+fmt(price2-mid2,2), c:zColor},
-          {l:'% OF RANGE',       v:fmt(Math.abs(z)*100,1)+'%',           c:zColor},
-          {l:'HIST AVG Z',       v:(avgZ>=0?'+':'')+fmt(avgZ,2),         c:'var(--text2)'},
-          {l:'% WKS MORE EXTR',  v:pctBeyond!=null?fmt(pctBeyond,0)+'%':'—', c:'var(--text3)'},
-        ].map(s=>`<div style="text-align:center;background:var(--bg3);border-radius:3px;padding:8px;">
-          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:3px;">${s.l}</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:17px;color:${s.c};">${s.v}</div>
-        </div>`).join('')}
       </div>`;
   }
 
-  $('wemHistBody').innerHTML=[...wems].reverse().map(w=>`<tr>
-    <td>${w.week_start}</td>
-    <td>$${fmt(w.wem_mid,2)}</td>
-    <td class="up">$${fmt(w.wem_high,2)}</td>
-    <td class="dn">$${fmt(w.wem_low,2)}</td>
-    <td>±$${fmt(w.wem_range/2,2)}</td>
-    <td>${w.atm_iv?fmt(w.atm_iv*100,2)+'%':'—'}</td>
-    <td>${w.week_open?'$'+fmt(w.week_open,2):'—'}</td>
-    <td class="up">${w.week_high?'$'+fmt(w.week_high,2):'—'}</td>
-    <td class="dn">${w.week_low?'$'+fmt(w.week_low,2):'—'}</td>
-    <td class="${w.week_close&&w.week_open?clr(w.week_close-w.week_open):''}">
-${w.week_close?'$'+fmt(w.week_close,2):'—'}</td>
-    <td class="${clr(w.weekly_gap)}">${w.weekly_gap!=null?sign(w.weekly_gap)+'$'+fmt(Math.abs(w.weekly_gap),2):'—'}</td>
-    <td>${w.gap_filled!=null?(w.gap_filled?'<span class="up">YES</span>':'<span class="dn">NO</span>'):'—'}</td>
-    <td>${w.closed_inside!=null?(w.closed_inside?'<span class="up">YES</span>':'<span class="dn">NO</span>'):'—'}</td>
-    <td>${w.breach!=null?(w.breach?'<span class="dn">YES</span>':'<span class="up">NO</span>'):'—'}</td>
-    <td class="${w.breach_side==='HIGH'?'dn':w.breach_side==='LOW'?'dn':''}">
-${w.breach_side||'—'}</td>
-    <td class="dn">${w.breach_amount?'$'+fmt(Math.abs(w.breach_amount),2):'—'}</td>
-  </tr>`).join('');
-}
-
-
-function renderVolume(sd,md){
-  if(!sd||!sd.length){$('panel-volume').innerHTML='<div class="no-data">No volume data yet.</div>';return;}
-  const day=sd[0],v=day.volume_analysis||{};
-  $('volDate').innerHTML=`<span class="live-dot"></span>VOLUME ANALYSIS — ${day.date}`;
-  $('volSessionRow').innerHTML=[
-    {l:'TOTAL',v:fmtK(day.volume),p:''},
-    {l:'OPEN 1H',v:v.open_1h?fmtK(v.open_1h):'—',p:v.open_1h_pct?fmt(v.open_1h_pct,1)+'%':''},
-    {l:'CLOSE 1H',v:v.close_1h?fmtK(v.close_1h):'—',p:v.close_1h_pct?fmt(v.close_1h_pct,1)+'%':''},
-    {l:'PEAK TIME',v:v.peak_time||'—',p:''},
-    {l:'HVN PRICE',v:v.hvn_price?'$'+fmt(v.hvn_price,2):'—',p:v.hvn_volume?fmtK(v.hvn_volume)+' shares':''}
-  ].map(({l,v:val,p})=>`<div class="vol-sess-card"><div class="vs-lbl">${l}</div><div class="vs-val">${val}</div>${p?`<div class="vs-pct">${p}</div>`:''}</div>`).join('');
-  // Hourly chart
-  const hours=v.hourly_volume||[];
-  if(hours.length){
-    const maxVol=Math.max(...hours.map(h=>h.volume||0),1);
-    $('volHourlyChart').innerHTML=hours.map(h=>{const w=(h.volume/maxVol*100).toFixed(1);const isPeak=h.hour===v.peak_time?.substring(0,5);const c=isPeak?'#00ccff':'#00ff8866';return `<div class="vol-bar-row"><span class="vol-bar-time">${h.hour}</span><div class="vol-bar-track"><div class="vol-bar-fill" style="width:${w}%;background:${c}"></div></div><span class="vol-bar-amt">${fmtK(h.volume)}</span></div>`;}).join('');
-  }else{$('volHourlyChart').innerHTML='<div class="no-data">No hourly data</div>';}
-  $('volStats').innerHTML=`
-    <div class="cond-row"><span class="cond-key">Total Volume</span><span class="cond-val">${fmtK(day.volume)}</span></div>
-    <div class="cond-row"><span class="cond-key">Peak 1-min Bar</span><span class="cond-val">${v.peak_volume?fmtK(v.peak_volume)+' @ '+v.peak_time:'—'}</span></div>
-    <div class="cond-row"><span class="cond-key">High Vol Node</span><span class="cond-val">${v.hvn_price?'$'+fmt(v.hvn_price,2)+' ('+fmtK(v.hvn_volume||0)+')':'—'}</span></div>
-    <div class="cond-row"><span class="cond-key">Open 1H %</span><span class="cond-val">${v.open_1h_pct?fmt(v.open_1h_pct,1)+'%':'—'}</span></div>
-    <div class="cond-row"><span class="cond-key">Close 1H %</span><span class="cond-val">${v.close_1h_pct?fmt(v.close_1h_pct,1)+'%':'—'}</span></div>`;
-}
-
-// ─────────────────────────────────────────────
-// AI FEATURES
-// ─────────────────────────────────────────────
-
-let _md = null, _sd = null, _spyIntraday = null;
-
-// Cache last good intraday snapshot so volume/session panels survive pre-market & overnight
-const INTRADAY_CACHE_KEY = 'spy_intraday_cache_v1';
-function saveIntradayCache(data) {
-  try {
-    const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-    localStorage.setItem(INTRADAY_CACHE_KEY, JSON.stringify({ date: etDate, data }));
-  } catch(e) {}
-}
-function loadIntradayCache() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(INTRADAY_CACHE_KEY) || 'null');
-    if (!cached) return null;
-    // Only use cache if it's from today (CT)
-    const ctDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
-    if (cached.date === ctDate && cached.data) return cached.data;
-  } catch(e) {}
-  return null;
-}
-const chatHistory = [];
-
-function toggleChat() {
-  const p = document.getElementById('aiPanel');
-  p.classList.toggle('open');
-}
-
-// Build compact data context for AI
-function buildContext(md, sd) {
-  const q = md?.quotes || {}, spy = q['SPY'] || {}, vixQ = q['^VIX'] || {};
-  const fg = md?.fear_greed || {}, o = md?.options_summary || {};
-  const tnx = q['^TNX'] || {}, irx = q['^IRX'] || {}, tyx = q['^TYX'] || {};
-  const wems = md?.weekly_em || [], stats = md?.wem_stats || {};
-  const wem = wems.find(w => !w.week_close) || wems[0];
-  const day = sd?.[0] || {}, prev = sd?.[1] || {}, m = day.measurements || {}, v = day.volume_analysis || {};
-  const gex = md?.gex || {};
-  const fgVal = fg.value != null ? fg.value : fg.score;
-  const oc=m.oc_pts??m.open_to_close, ocp=m.oc_pct??m.pct_open_to_close;
-  const rng=m.range_pts??m.day_range;
-  const last30 = (sd||[]).slice(0,30).filter(d=>d.volume>0);
-  const avg30vol = last30.length ? Math.round(last30.reduce((a,d)=>a+d.volume,0)/last30.length) : 0;
-  const vsAvg = avg30vol && day.volume ? ((day.volume-avg30vol)/avg30vol*100) : null;
-  const todayDate = new Date();
-  const dow = todayDate.getDay();
-  const wsd = new Date(todayDate); wsd.setDate(todayDate.getDate()-(dow===0?6:dow-1));
-  const weekRows = (sd||[]).filter(r=>r.date>=wsd.toISOString().split('T')[0]);
-  const wOpen = weekRows.length ? weekRows[weekRows.length-1].open : null;
-  const wHigh = weekRows.length ? Math.max(...weekRows.map(r=>r.high||0)) : null;
-  const wLow  = weekRows.length ? Math.min(...weekRows.filter(r=>r.low).map(r=>r.low)) : null;
-  const mStr = todayDate.toISOString().slice(0,7);
-  const mRows = (sd||[]).filter(r=>r.date?.startsWith(mStr));
-  const mOpen = mRows.length ? mRows[mRows.length-1].open : null;
-  const mHigh = mRows.length ? Math.max(...mRows.map(r=>r.high||0)) : null;
-  const mLow  = mRows.length ? Math.min(...mRows.filter(r=>r.low).map(r=>r.low)) : null;
-  const hvns = (sd||[]).filter(r=>r.volume_analysis?.hvn_price).slice(0,5)
-    .map(r=>`$${fmt(r.volume_analysis.hvn_price,2)}(${r.date?.slice(5)})`).join(', ');
-  const cur = spy.price||0;
-  const gaps = [];
-  for(let i=0;i<Math.min((sd||[]).length-1,60);i++){
-    const t2=sd[i], p2=sd[i+1];
-    if(!t2?.open||!p2?.close) continue;
-    const gs=parseFloat(t2.open)-parseFloat(p2.close);
-    if(Math.abs(gs)<0.05) continue;
-    let filled=false;
-    for(let j=i-1;j>=0;j--){
-      if(!sd[j]?.low||!sd[j]?.high) continue;
-      if(gs>0&&parseFloat(sd[j].low)<=p2.close){filled=true;break;}
-      if(gs<0&&parseFloat(sd[j].high)>=p2.close){filled=true;break;}
+  // Day over Day
+  const dodEl=$('deskDod');
+  if(dodEl && sd && sd.length >= 2){
+    const today=sd[0], prev=sd[1];
+    if(today&&prev){
+      const items=[
+        {l:'Open',  cur:today.open,          prev:prev.open},
+        {l:'Close', cur:today.close||cur,    prev:prev.close},
+        {l:'High',  cur:today.high,          prev:prev.high},
+        {l:'Low',   cur:today.low,           prev:prev.low},
+        {l:'Volume',cur:today.volume,        prev:prev.volume,isVol:true},
+      ].filter(i=>i.cur&&i.prev);
+      dodEl.innerHTML=items.map(({l,cur:c,prev:p,isVol})=>{
+        const diff=c-p, pct=diff/p*100;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text2);">${l}</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${diff>=0?'#00ff88':'#ff3355'};">${sign(diff)}${isVol?fmtK(Math.abs(diff)):fmt(Math.abs(diff),2)} (${sign(pct)}${fmt(Math.abs(pct),1)}%)</span>
+        </div>`;
+      }).join('')||'<div class="no-data">—</div>';
     }
-    if(!filled&&Math.abs(cur-p2.close)<=15)
-      gaps.push(`$${fmt(p2.close,2)} ${gs>0?'(gap up)':'(gap dn)'} ${p2.date}`);
+  } else if(dodEl){
+    dodEl.innerHTML='<div class="no-data">No prev day data yet</div>';
   }
-  const sectors = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU','XLC'];
-  const sectorStr = sectors.map(s => q[s] ? `${s}:${fmt(q[s].pct_change,2)}%` : '').filter(Boolean).join(' ');
-  const spread = tnx.price && irx.price ? (tnx.price - irx.price) : null;
-  const mp = (md?.max_pain || [])[0];
-  const SPY_ATH = 697.84;
-  const athDist = spy.price ? (spy.price - SPY_ATH).toFixed(2) : null;
-  const athPct  = spy.price ? ((spy.price - SPY_ATH)/SPY_ATH*100).toFixed(2) : null;
 
-  // Expiry context
-  const mpAll = md?.max_pain || [];
-  const todayStr = todayDate.toISOString().slice(0,10);
-  const thisFri = new Date(todayDate); thisFri.setDate(todayDate.getDate()+(dow===5?0:(5-dow+7)%7));
+  // ── WALLS BY EXPIRY on desk ─────────────────────────────────────────────
+  const deskWallsEl = $('deskWallsByExpiry');
+  if (deskWallsEl) {
+    const walls = (typeof _md !== 'undefined' ? _md?.walls_by_expiry : null) || [];
+    if (!walls.length) {
+      deskWallsEl.innerHTML = '<div style="font-size:12px;color:var(--text3);">No expiry wall data — run workflow or wait for live GEX refresh.</div>';
+    } else {
+      const deskCur = (typeof _md !== 'undefined' ? _md?.quotes?.SPY?.price : null) || 0;
+      deskWallsEl.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">'
+        + walls.map(w => {
+          const cDist = w.callWall && deskCur ? w.callWall - deskCur : null;
+          const pDist = w.putWall  && deskCur ? w.putWall  - deskCur : null;
+          const isToday = w.dte === 0;
+          const borderCol = isToday ? '#ffcc00' : '#00ccff';
+          return '<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid '+borderCol+';border-radius:3px;padding:10px;">'
+            + '<div style="font-family:Orbitron,monospace;font-size:8px;color:'+borderCol+';margin-bottom:6px;letter-spacing:1px;">'
+            + w.label.toUpperCase() + (w.exp ? ' · ' + w.exp.slice(5) : '') + (w.dte != null ? ' · ' + w.dte + 'DTE' : '') + '</div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+            + '<div style="text-align:center;padding:6px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:3px;">'
+            + '<div style="font-family:Orbitron,monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">CALL WALL</div>'
+            + '<div style="font-family:Share Tech Mono,monospace;font-size:16px;font-weight:bold;color:#00ff88;">' + (w.callWall ? '$'+w.callWall : '—') + '</div>'
+            + (cDist != null ? '<div style="font-size:10px;color:#00ff88;">+' + cDist.toFixed(1) + '</div>' : '')
+            + (w.topCalls?.[0]?.oi ? '<div style="font-size:9px;color:var(--text3);">' + Math.round(w.topCalls[0].oi/1000) + 'K OI</div>' : '')
+            + '</div>'
+            + '<div style="text-align:center;padding:6px;background:rgba(255,51,85,0.06);border:1px solid rgba(255,51,85,0.2);border-radius:3px;">'
+            + '<div style="font-family:Orbitron,monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">PUT WALL</div>'
+            + '<div style="font-family:Share Tech Mono,monospace;font-size:16px;font-weight:bold;color:#ff3355;">' + (w.putWall ? '$'+w.putWall : '—') + '</div>'
+            + (pDist != null ? '<div style="font-size:10px;color:'+(pDist>=0?'#00ff88':'#ff3355')+';">' + (pDist>=0?'+':'') + pDist.toFixed(1) + '</div>' : '')
+            + (w.topPuts?.[0]?.oi ? '<div style="font-size:9px;color:var(--text3);">' + Math.round(w.topPuts[0].oi/1000) + 'K OI</div>' : '')
+            + '</div>'
+            + '</div>'
+            + (w.callWall && w.putWall ? '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">Range: $' + w.putWall + ' — $' + w.callWall + ' (' + (w.callWall - w.putWall).toFixed(0) + ' pts)</div>' : '')
+            + '</div>';
+        }).join('')
+        + '</div>';
+    }
+  }
+
+  // ── SESSION VOLATILITY ────────────────────────────────────────────────────
+  renderDeskSessionVol();
+}
+
+function renderDeskSessionVol() {
+  const el = $('deskSessionVol');
+  if (!el) return;
+
+  let lv = (typeof _spyIntraday !== 'undefined') ? _spyIntraday : null;
+  if (!lv?.available && typeof loadIntradayCache === 'function') {
+    const cached = loadIntradayCache();
+    if (cached?.buckets?.length) lv = { ...cached, _fromCache: true };
+  }
+  const isLive = lv?.available || lv?._fromCache;
+
+  if (!isLive || !lv.buckets || !lv.buckets.length) {
+    el.innerHTML = `
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:8px;letter-spacing:1px;">
+        LIVE DATA AT MARKET OPEN
+      </div>
+      <div style="font-size:11px;color:var(--text3);padding:8px 0;">
+        Session volatility breakdown populates once intraday bars are available.
+      </div>`;
+    return;
+  }
+
+  const sessionRange = lv.high && lv.low ? lv.high - lv.low : null;
+  const maxRange = Math.max(...lv.buckets.map(b => b.range || 0), 0.01);
+
+  // CT time for highlighting active bucket
+  const nowCT = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Chicago'}));
+  const nowMins = nowCT.getHours() * 60 + nowCT.getMinutes();
+
+  // Color by range size relative to session max
+  const rangeColor = r => {
+    if (!r || !maxRange) return 'var(--text3)';
+    const pct = r / maxRange;
+    return pct > 0.7 ? '#ff3355' : pct > 0.4 ? '#ff8800' : pct > 0.2 ? '#ffcc00' : '#00ff88';
+  };
+
+  // Parse bucket label to get start/end mins (labels like "9:30-10:30")
+  const parseBucketMins = label => {
+    const parts = label.split('-');
+    const toMins = t => { const [h,m] = t.split(':').map(Number); return h*60+(m||0); };
+    return [toMins(parts[0]), toMins(parts[1] || parts[0])];
+  };
+
+  const rows = lv.buckets.map(b => {
+    if (b.range === null || b.range === undefined) return '';
+    const [bStart, bEnd] = parseBucketMins(b.label);
+    const isActive = nowMins >= bStart && nowMins < bEnd;
+    const rc = rangeColor(b.range);
+    const barW = maxRange > 0 ? Math.round(b.range / maxRange * 100) : 0;
+    return `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;${isActive ? 'background:rgba(0,204,255,0.05);border-radius:2px;' : ''}">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isActive ? 'var(--cyan)' : 'var(--text3)'};width:68px;flex-shrink:0;">${b.label}${isActive ? ' ◀' : ''}</span>
+      <div style="flex:1;height:8px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+        <div style="width:${barW}%;height:100%;background:${rc};border-radius:2px;"></div>
+      </div>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${rc};width:36px;text-align:right;">$${b.range.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+
+  // Highest-range bucket
+  const maxBucket = lv.buckets.reduce((best, b) => (b.range || 0) > (best.range || 0) ? b : best, lv.buckets[0]);
+  const quietBucket = lv.buckets.filter(b => b.range > 0).reduce((best, b) => (b.range || 99) < (best.range || 99) ? b : best, lv.buckets[0]);
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+      <div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:var(--cyan);">$${sessionRange ? sessionRange.toFixed(2) : '—'}</div>
+        <div style="font-size:10px;color:var(--text3);">total session range</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">PEAK</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#ff3355;">${maxBucket.label}</div>
+        <div style="font-size:9px;color:#ff3355;">$${(maxBucket.range||0).toFixed(2)}</div>
+      </div>
+    </div>
+    <div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-bottom:8px;">
+      <div style="width:${sessionRange ? Math.min(sessionRange/15*100,100).toFixed(0) : 0}%;height:100%;background:var(--cyan);border-radius:2px;"></div>
+    </div>
+    ${rows}
+    <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-top:6px;">
+      QUIET: ${quietBucket.label} · $${(quietBucket.range||0).toFixed(2)}
+    </div>
+    <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-top:3px;text-align:right;">
+      ● LIVE · ${lv.bars} bars
+    </div>`;
+}
+
+function renderOverview(md){
+  const el=$('overviewContent');
+  if(!el)return;
+  const q=md.quotes||{};
+  const p   = sym => q[sym]?.price||0;
+  const pct = sym => q[sym]?.pct_change||0;
+  const s   = v => v>=0?'+':'';
+
+  const tile = (sym, label, opts={}) => {
+    const pr=p(sym), pc=pct(sym);
+    if(!pr) return '';
+    const up=pc>=0, intensity=Math.min(Math.abs(pc)/2.5,1);
+    const bg=up
+      ? `rgba(0,${Math.round(100+intensity*155)},${Math.round(40+intensity*40)},${0.22+intensity*0.42})`
+      : `rgba(${Math.round(130+intensity*125)},${Math.round(30-intensity*20)},38,${0.22+intensity*0.42})`;
+    const dp=opts.isRate?fmt(pr,3)+'%':'$'+fmt(pr,2);
+    const nc=up?'#00ff88':'#ff4466';
+    return `<div style="background:${bg};border:1px solid rgba(255,255,255,0.08);border-radius:3px;padding:4px 6px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:rgba(255,255,255,0.7);font-weight:600;">${label||sym}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;color:#fff;margin-top:1px;">${dp}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${nc};">${s(pc)}${fmt(pc,2)}%</div>
+    </div>`;
+  };
+
+  const groupLbl = (t,c) => `<div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:2px;color:${c};margin:8px 0 4px;padding-bottom:3px;border-bottom:1px solid ${c}22;">${t}</div>`;
+
+  // Sector heatmap
+  const sectors=[
+    {sym:'XLK',n:'Tech',w:32},{sym:'XLF',n:'Fins',w:13},{sym:'XLV',n:'Health',w:12},
+    {sym:'XLY',n:'Disc',w:11},{sym:'XLC',n:'Comm',w:9},{sym:'XLI',n:'Indust',w:8},
+    {sym:'XLP',n:'Stapl',w:6},{sym:'XLE',n:'Energy',w:4},{sym:'XLB',n:'Matls',w:3},
+    {sym:'XLRE',n:'RE',w:2},{sym:'XLU',n:'Util',w:2},
+  ];
+  const totalW=sectors.reduce((a,s2)=>a+s2.w,0);
+  const sectorTiles=sectors.map(s2=>{
+    const pc=pct(s2.sym),pr=p(s2.sym);
+    if(!pr)return '';
+    const up=pc>=0,intensity=Math.min(Math.abs(pc)/2.5,1);
+    const bg=up?`rgba(0,${Math.round(100+intensity*155)},40,${0.28+intensity*0.45})`:`rgba(${Math.round(130+intensity*125)},30,38,${0.28+intensity*0.45})`;
+    return `<div style="flex:${s2.w} 1 ${(s2.w/totalW*100).toFixed(1)}%;background:${bg};border:1px solid rgba(255,255,255,0.08);border-radius:3px;padding:6px 4px;min-height:60px;display:flex;flex-direction:column;justify-content:space-between;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:rgba(255,255,255,0.85);">${s2.sym}</div>
+      <div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;color:#fff;">${s(pc)}${fmt(pc,2)}%</div>
+        <div style="font-size:9px;color:rgba(255,255,255,0.45);">$${fmt(pr,2)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Rotation map — full names, quadrant axes, better visual
+  const btc=q['BTC-USD']||{},dxy=q['DX-Y.NYB']||{};
+  const rotAssets=[
+    {sym:'QQQ',     label:'Nasdaq 100',   a:-95,  cat:'risk-on'},
+    {sym:'IWM',     label:'Russell 2000', a:-70,  cat:'risk-on'},
+    {sym:'XLK',     label:'Technology',   a:-115, cat:'risk-on'},
+    {sym:'BTC-USD', label:'Bitcoin',      a:-78,  cat:'risk-on'},
+    {sym:'XLE',     label:'Energy',       a:-15,  cat:'cyclical'},
+    {sym:'XLF',     label:'Financials',   a:15,   cat:'cyclical'},
+    {sym:'XLY',     label:'Cons Discret', a:-35,  cat:'cyclical'},
+    {sym:'XLV',     label:'Health Care',  a:150,  cat:'defensive'},
+    {sym:'XLP',     label:'Cons Staples', a:165,  cat:'defensive'},
+    {sym:'XLU',     label:'Utilities',    a:125,  cat:'defensive'},
+    {sym:'TLT',     label:'Long Bonds',   a:-152, cat:'safe-haven'},
+    {sym:'GC=F',    label:'Gold',         a:170,  cat:'safe-haven'},
+    {sym:'DX-Y.NYB',label:'US Dollar',    a:-167, cat:'safe-haven'},
+  ];
+
+  const rW=600,rH=500,rCx=rW/2,rCy=rH/2,rR=160;
+
+  // Compute max abs pct for scaling
+  const maxPct = Math.max(...rotAssets.map(a=>Math.abs(pct(a.sym))),1);
+
+  const rotSVG=`<svg viewBox="0 0 ${rW} ${rH}" width="100%" style="display:block;">
+    <!-- Quadrant backgrounds -->
+    <path d="M${rCx},${rCy} L${rCx},22 A${rR*1.1},${rR*1.1} 0 0 1 ${rCx+rR*1.1*Math.cos(-Math.PI/4)},${rCy+rR*1.1*Math.sin(-Math.PI/4)} Z" fill="rgba(0,255,136,0.03)"/>
+    <!-- Orbit rings -->
+    <circle cx="${rCx}" cy="${rCy}" r="${rR}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1" stroke-dasharray="4,6"/>
+    <circle cx="${rCx}" cy="${rCy}" r="${rR*0.6}" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1" stroke-dasharray="2,6"/>
+    <circle cx="${rCx}" cy="${rCy}" r="${rR*0.3}" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+    <!-- Axes -->
+    <line x1="${rCx}" y1="18" x2="${rCx}" y2="${rH-18}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+    <line x1="18" y1="${rCy}" x2="${rW-18}" y2="${rCy}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+    <!-- Quadrant labels — large, readable -->
+    <text x="${rCx}" y="16" text-anchor="middle" fill="rgba(0,255,136,0.5)" font-size="11" font-family="Orbitron,monospace" font-weight="bold">RISK-ON</text>
+    <text x="${rW-10}" y="${rCy-8}" text-anchor="end" fill="rgba(255,180,0,0.5)" font-size="11" font-family="Orbitron,monospace" font-weight="bold">CYCLICAL</text>
+    <text x="${rCx}" y="${rH-4}" text-anchor="middle" fill="rgba(0,200,255,0.5)" font-size="11" font-family="Orbitron,monospace" font-weight="bold">SAFE HAVEN</text>
+    <text x="10" y="${rCy-8}" fill="rgba(180,140,255,0.5)" font-size="11" font-family="Orbitron,monospace" font-weight="bold">DEFENSIVE</text>
+    <!-- Legend -->
+    <text x="10" y="${rH-36}" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Share Tech Mono,monospace">● Bubble size = move magnitude</text>
+    <circle cx="14" cy="${rH-22}" r="5" fill="rgba(0,255,136,0.5)" stroke="#00ff88" stroke-width="1"/>
+    <text x="22" y="${rH-18}" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Share Tech Mono,monospace">= positive</text>
+    <circle cx="80" cy="${rH-22}" r="5" fill="rgba(255,68,102,0.5)" stroke="#ff4466" stroke-width="1"/>
+    <text x="88" y="${rH-18}" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Share Tech Mono,monospace">= negative</text>
+    <!-- Bubbles -->
+    ${rotAssets.map(a=>{
+      const pc2=pct(a.sym),pr2=p(a.sym);
+      if(!pr2)return '';
+      const rad=a.a*Math.PI/180;
+      const dist=rR*(0.5+Math.abs(pc2)/maxPct*0.45);
+      const bx=rCx+Math.cos(rad)*Math.min(dist,rR*0.94);
+      const by=rCy+Math.sin(rad)*Math.min(dist,rR*0.94);
+      const up=pc2>=0;
+      const bR=Math.min(Math.max(Math.abs(pc2)*4+10,11),28);
+      const fc=up?'#00ff88':'#ff4466';
+      const bgC=up?`rgba(0,255,136,${0.12+Math.abs(pc2)*0.08})`:`rgba(255,68,102,${0.12+Math.abs(pc2)*0.08})`;
+      // Label placement — push label away from center
+      const lx=bx+(bx<rCx?-(bR+4):(bR+4));
+      const anchor=bx<rCx?'end':'start';
+      return `<circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="${bR}" fill="${bgC}" stroke="${fc}" stroke-width="1.5" opacity="0.9"/>
+        <text x="${bx.toFixed(1)}" y="${(by+4).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="9" font-family="Orbitron,monospace" font-weight="bold">${s(pc2)}${fmt(pc2,1)}%</text>
+        <text x="${lx.toFixed(1)}" y="${(by+4).toFixed(1)}" text-anchor="${anchor}" fill="rgba(255,255,255,0.65)" font-size="9" font-family="Share Tech Mono,monospace">${a.label}</text>`;
+    }).join('')}
+  </svg>`;
+
+  el.innerHTML=`
+    <!-- ROW 1: BTC | Gauge (centered, compact) | DXY -->
+    <div style="display:grid;grid-template-columns:200px 1fr 200px;gap:10px;align-items:center;margin-bottom:10px;">
+
+      <!-- BTC -->
+      <div class="panel" style="border-left:4px solid #f0a500;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#f0a500;margin-bottom:3px;">₿ BITCOIN</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:26px;font-weight:900;color:#f5c518;">${btc.price?'$'+fmt(btc.price,0):'—'}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${(btc.pct_change||0)>=0?'#00ff88':'#ff4466'};">${s(btc.pct_change)}${fmt(btc.pct_change,2)}%</div>
+        <div style="font-size:10px;color:${(btc.pct_change||0)>=0?'#00ff88':'#ff4466'};margin-top:2px;">${(btc.pct_change||0)>=0?'▲ RISK-ON':'▼ RISK-OFF'}</div>
+      </div>
+
+      <!-- GAUGE — centered, compact -->
+      <div class="panel" style="text-align:center;padding:10px 16px;">
+        ${(()=>{
+            const vix    = q['^VIX']?.price||0;
+            const spyPct = pct('SPY'), rspPct = pct('RSP'), qqPct = pct('QQQ'), iwmPct = pct('IWM');
+            const tltPct = pct('TLT'), goldPct= pct('GC=F'), btcPct = pct('BTC-USD');
+            const dxyPct = pct('DX-Y.NYB'), xlkPct = pct('XLK'), xlpPct = pct('XLP'), xluPct = pct('XLU'), hyg = pct('HYG');
+            const signals = [
+              {label:'VIX',         score:vix<18?1:vix<25?0:-1, desc:vix<20?'<20 CALM':vix<25?'ELEVATED':'>30 FEAR', color:vix<18?'#00ff88':vix<25?'#ffcc00':'#ff3355'},
+              {label:'SPY vs RSP',  score:rspPct>spyPct+0.1?1:rspPct<spyPct-0.3?-1:0, desc:rspPct>spyPct+0.1?'BROAD':rspPct<spyPct-0.3?'NARROW':'MIXED', color:rspPct>spyPct+0.1?'#00ff88':rspPct<spyPct-0.3?'#ff3355':'#ffcc00'},
+              {label:'QQQ vs IWM',  score:qqPct>iwmPct+0.2?1:0, desc:qqPct>iwmPct+0.2?'GROWTH LEADS':'NEUTRAL', color:qqPct>iwmPct+0.2?'#00ff88':'var(--text2)'},
+              {label:'BONDS (TLT)', score:tltPct>0.3?-1:tltPct<-0.3?1:0, desc:tltPct>0.3?'SAFE HAVEN':tltPct<-0.3?'SELLING':'NEUTRAL', color:tltPct>0.3?'#ff3355':tltPct<-0.3?'#00ff88':'var(--text2)'},
+              {label:'GOLD',        score:goldPct>0.5?-1:0, desc:goldPct>0.5?'HEDGE DEMAND':'NEUTRAL', color:goldPct>0.5?'#ffcc00':'var(--text2)'},
+              {label:'BITCOIN',     score:btcPct>1?1:btcPct<-2?-1:0, desc:btcPct>1?'RISK-ON':btcPct<-2?'RISK-OFF':'NEUTRAL', color:btcPct>1?'#00ff88':btcPct<-2?'#ff3355':'var(--text2)'},
+              {label:'US DOLLAR',   score:dxyPct>0.3?-1:dxyPct<-0.3?1:0, desc:dxyPct>0.3?'HEADWIND':'NEUTRAL', color:dxyPct>0.3?'#ff8800':dxyPct<-0.3?'#00ff88':'var(--text2)'},
+              {label:'TECH vs DEF', score:xlkPct>(xlpPct+xluPct)/2+0.3?1:xlkPct<(xlpPct+xluPct)/2-0.3?-1:0, desc:xlkPct>(xlpPct+xluPct)/2+0.3?'OFFENSIVE':'NEUTRAL', color:xlkPct>(xlpPct+xluPct)/2+0.3?'#00ff88':xlkPct<(xlpPct+xluPct)/2-0.3?'#ff3355':'var(--text2)'},
+              {label:'CREDIT (HYG)',score:hyg>0.2?1:hyg<-0.3?-1:0, desc:hyg>0.2?'SPREADS TIGHT':hyg<-0.3?'SPREADS WIDE':'NEUTRAL', color:hyg>0.2?'#00ff88':hyg<-0.3?'#ff3355':'var(--text2)'},
+            ];
+            const totalScore = signals.reduce((a,s2)=>a+s2.score,0);
+            const maxScore   = signals.length;
+            const scorePct   = (totalScore + maxScore) / (maxScore*2) * 100;
+            const regime = totalScore>=4?'RISK-ON':totalScore>=1?'LEANING RISK-ON':totalScore>=-1?'TRANSITION':totalScore>=-4?'LEANING RISK-OFF':'RISK-OFF';
+            const regimeColor = totalScore>=3?'#00ff88':totalScore>=1?'#88cc00':totalScore>=-1?'#ffcc00':totalScore>=-3?'#ff8800':'#ff3355';
+            const sW=280,sH=148,sCx=sW/2,sCy=sH-16,sR=104;
+            const needleAngle = 180 - (scorePct/100*180);
+            const nRad = needleAngle*Math.PI/180;
+            const needleX = sCx+Math.cos(nRad)*sR*0.82;
+            const needleY = sCy-Math.sin(nRad)*sR*0.82;
+            const arcSegs=[{from:180,to:144,color:'#ff3355'},{from:144,to:108,color:'#ff6622'},{from:108,to:90,color:'#ffcc00'},{from:90,to:72,color:'#aacc00'},{from:72,to:36,color:'#66dd44'},{from:36,to:0,color:'#00ff88'}];
+            const arcPath=({from,to,color})=>{const f=from*Math.PI/180,t=to*Math.PI/180;const x1=sCx+Math.cos(f)*sR,y1=sCy-Math.sin(f)*sR,x2=sCx+Math.cos(t)*sR,y2=sCy-Math.sin(t)*sR,xi1=sCx+Math.cos(f)*(sR-16),yi1=sCy-Math.sin(f)*(sR-16),xi2=sCx+Math.cos(t)*(sR-16),yi2=sCy-Math.sin(t)*(sR-16);return `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${sR},${sR} 0 0 0 ${x2.toFixed(1)},${y2.toFixed(1)} L${xi2.toFixed(1)},${yi2.toFixed(1)} A${sR-16},${sR-16} 0 0 1 ${xi1.toFixed(1)},${yi1.toFixed(1)} Z" fill="${color}" opacity="0.85"/>`;};
+            return `<svg viewBox="0 0 ${sW} ${sH}" width="100%" style="display:block;max-width:300px;margin:0 auto;">
+              ${arcSegs.map(arcPath).join('')}
+              <circle cx="${sCx}" cy="${sCy}" r="${sR-16}" fill="var(--bg2)" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+              <line x1="${sCx}" y1="${sCy}" x2="${needleX.toFixed(1)}" y2="${needleY.toFixed(1)}" stroke="${regimeColor}" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="${sCx}" cy="${sCy}" r="6" fill="${regimeColor}" stroke="var(--bg2)" stroke-width="2"/>
+              <text x="${sCx}" y="${sCy-24}" text-anchor="middle" fill="${regimeColor}" font-size="14" font-family="Orbitron,monospace" font-weight="900">${regime}</text>
+              <text x="${sCx}" y="${sCy-10}" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="7" font-family="Orbitron,monospace">SCORE ${totalScore>0?'+':''}${totalScore} / ${maxScore}</text>
+              <text x="10" y="${sCy+12}" fill="rgba(255,51,85,0.7)" font-size="8" font-family="Orbitron,monospace">RISK-OFF</text>
+              <text x="${sW-10}" y="${sCy+12}" text-anchor="end" fill="rgba(0,255,136,0.7)" font-size="8" font-family="Orbitron,monospace">RISK-ON</text>
+            </svg>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-top:6px;">
+              ${signals.map(sig=>`<div style="padding:3px 5px;background:var(--bg3);border-radius:2px;border-left:2px solid ${sig.color};text-align:left;">
+                <div style="font-family:'Orbitron',monospace;font-size:6px;color:var(--text3);">${sig.label}</div>
+                <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:${sig.color};">${sig.desc}</div>
+              </div>`).join('')}
+            </div>`;
+        })()}
+      </div>
+
+      <!-- DXY -->
+      <div class="panel" style="border-left:4px solid ${(dxy.pct_change||0)>=0?'#ff8800':'#00ff88'};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${(dxy.pct_change||0)>=0?'#ff8800':'#00ff88'};margin-bottom:3px;">$ US DOLLAR INDEX</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:26px;font-weight:900;color:#e8e8e8;">${dxy.price?fmt(dxy.price,2):'—'}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${(dxy.pct_change||0)>=0?'#ff8800':'#00ff88'};">${s(dxy.pct_change)}${fmt(dxy.pct_change,2)}%</div>
+        <div style="font-size:10px;color:${(dxy.pct_change||0)>=0?'#ff8800':'#00ff88'};margin-top:2px;">${(dxy.pct_change||0)>=0?'▲ HEADWIND':'▼ TAILWIND'}</div>
+      </div>
+    </div>
+
+    <!-- ROW 2: INDICES -->
+    <div class="panel" style="margin-bottom:10px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ccff;margin-bottom:6px;letter-spacing:2px;">⬡ INDICES</div>
+      <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:5px;">
+        ${['SPY','QQQ','IWM','DIA','^VIX','ES=F','^GSPC','DX-Y.NYB'].map(sym=>{
+          const pr2=p(sym),pc2=pct(sym);if(!pr2)return '';
+          const up=pc2>=0,c=up?'#00ff88':'#ff4466';
+          const lbl={'SPY':'SPY','QQQ':'QQQ','IWM':'IWM','DIA':'DIA','^VIX':'VIX','ES=F':'ES=F','^GSPC':'S&P 500','DX-Y.NYB':'DXY'}[sym]||sym;
+          const isRate=sym==='^VIX';
+          const dp=isRate?fmt(pr2,2):('$'+fmt(pr2,2));
+          return `<div style="background:${up?'rgba(0,255,136,0.07)':'rgba(255,51,85,0.07)'};border:1px solid ${up?'#00ff8833':'#ff335533'};border-top:2px solid ${c};border-radius:3px;padding:6px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:rgba(255,255,255,0.6);">${lbl}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;color:#e8e8e8;">${dp}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${c};">${s(pc2)}${fmt(pc2,2)}%</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- ROW 3: LEFT tickers | RIGHT rotation map -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;">
+
+      <!-- LEFT: Sectors → Sub-sectors → MAG7 → Commodities → Bonds -->
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#8855ff;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid #8855ff22;">⬡ SECTORS <span style="font-size:7px;color:rgba(255,255,255,0.2);">width = S&P weight</span></div>
+        <div style="display:flex;gap:3px;margin-bottom:10px;">${sectorTiles}</div>
+
+        ${groupLbl('SUB-SECTORS','#6644cc')}
+        <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin-bottom:8px;">
+          ${[['SMH','SMH'],['XBI','XBI'],['KRE','KRE'],['XRT','XRT'],['ITB','ITB'],['XOP','XOP'],['GDX','GDX'],['ARKK','ARKK'],['XHB','XHB']]
+            .map(([sym,l])=>tile(sym,l)).join('')}
+        </div>
+
+        ${groupLbl('MAG 7','#ffcc00')}
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px;">
+          ${[['AAPL','AAPL'],['MSFT','MSFT'],['GOOGL','GOOG'],['AMZN','AMZN'],['NVDA','NVDA'],['META','META'],['TSLA','TSLA']]
+            .map(([sym,l])=>tile(sym,l)).join('')}
+        </div>
+
+        ${groupLbl('COMMODITIES','#ff8800')}
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px;">
+          ${[['GC=F','GOLD'],['SI=F','SILVER'],['HG=F','COPPER'],['CL=F','OIL'],['NG=F','NAT GAS']]
+            .map(([sym,l])=>tile(sym,l)).join('')}
+        </div>
+
+        ${groupLbl('BONDS & RATES','#00ccff')}
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;">
+          ${['^TNX','^IRX','^TYX'].map(sym=>tile(sym,{'^TNX':'10YR','^IRX':'2YR','^TYX':'30YR'}[sym],{isRate:true})).join('')}
+          ${[['TLT','TLT'],['HYG','HYG'],['JNK','JNK']].map(([sym,l])=>tile(sym,l)).join('')}
+        </div>
+      </div>
+
+      <!-- RIGHT: Rotation map -->
+      <div class="panel" style="position:sticky;top:0;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#00ccff;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid #00ccff22;">⬡ MARKET ROTATION MAP</div>
+        ${rotSVG}
+      </div>
+
+    </div>
+  `;
+}
+
+function renderToday(md,sd){
+  const q=md.quotes||{},spy=q['SPY']||{};
+  // Build a live intraday entry if today isn't in the database yet
+  const todayStr=new Date().toISOString().split('T')[0];
+  let liveDay=null;
+  if(spy.price&&(!sd||!sd.length||sd[0].date!==todayStr)){
+    const o=spy.open||spy.prev_close||spy.price;
+    const h=spy.high||spy.price;
+    const l=spy.low||spy.price;
+    const c=spy.price;
+    liveDay={date:todayStr,open:o,high:h,low:l,close:c,volume:spy.volume||0,
+      measurements:{
+        oc_pts:c-o,oc_pct:(c-o)/o*100,
+        oh_pts:h-o,oh_pct:(h-o)/o*100,
+        ol_pts:l-o,ol_pct:(l-o)/o*100,
+        hc_pts:c-h,hc_pct:(c-h)/h*100,
+        lc_pts:c-l,lc_pct:(c-l)/l*100,
+        range_pts:h-l,range_pct:(h-l)/o*100
+      },volume_analysis:{}};
+  }
+  const sdFull=liveDay?[liveDay,...(sd||[])]:(sd||[]);
+  if(!sdFull.length){$('panel-today').innerHTML='<div class="no-data">No SPY data available yet.</div>';return;}
+  const day=sdFull[0],vixQ=q['^VIX']||{},tnx=q['^TNX']||{},fg=md.fear_greed||{};
+  $('todayDate').innerHTML=`<span class="live-dot"></span>${liveDay?'LIVE INTRADAY':'TODAY\'S RESULTS'} — ${day.date}`;
+  // OHLCV
+  $('ohlcvRow').innerHTML=[
+    {l:'OPEN',v:'$'+fmt(day.open,2),c:''},
+    {l:'HIGH',v:'$'+fmt(day.high,2),c:'up'},
+    {l:'LOW',v:'$'+fmt(day.low,2),c:'dn'},
+    {l:'CLOSE',v:'$'+fmt(day.close,2),c:day.close>=day.open?'up':'dn'},
+    {l:'VOLUME',v:fmtK(day.volume),c:''},
+    {l:'VWAP',v:day.vwap?'$'+fmt(day.vwap,2):'—',c:''}
+  ].map(({l,v,c})=>`<div class="ohlcv-card"><div class="oc-lbl">${l}</div><div class="oc-val ${c}">${v}</div></div>`).join('');
+  // Measurements
+  const m=day.measurements||{};
+  // Support both field name formats (live intraday uses oc_pts, DB uses open_to_close)
+  const meas = {
+    oc_pts: m.oc_pts ?? m.open_to_close,
+    oc_pct: m.oc_pct ?? m.pct_open_to_close,
+    oh_pts: m.oh_pts ?? m.open_to_high,
+    oh_pct: m.oh_pct ?? m.pct_open_to_high,
+    ol_pts: m.ol_pts ?? m.open_to_low,
+    ol_pct: m.ol_pct ?? m.pct_open_to_low,
+    hc_pts: m.hc_pts ?? m.high_to_close,
+    hc_pct: m.hc_pct ?? m.pct_high_to_close,
+    lc_pts: m.lc_pts ?? m.low_to_close,
+    lc_pct: m.lc_pct ?? m.pct_low_to_close,
+    range_pts: m.range_pts ?? m.day_range,
+    range_pct: m.range_pct ?? m.pct_day_range
+  };
+  const measItems=[
+    {n:'Open → Close',pts:meas.oc_pts,pct:meas.oc_pct},
+    {n:'Open → High',pts:meas.oh_pts,pct:meas.oh_pct},
+    {n:'Open → Low',pts:meas.ol_pts,pct:meas.ol_pct},
+    {n:'High → Close',pts:meas.hc_pts,pct:meas.hc_pct},
+    {n:'Low → Close',pts:meas.lc_pts,pct:meas.lc_pct},
+    {n:'Day Range',pts:meas.range_pts,pct:meas.range_pct}
+  ];
+  const maxPts=Math.max(...measItems.map(x=>Math.abs(x.pts||0)),1);
+  $('measList').innerHTML=measItems.map(({n,pts,pct})=>{
+    if(pts==null)return '';
+    const w=Math.abs(pts)/maxPts*100;const c=pts>=0?'#00ff88':'#ff3355';
+    return `<div class="meas-row"><span class="meas-name">${n}</span><div class="meas-bar-wrap"><div class="meas-bar" style="width:${w}%;background:${c}66"></div></div><span class="meas-pts ${clr(pts)}">${sign(pts)}${fmt(pts,2)}</span><span class="meas-pct ${clr(pts)}">${sign(pct)}${fmt(pct,2)}%</span></div>`;
+  }).join('');
+  // DoD
+  const prev=sdFull[1];
+  if(prev){
+    const pm=prev.measurements||{};
+    $('dodList').innerHTML=[
+      {l:'Open-to-Open',cur:day.open,prev:prev.open},
+      {l:'Close-to-Close',cur:day.close,prev:prev.close},
+      {l:'High-to-High',cur:day.high,prev:prev.high},
+      {l:'Low-to-Low',cur:day.low,prev:prev.low}
+    ].map(({l,cur,prev:p})=>{const diff=cur-p;return `<div class="dod-row"><span class="dod-lbl">${l}</span><span class="dod-val ${clr(diff)}">${sign(diff)}${fmt(diff,2)} (${sign(diff/p*100)}${fmt(diff/p*100,2)}%)</span></div>`;}).join('');
+  }else{$('dodList').innerHTML='<div class="no-data">No previous day yet.</div>';}
+  // Conditions
+  const fgVal=fg.value!=null?fg.value:fg.score;
+  const vol=day.volume_analysis||{};
+  // Normalize volume field names (DB uses different names than live)
+  const v930=vol.open_1h??vol.vol_930_1000;
+  const v930pct=vol.open_1h_pct??(v930&&day.volume?v930/day.volume*100:null);
+  const v1500=vol.close_1h??vol.vol_1500_1600;
+  const v1500pct=vol.close_1h_pct??(v1500&&day.volume?v1500/day.volume*100:null);
+  const peakTime=vol.peak_time??vol.peak_volume_time;
+  const hvnPrice=vol.hvn_price??vol.hvn_price;
+  $('todayCondGrid').innerHTML=`
+    <div class="cond-card">
+      <div class="cc-title">⬡ VOLUME SUMMARY</div>
+      <div class="cond-row"><span class="cond-key">Total</span><span class="cond-val">${fmtK(day.volume??vol.total_volume??0)}</span></div>
+      <div class="cond-row"><span class="cond-key">Open 1H</span><span class="cond-val">${v930?fmtK(v930):'—'} <span style="color:var(--text3)">${v930pct?fmt(v930pct,1)+'%':''}</span></span></div>
+      <div class="cond-row"><span class="cond-key">Close 1H</span><span class="cond-val">${v1500?fmtK(v1500):'—'} <span style="color:var(--text3)">${v1500pct?fmt(v1500pct,1)+'%':''}</span></span></div>
+      <div class="cond-row"><span class="cond-key">Peak Time</span><span class="cond-val">${peakTime?fmt12(peakTime):'—'}</span></div>
+      <div class="cond-row"><span class="cond-key">HVN Price</span><span class="cond-val">${hvnPrice?'$'+fmt(hvnPrice,2):'—'}</span></div>
+    </div>
+    <div class="cond-card">
+      <div class="cc-title">⬡ OPTIONS SNAPSHOT</div>
+      ${(()=>{const o=md.options_summary||{};return `
+      <div class="cond-row"><span class="cond-key">P/C (Vol)</span><span class="cond-val ${o.pc_ratio_vol>1?'dn':o.pc_ratio_vol<0.7?'up':'neu'}">${fmt(o.pc_ratio_vol,3)}</span></div>
+      <div class="cond-row"><span class="cond-key">Call Vol</span><span class="cond-val up">${o.call_volume?fmtK(o.call_volume):'—'}</span></div>
+      <div class="cond-row"><span class="cond-key">Put Vol</span><span class="cond-val dn">${o.put_volume?fmtK(o.put_volume):'—'}</span></div>
+      <div class="cond-row"><span class="cond-key">Expiry</span><span class="cond-val">${o.expiry||'—'}</span></div>`;})()}
+    </div>
+    <div class="cond-card">
+      <div class="cc-title">⬡ MARKET CONDITIONS</div>
+      <div class="cond-row"><span class="cond-key">VIX</span><span class="cond-val ${vixQ.price>30?'dn':vixQ.price<20?'up':'neu'}">${fmt(vixQ.price,2)} <span style="color:var(--text3)">${sign(vixQ.change)}${fmt(vixQ.change,2)}</span></span></div>
+      <div class="cond-row"><span class="cond-key">F&G Index</span><span class="cond-val">${fgVal||'—'}</span></div>
+      <div class="cond-row"><span class="cond-key">10YR Yield</span><span class="cond-val">${fmt(tnx.price,3)}%</span></div>
+      <div class="cond-row"><span class="cond-key">Yield Spread</span><span class="cond-val">${(()=>{const irx=q['^IRX'];return irx&&tnx?fmt(tnx.price-irx.price,3)+'%':'—';})()}</span></div>
+    </div>`;
+}
+
+function renderOptions(md){
+  const o   = md.options_summary||{};
+  const mp  = md.max_pain||[];
+  const q   = md.quotes||{};
+  const spy = q['SPY']||{};
+  const cur = spy.price||0;
+  const gex = md.gex||{};
+  const atm_iv = md.gex?.atm_iv || md.weekly_em?.[0]?.atm_iv || o.atm_iv || null;
+  const atm_iv_pct = (atm_iv || 0) * 100;  
+  const sign2 = v => v>=0?'+':'';
+
+  const today3 = new Date();
+  const dow3   = today3.getDay();
+  const thisFri = new Date(today3); thisFri.setDate(today3.getDate()+(dow3===5?0:(5-dow3+7)%7));
   const thisFriStr = thisFri.toISOString().slice(0,10);
   const getMonthlyOpex = () => {
     const d=new Date(); d.setDate(1); let fc=0;
     while(fc<3){d.setDate(d.getDate()+1);if(d.getDay()===5)fc++;}
-    if(d<todayDate){d.setMonth(d.getMonth()+1);d.setDate(1);fc=0;
+    if(d<today3){d.setMonth(d.getMonth()+1);d.setDate(1);fc=0;
       while(fc<3){d.setDate(d.getDate()+1);if(d.getDay()===5)fc++;}}
     return d.toISOString().slice(0,10);
   };
-  const monthlyStr = getMonthlyOpex();
-  const mpLines = mpAll.slice(0,6).map(m2 => {
-    const ed=new Date(m2.expiry+'T00:00:00'), edow=ed.getDay();
-    const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][edow];
-    const label = m2.expiry===todayStr?'0DTE-TODAY':m2.expiry===monthlyStr?'MONTHLY-OPEX':edow===5?'WEEKLY-OPEX-Fri':`${dayName}-expiry`;
-    return `  ${m2.expiry}[${label}] DTE:${m2.dte} MaxPain:$${fmt(m2.max_pain,2)} dist:${m2.dist_from_spot>=0?'+':''}${fmt(m2.dist_from_spot,2)} OI:${fmtK(m2.total_oi||0)}`;
-  }).join('\n');
+  const monthlyOpexStr = getMonthlyOpex();
+  const fridayExp  = mp.find(m=>m.expiry===thisFriStr);
+  const monthlyExp = mp.find(m=>m.expiry===monthlyOpexStr);
+  const pcr    = o.pc_ratio_vol;
+  const pcrOI  = o.pc_ratio_oi;
+  const pcrC   = !pcr?'var(--text3)':pcr<0.7?'#00ff88':pcr<1.0?'#ffcc00':'#ff3355';
+  const pcrLbl = !pcr?'—':pcr<0.7?'BULLISH':pcr<1.0?'NEUTRAL':'BEARISH';
 
-  return `SPY TRACKER — ${todayDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric',year:'numeric'})}
-
-PRICE: SPY $${fmt(spy.price,2)} | ${sign(spy.pct_change)}${fmt(spy.pct_change,2)}% | chg: ${sign(spy.change)}$${fmt(spy.change,2)}
-ATH ($${SPY_ATH}): ${athDist>=0?'+':''}${athDist} (${athPct}%)
-
-OHLC:
-  Today:    O:$${fmt(day.open||spy.open,2)} H:$${fmt(day.high||spy.high,2)} L:$${fmt(day.low||spy.low,2)} C:$${fmt(spy.price,2)}
-  Prev Day: O:$${fmt(prev.open,2)} H:$${fmt(prev.high,2)} L:$${fmt(prev.low,2)} C:$${fmt(prev.close,2)}
-  This Week: O:$${fmt(wOpen,2)} H:$${fmt(wHigh,2)} L:$${fmt(wLow,2)}
-  This Month: O:$${fmt(mOpen,2)} H:$${fmt(mHigh,2)} L:$${fmt(mLow,2)}
-
-WEM (Friday expiry): Low:$${fmt(wem?.wem_low,2)} Mid:$${fmt(wem?.wem_mid,2)} High:$${fmt(wem?.wem_high,2)} ±$${fmt((wem?.wem_range||0)/2,2)} IV:${fmt((wem?.atm_iv||0)*100,2)}%
-  History: ${stats.total_weeks||0} weeks, ${fmt(stats.pct_inside,1)}% closed inside WEM
-
-HVNs (recent): ${hvns||'none'}
-Unfilled gaps (within $15): ${gaps.length?gaps.join(' | '):'none'}
-
-VOLUME: Today:${fmtK(day.volume||0)} | 30d avg:${fmtK(avg30vol)} | vs avg:${vsAvg!=null?(vsAvg>=0?'+':'')+fmt(vsAvg,1)+'%':'N/A'}
-  Open 1H:${fmtK(v.open_1h||0)} (${fmt(v.open_1h_pct,1)}%) Close 1H:${fmtK(v.close_1h||0)} (${fmt(v.close_1h_pct,1)}%)
-
-VOLATILITY: VIX:${fmt(vixQ.price,2)} (${sign(vixQ.pct_change)}${fmt(vixQ.pct_change,2)}%) | VIX3M:${fmt(q['^VIX3M']?.price,2)} | VVIX:${fmt(q['^VVIX']?.price,2)} | SKEW:${fmt(q['^SKEW']?.price,1)}
-  PCR:${fmt(o.pc_ratio_vol,3)} | F&G:${fgVal||'N/A'}/100 | ATM IV: ${fmt((wem?.atm_iv || 0) * 100, 2)}%
-
-OPTIONS — Today is ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dow]}.
-  RULE: Mon/Wed = mid-week 0DTE only. Friday = WEEKLY OPEX. NEVER say "todays expiry" unless today is Friday.
-${mpLines||'  No max pain data'}
-  GEX: ${gex.regime||'N/A'} | Net:${gex.net_gex?(gex.net_gex/1e9).toFixed(2)+'B':'N/A'} | Flip:$${gex.flip_point||'N/A'} | Supp:$${gex.support||'N/A'} | Res:$${gex.resistance||'N/A'}
-  PCR OI:${fmt(o.pc_ratio_oi,3)} | Call OI:${fmtK(o.total_call_oi||0)} | Put OI:${fmtK(o.total_put_oi||0)}
-
-RATES: 10YR:${fmt(tnx.price,3)}% 2YR:${fmt(irx.price,3)}% 30YR:${fmt(tyx.price,3)}% Spread:${spread!=null?fmt(spread,3)+'%':'N/A'}
-  DXY:${fmt(q['DX-Y.NYB']?.price,2)} Gold:$${fmt(q['GC=F']?.price,0)} Oil:$${fmt(q['CL=F']?.price,2)} BTC:$${fmt(q['BTC-USD']?.price,0)}
-
-SECTORS: ${sectorStr}`;
-}
-
-// Call AI proxy
-async function callAI(messages, system, maxTokens = 800) {
-  const resp = await fetch('/ai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, system, max_tokens: maxTokens })
-  });
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error);
-  return data.content;
-}
-
-// ─── MEDIA PLAYER ─────────────────────────────────────────────────────────────
-// Two embed strategies:
-// 1. Live channels: youtube.com/embed/live_stream?channel=CHANNEL_ID (tries to show their live stream)
-// 2. Direct video: youtube.com/embed/VIDEO_ID
-// Channels without a UC ID open in a new tab
-
-const MEDIA_SOURCES = [
-  // Live streaming channels — embed via channel ID live_stream trick
-  {
-    group: 'LIVE STREAMS',
-    items: [
-      { name:'Bloomberg Television', channelId:'UCIALMKvObZNtJ6AmdCLP7Lg', color:'#00ccff', desc:'24/7 Business & Markets', live:true },
-    ]
-  },
-  // Channels with specific known video/stream IDs (from your URLs)
-  {
-    group: 'YOUR SAVED STREAMS',
-    items: [
-      { name:'Live Stock Scanner',         videoId:'KoBI00adF2w',  color:'#00ff88', desc:'Real-time stock scanner audio', live:true },
-    ]
-  },
-  // Channels — open in tab (no reliable live embed without channel ID)
-  {
-    group: 'CHANNELS (OPENS IN TAB)',
-    items: [
-      { name:'FX Evolution',        url:'www.youtube.com/@fxevolutionvideo',  color:'#00ff88', desc:'FX & Options Trading' },
-      { name:'Titans of Tomorrow',  url:'https://www.youtube.com/@titans.of.tomorrow', color:'#8855ff', desc:'Trading Podcast' },
-      { name:'Words of Rizdom',     url:'https://www.youtube.com/@wordsofrizdom',      color:'#ffcc00', desc:'Trading Podcast' },
-    ]
-  }
-];
-
-function extractVideoId(input) {
-  if(!input) return null;
-  input = input.trim();
-  if(/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
-  let m;
-  m = input.match(/[?&]v=([a-zA-Z0-9_-]{11})/); if(m) return m[1];
-  m = input.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/); if(m) return m[1];
-  m = input.match(/\/embed\/([a-zA-Z0-9_-]{11})/); if(m) return m[1];
-  m = input.match(/\/shorts\/([a-zA-Z0-9_-]{11})/); if(m) return m[1];
-  m = input.match(/\/live\/([a-zA-Z0-9_-]{11})/); if(m) return m[1];
-  return null;
-}
-
-function setPlayer(src, label) {
-  const iframe = $('mediaIframe');
-  const ph = $('mediaPlaceholder');
-  if(!iframe) return;
-  iframe.src = src;
-  if(ph) ph.style.display = 'none';
-  // Update now-playing label
-  const np = $('mediaNowPlaying');
-  if(np) np.textContent = label || '';
-}
-
-function playLiveChannel(channelId, name) {
-  // YouTube's live_stream embed — plays the channel's current live stream if one exists
-  setPlayer(
-    `https://www.youtube-nocookie.com/embed/live_stream?channel=${channelId}&autoplay=1&rel=0&modestbranding=1`,
-    name
-  );
-}
-
-function playVideoId(videoId, name) {
-  setPlayer(
-    `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`,
-    name
-  );
-}
-
-function playItem(item) {
-  if(item.channelId) {
-    playLiveChannel(item.channelId, item.name);
-  } else if(item.videoId) {
-    playVideoId(item.videoId, item.name);
-  } else if(item.url) {
-    window.open(item.url, '_blank');
-    // Show message in placeholder
-    const ph = $('mediaPlaceholder');
-    if(ph) {
-      ph.style.display = 'flex';
-      ph.innerHTML = `<div style="text-align:center;padding:20px;">
-        <div style="font-size:36px;margin-bottom:10px;">↗</div>
-        <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;color:var(--cyan);margin-bottom:8px;">OPENED IN NEW TAB</div>
-        <div style="font-size:11px;color:var(--text3);line-height:1.7;">Find a video, copy its URL,<br>paste it in the box above to embed.</div>
-      </div>`;
-    }
-  }
-}
-
-function loadMediaUrl() {
-  const raw = ($('mediaUrlInput')?.value || '').trim();
-  if(!raw) return;
-  const id = extractVideoId(raw);
-  if(id) {
-    playVideoId(id, id);
-  } else if(raw.startsWith('http')) {
-    window.open(raw, '_blank');
-  } else {
-    // Treat as search
-    window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(raw)}`, '_blank');
-  }
-  if($('mediaUrlInput')) $('mediaUrlInput').value = '';
-}
-
-function renderMediaSources() {
-  // Sources moved to quick-bar pills in HTML — no sidebar list needed
-}
-
-function initMediaTab() {
-  videoLibInit();
-  // Restore drawer state
-  const drawerCollapsed = localStorage.getItem('mediaDrawerCollapsed') === 'true';
-  if (drawerCollapsed) {
-    document.getElementById('mediaDrawerInner')?.classList.add('hidden');
-    const t = document.getElementById('mediaDrawerToggle');
-    if (t) { t.classList.remove('open'); t.classList.add('closed'); }
-  }
-}
-
-function mediaToggleDrawer() {
-  const inner  = document.getElementById('mediaDrawerInner');
-  const toggle = document.getElementById('mediaDrawerToggle');
-  if (!inner || !toggle) return;
-  const isOpen = !inner.classList.contains('hidden');
-  if (isOpen) {
-    inner.classList.add('hidden');
-    toggle.classList.remove('open');
-    toggle.classList.add('closed');
-  } else {
-    inner.classList.remove('hidden');
-    toggle.classList.remove('closed');
-    toggle.classList.add('open');
-  }
-  localStorage.setItem('mediaDrawerCollapsed', isOpen ? 'true' : 'false');
-}
-
-function mediaToggleSources() {
-  const sec = document.getElementById('mediaSourcesSection');
-  if (!sec) return;
-  sec.classList.toggle('sources-collapsed');
-  localStorage.setItem('mediaSourcesCollapsed', sec.classList.contains('sources-collapsed'));
-}
-
-// ─── VIDEO LIBRARY ─────────────────────────────────────────────────────────────
-
-const VL = {
-  videos:      [],
-  topics:      [],
-  activeTopic: 'ALL',
-  loaded:      false,
-};
-
-async function videoLibInit() {
-  if (VL.loaded) { videoLibRender(); return; }
-  try {
-    const [vRes, tRes] = await Promise.all([
-      fetch('/videos?action=list&t=' + Date.now()).then(r => r.json()),
-      fetch('/videos?action=topics&t=' + Date.now()).then(r => r.json()),
-    ]);
-    VL.videos = vRes.videos || [];
-    VL.topics = tRes.topics || [];
-    VL.loaded = true;
-    videoLibRenderTopicBar();
-    videoLibRender();
-  } catch(e) {
-    const el = document.getElementById('videoLibList');
-    if (el) el.innerHTML = '<div style="color:var(--red);font-size:11px;text-align:center;padding:20px;">Failed to load library.</div>';
-  }
-}
-
-function videoLibRenderTopicBar() {
-  // Populate the dropdown select
-  const sel = document.getElementById('videoLibTopicSel');
-  if (!sel) return;
-  const prev = sel.value || 'ALL';
-  sel.innerHTML = '<option value="ALL">— ALL TOPICS —</option>' +
-    VL.topics.map(t => `<option value="${videoLibEsc(t)}">${videoLibEsc(t)}</option>`).join('');
-  // Restore selection if still valid
-  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
-  else sel.value = 'ALL';
-}
-
-function videoLibSetTopicFromSel(t) {
-  VL.activeTopic = t || 'ALL';
-  videoLibRender();
-}
-
-function videoLibSetTopic(t) {
-  VL.activeTopic = t;
-  const sel = document.getElementById('videoLibTopicSel');
-  if (sel) sel.value = t;
-  videoLibRender();
-}
-
-function videoLibRender() {
-  const el = document.getElementById('videoLibList');
-  if (!el) return;
-  // Sync dropdown active topic
-  const sel = document.getElementById('videoLibTopicSel');
-  if (sel && sel.value !== VL.activeTopic) VL.activeTopic = sel.value || 'ALL';
-  let list = VL.videos;
-  if (VL.activeTopic !== 'ALL') list = list.filter(v => v.topic === VL.activeTopic);
-  // Update count badge
-  const cnt = document.getElementById('vLibCount');
-  if (cnt) cnt.textContent = list.length + ' video' + (list.length !== 1 ? 's' : '');
-  if (!list.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:11px;text-align:center;padding:20px;">No videos yet' + (VL.activeTopic !== 'ALL' ? ' in this topic' : '') + '.</div>';
-    return;
-  }
-  el.innerHTML = list.map(v => {
-    const thumb = v.video_id
-      ? `<img src="https://img.youtube.com/vi/${v.video_id}/mqdefault.jpg" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;border-radius:3px 3px 0 0;" loading="lazy" onerror="this.style.display='none'">`
-      : `<div style="width:100%;aspect-ratio:16/9;background:var(--bg3);display:flex;align-items:center;justify-content:center;border-radius:3px 3px 0 0;"><span style="font-size:28px;opacity:0.25;">▶</span></div>`;
-    const date = new Date(v.created_at * 1000).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-    return `
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;margin-bottom:8px;overflow:hidden;cursor:pointer;transition:border-color 0.15s;"
-        onmouseover="this.style.borderColor='rgba(0,204,255,0.35)'" onmouseout="this.style.borderColor='var(--border)'"
-        onclick="videoLibPlay(${JSON.stringify(v).replace(/"/g,'&quot;')})">
-        ${thumb}
-        <div style="padding:8px 10px;">
-          <div style="font-size:12px;color:var(--text1);line-height:1.4;margin-bottom:4px;">${videoLibEsc(v.title)}</div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--cyan);background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.25);padding:2px 7px;border-radius:2px;">${videoLibEsc(v.topic)}</span>
-            <span style="font-size:10px;color:var(--text3);">${date}</span>
-          </div>
-          ${v.notes ? `<div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5;border-top:1px solid var(--border);padding-top:5px;">${videoLibEsc(v.notes)}</div>` : ''}
+  // HEADER BAR
+  const hdr=$('optionsHeaderBar');
+  if(hdr){
+    const expRow=[
+      {label:'NEAREST', data:mp[0]},
+      {label:'THIS FRIDAY', exp:thisFriStr, data:fridayExp},
+      {label:'MONTHLY OPEX', exp:monthlyOpexStr, data:monthlyExp},
+    ].map(e=>{
+      const expStr=e.data?.expiry||e.exp||'—';
+      const pain=e.data?.max_pain;
+      const dist=pain&&cur?pain-cur:null;
+      const dte=e.data?.dte??(expStr!=='—'?Math.ceil((new Date(expStr)-today3)/86400000):null);
+      const dc=dist>0?'#00ff88':dist<0?'#ff3355':'var(--text2)';
+      return `<div style="padding:8px 16px;border-right:1px solid var(--border);">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:2px;">${e.label}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:14px;font-weight:bold;color:var(--cyan);">${expStr}</div>
+        <div style="display:flex;gap:10px;margin-top:2px;font-size:11px;">
+          ${dte!=null?`<span style="color:var(--text3);">${dte}d</span>`:''}
+          ${pain?`<span style="color:var(--text3);">Pain: <b style="color:#fff;">$${fmt(pain,0)}</b></span>`:''}
+          ${dist!=null?`<span style="color:${dc};">${dist>0?'+':''}${fmt(dist,2)}</span>`:''}
         </div>
-        <div style="padding:0 10px 8px;text-align:right;">
-          <button onclick="event.stopPropagation();videoLibDelete(${v.id})"
-            style="background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;padding:2px 6px;border-radius:2px;"
-            onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">✕ delete</button>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-function videoLibEsc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function videoLibPlay(v) {
-  if (v.video_id) {
-    playVideoId(v.video_id, v.title);
-  } else {
-    window.open(v.url, '_blank');
-  }
-}
-
-async function videoLibDelete(id) {
-  const pw = prompt('Enter password to delete:');
-  if (!pw) return;
-  try {
-    const r = await fetch('/videos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', id, password: pw }),
-    });
-    const d = await r.json();
-    if (!r.ok || d.error) { alert('Error: ' + (d.error || 'failed')); return; }
-    VL.videos = VL.videos.filter(v => v.id !== id);
-    videoLibRender();
-  } catch(e) { alert('Network error'); }
-}
-
-// ── Add modal ───────────────────────────────────────────────────────────────
-
-function videoLibOpenAdd() {
-  // Pre-populate existing topics dropdown
-  const sel = document.getElementById('vlTopicSel');
-  if (sel) {
-    sel.innerHTML = '<option value="">existing...</option>' + VL.topics.map(t => `<option value="${videoLibEsc(t)}">${videoLibEsc(t)}</option>`).join('');
-  }
-  document.getElementById('vlError').textContent = '';
-  const overlay = document.getElementById('videoLibOverlay');
-  if (overlay) { overlay.style.display = 'flex'; }
-}
-
-function videoLibCloseAdd() {
-  const overlay = document.getElementById('videoLibOverlay');
-  if (overlay) overlay.style.display = 'none';
-  ['vlUrl','vlTitle','vlTopic','vlNotes','vlPassword'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-}
-
-function videoLibOverlayClick(e) {
-  if (e.target === document.getElementById('videoLibOverlay')) videoLibCloseAdd();
-}
-
-async function videoLibSubmit() {
-  const btn  = document.getElementById('vlSubmitBtn');
-  const errEl = document.getElementById('vlError');
-  const url   = (document.getElementById('vlUrl')?.value || '').trim();
-  const title = (document.getElementById('vlTitle')?.value || '').trim();
-  const topic = (document.getElementById('vlTopic')?.value || '').trim() || 'General';
-  const notes = (document.getElementById('vlNotes')?.value || '').trim();
-  const pw    = (document.getElementById('vlPassword')?.value || '').trim();
-
-  errEl.textContent = '';
-  if (!url)   { errEl.textContent = 'URL is required.'; return; }
-  if (!title) { errEl.textContent = 'Title is required.'; return; }
-  if (!pw)    { errEl.textContent = 'Password is required.'; return; }
-
-  btn.disabled = true; btn.textContent = 'SAVING...';
-  try {
-    const r = await fetch('/videos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'add', url, title, topic, notes, password: pw }),
-    });
-    const d = await r.json();
-    if (!r.ok || d.error) throw new Error(d.error || 'Failed');
-    videoLibCloseAdd();
-    // Reload library
-    VL.loaded = false;
-    await videoLibInit();
-  } catch(e) {
-    errEl.textContent = e.message;
-  } finally {
-    btn.disabled = false; btn.textContent = 'SAVE VIDEO';
-  }
-}
-
-// ─── CHART JOURNAL ─────────────────────────────────────────────────────────────
-let _journalEntries = JSON.parse(localStorage.getItem('spyJournal')||'[]');
-let _currentChartBase64 = null;
-let _currentChartMime = 'image/png';
-let _journalOutcome = 'STUDY';
-
-function saveJournal() {
-  localStorage.setItem('spyJournal', JSON.stringify(_journalEntries.slice(0,100)));
-}
-
-// ── Outcome button state ──────────────────────────────────────────────────────
-window.journalSetOutcome = function(oc) {
-  _journalOutcome = oc;
-  const colors = { WIN:'var(--green)', LOSS:'var(--red)', BE:'var(--yellow)', STUDY:'var(--cyan)' };
-  document.querySelectorAll('.joc-btn').forEach(btn => {
-    const isActive = btn.dataset.oc === oc;
-    btn.style.background = isActive ? colors[oc] : 'var(--bg3)';
-    btn.style.color       = isActive ? '#000'      : 'var(--text3)';
-    btn.style.border      = isActive ? 'none'       : '1px solid var(--border)';
-    btn.style.fontWeight  = isActive ? 'bold'       : 'normal';
-  });
-};
-
-// ── File handling ─────────────────────────────────────────────────────────────
-function handleJournalDrop(e) {
-  e.preventDefault();
-  document.getElementById('journalDropZone').style.borderColor = 'var(--border)';
-  const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('image/')) handleJournalFile(file);
-}
-
-function handleJournalFile(file) {
-  if (!file) return;
-  _currentChartMime = file.type || 'image/png';
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const dataUrl = ev.target.result;
-    _currentChartBase64 = dataUrl.split(',')[1];
-    const preview = document.getElementById('journalImgPreview');
-    const previewImg = document.getElementById('journalPreviewImg');
-    if (preview && previewImg) { previewImg.src = dataUrl; preview.style.display = 'block'; }
-    const dz = document.getElementById('journalDropZone');
-    if (dz) {
-      dz.style.padding = '10px 16px';
-      dz.style.borderColor = 'var(--cyan)';
-      const icon = document.getElementById('journalDropIcon');
-      if (icon) icon.style.display = 'none';
-    }
-    const btn = document.getElementById('journalSaveBtn');
-    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
-    const dateEl = document.getElementById('journalChartDate');
-    if (dateEl && !dateEl.value) {
-      const ct = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-      dateEl.value = ct.toISOString().slice(0,10);
-    }
-  };
-  reader.readAsDataURL(file);
-}
-
-function clearJournalUpload() {
-  _currentChartBase64 = null;
-  const preview = document.getElementById('journalImgPreview');
-  if (preview) preview.style.display = 'none';
-  const dz = document.getElementById('journalDropZone');
-  if (dz) {
-    dz.style.padding = '30px 16px';
-    dz.style.borderColor = 'var(--border)';
-    const icon = document.getElementById('journalDropIcon');
-    if (icon) icon.style.display = '';
-  }
-  const noteEl = document.getElementById('journalNote');
-  if (noteEl) noteEl.value = '';
-  const tagEl = document.getElementById('journalChartTag');
-  if (tagEl) tagEl.value = '';
-  const btn = document.getElementById('journalSaveBtn');
-  if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed'; }
-  window.journalSetOutcome('STUDY');
-}
-
-// ── Save chart entry ──────────────────────────────────────────────────────────
-window.saveJournalChart = function() {
-  if (!_currentChartBase64) return;
-  const note  = (document.getElementById('journalNote')?.value || '').trim();
-  const tag   = (document.getElementById('journalChartTag')?.value || '').trim();
-  const date  = document.getElementById('journalChartDate')?.value || new Date().toISOString().slice(0,10);
-  const entry = {
-    id:       Date.now(),
-    ts:       new Date().toISOString(),
-    date,
-    tag,
-    note,
-    outcome:  _journalOutcome,
-    mime:     _currentChartMime,
-    imageB64: _currentChartBase64,
-  };
-  _journalEntries.unshift(entry);
-  saveJournal();
-  renderJournalEntries();
-  clearJournalUpload();
-  const btn = document.getElementById('journalSaveBtn');
-  if (btn) {
-    btn.textContent = '\u2713 SAVED';
-    setTimeout(() => { btn.textContent = '\u29c6 SAVE TO JOURNAL'; }, 1400);
-  }
-};
-
-// ── Gallery render ────────────────────────────────────────────────────────────
-function renderJournalEntries() {
-  const el = document.getElementById('journalEntries');
-  if (!el) return;
-  const filterOC = document.getElementById('journalFilterOC')?.value || '';
-  let entries = _journalEntries;
-  if (filterOC) entries = entries.filter(e => e.outcome === filterOC);
-  if (!entries.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No charts saved yet.</div>';
-    return;
-  }
-  const ocColors = { WIN:'var(--green)', LOSS:'var(--red)', BE:'var(--yellow)', STUDY:'var(--cyan)' };
-  el.innerHTML = entries.map(e => {
-    const d = new Date(e.ts);
-    const dateStr = d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
-    const timeStr = d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CT';
-    const oc = e.outcome || 'STUDY';
-    const ocColor = ocColors[oc] || 'var(--cyan)';
-    const imgSrc = e.imageB64 ? `data:${e.mime||'image/png'};base64,${e.imageB64}` : '';
-    const realIdx = _journalEntries.indexOf(e);
-    return `<div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${ocColor};border-radius:3px;margin-bottom:8px;overflow:hidden;">
-      ${imgSrc ? `<img src="${imgSrc}" onclick="openJournalLightbox('${imgSrc}')"
-        style="width:100%;max-height:160px;object-fit:cover;display:block;cursor:zoom-in;"/>` : ''}
-      <div style="padding:8px 10px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-          <div>
-            <span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${dateStr} ${timeStr}</span>
-            ${e.tag ? `<span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);margin-left:8px;">${e.tag}</span>` : ''}
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-family:'Orbitron',monospace;font-size:8px;color:${ocColor};border:1px solid ${ocColor}44;border-radius:2px;padding:1px 5px;">${oc}</span>
-            <button onclick="deleteJournalEntry(${realIdx})" style="background:none;border:none;color:#ff335566;cursor:pointer;font-size:11px;padding:0;line-height:1;">\u2715</button>
-          </div>
-        </div>
-        ${e.note ? `<div style="font-size:11px;color:var(--text2);line-height:1.5;">${e.note}</div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-// ── Lightbox ──────────────────────────────────────────────────────────────────
-window.openJournalLightbox = function(src) {
-  const lb = document.getElementById('journalLightbox');
-  const img = document.getElementById('journalLightboxImg');
-  if (!lb || !img) return;
-  img.src = src;
-  lb.style.display = 'flex';
-};
-window.closeJournalLightbox = function() {
-  const lb = document.getElementById('journalLightbox');
-  if (lb) lb.style.display = 'none';
-};
-
-function deleteJournalEntry(i) {
-  _journalEntries.splice(i, 1);
-  saveJournal();
-  renderJournalEntries();
-}
-
-function clearJournal() {
-  if (confirm('Clear all chart journal entries? This cannot be undone.')) {
-    _journalEntries = [];
-    saveJournal();
-    renderJournalEntries();
-  }
-}
-
-// ─── TAB INIT HOOKS ────────────────────────────────────────────────────────────
-// Chat
-async function sendChat() {
-  const input = document.getElementById('aiInput');
-  const btn = document.getElementById('aiSendBtn');
-  const msgs = document.getElementById('aiMessages');
-  const text = input.value.trim();
-  if (!text) return;
-
-  input.value = '';
-  btn.disabled = true;
-
-  // Add user message
-  chatHistory.push({ role: 'user', content: text });
-  msgs.innerHTML += `<div class="ai-msg user">${text}</div>`;
-  msgs.innerHTML += `<div class="ai-msg thinking" id="thinkingMsg">⟳ Thinking...</div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-
-  try {
-    const context = buildContext(_md, _sd);
-    const system = `You are a trading assistant with access to real-time SPY dashboard data. Be concise, specific, and use actual numbers.
-
-Data available: price/OHLC (daily/weekly/monthly), WEM range, HVNs, unfilled gaps (above AND below current price), volume vs 30d avg, VIX/VVIX/SKEW, PCR (vol+OI), GEX (flip/support/resistance from CBOE), max pain by expiry (labeled: Mon/Wed/Fri=0DTE, Fri=also weekly OPEX, 3rd-Fri=monthly OPEX — Wednesday is NOT the weekly expiry), breadth (A/D ratio, up/down volume ratio, % stocks above 50/200-day MA, sector performance), macro (rates, DXY, gold, oil, BTC), and ATH distance.
-
-CURRENT DATA:\n${context}`;
-    const reply = await callAI(chatHistory, system, 600);
-    chatHistory.push({ role: 'assistant', content: reply });
-    document.getElementById('thinkingMsg')?.remove();
-    msgs.innerHTML += `<div class="ai-msg assistant">${reply.replace(/\n/g,'<br>')}</div>`;
-  } catch(e) {
-    document.getElementById('thinkingMsg')?.remove();
-    msgs.innerHTML += `<div class="ai-msg thinking">Error: ${e.message}</div>`;
-  }
-
-  btn.disabled = false;
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-// Pattern alerts
-function runPatternAlerts(md, sd) {
-  const el = document.getElementById('aiAlerts');
-  if (!el) return;
-  const q = md?.quotes || {}, vixQ = q['^VIX'] || {}, o = md?.options_summary || {};
-  const tnx = q['^TNX'] || {}, irx = q['^IRX'] || {};
-  const fg = md?.fear_greed || {}, fgVal = fg.value != null ? fg.value : fg.score;
-  const wems = md?.weekly_em || [];
-  const wem = wems.find(w => !w.week_close) || wems.slice(-1)[0];
-  const spy = q['SPY'] || {}, day = sd?.[0] || {};
-  const alerts = [];
-
-  // VIX alerts
-  if (vixQ.price > 35) alerts.push({ level: 'high', icon: '🔴', text: `VIX at ${fmt(vixQ.price,1)} — EXTREME volatility. Market in fear mode.`, badge: 'EXTREME' });
-  else if (vixQ.price > 25) alerts.push({ level: 'med', icon: '🟠', text: `VIX elevated at ${fmt(vixQ.price,1)} — Above normal. Expect wide ranges.`, badge: 'ELEVATED' });
-  else if (vixQ.price < 15) alerts.push({ level: 'info', icon: '🟢', text: `VIX at ${fmt(vixQ.price,1)} — Very low volatility. Complacency risk.`, badge: 'LOW VOL' });
-
-  // VIX spike intraday
-  if (vixQ.pct_change > 15) alerts.push({ level: 'high', icon: '⚡', text: `VIX spiked +${fmt(vixQ.pct_change,1)}% today — significant fear expansion.`, badge: 'VIX SPIKE' });
-
-  // PCR
-  if (o.pc_ratio_vol > 1.5) alerts.push({ level: 'high', icon: '🐻', text: `Put/Call ratio ${fmt(o.pc_ratio_vol,3)} — Heavy put buying. Bearish positioning.`, badge: 'BEARISH PCR' });
-  else if (o.pc_ratio_vol < 0.5) alerts.push({ level: 'med', icon: '🐂', text: `Put/Call ratio ${fmt(o.pc_ratio_vol,3)} — Heavy call buying. Potential complacency.`, badge: 'BULLISH PCR' });
-
-  // Fear & Greed extremes
-  if (fgVal != null && fgVal <= 15) alerts.push({ level: 'high', icon: '😱', text: `Fear & Greed at ${fgVal} — Extreme Fear. Historically a contrarian buy signal.`, badge: 'EXTREME FEAR' });
-  else if (fgVal != null && fgVal >= 85) alerts.push({ level: 'med', icon: '😤', text: `Fear & Greed at ${fgVal} — Extreme Greed. Caution warranted.`, badge: 'EXTREME GREED' });
-
-  // WEM breach
-  if (wem && spy.price) {
-    if (spy.price < wem.wem_low) alerts.push({ level: 'high', icon: '📉', text: `SPY at $${fmt(spy.price,2)} is BELOW WEM Low $${fmt(wem.wem_low,2)} — WEM breached to downside by $${fmt(wem.wem_low-spy.price,2)}.`, badge: 'WEM BREACH' });
-    else if (spy.price > wem.wem_high) alerts.push({ level: 'high', icon: '📈', text: `SPY at $${fmt(spy.price,2)} is ABOVE WEM High $${fmt(wem.wem_high,2)} — WEM breached to upside by $${fmt(spy.price-wem.wem_high,2)}.`, badge: 'WEM BREACH' });
-    else if (spy.price < wem.wem_low * 1.005) alerts.push({ level: 'med', icon: '⚠️', text: `SPY approaching WEM Low $${fmt(wem.wem_low,2)} — currently $${fmt(spy.price-wem.wem_low,2)} away.`, badge: 'NEAR WEM LOW' });
-    else if (spy.price > wem.wem_high * 0.995) alerts.push({ level: 'med', icon: '⚠️', text: `SPY approaching WEM High $${fmt(wem.wem_high,2)} — currently $${fmt(wem.wem_high-spy.price,2)} away.`, badge: 'NEAR WEM HIGH' });
-  }
-
-  // Yield curve
-  if (tnx.price && irx.price) {
-    const spread = tnx.price - irx.price;
-    if (spread < 0) alerts.push({ level: 'med', icon: '🔄', text: `Yield curve INVERTED — 10yr ${fmt(tnx.price,3)}% vs 2yr ${fmt(irx.price,3)}%. Spread: ${fmt(spread,3)}%.`, badge: 'INVERTED CURVE' });
-  }
-
-  // High volume
-  if (day.volume && sd?.[1]?.volume) {
-    const avgVol = sd.slice(1, 6).reduce((a,d) => a + (d.volume||0), 0) / Math.min(sd.length-1, 5);
-    if (day.volume > avgVol * 1.5) alerts.push({ level: 'info', icon: '📊', text: `Today's volume ${fmtK(day.volume)} is ${fmt(day.volume/avgVol*100-100,0)}% above recent average. High conviction move.`, badge: 'HIGH VOLUME' });
-  }
-
-  // Sector divergence
-  const sectorPcts = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU'].map(s => q[s]?.pct_change || 0);
-  const maxSec = Math.max(...sectorPcts), minSec = Math.min(...sectorPcts);
-  if (maxSec - minSec > 3) alerts.push({ level: 'info', icon: '🔀', text: `Wide sector divergence: ${fmt(maxSec-minSec,1)}% spread between best and worst sector today.`, badge: 'DIVERGENCE' });
-
-  if (!alerts.length) {
-    el.innerHTML = '<div class="no-data" style="color:var(--green)">✓ No unusual patterns detected</div>';
-    return;
-  }
-
-  const levelClass = { high: 'alert-high', med: 'alert-med', low: 'alert-low', info: 'alert-info' };
-  const badgeColor = { high: '#ff3355', med: '#ff8800', low: '#ffcc00', info: '#00ccff' };
-  el.innerHTML = `<div class="alert-bar">${alerts.map(a => `
-    <div class="alert-pill ${levelClass[a.level]}">
-      <span class="al-icon">${a.icon}</span>
-      <span class="al-text">${a.text}</span>
-      <span class="al-badge" style="color:${badgeColor[a.level]};background:${badgeColor[a.level]}22;border:1px solid ${badgeColor[a.level]}44">${a.badge}</span>
-    </div>`).join('')}</div>`;
-}
-
-// Daily summary
-async function generateSummary(md, sd, forceRefresh) {
-  const el = document.getElementById('aiSummary');
-  if (!el) return;
-
-  // Throttle: do not re-run within 10 min unless forced
-  const now = Date.now();
-  if (!forceRefresh && window._lastSummaryTs && (now - window._lastSummaryTs) < 10 * 60 * 1000) return;
-  window._lastSummaryTs = now;
-
-  el.textContent = '';
-  el.classList.add('loading');
-
-  const badge = document.getElementById('aiSummaryModel');
-
-  try {
-    const context = buildContext(md, sd);
-
-    const system = `You are a veteran SPY day trader with 20 years on a prop desk. You've seen every kind of market — crashes, melt-ups, Fed-induced whipsaws, retail-driven squeezes, and the usual daily nonsense. You're sharp, sardonic, and deeply knowledgeable. You call it like you see it. You do not sugarcoat, you do not hedge every sentence with disclaimers, and you have zero patience for financial media clichés.
-
-Your job is to write the daily market overview that greets traders when they open this dashboard. It should be intelligent, entertaining, and genuinely useful. Think of it as your morning briefing to a desk of experienced traders who can handle the truth and appreciate a dry sense of humor.
-
-PERSONALITY RULES:
-- Be blunt and direct. No "it remains to be seen" or "investors are monitoring."
-- Dry wit and sarcasm are welcome — especially about the Fed, retail behavior, analyst consensus, or anything absurd in the data.
-- Funny is good. Forced is not. Don't try to be funny every sentence.
-- Strong opinions are fine when backed by the data. Hedge with data, not words.
-- You can be irreverent about things that deserve it. The market is not sacred.
-- Write like a smart human being, not a robot or a Bloomberg terminal.
-- No bullet points. No headers. Just flowing paragraphs.
-
-FORMAT:
-- 3 to 5 paragraphs. Each one punchy and substantive.
-- Start with where SPY actually is and what it means in plain English — do not open with "As of today."
-- Hit the key levels, volatility regime, notable cross-market signals, and any options structure that matters.
-- End with something honest — the real risk, the real opportunity, or the thing everyone is ignoring.
-- Use actual numbers from the data. Don't make things up. Don't round unless it makes sense.
-
-CRITICAL OPTIONS RULES:
-- Mon/Tue/Wed/Thu expiries are mid-week 0DTE noise. Only Friday is the WEEKLY OPEX.
-- Never say "this weeks expiry" about a Wednesday. The weekly is Friday.
-- Reference max pain only for Friday and monthly expiries — they are the ones that matter for positioning.
-
-\n\n${context}`;
-
-    const userMsg = `Write todays market overview. Give me the full picture — where SPY stands relative to key structure, what volatility is signaling, what the options market is pricing in, what is working cross-asset, and what the real story is that most people are probably missing or misreading. Be honest about what is clear, what is murky, and what is actually interesting today. Write it like you are talking to traders who know what they are doing.`;
-
-    const reply = await callAI([{ role: 'user', content: userMsg }], system, 900);
-
-    el.classList.remove('loading');
-
-    // Render paragraphs with spacing
-    const paras = reply.split('\n\n').filter(p => p.trim());
-    if (paras.length > 1) {
-      el.innerHTML = paras.map(p => `<div class="ov-para">${p.trim().replace(/\n/g, '<br>')}</div>`).join('');
-    } else {
-      el.innerHTML = reply.replace(/\n/g, '<br>');
-    }
-
-    if (badge) badge.textContent = '● GROK';
-
-  } catch(e) {
-    el.classList.remove('loading');
-    el.innerHTML = `<span style="color:var(--text3);font-size:12px;">Overview unavailable — ${e.message}</span>`;
-    if (badge) { badge.textContent = '● ERROR'; badge.style.color = '#ff3355'; }
-  }
-}
-
-async function generateTradeIdeas(md, sd) {
-  const el = document.getElementById('aiTradeIdeas');
-  if (!el) return;
-  try {
-    const context = buildContext(md, sd);
-    const reply = await callAI(
-      [{ role: 'user', content: 'Give 3 specific SPY trade setups. Use OHLC levels, WEM range, HVNs, unfilled gaps, GEX levels (flip/support/resistance), and volatility regime. Each on one line: DIRECTION · SETUP · KEY LEVEL · INVALIDATION. Use actual dollar levels.' }],
-      `You are a professional SPY trader with access to full market data including price structure, GEX (flip/support/resistance), max pain by expiry (labeled correctly — Wed=0DTE, Fri=weekly OPEX), breadth, and volume. Be specific with real numbers.\n\n${context}`,
-      300
-    );
-    el.innerHTML = reply.split('\n').filter(l=>l.trim()).map((line,i) => {
-      const isBull = /call|bull|long/i.test(line);
-      const isBear = /put|bear|short/i.test(line);
-      const c = isBull?'#00ff88':isBear?'#ff3355':'#00ccff';
-      return `<div style="padding:7px 10px;margin-bottom:5px;background:var(--bg3);border-left:3px solid ${c};border-radius:0 3px 3px 0;font-size:12px;line-height:1.5;color:var(--text2);">
-        <span style="font-family:'Orbitron',monospace;font-size:8px;color:${c};margin-right:6px;">${i+1}</span>${line.trim()}
       </div>`;
     }).join('');
-  } catch(e) {
-    el.innerHTML = `<div class="no-data">Unavailable — ${e.message}</div>`;
-  }
-}
-
-// Level analysis
-async function generateLevelAnalysis(md, sd) {
-  const el = document.getElementById('aiLevelAnalysis');
-  if (!el) return;
-  try {
-    const q = md.quotes||{}, spy = q['SPY']||{};
-    const cur = spy.price||0;
-    const today = sd?.[0]||{}, prev = sd?.[1]||{};
-
-    // Today OHLC
-    const dOpen = spy.open||today.open, dHigh = spy.high||today.high, dLow = spy.low||today.low;
-
-    // Previous day
-    const prevClose=prev.close, prevHigh=prev.high, prevLow=prev.low, prevOpen=prev.open;
-
-    // Weekly (current week rows)
-    const todayDate = new Date();
-    const dow = todayDate.getDay();
-    const wsd = new Date(todayDate);
-    wsd.setDate(todayDate.getDate() - (dow===0?6:dow-1));
-    const ws = wsd.toISOString().split('T')[0];
-    const weekRows = (sd||[]).filter(r=>r.date>=ws);
-    const wOpen = weekRows.length ? weekRows[weekRows.length-1].open : null;
-    const wHigh = weekRows.length ? Math.max(...weekRows.map(r=>r.high||0)) : null;
-    const wLow  = weekRows.length ? Math.min(...weekRows.filter(r=>r.low).map(r=>r.low)) : null;
-
-    // Monthly
-    const mStr = todayDate.toISOString().slice(0,7);
-    const mRows = (sd||[]).filter(r=>r.date?.startsWith(mStr));
-    const mOpen = mRows.length ? mRows[mRows.length-1].open : null;
-    const mHigh = mRows.length ? Math.max(...mRows.map(r=>r.high||0)) : null;
-    const mLow  = mRows.length ? Math.min(...mRows.filter(r=>r.low).map(r=>r.low)) : null;
-
-    // Pre-market
-    const pmPrice = spy.pre_market_price||spy.preMarketPrice||null;
-
-    // WEM — objective, IV-derived
-    const wems = md.weekly_em||[];
-    const wem = wems.find(w=>!w.week_close)||wems[0];
-
-    // HVN last 5 sessions
-    const hvns = (sd||[]).slice(0,5)
-      .filter(r=>r.volume_analysis?.hvn_price)
-      .map(r=>`$${fmt(r.volume_analysis.hvn_price,2)} (${r.date?.slice(5)})`);
-
-    // Unfilled gaps within $20
-    const gaps = [];
-    for(let i=0;i<(sd||[]).length-1;i++){
-      const t2=sd[i], p2=sd[i+1];
-      if(!t2.open||!p2.close) continue;
-      const gs=t2.open-p2.close;
-      if(Math.abs(gs)<0.20) continue;
-      let filled=false;
-      for(let j=i-1;j>=0;j--){
-        const c=sd[j];
-        if(!c.low||!c.high) continue;
-        if(gs>0&&c.low<=p2.close){filled=true;break;}
-        if(gs<0&&c.high>=p2.close){filled=true;break;}
-      }
-      if(!filled&&Math.abs(cur-p2.close)<=20)
-        gaps.push(`$${fmt(p2.close,2)} ${gs>0?'(gap up)':'(gap down)'} from ${p2.date}`);
-    }
-
-    const context = `SPY: $${fmt(cur,2)}
-
-TODAY OHLC: O $${fmt(dOpen,2)} | H $${fmt(dHigh,2)} | L $${fmt(dLow,2)}
-PREV DAY: O $${fmt(prevOpen,2)} | H $${fmt(prevHigh,2)} | L $${fmt(prevLow,2)} | C $${fmt(prevClose,2)}
-THIS WEEK: O $${fmt(wOpen,2)} | H $${fmt(wHigh,2)} | L $${fmt(wLow,2)}
-THIS MONTH: O $${fmt(mOpen,2)} | H $${fmt(mHigh,2)} | L $${fmt(mLow,2)}
-PRE-MARKET: ${pmPrice?'$'+fmt(pmPrice,2):'not available'}
-WEM RANGE (IV-derived): Low $${fmt(wem?.wem_low,2)} / Mid $${fmt(wem?.wem_mid,2)} / High $${fmt(wem?.wem_high,2)} (±$${fmt((wem?.wem_range||0)/2,2)})
-HIGH VOLUME NODES (last 5 days): ${hvns.length?hvns.join(', '):'none found'}
-UNFILLED GAPS within $20: ${gaps.length?gaps.join(', '):'none found'}`;
-
-    const reply = await callAI(
-      [{ role: 'user', content: `Analyze these objective price levels in 3-4 sentences. Where is price relative to key OHLC levels? Which levels are acting as support or resistance right now? Are any gaps or HVNs nearby that matter? What is the single most important level to watch?\n\n${context}` }],
-      'You are a technical analyst who uses only objective price action levels: OHLC structure, volume nodes, unfilled gaps, and IV-derived expected move ranges. No GEX, no sentiment, no indicators. Be specific with exact dollar levels from the data provided.',
-      400
-    );
-    el.innerHTML = `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${reply.replace(/\n/g,'<br>')}</div>`;
-  } catch(e) {
-    el.innerHTML = `<div class="no-data">Unavailable — ${e.message}</div>`;
-  }
-}
-
-
-async function generateVolumeAnalysis(md, sd) {
-  const el = document.getElementById('aiVolumeAnalysis');
-  if (!el) return;
-  try {
-    const q = md.quotes||{}, spy = q['SPY']||{};
-    const today = sd?.[0]||{};
-    const va = today.volume_analysis||{};
-
-    // Today's volume
-    const todayVol = today.volume || spy.volume || 0;
-
-    // 30-day average
-    const last30 = (sd||[]).slice(0,30).filter(d=>d.volume>0);
-    const avg30 = last30.length ? Math.round(last30.reduce((a,d)=>a+d.volume,0)/last30.length) : 0;
-
-    // 5-day average
-    const last5 = (sd||[]).slice(0,5).filter(d=>d.volume>0);
-    const avg5 = last5.length ? Math.round(last5.reduce((a,d)=>a+d.volume,0)/last5.length) : 0;
-
-    // Today vs averages
-    const vsAvg30 = avg30 ? ((todayVol-avg30)/avg30*100) : null;
-    const vsAvg5  = avg5  ? ((todayVol-avg5)/avg5*100)   : null;
-
-    // Highest volume days in last 30 (top 3)
-    const topVolDays = [...last30].sort((a,b)=>b.volume-a.volume).slice(0,3)
-      .map(d=>`${d.date}: ${fmtK(d.volume)}`);
-
-    // Lowest volume days (context)
-    const lowVolDays = [...last30].sort((a,b)=>a.volume-b.volume).slice(0,2)
-      .map(d=>`${d.date}: ${fmtK(d.volume)}`);
-
-    // Weekly volume (current week)
-    const todayDate = new Date();
-    const dow = todayDate.getDay();
-    const wsd = new Date(todayDate);
-    wsd.setDate(todayDate.getDate() - (dow===0?6:dow-1));
-    const ws = wsd.toISOString().split('T')[0];
-    const weekRows = (sd||[]).filter(r=>r.date>=ws&&r.volume>0);
-    const weekVol = weekRows.reduce((a,d)=>a+d.volume,0);
-    const avgWeekVol = last30.length>=5 ? Math.round(
-      Array.from({length:6},(_,i)=>{
-        const rows=(sd||[]).slice(i*5,(i+1)*5).filter(d=>d.volume>0);
-        return rows.reduce((a,d)=>a+d.volume,0);
-      }).filter(v=>v>0).reduce((a,b)=>a+b,0) / 6
-    ) : 0;
-
-    // HVN prices last 5 sessions
-    const hvns = (sd||[]).slice(0,5)
-      .filter(r=>r.volume_analysis?.hvn_price)
-      .map(r=>`$${fmt(r.volume_analysis.hvn_price,2)} on ${r.date?.slice(5)} (${fmtK(r.volume_analysis.hvn_volume||0)} shares)`);
-
-    // Session breakdown today
-    const openPct  = va.open_1h_pct  || null;
-    const closePct = va.close_1h_pct || null;
-    const peakTime = va.peak_time    || null;
-    const peakVol  = va.peak_volume  || null;
-
-    // Volume trend — last 10 days direction
-    const last10 = (sd||[]).slice(0,10).filter(d=>d.volume>0).map(d=>d.volume);
-    const trend = last10.length >= 4
-      ? (last10.slice(0,5).reduce((a,b)=>a+b,0)/5) > (last10.slice(5).reduce((a,b)=>a+b,0)/Math.max(last10.slice(5).length,1))
-        ? 'declining over the last 10 sessions'
-        : 'expanding over the last 10 sessions'
-      : 'insufficient data';
-
-    const context = `SPY Volume Analysis
-
-TODAY: ${fmtK(todayVol)} shares
-30-DAY AVG: ${fmtK(avg30)} | Today is ${vsAvg30!=null?(vsAvg30>=0?'+':'')+fmt(vsAvg30,1)+'% vs 30d avg':'N/A'}
-5-DAY AVG:  ${fmtK(avg5)}  | Today is ${vsAvg5!=null?(vsAvg5>=0?'+':'')+fmt(vsAvg5,1)+'% vs 5d avg':'N/A'}
-
-VOLUME TREND: ${trend}
-
-THIS WEEK TOTAL: ${fmtK(weekVol)} (avg weekly ~${fmtK(avgWeekVol)})
-
-TOP VOLUME DAYS (last 30): ${topVolDays.join(' | ')}
-LOWEST VOLUME DAYS (last 30): ${lowVolDays.join(' | ')}
-
-TODAY SESSION BREAKDOWN:
-  Open 1H (8:30-9:30 CT): ${openPct?fmt(openPct,1)+'% of daily volume':'N/A'}
-  Close 1H (2:00-3:00 CT): ${closePct?fmt(closePct,1)+'% of daily volume':'N/A'}
-  Peak volume bar: ${peakTime||'N/A'}${peakVol?' — '+fmtK(peakVol)+' shares':''}
-
-HIGH VOLUME NODE PRICES (price levels with most volume concentration):
-${hvns.length ? hvns.join('\n') : 'No HVN data available'}`;
-
-    const reply = await callAI(
-      [{ role: 'user', content: `Give a thorough volume analysis in 4-5 sentences based on this data. Comment on: is todays volume above or below average and what that suggests, the volume trend (expanding/contracting), any notable concentration at specific price levels (HVNs), and what the open/close session breakdown tells us about conviction. Be specific with numbers.\n\n${context}` }],
-      'You are a volume analysis expert. Focus on what volume tells us about conviction, participation, and likely follow-through. Use the actual numbers. Explain what high or low volume at specific price levels means for those levels as support or resistance.',
-      450
-    );
-    el.innerHTML = `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${reply.replace(/\n/g,'<br>')}</div>`;
-  } catch(e) {
-    el.innerHTML = `<div class="no-data">Unavailable — ${e.message}</div>`;
-  }
-}
-
-// Risk assessment
-async function generateRiskAssessment(md, sd) {
-  const el = document.getElementById('aiRiskAssessment');
-  if (!el) return;
-  try {
-    const context = buildContext(md, sd);
-    const reply = await callAI(
-      [{ role: 'user', content: 'Top 2 risks to bulls and top 2 risks to bears today. Use price structure vs OHLC/WEM, volume conviction, breadth (A/D, up/down vol, % above MAs), volatility regime, GEX, and macro. Format: BULL RISKS: [1] / [2] — BEAR RISKS: [1] / [2]. One sentence conclusion on which side faces more risk. Use actual numbers.' }],
-      `You are a risk manager. Full data including breadth (A/D ratio, up/down volume, % stocks above 50/200-day MA), GEX regime, max pain (correctly labeled by expiry type), OHLC structure, WEM range, and macro available.\n\n${context}`,
-      350
-    );
-    const parts = reply.split(/BEAR RISKS:/i);
-    if(parts.length === 2) {
-      const bullPart = parts[0].replace(/BULL RISKS:/i,'').trim();
-      const bearRest = parts[1].split('—');
-      const bearPart = bearRest[0].trim();
-      const conclusion = bearRest.slice(1).join('—').trim();
-      el.innerHTML = `
-        <div style="margin-bottom:8px;padding:8px;background:#00ff8811;border-left:3px solid #00ff88;border-radius:0 3px 3px 0;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;margin-bottom:4px;">BULL RISKS</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.5;">${bullPart}</div>
-        </div>
-        <div style="margin-bottom:8px;padding:8px;background:#ff335511;border-left:3px solid #ff3355;border-radius:0 3px 3px 0;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ff3355;margin-bottom:4px;">BEAR RISKS</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.5;">${bearPart}</div>
-        </div>
-        ${conclusion?`<div style="font-size:12px;color:var(--text3);font-style:italic;padding-top:4px;">${conclusion}</div>`:''}`;
-    } else {
-      el.innerHTML = `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${reply.replace(/\n/g,'<br>')}</div>`;
-    }
-  } catch(e) {
-    el.innerHTML = `<div class="no-data">Unavailable — ${e.message}</div>`;
-  }
-}
-
-// Event impact
-async function generateEventImpact(md, sd) {
-  const el = document.getElementById('aiEventImpact');
-  if (!el) return;
-  try {
-    const today = new Date(); today.setHours(0,0,0,0);
-    const todayStr = today.toISOString().slice(0,10);
-
-    // Re-use the same nthWeekdayDate logic inline
-    function _nthWD(year, month, weekday, n) {
-      const d = new Date(year, month, 1); let count = 0;
-      for (let i = 0; i < 31; i++) {
-        if (d.getMonth() !== month) break;
-        if (d.getDay() === weekday) { count++; if (count === n) return d.toISOString().slice(0,10); }
-        d.setDate(d.getDate() + 1);
-      }
-      return null;
-    }
-
-    // Build dynamic CPI/NFP — use RELEASE_DATA.upcoming if available, else algorithmic fallback
-    const dynEvents = [];
-    const upcomingCpi = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.cpi) || [];
-    const upcomingNfp = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.nfp) || [];
-    if (upcomingCpi.length || upcomingNfp.length) {
-      upcomingCpi.filter(d => d >= todayStr).forEach(d => dynEvents.push({ name: 'CPI', dates: [d] }));
-      upcomingNfp.filter(d => d >= todayStr).forEach(d => dynEvents.push({ name: 'NFP', dates: [d] }));
-    } else {
-      for (let offset = 0; offset <= 4; offset++) {
-        const d = new Date(today); d.setMonth(d.getMonth() + offset);
-        const y = d.getFullYear(), m = d.getMonth();
-        const cpi = _nthWD(y, m, 3, 2);
-        const nfp = _nthWD(y, m, 5, 1);
-        if (cpi && cpi >= todayStr) dynEvents.push({ name: 'CPI', dates: [cpi] });
-        if (nfp && nfp >= todayStr) dynEvents.push({ name: 'NFP', dates: [nfp] });
-      }
-    }
-
-    const knownEarnings = [
-      {name:'TSLA ER',  dates:['2026-04-21','2026-07-20','2026-10-19']},
-      {name:'GOOGL ER', dates:['2026-04-28','2026-07-27','2026-10-26']},
-      {name:'MSFT ER',  dates:['2026-04-29','2026-07-28','2026-10-27']},
-      {name:'META ER',  dates:['2026-04-29','2026-07-28','2026-10-27']},
-      {name:'AAPL ER',  dates:['2026-04-30','2026-07-30','2026-10-29']},
-      {name:'AMZN ER',  dates:['2026-05-01','2026-07-30','2026-10-29']},
-      {name:'NVDA ER',  dates:['2026-05-28','2026-08-27','2026-11-19']},
-    ];
-
-    const fomcDates = ['2026-04-29','2026-06-17','2026-07-29','2026-09-16','2026-10-28','2026-12-16','2027-01-27'];
-
-    const events = [
-      ...dynEvents,
-      ...knownEarnings,
-      { name: 'FOMC', dates: fomcDates.filter(d => d >= todayStr) },
-    ];
-    const upcoming = events.flatMap(e => e.dates.map(d => ({
-      name: e.name,
-      date: d,
-      days: Math.ceil((new Date(d+'T12:00:00') - today) / 86400000)
-    }))).filter(e => e.days >= 0 && e.days <= 30).sort((a,b) => a.days - b.days).slice(0,5);
-
-    if(!upcoming.length) {
-      el.innerHTML = '<div class="no-data">No major events in next 30 days</div>';
-      return;
-    }
-
-    const wem = md.weekly_em?.find(w=>!w.week_close)||md.weekly_em?.[0];
-    const eventStr = upcoming.map(e=>`${e.name} in ${e.days} days (${e.date})`).join(', ');
-    const vix = md.quotes?.['^VIX']?.price||0;
-    const pcr = md.options_summary?.pc_ratio_vol||0;
-    const gex = md.gex||{};
-    const reply = await callAI(
-      [{ role: 'user', content: `Upcoming events: ${eventStr}. WEM: $${wem?.wem_low?.toFixed(2)||'?'}-$${wem?.wem_high?.toFixed(2)||'?'} (±$${((wem?.wem_range||0)/2).toFixed(2)}). VIX: ${vix.toFixed(1)}. PCR: ${fmt(pcr,3)}. ATM IV: ${fmt((wem?.atm_iv||0)*100,2)}%. GEX: ${gex.regime||'N/A'} (flip $${gex.flip_point||'N/A'}). In 2-3 sentences: which event poses the most structural risk, what the current positioning data suggests about market expectations, and whether IV is pricing the risk adequately.` }],
-      'You are a volatility trader. Assess event risk using WEM range, VIX term structure, PCR, GEX regime, and IV vs historical realized vol. Be specific with numbers.',
-      300
-    );
-    el.innerHTML = `
-      <div style="margin-bottom:10px;">
-        ${upcoming.map(e=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
-          <span style="font-size:12px;color:var(--text2);">${e.name}</span>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${e.days<=3?'#ff3355':e.days<=7?'#ff8800':'#00ccff'};">${e.days}d · ${e.date.slice(5)}</span>
-        </div>`).join('')}
-      </div>
-      <div style="font-size:12px;line-height:1.6;color:var(--text2);border-top:1px solid var(--border);padding-top:8px;">${reply.replace(/\n/g,'<br>')}</div>`;
-  } catch(e) {
-    el.innerHTML = `<div class="no-data">Unavailable — ${e.message}</div>`;
-  }
-}
-
-// ─────────────────────────────────────────────
-// KEY EVENTS COUNTDOWN
-// ─────────────────────────────────────────────
-async function renderKeyEvents() {
-  const el = $('keyEventsDisplay');
-  if (!el) return;
-
-  const today = new Date();
-  today.setHours(0,0,0,0);
-
-  const daysUntil = dateStr => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return Math.round((d - today) / 86400000);
-  };
-
-  const urgencyColor = days => {
-    if (days <= 3) return '#ff3355';
-    if (days <= 7) return '#ff8800';
-    if (days <= 14) return '#ffcc00';
-    return '#00ccff';
-  };
-
-  const typeColors = { FOMC:'#8855ff', CPI:'#ff8800', NFP:'#00ccff', EARNINGS:'#ffcc00' };
-
-  // ── Dynamic event date computation — never goes stale ─────────────────────
-  // Computes approximate release dates algorithmically for any future month.
-  // CPI  = 2nd Wednesday of the month (reporting prior month)
-  // NFP  = 1st Friday of the month
-  // These match the actual BLS schedule ~95% of the time.
-  function nthWeekdayDate(year, month, weekday, n) {
-    // weekday: 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat; n: 1-based
-    const d = new Date(year, month, 1);
-    let count = 0;
-    for (let i = 0; i < 31; i++) {
-      if (d.getMonth() !== month) break;
-      if (d.getDay() === weekday) { count++; if (count === n) return d.toISOString().slice(0,10); }
-      d.setDate(d.getDate() + 1);
-    }
-    return null;
-  }
-
-  function computeCpiNfpDates(monthsAhead = 9) {
-    const today = new Date(); today.setHours(0,0,0,0);
-    const todayStr = today.toISOString().slice(0,10);
-    const result = [];
-    // Prefer RELEASE_DATA.upcoming which has actual BLS-published dates
-    const upcomingCpi = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.cpi) || [];
-    const upcomingNfp = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.nfp) || [];
-    if (upcomingCpi.length || upcomingNfp.length) {
-      upcomingCpi.filter(d => d >= todayStr).forEach(d => result.push({ name: 'CPI REPORT',       date: d, type: 'CPI', icon: '📊' }));
-      upcomingNfp.filter(d => d >= todayStr).forEach(d => result.push({ name: 'NONFARM PAYROLLS', date: d, type: 'NFP', icon: '💼' }));
-    } else {
-      // Algorithmic fallback (less accurate — CPI is not always 2nd Wednesday)
-      for (let offset = 0; offset <= monthsAhead; offset++) {
-        const d = new Date(today); d.setMonth(d.getMonth() + offset);
-        const y = d.getFullYear(), m = d.getMonth();
-        const cpi = nthWeekdayDate(y, m, 3, 2);
-        const nfp = nthWeekdayDate(y, m, 5, 1);
-        if (cpi && cpi >= todayStr) result.push({ name: 'CPI REPORT',       date: cpi, type: 'CPI', icon: '📊' });
-        if (nfp && nfp >= todayStr) result.push({ name: 'NONFARM PAYROLLS', date: nfp, type: 'NFP', icon: '💼' });
-      }
-    }
-    return result;
-  }
-
-  // ── Earnings: known upcoming cycle + algorithmic next-quarter fallback ──────
-  // Known Q1 2026 earnings (April/May report season). After these pass the
-  // algorithmic fallback below kicks in — MAG7 typically reports in:
-  //   Q1 results → late April / early May
-  //   Q2 results → late July / early August
-  //   Q3 results → late October / early November
-  //   Q4 results → late January / early February
-  const KNOWN_EARNINGS = [
-    { name: 'TSLA EARNINGS',  date: '2026-04-21', type: 'EARNINGS', icon: '⚡' },
-    { name: 'GOOGL EARNINGS', date: '2026-04-28', type: 'EARNINGS', icon: '🔍' },
-    { name: 'MSFT EARNINGS',  date: '2026-04-29', type: 'EARNINGS', icon: '💻' },
-    { name: 'META EARNINGS',  date: '2026-04-29', type: 'EARNINGS', icon: '📱' },
-    { name: 'AAPL EARNINGS',  date: '2026-04-30', type: 'EARNINGS', icon: '🍎' },
-    { name: 'AMZN EARNINGS',  date: '2026-05-01', type: 'EARNINGS', icon: '📦' },
-    { name: 'NVDA EARNINGS',  date: '2026-05-28', type: 'EARNINGS', icon: '🎮' },
-    // Q2 2026 season — approx dates (update when confirmed)
-    { name: 'TSLA EARNINGS',  date: '2026-07-20', type: 'EARNINGS', icon: '⚡' },
-    { name: 'GOOGL EARNINGS', date: '2026-07-27', type: 'EARNINGS', icon: '🔍' },
-    { name: 'MSFT EARNINGS',  date: '2026-07-28', type: 'EARNINGS', icon: '💻' },
-    { name: 'META EARNINGS',  date: '2026-07-28', type: 'EARNINGS', icon: '📱' },
-    { name: 'AAPL EARNINGS',  date: '2026-07-30', type: 'EARNINGS', icon: '🍎' },
-    { name: 'AMZN EARNINGS',  date: '2026-07-30', type: 'EARNINGS', icon: '📦' },
-    { name: 'NVDA EARNINGS',  date: '2026-08-27', type: 'EARNINGS', icon: '🎮' },
-    // Q3 2026 season — approx dates
-    { name: 'TSLA EARNINGS',  date: '2026-10-19', type: 'EARNINGS', icon: '⚡' },
-    { name: 'GOOGL EARNINGS', date: '2026-10-26', type: 'EARNINGS', icon: '🔍' },
-    { name: 'MSFT EARNINGS',  date: '2026-10-27', type: 'EARNINGS', icon: '💻' },
-    { name: 'META EARNINGS',  date: '2026-10-27', type: 'EARNINGS', icon: '📱' },
-    { name: 'AAPL EARNINGS',  date: '2026-10-29', type: 'EARNINGS', icon: '🍎' },
-    { name: 'AMZN EARNINGS',  date: '2026-10-29', type: 'EARNINGS', icon: '📦' },
-    { name: 'NVDA EARNINGS',  date: '2026-11-19', type: 'EARNINGS', icon: '🎮' },
-  ];
-
-  // ── Build full events list ──────────────────────────────────────────────────
-  const today0 = new Date(); today0.setHours(0,0,0,0);
-  const todayStr0 = today0.toISOString().slice(0,10);
-
-  let events = [
-    ...computeCpiNfpDates(9),
-    ...KNOWN_EARNINGS.filter(e => e.date >= todayStr0),
-  ];
-
-  // ── FOMC: try live fetch, fall back to known 2026 schedule ─────────────────
-  try {
-    const r = await fetch('/fomc?t=' + Date.now());
-    if (r.ok) {
-      const data = await r.json();
-      if (data.meetings && data.meetings.length > 0) {
-        data.meetings.forEach(m => {
-          events.push({ name: 'FOMC DECISION', date: m.date, type: 'FOMC', icon: '🏦' });
-          if (m.press_conference) events.push({ name: 'FOMC PRESS CONF', date: m.date, type: 'FOMC', icon: '🎙️' });
-        });
-      }
-    }
-  } catch(e) {
-    // Known 2026 + approx 2027 Q1 schedule
-    ['2026-04-29','2026-06-17','2026-07-29','2026-09-16','2026-10-28','2026-12-16',
-     '2027-01-27','2027-03-17'].forEach(d => {
-      if (d >= todayStr0) events.push({ name: 'FOMC DECISION', date: d, type: 'FOMC', icon: '🏦' });
-    });
-  }
-
-  // Filter future, sort by date
-  const upcoming = events
-    .map(e => ({ ...e, days: daysUntil(e.date) }))
-    .filter(e => e.days >= 0)
-    .sort((a, b) => a.days - b.days);
-
-  const nextFOMC     = upcoming.find(e => e.type === 'FOMC' && e.name.includes('DECISION'));
-  const nextCPI      = upcoming.find(e => e.type === 'CPI');
-  const nextNFP      = upcoming.find(e => e.type === 'NFP');
-  const nextEarnings = upcoming.filter(e => e.type === 'EARNINGS').slice(0, 4);
-
-  const bigCard = e => {
-    if (!e) return '';
-    const c = typeColors[e.type];
-    const uc = urgencyColor(e.days);
-    const d = new Date(e.date + 'T00:00:00');
-    const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `<div style="background:var(--bg3);border:1px solid ${c}44;border-top:3px solid ${c};border-radius:4px;padding:14px;text-align:center;">
-      <div style="font-size:20px;margin-bottom:6px;">${e.icon}</div>
-      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${c};margin-bottom:6px;">${e.type}</div>
-      <div style="font-family:'Orbitron',monospace;font-size:11px;color:var(--text);margin-bottom:8px;">${e.name}</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:${uc};">${e.days}</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">days away</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text2);margin-top:4px;">${dateStr}</div>
-    </div>`;
-  };
-
-  const earningsCards = nextEarnings.map(e => {
-    const c = typeColors.EARNINGS;
-    const uc = urgencyColor(e.days);
-    const d = new Date(e.date + 'T00:00:00');
-    const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const ticker = e.name.split(' ')[0];
-    return `<div style="background:var(--bg3);border:1px solid ${c}33;border-left:3px solid ${c};border-radius:3px;padding:10px;display:flex;justify-content:space-between;align-items:center;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:16px;">${e.icon}</span>
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:${c};">${ticker}</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">${dateStr}</div>
-        </div>
-      </div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${uc};">${e.days}d</div>
-    </div>`;
-  }).join('');
-
-  el.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;align-items:start;">
-      ${bigCard(nextFOMC)}
-      ${bigCard(nextCPI)}
-      ${bigCard(nextNFP)}
-      <div style="grid-column:span 1;">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#ffcc00;margin-bottom:8px;">⬡ MAG 7 EARNINGS</div>
-        <div style="display:flex;flex-direction:column;gap:6px;">${earningsCards}</div>
+    hdr.innerHTML=`<div style="display:flex;background:var(--bg2);border:1px solid var(--border);border-radius:4px;overflow:hidden;align-items:stretch;">
+      ${expRow}
+      <div style="padding:8px 16px;margin-left:auto;display:flex;align-items:center;gap:20px;">
+        <div><div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">SPY</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;">$${fmt(cur,2)}</div></div>
+        <div><div style="font-family:'Orbitron',monospace;font-size:7px;color:#8855ff;">ATM IV</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:#8855ff;">${atm_iv?fmt(atm_iv*100,1)+'%':'—'}</div></div>
+        <div><div style="font-family:'Orbitron',monospace;font-size:7px;color:${pcrC};">PCR</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;color:${pcrC};">${pcr?fmt(pcr,3):'—'} <span style="font-size:9px;">${pcrLbl}</span></div></div>
       </div>
     </div>`;
-}
-
-
-// VOLATILITY STATS TAB RENDER
-// ─────────────────────────────────────────────
-function renderVolStats() {
-  // Use existing esRenderVolEdge() then mirror output into vs-* elements
-  if (typeof esRenderVolEdge === 'function') {
-    esRenderVolEdge();
-    const copy = (from, to) => {
-      const src = document.getElementById(from);
-      const dst = document.getElementById(to);
-      if (src && dst) dst.innerHTML = src.innerHTML;
-    };
-    copy('es-wvol-rows', 'vs-wvol-rows');
-    copy('es-dvol-rows', 'vs-dvol-rows');
-    copy('es-risk-cards', 'vs-risk-cards');
-    copy('es-consec-vol-cards', 'vs-consec-vol-cards');
-    copy('es-vol-explainer', 'vs-vol-explainer');
   }
 
-  // ES_DATA and esLookback live in the edgestats inline script — access via window
-  const _esData = typeof window.ES_DATA !== 'undefined' ? window.ES_DATA
-                : typeof ES_DATA !== 'undefined' ? ES_DATA : null;
-  if (!_esData) { 
-    setTimeout(renderVolStats, 500);
-    return;
+  // EXPIRY REFERENCE BANNER
+  const nearestExp = mp[0]?.expiry || o.expiry || '—';
+  const nearestDte = o.dte ?? mp[0]?.dte ?? null;
+  const nearestExpDow = nearestExp!=='—' ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(nearestExp+'T12:00:00').getDay()] : '';
+  const nearestLabel = nearestExp===today3.toISOString().slice(0,10) ? '0DTE' : nearestExp===thisFriStr ? 'WEEKLY OPEX' : nearestExp===monthlyOpexStr ? 'MONTHLY OPEX' : `${nearestExpDow} expiry`;
+  const expTag = `<span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);padding:1px 5px;border-radius:2px;margin-left:6px;">${nearestExp} · ${nearestLabel}${nearestDte!=null?' · '+nearestDte+'d':''}</span>`;
+  const banner=$('optsExpiryBanner');
+  if(banner){
+    const nearestExpDow2 = nearestExp!=='—' ? new Date(nearestExp+'T12:00:00').getDay() : null;
+    const bannerColor = nearestExp===today3.toISOString().slice(0,10)?'#ff3355':nearestExp===thisFriStr?'#ffcc00':nearestExp===monthlyOpexStr?'#ff8800':'var(--cyan)';
+    banner.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:6px 12px;background:${bannerColor}15;border:1px solid ${bannerColor}44;border-left:4px solid ${bannerColor};border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:12px;">
+      <span style="font-family:'Orbitron',monospace;font-size:8px;color:${bannerColor};letter-spacing:1px;">NEAREST EXPIRY</span>
+      <span style="font-weight:bold;color:#fff;">${nearestExp}</span>
+      <span style="color:${bannerColor};font-weight:bold;">${nearestLabel}</span>
+      ${nearestDte!=null?`<span style="color:var(--text3);">${nearestDte} day${nearestDte!==1?'s':''} to expiry</span>`:''}
+      <span style="color:var(--text3);margin-left:auto;font-size:11px;">PCR, call/put vol, OI, and strike data below all reference this expiry unless noted</span>
+    </div>`;
   }
-  const _lb = typeof window.esLookback !== 'undefined' ? window.esLookback
-            : typeof esLookback !== 'undefined' ? esLookback : 'all_time';
-  const D = _esData[_lb] || _esData['all_time'];
-  if (!D) return;
-  const ve = D.vol_edge;
-  if (!ve) return;
 
-  // Weekly buckets
-  const wvolEl = document.getElementById('vs-wvol-rows');
-  if (wvolEl && ve.weekly_buckets) {
-    wvolEl.innerHTML = ve.weekly_buckets.map(b => {
-      const sc = b.self_avg >= 0 ? '#00ff88' : '#ff3355';
-      const ac = b.after_avg >= 0 ? '#00ff88' : '#ff3355';
-      return `<div class="es-vol-bucket">
-        <div>${b.bucket}</div>
-        <div>$${b.threshold_low.toFixed(2)}</div>
-        <div>$${b.threshold_high.toFixed(2)}</div>
-        <div style="color:${sc};">${b.self_avg >= 0 ? '+' : ''}${b.self_avg.toFixed(2)}%</div>
-        <div>${b.self_winrate.toFixed(1)}%</div>
-        <div style="color:${ac};">${b.after_avg >= 0 ? '+' : ''}${b.after_avg.toFixed(2)}%</div>
+  const totalCallVol=o.total_call_vol||0, totalPutVol=o.total_put_vol||0;
+  const totalCallOI=o.total_call_oi||0,   totalPutOI=o.total_put_oi||0;
+  const totalVol=totalCallVol+totalPutVol, totalOI=totalCallOI+totalPutOI;
+  const cvPct=totalVol?Math.round(totalCallVol/totalVol*100):50;
+  const coiPct=totalOI?Math.round(totalCallOI/totalOI*100):50;
+  $('optsSummaryRow').innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">
+      <div class="panel" style="text-align:center;border-top:3px solid ${pcrC};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${pcrC};margin-bottom:2px;">PCR VOLUME</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:900;color:${pcrC};">${pcr?fmt(pcr,3):'—'}</div>
+        <div style="font-size:10px;color:${pcrC};">${pcrLbl}</div>
+      </div>
+      <div class="panel" style="text-align:center;border-top:3px solid ${!pcrOI?'var(--border)':pcrOI<0.7?'#00ff88':pcrOI<1.0?'#ffcc00':'#ff3355'};">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:2px;">PCR OI</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:900;color:${!pcrOI?'var(--text2)':pcrOI<0.7?'#00ff88':pcrOI<1.0?'#ffcc00':'#ff3355'};">${pcrOI?fmt(pcrOI,3):'—'}</div>
+        <div style="font-size:10px;color:var(--text3);">${!pcrOI?'—':pcrOI<0.7?'BULLISH':pcrOI<1.0?'NEUTRAL':'BEARISH'}</div>
+      </div>
+      <div class="panel" style="text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:2px;">CALL / PUT VOL</div>
+        <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin:6px 0;">
+          <div style="flex:${cvPct};background:#00ff88;"></div><div style="flex:${100-cvPct};background:#ff3355;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;">
+          <span style="color:#00ff88;">${totalCallVol?fmtK(totalCallVol):'—'}</span>
+          <span style="color:#ff3355;">${totalPutVol?fmtK(totalPutVol):'—'}</span>
+        </div>
+      </div>
+      <div class="panel" style="text-align:center;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:2px;">CALL / PUT OI</div>
+        <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin:6px 0;">
+          <div style="flex:${coiPct};background:#00ff8866;"></div><div style="flex:${100-coiPct};background:#ff335566;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;">
+          <span style="color:#00ff88;">${totalCallOI?fmtK(totalCallOI):'—'}</span>
+          <span style="color:#ff3355;">${totalPutOI?fmtK(totalPutOI):'—'}</span>
+        </div>
+      </div>
+      <div class="panel" style="text-align:center;border-top:3px solid #8855ff;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#8855ff;margin-bottom:4px;">ATM IV</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:900;color:${atm_iv>25?'#ff3355':atm_iv>18?'#ff8800':atm_iv>12?'#ffcc00':'#00ff88'};">${atm_iv?fmt(atm_iv*100,1)+'%':'—'}</div>
+        <div style="font-size:10px;color:var(--text3);">IMPLIED VOLATILITY</div>
+      </div>
+    </div>`;
+
+  // STRIKES
+  const calls=md.top_call_strikes||[], puts=md.top_put_strikes||[];
+  const callWall=calls[0]?.strike, putWall=puts[0]?.strike;
+  $('callStrikeList').innerHTML=calls.length?calls.map((s,i)=>{
+    const isW=i===0; const dist=cur?s.strike-cur:null;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);${isW?'border-left:3px solid #00ff88;padding-left:6px;':''}">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${isW?'#00ff88':'var(--text1)'};">$${fmt(s.strike,0)}</span>
+      ${isW?' ◀ WALL':''}
+      <span style="font-size:11px;color:var(--text3);">${fmtK(s.oi)} OI</span>
+      ${dist!=null?`<span style="font-size:11px;color:#00ff88;">+${fmt(dist,2)}</span>`:''}
+    </div>`;
+  }).join(''):'<div class="no-data">No data</div>';
+  $('putStrikeList').innerHTML=puts.length?puts.map((s,i)=>{
+    const isW=i===0; const dist=cur?cur-s.strike:null;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);${isW?'border-left:3px solid #ff3355;padding-left:6px;':''}">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${isW?'#ff3355':'var(--text1)'};">$${fmt(s.strike,0)}</span>
+      ${isW?' ◀ WALL':''}
+      <span style="font-size:11px;color:var(--text3);">${fmtK(s.oi)} OI</span>
+      ${dist!=null?`<span style="font-size:11px;color:#ff3355;">${fmt(dist,2)}</span>`:''}
+    </div>`;
+  }).join(''):'<div class="no-data">No data</div>';
+
+  // KEY LEVELS
+  const klEl=$('optsKeyLevels');
+  if(klEl){
+    const rows=[
+      {l:'Call Wall',  v:callWall,         c:'#00ff88'},
+      {l:'Put Wall',   v:putWall,          c:'#ff3355'},
+      {l:'GEX Flip',   v:gex.flip_point,   c:'#ffcc00'},
+      {l:'GEX Support',v:gex.support,      c:'#00ff8888'},
+      {l:'GEX Resist', v:gex.resistance,   c:'#ff335588'},
+      {l:'Max Pain (nearest)',v:mp[0]?.max_pain, c:'var(--cyan)'},
+      {l:'Max Pain (Fri)',    v:fridayExp?.max_pain,  c:'#ffcc00'},
+      {l:'Max Pain (Monthly)',v:monthlyExp?.max_pain, c:'#ff8800'},
+    ].filter(r=>r.v);
+    klEl.innerHTML=rows.map(r=>{
+      const dist=cur&&r.v?r.v-cur:null;
+      const dc=dist>0?'#00ff88':dist<0?'#ff3355':'var(--text2)';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:11px;color:var(--text3);">${r.l}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:14px;font-weight:bold;color:${r.c};">$${fmt(r.v,2)}</span>
+        ${dist!=null?`<span style="font-size:11px;color:${dc};">${dist>0?'+':''}${fmt(dist,2)}</span>`:''}
       </div>`;
-    }).join('');
+    }).join('')||'<div class="no-data">Loading levels...</div>';
   }
 
-  // Daily buckets
-  const dvolEl = document.getElementById('vs-dvol-rows');
-  if (dvolEl && ve.daily_buckets) {
-    dvolEl.innerHTML = ve.daily_buckets.map(b => {
-      const sc = b.self_avg >= 0 ? '#00ff88' : '#ff3355';
-      const ac = b.after_avg >= 0 ? '#00ff88' : '#ff3355';
-      return `<div class="es-vol-bucket">
-        <div>${b.bucket}</div>
-        <div>$${b.threshold_low.toFixed(2)}</div>
-        <div>$${b.threshold_high.toFixed(2)}</div>
-        <div style="color:${sc};">${b.self_avg >= 0 ? '+' : ''}${b.self_avg.toFixed(2)}%</div>
-        <div>${b.self_winrate.toFixed(1)}%</div>
-        <div style="color:${ac};">${b.after_avg >= 0 ? '+' : ''}${b.after_avg.toFixed(2)}%</div>
-      </div>`;
-    }).join('');
-  }
-
-  // Risk + consec cards
-  const riskEl = document.getElementById('vs-risk-cards');
-  if (riskEl) {
-    riskEl.innerHTML = [
-      { lbl: 'Risk-Adj (All)', val: ve.risk_adj_all?.toFixed(4) || '—', sub: 'return per $ of range' },
-      { lbl: 'High-Vol Self', val: (ve.hi_vol_self_avg >= 0 ? '+' : '') + (ve.hi_vol_self_avg?.toFixed(2) || '—') + '%', sub: ve.hi_vol_self_winrate?.toFixed(1) + '% up' },
-      { lbl: 'Low-Vol Self',  val: (ve.lo_vol_self_avg >= 0 ? '+' : '') + (ve.lo_vol_self_avg?.toFixed(2) || '—') + '%', sub: 'during low-vol weeks' },
-    ].map(c => `<div class="es-card"><div class="es-card-label">${c.lbl}</div><div class="es-card-val neu">${c.val}</div><div class="es-card-sub">${c.sub}</div></div>`).join('');
-  }
-
-  const consecEl = document.getElementById('vs-consec-vol-cards');
-  if (consecEl && ve.after_consec_hivol_avg != null) {
-    consecEl.innerHTML = [
-      { lbl: 'After 2+ High-Vol Wks Avg', val: (ve.after_consec_hivol_avg >= 0 ? '+' : '') + ve.after_consec_hivol_avg.toFixed(2) + '%', cls: ve.after_consec_hivol_avg >= 0 ? 'up' : 'dn' },
-      { lbl: 'Win Rate', val: ve.after_consec_hivol_winrate?.toFixed(1) + '%', cls: ve.after_consec_hivol_winrate >= 55 ? 'up' : 'dn' },
-    ].map(c => `<div class="es-card"><div class="es-card-label">${c.lbl}</div><div class="es-card-val ${c.cls}">${c.val}</div></div>`).join('');
-  }
-
-  // ── Charts: next-period return by vol bucket ────────────────────────────
-  function renderVolBucketChart(containerId, buckets, periodLabel) {
-    const el = document.getElementById(containerId);
-    if (!el || !buckets || !buckets.length) return;
-    const bucketColors = ['#00ff88','#88cc00','#ffcc00','#ff8800','#ff3355'];
-    // Find max absolute value for scale
-    const maxAbs = Math.max(...buckets.map(b => Math.abs(b.after_avg || 0)), 0.1);
-    const maxW = 140; // max bar half-width px
-
-    el.innerHTML = `
-      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:10px;">
-        NEXT ${periodLabel} AVG RETURN BY CURRENT VOLATILITY BUCKET
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        ${buckets.map((b, i) => {
-          const v = b.after_avg || 0;
-          const color = bucketColors[i];
-          const barW = Math.round(Math.abs(v) / maxAbs * maxW);
-          const isPos = v >= 0;
-          const wr = b.after_winrate != null ? b.after_winrate.toFixed(1)+'%' : '';
-          return `<div style="display:flex;align-items:center;gap:8px;">
-            <div style="font-size:10px;color:${color};width:72px;flex-shrink:0;font-family:'Share Tech Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.bucket}</div>
-            <div style="flex:1;height:22px;background:var(--bg3);border-radius:2px;position:relative;overflow:hidden;">
-              <div style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,0.1);"></div>
-              <div style="position:absolute;top:2px;bottom:2px;${isPos?'left:50%':'right:50%'};width:${barW}px;background:${color}99;border-radius:2px;"></div>
-              <div style="position:absolute;top:0;bottom:0;${isPos?'left:calc(50% + '+barW+'px + 4px)':'right:calc(50% + '+barW+'px + 4px)'};display:flex;align-items:center;">
-                <span style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;color:${color};">${isPos?'+':''}${v.toFixed(3)}%</span>
-                ${wr ? `<span style="font-size:9px;color:var(--text3);margin-left:4px;">${wr} WR</span>` : ''}
-              </div>
-            </div>
-            <div style="font-size:9px;color:var(--text3);width:48px;text-align:right;font-family:'Share Tech Mono',monospace;">$${(b.threshold_low||0).toFixed(1)}–${(b.threshold_high||0).toFixed(1)}</div>
-          </div>`;
-        }).join('')}
-      </div>
-      <div style="display:flex;justify-content:center;gap:20px;margin-top:8px;">
-        <div style="font-size:10px;color:#ff3355;">◀ Negative return next ${periodLabel.toLowerCase()}</div>
-        <div style="font-size:10px;color:var(--text3);">│</div>
-        <div style="font-size:10px;color:#00ff88;">Positive return next ${periodLabel.toLowerCase()} ▶</div>
-      </div>`;
-  }
-
-  if (ve.weekly_buckets) renderVolBucketChart('vs-wvol-chart', ve.weekly_buckets, 'WEEK');
-  if (ve.daily_buckets)  renderVolBucketChart('vs-dvol-chart',  ve.daily_buckets,  'DAY');
-
-  // ── Win-rate sparkline for each bucket (who wins more?) ─────────────────
-  // Also add 'after_winrate' to the rows if data has it
-  const addWRToRows = (rowsId, buckets) => {
-    const el = document.getElementById(rowsId);
-    if (!el || !buckets) return;
-    const rows = el.querySelectorAll('.es-vol-bucket');
-    rows.forEach((row, i) => {
-      const b = buckets[i];
-      if (!b) return;
-      const wr = b.after_winrate != null ? b.after_winrate : b.self_winrate;
-      const wrColor = wr > 60 ? '#00ff88' : wr > 50 ? '#ffcc00' : '#ff3355';
-      // Check if we already added wr cell
-      if (!row.querySelector('.wr-cell')) {
-        const wrCell = document.createElement('div');
-        wrCell.className = 'wr-cell';
-        wrCell.style.cssText = `font-size:11px;color:${wrColor};font-family:'Share Tech Mono',monospace;padding:7px 9px;`;
-        wrCell.textContent = wr != null ? wr.toFixed(1)+'%' : '—';
-        // Don't append to avoid layout issues — just colorize existing cell
-      }
-    });
-  };
-
-  // Lookback + meta
-  const lbEl = document.getElementById('vs-vol-lb');
-  if (lbEl) {
-    lbEl.innerHTML = `<div class="es-lookback">
-      <button class="es-lb-btn ${_lb==='all_time'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('all_time');else window.esLookback='all_time';renderVolStats();">ALL TIME</button>
-      <button class="es-lb-btn ${_lb==='since_2020'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('since_2020');else window.esLookback='since_2020';renderVolStats();">SINCE 2020</button>
-      <button class="es-lb-btn ${_lb==='current_year'?'active':''}" onclick="if(typeof esSetLookback==='function')esSetLookback('current_year');else window.esLookback='current_year';renderVolStats();">2026 YTD</button>
-    </div>`;
-  }
-}
-
-window.vsSubTab = function(id, el) {
-  document.querySelectorAll('#panel-volstats .es-subtab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-};
-
-
-// GEX RENDER
-// ─────────────────────────────────────────────
-function renderGEX(md) {
-  // Render into the GEX tab panel only
-  const targets = [$('gexContent')].filter(Boolean);
-  if(!targets.length) return;
-  const gex = md.gex;
-  const spy = md.quotes?.['SPY'] || {};
-  const spot = spy.price || gex?.spot || 0;
-
-  if (!gex || !gex.flip_point) {
-    const noDataMsg = `
-      <div style="padding:16px;display:flex;align-items:center;gap:16px;">
-        <div style="font-size:28px;opacity:0.3;">⬡</div>
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:11px;color:var(--text3);margin-bottom:4px;">GEX DATA NOT YET AVAILABLE</div>
-          <div style="font-size:12px;color:var(--text3);line-height:1.6;">
-            Loading live CBOE data... If this persists, the /gex function may not be deployed yet.<br>
-            Data updates every 5 minutes during market hours.
-          </div>
-        </div>
-      </div>`;
-    targets.forEach(el => el.innerHTML = noDataMsg);
-    return;
-  }
-
-  const isPos = gex.net_gex > 0;
-  const regimeColor = gex.net_gex > 1e9 ? '#00ff88' : gex.net_gex > 0 ? '#88cc00' : gex.net_gex > -1e9 ? '#ff8800' : '#ff3355';
-  const fmtB = n => {
-    const abs = Math.abs(n);
-    const sign = n >= 0 ? '+' : '-';
-    if (abs >= 1e9) return sign + '$' + (abs/1e9).toFixed(2) + 'B';
-    if (abs >= 1e6) return sign + '$' + (abs/1e6).toFixed(0) + 'M';
-    return sign + '$' + Math.round(abs).toLocaleString();
-  };
-
-  const maxGex = gex.strikes ? Math.max(...gex.strikes.map(s => Math.abs(s.gex)), 1) : 1;
-  const barChart = gex.strikes ? gex.strikes.map(s => {
-    const w = (Math.abs(s.gex) / maxGex * 50).toFixed(1);
-    const color = s.gex > 0 ? '#00ff88' : '#ff3355';
-    const isSpot = Math.abs(s.strike - spot) < 2.5;
-    const isFlip = gex.flip_point && Math.abs(s.strike - gex.flip_point) < 1.5;
-    return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;${isSpot?'background:rgba(0,204,255,0.08);border-radius:3px;padding:3px 6px;':''}${isFlip?'background:rgba(255,204,0,0.06);border-radius:3px;padding:3px 6px;':''}">
-      <span style="font-family:'Share Tech Mono',monospace;font-size:12px;width:55px;text-align:right;color:${isSpot?'var(--cyan)':isFlip?'#ffcc00':'var(--text2)'}">$${s.strike}</span>
-      <div style="flex:1;height:16px;background:var(--bg3);border-radius:2px;overflow:hidden;position:relative;">
-        ${s.gex>0
-          ?`<div style="position:absolute;left:50%;width:${w}%;height:100%;background:${color}88;border-radius:0 2px 2px 0;"></div>`
-          :`<div style="position:absolute;right:50%;width:${w}%;height:100%;background:${color}88;border-radius:2px 0 0 2px;"></div>`}
-        <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border2);"></div>
-      </div>
-      <span style="font-family:'Share Tech Mono',monospace;font-size:11px;width:76px;color:${color};text-align:right;">${fmtB(s.gex)}</span>
-      ${isSpot?'<span style="font-family:\'Orbitron\',monospace;font-size:7px;color:var(--cyan);width:32px;">SPOT</span>':isFlip?'<span style="font-family:\'Orbitron\',monospace;font-size:7px;color:#ffcc00;width:32px;">FLIP</span>':'<span style="width:32px;"></span>'}
-    </div>`;
-  }).join('') : '';
-
-  const html = `
-    <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:12px;align-items:center;margin-bottom:14px;">
-      <!-- Regime -->
-      <div style="padding:12px 20px;background:${regimeColor}11;border:1px solid ${regimeColor}44;border-left:4px solid ${regimeColor};border-radius:4px;min-width:220px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:2px;color:var(--text3);margin-bottom:6px;">GEX REGIME</div>
-        <div style="font-family:'Orbitron',monospace;font-size:16px;font-weight:900;color:${regimeColor};margin-bottom:6px;">${gex.regime}</div>
-        <div style="font-size:11px;color:var(--text2);line-height:1.5;">${gex.regime_desc}</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);margin-top:6px;">Net: ${fmtB(gex.net_gex)}</div>
-      </div>
-      <!-- Support -->
-      <div style="text-align:center;padding:12px;background:rgba(255,51,85,0.06);border:1px solid rgba(255,51,85,0.3);border-radius:4px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:#ff3355;margin-bottom:6px;">GEX SUPPORT</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;color:#ff3355;">$${gex.support||'—'}</div>
-        ${gex.support&&spot?`<div style="font-size:11px;color:var(--text3);margin-top:4px;">${fmt(spot-gex.support,2)} pts below</div>`:''}
-        <div style="font-size:10px;color:rgba(255,51,85,0.6);margin-top:4px;">Dealers buy here</div>
-      </div>
-      <!-- Flip -->
-      <div style="text-align:center;padding:12px;background:rgba(0,204,255,0.06);border:1px solid rgba(0,204,255,0.3);border-radius:4px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--cyan);margin-bottom:6px;">GAMMA FLIP</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;color:var(--cyan);">$${gex.flip_point||'—'}</div>
-        ${gex.flip_point&&spot?`<div style="font-family:'Orbitron',monospace;font-size:9px;margin-top:6px;padding:2px 8px;border-radius:2px;display:inline-block;
-          color:${spot>gex.flip_point?'#00ff88':'#ff3355'};background:${spot>gex.flip_point?'rgba(0,255,136,0.12)':'rgba(255,51,85,0.12)'};">
-          ${spot>gex.flip_point?'✓ ABOVE — CONTAINED':'⚠ BELOW — VOLATILE'}</div>`:''}
-        <div style="font-size:10px;color:rgba(0,204,255,0.6);margin-top:4px;">Zero GEX crossing</div>
-      </div>
-      <!-- Resistance -->
-      <div style="text-align:center;padding:12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.3);border-radius:4px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:#00ff88;margin-bottom:6px;">GEX RESISTANCE</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;color:#00ff88;">$${gex.resistance||'—'}</div>
-        ${gex.resistance&&spot?`<div style="font-size:11px;color:var(--text3);margin-top:4px;">${fmt(gex.resistance-spot,2)} pts above</div>`:''}
-        <div style="font-size:10px;color:rgba(0,255,136,0.6);margin-top:4px;">Dealers sell here</div>
-      </div>
-    </div>
-
-    ${barChart ? `
-    <div>
-      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;display:flex;justify-content:space-between;">
-        <span>GEX BY STRIKE — green=call GEX (stabilizing) · red=put GEX (destabilizing)</span>
-        <span style="color:var(--cyan);">SPOT=$${fmt(spot,2)} highlighted</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
-        ${gex.strikes.slice(0, Math.ceil(gex.strikes.length/2)).map(s => {
-          const w = (Math.abs(s.gex) / maxGex * 50).toFixed(1);
-          const color = s.gex > 0 ? '#00ff88' : '#ff3355';
-          const isSpot = Math.abs(s.strike - spot) < 2.5;
-          const isFlip = gex.flip_point && Math.abs(s.strike - gex.flip_point) < 1.5;
-          return `<div style="display:flex;align-items:center;gap:8px;padding:2px 0;${isSpot?'background:rgba(0,204,255,0.08);border-radius:2px;padding:2px 4px;':''}${isFlip?'background:rgba(255,204,0,0.06);border-radius:2px;padding:2px 4px;':''}">
-            <span style="font-family:'Share Tech Mono',monospace;font-size:11px;width:52px;text-align:right;color:${isSpot?'var(--cyan)':isFlip?'#ffcc00':'var(--text2)'}">$${s.strike}</span>
-            <div style="flex:1;height:14px;background:var(--bg3);border-radius:2px;overflow:hidden;position:relative;">
-              ${s.gex>0?`<div style="position:absolute;left:50%;width:${w}%;height:100%;background:${color}88;border-radius:0 2px 2px 0;"></div>`:`<div style="position:absolute;right:50%;width:${w}%;height:100%;background:${color}88;border-radius:2px 0 0 2px;"></div>`}
-              <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border2);"></div>
-            </div>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:10px;width:68px;color:${color};text-align:right;">${fmtB(s.gex)}</span>
-          </div>`;
-        }).join('')}
-        ${gex.strikes.slice(Math.ceil(gex.strikes.length/2)).map(s => {
-          const w = (Math.abs(s.gex) / maxGex * 50).toFixed(1);
-          const color = s.gex > 0 ? '#00ff88' : '#ff3355';
-          const isSpot = Math.abs(s.strike - spot) < 2.5;
-          const isFlip = gex.flip_point && Math.abs(s.strike - gex.flip_point) < 1.5;
-          return `<div style="display:flex;align-items:center;gap:8px;padding:2px 0;${isSpot?'background:rgba(0,204,255,0.08);border-radius:2px;padding:2px 4px;':''}${isFlip?'background:rgba(255,204,0,0.06);border-radius:2px;padding:2px 4px;':''}">
-            <span style="font-family:'Share Tech Mono',monospace;font-size:11px;width:52px;text-align:right;color:${isSpot?'var(--cyan)':isFlip?'#ffcc00':'var(--text2)'}">$${s.strike}</span>
-            <div style="flex:1;height:14px;background:var(--bg3);border-radius:2px;overflow:hidden;position:relative;">
-              ${s.gex>0?`<div style="position:absolute;left:50%;width:${w}%;height:100%;background:${color}88;border-radius:0 2px 2px 0;"></div>`:`<div style="position:absolute;right:50%;width:${w}%;height:100%;background:${color}88;border-radius:2px 0 0 2px;"></div>`}
-              <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border2);"></div>
-            </div>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:10px;width:68px;color:${color};text-align:right;">${fmtB(s.gex)}</span>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>` : ''}`;
-
-  targets.forEach(el => el.innerHTML = html);
-}
-async function renderLiquidity() {
-  const el = $('liquidityContent');
-  if (!el) return;
-
-  const fmtT = n => {
-    if (!n && n !== 0) return '—';
-    const abs = Math.abs(n);
-    const sign = n < 0 ? '-' : '';
-    if (abs >= 1e12) return sign + '$' + (abs/1e12).toFixed(2) + 'T';
-    if (abs >= 1e9)  return sign + '$' + (abs/1e9).toFixed(1) + 'B';
-    if (abs >= 1e6)  return sign + '$' + (abs/1e6).toFixed(1) + 'M';
-    return sign + '$' + Math.round(abs).toLocaleString();
-  };
-  const chgColor = n => n > 0 ? '#00ff88' : n < 0 ? '#ff3355' : '#ffcc00';
-  const chgSign  = n => n > 0 ? '+' : '';
-  const fmtPct   = n => n == null ? '—' : (n > 0 ? '+' : '') + n.toFixed(2) + '%';
-
-  const buildHTML = d => {
-    const regimeColor = d.regime === 'EASING' ? '#00ff88' :
-                        d.regime === 'SLIGHTLY EASING' ? '#88cc00' :
-                        d.regime === 'SLIGHTLY TIGHTENING' ? '#ff8800' : '#ff3355';
-    const isStatic = !d.fed_balance?.value || d.fed_balance?.source === 'static';
-
-    const metricCard = (label, value, change, changePct, date, color, desc) => `
-      <div class="panel" style="border-top:3px solid ${color};">
-        <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:${color};margin-bottom:8px;">${label}</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:900;color:var(--text);margin-bottom:4px;">${fmtT(value)}</div>
-        ${change != null ? `<div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${chgColor(change)};">${chgSign(change)}${fmtT(change)} (${fmtPct(changePct)})</div>` : ''}
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">${date || ''}</div>
-        ${desc ? `<div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.4;">${desc}</div>` : ''}
-      </div>`;
-
-    return `
-      ${isStatic ? `<div style="background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.4);border-radius:4px;padding:12px 14px;margin-bottom:10px;">
-        <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ff3355;margin-bottom:6px;">⚠ PLACEHOLDER DATA — NOT REAL</div>
-        <div style="font-size:13px;color:var(--text2);line-height:1.6;">The numbers below are <strong style="color:#ff3355;">estimates I hardcoded</strong> — not live FRED data. The live feed from the Federal Reserve is not loading. All dollar figures are approximate and may be significantly wrong. Do not trade on this data.</div>
-      </div>` : ''}
-
-      <div class="panel" style="margin-bottom:10px;border-left:4px solid ${regimeColor};">
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center;">
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--text3);margin-bottom:6px;">LIQUIDITY REGIME</div>
-            <div style="font-family:'Orbitron',monospace;font-size:24px;font-weight:900;color:${regimeColor};">${d.regime}</div>
-          </div>
-          <div style="font-size:14px;color:var(--text2);line-height:1.6;">${d.regime_desc}</div>
-        </div>
-      </div>
-
-      ${d.net_liquidity ? `
-      <div class="panel" style="margin-bottom:10px;background:rgba(0,204,255,0.04);border-color:rgba(0,204,255,0.3);">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center;">
-          <div>
-            <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">NET LIQUIDITY = FED BALANCE SHEET − RRP − TGA</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:42px;font-weight:900;color:${chgColor(d.net_liquidity.change_wow)};">${fmtT(d.net_liquidity.value)}</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${chgColor(d.net_liquidity.change_wow)};margin-top:6px;">${chgSign(d.net_liquidity.change_wow)}${fmtT(d.net_liquidity.change_wow)} this week</div>
-          </div>
-          <div style="font-size:13px;color:var(--text2);line-height:1.8;">
-            <div>The single most important liquidity metric for stocks.</div>
-            <div style="margin-top:8px;color:var(--text3);">Rising → more money chasing assets → stocks go up</div>
-            <div style="color:var(--text3);">Falling → money drained from system → stocks face headwinds</div>
-            <div style="margin-top:8px;color:var(--cyan);">Historically correlates strongly with SPY direction.</div>
-          </div>
-        </div>
-      </div>` : ''}
-
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
-        ${metricCard('FED BALANCE SHEET', d.fed_balance?.value, d.fed_balance?.change_wow, d.fed_balance?.change_pct, d.fed_balance?.date, '#8855ff', 'Total Fed assets. Rising = QE/easing. Falling = QT/tightening.')}
-        ${metricCard('REVERSE REPO (RRP)', d.rrp?.value, d.rrp?.change_wow, d.rrp?.change_pct, d.rrp?.date, '#ff8800', 'Cash parked at Fed overnight. Draining RRP = liquidity entering markets = bullish.')}
-        ${metricCard('TREASURY GEN. ACCOUNT', d.tga?.value, d.tga?.change_wow, d.tga?.change_pct, d.tga?.date, '#ff3355', "Treasury Fed account. Rising TGA drains liquidity. Falling TGA injects liquidity.")}
-        ${metricCard('M2 MONEY SUPPLY', d.m2?.value, d.m2?.change_mom, d.m2?.change_pct, d.m2?.date, '#00ff88', 'Total money in circulation. Leads stocks by 6-12 months.')}
-      </div>
-
-      ${d.margin ? `
-      <div class="panel">
-        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;">⬡ FINRA MARGIN DEBT & LEVERAGE — ${d.margin.date}${d.margin.source==='static_fallback'?' (estimated)':''}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
-          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#ff3355;margin-bottom:6px;">MARGIN DEBT</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:#ff3355;">${fmtT(d.margin.margin_debt)}</div>
-            ${d.margin.change_mom != null ? `<div style="font-size:12px;color:${chgColor(d.margin.change_mom)};margin-top:4px;">${chgSign(d.margin.change_mom)}${fmtT(d.margin.change_mom)} M/M</div>` : ''}
-          </div>
-          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#00ff88;margin-bottom:6px;">FREE CREDIT (MARGIN ACCTS)</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:#00ff88;">${fmtT(d.margin.free_credit_margin)}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Idle cash in margin accounts</div>
-          </div>
-          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#00ff88;margin-bottom:6px;">FREE CREDIT (CASH ACCTS)</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:#00ff88;">${fmtT(d.margin.free_credit_cash)}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Idle cash in cash accounts</div>
-          </div>
-          <div style="background:var(--bg3);border:1px solid ${chgColor(d.margin.net_margin)}44;border-left:3px solid ${chgColor(d.margin.net_margin)};border-radius:3px;padding:12px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">NET LEVERAGE</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:${chgColor(d.margin.net_margin)};">${fmtT(d.margin.net_margin)}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Debt minus all free credit</div>
-          </div>
-        </div>
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;">
-          <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">WHAT MARGIN DEBT TELLS YOU</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:13px;color:var(--text2);">
-            <div><span style="color:#ff3355;">■</span> <strong>Rising fast</strong> — market overleveraged, vulnerable to forced selling on any dip</div>
-            <div><span style="color:#ffcc00;">■</span> <strong>Stable</strong> — healthy leverage, normal market conditions</div>
-            <div><span style="color:#00ff88;">■</span> <strong>Falling fast</strong> — deleveraging underway, often marks capitulation bottoms</div>
-          </div>
-        </div>
-      </div>` : ''}`;
-  };
-  // Static fallback — always shown immediately, replaced by live data if available
-  const staticFallback = {
-    regime: 'TIGHTENING',
-    regime_desc: 'Fed QT ongoing. Balance sheet declining. RRP near zero — that liquidity buffer is gone. Net liquidity is falling, which historically creates headwinds for equities.',
-    net_liquidity: { value: 5.61e12, change_wow: -23e9 },
-    fed_balance: { value: 6.73e12, change_wow: -15e9, change_pct: -0.22, date: 'Mar 2026', source: 'static' },
-    rrp: { value: 412e9, change_wow: -8e9, change_pct: -1.90, date: 'Mar 2026' },
-    tga: { value: 823e9, change_wow: 16e9, change_pct: 1.98, date: 'Mar 2026' },
-    m2: { value: 21.4e12, change_mom: 180e9, change_pct: 0.85, date: 'Feb 2026' },
-    margin: { date: 'Feb 2026', margin_debt: 892.4e9, free_credit_margin: 178.3e9, free_credit_cash: 243.1e9, net_margin: 471e9, change_mom: 18.2e9, change_pct: 2.08, source: 'static_fallback' }
-  };
-
-  // Show static immediately
-  el.innerHTML = buildHTML(staticFallback);
-
-  // Then try to fetch live data and replace
-  try {
-    const r = await fetch('/liquidity?t=' + Date.now());
-    if (r.ok) {
-      const d = await r.json();
-      if (d && (d.fed_balance || d.net_liquidity)) {
-        el.innerHTML = buildHTML(d);
-      }
-    }
-  } catch(e) {
-    // Static fallback already showing, nothing to do
-  }
-}
-
-// ─────────────────────────────────────────────
-// MICHIGAN CONSUMER SENTIMENT (FRED)
-// ─────────────────────────────────────────────
-async function loadMichiganSentiment() {
-  const el = $('michiganPanel');
-  if (!el) return;
-  try {
-    // Use localStorage FRED cache first (same key as macro.js), fall back to live fetch
-    let fredData = null;
-    try {
-      const cached = localStorage.getItem('spy_fred_cache');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed?.data && (Date.now() - parsed.ts) < 4 * 60 * 60 * 1000) {
-          fredData = parsed.data;
-        }
-      }
-    } catch(e) {}
-    if (!fredData) {
-      try {
-        const r = await fetch('/fred?t=' + Date.now());
-        if (r.ok) fredData = await r.json();
-      } catch(e) {}
-    }
-
-    const S = fredData?.series || {};
-    const umcs = S.UMCSENT;
-    if (!umcs) {
-      el.innerHTML = '<div class="no-data">Michigan Sentiment — data unavailable (FRED)</div>';
-      return;
-    }
-
-    const val = umcs.latest;
-    const prev = umcs.prev;
-    const chg = val != null && prev != null ? val - prev : null;
-    const trend = umcs.trend;
-    const history = umcs.history || [];
-    const color = val >= 90 ? '#00ff88' : val >= 75 ? '#88cc00' : val >= 60 ? '#ffcc00' : val >= 45 ? '#ff8800' : '#ff3355';
-    const signal = val >= 90 ? 'CONFIDENT' : val >= 75 ? 'POSITIVE' : val >= 60 ? 'CAUTIOUS' : val >= 45 ? 'PESSIMISTIC' : 'RECESSION FEAR';
-
-    // Sparkline
-    const spark = (hist, col, h=60) => {
-      if (!hist || hist.length < 2) return '';
-      const vals = hist.map(d => d.v).filter(v => v != null);
-      if (vals.length < 2) return '';
-      const min = Math.min(...vals), max = Math.max(...vals);
-      const range = max - min || 1;
-      const W = 400, H = h, P = 4;
-      const x = i => P + (i / (vals.length-1)) * (W - P*2);
-      const y = v => H - P - ((v-min)/range) * (H - P*2);
-      const pts = vals.map((v,i) => x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
-      const fill = x(0).toFixed(1)+','+H+' '+pts+' '+x(vals.length-1).toFixed(1)+','+H;
-      return '<svg width="100%" height="'+h+'" viewBox="0 0 '+(W+20)+' '+(H+4)+'" style="display:block;margin-top:8px;">' +
-        '<polygon points="'+fill+'" fill="'+col+'" opacity="0.12"/>' +
-        '<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.5"/>' +
-        '<circle cx="'+x(vals.length-1).toFixed(1)+'" cy="'+y(vals[vals.length-1]).toFixed(1)+'" r="3" fill="'+col+'"/>' +
-        // Historical reference lines at 60, 75, 90
-        [60,75,90].map(ref => {
-          if (ref < min || ref > max) return '';
-          const yy = y(ref).toFixed(1);
-          return '<line x1="'+P+'" y1="'+yy+'" x2="'+(W-P)+'" y2="'+yy+'" stroke="'+col+'" stroke-width="0.5" opacity="0.25" stroke-dasharray="3,3"/>'+
-                 '<text x="'+(W+2)+'" y="'+(parseFloat(yy)+3)+'" font-size="8" fill="'+col+'" opacity="0.5" font-family="Share Tech Mono,monospace">'+ref+'</text>';
-        }).join('') +
-        '</svg>';
-    };
-
-    // Historical context
-    const allVals = history.map(d => d.v).filter(v => v != null);
-    const avg10y = allVals.length ? (allVals.reduce((a,b)=>a+b,0)/allVals.length).toFixed(1) : null;
-    const vsAvg = avg10y ? (val - parseFloat(avg10y)).toFixed(1) : null;
-
-    el.innerHTML =
-      '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">' +
-        '<div style="text-align:center;">' +
-          '<div style="font-family:Share Tech Mono,monospace;font-size:42px;font-weight:900;color:'+color+';line-height:1;">'+val.toFixed(1)+'</div>' +
-          '<div style="font-family:Orbitron,monospace;font-size:9px;letter-spacing:1.5px;color:'+color+';margin-top:4px;">'+signal+'</div>' +
-          (chg!=null?'<div style="font-size:11px;color:'+(chg>=0?'#00ff88':'#ff3355')+';margin-top:4px;">'+(chg>=0?'+':'')+chg.toFixed(1)+' vs prior</div>':'') +
-        '</div>' +
-        '<div>' +
-          '<div style="font-size:12px;color:var(--text2);line-height:1.6;">University of Michigan survey of ~500 consumers on personal finances and broader economy. One of the longest-running sentiment series — data back to 1952. ' +
-          'Readings above 90 signal consumer confidence driving spending. Below 60 = recessionary pessimism.</div>' +
-          (avg10y?'<div style="font-size:11px;color:var(--text3);margin-top:6px;">Historical avg (this period): <span style="color:'+color+'">'+avg10y+'</span> · Current '+(vsAvg>=0?'<span style="color:#00ff88">+'+vsAvg+' above avg</span>':'<span style="color:#ff8800">'+vsAvg+' below avg</span>')+'</div>':'') +
-          spark(history, color, 60) +
-          '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Source: FRED / University of Michigan · Monthly · ' + (umcs.latest_date||'') + '</div>' +
-        '</div>' +
-      '</div>';
-
-  } catch(e) {
-    if ($('michiganPanel')) $('michiganPanel').innerHTML = '<div class="no-data">Michigan Sentiment unavailable: ' + e.message + '</div>';
-  }
-}
-
-// ─────────────────────────────────────────────
-// MARGIN DEBT (FINRA via liquidity.js)
-// ─────────────────────────────────────────────
-async function loadMarginDebtSentiment() {
-  const el = $('marginDebtPanel');
-  if (!el) return;
-  // Use cached liquidity data if available, otherwise fetch it
-  let ld = window._liquidityData?.margin;
-  if (!ld || !ld.margin_debt) {
-    try {
-      if (typeof renderLiquidity === 'function') await renderLiquidity();
-      ld = window._liquidityData?.margin;
-    } catch(e) {}
-  }
-  if (!ld || !ld.margin_debt) {
-    // Try fetching liquidity data directly
-    try {
-      const r = await fetch('/liquidity?t=' + Date.now());
-      if (r.ok) {
-        const d = await r.json();
-        ld = d?.margin || null;
-        if (ld) { if (!window._liquidityData) window._liquidityData = {}; window._liquidityData.margin = ld; }
-      }
-    } catch(e) {}
-  }
-  // Use static fallback if still no data
-  if (!ld || !ld.margin_debt) {
-    ld = { date: 'Feb 2026', margin_debt: 892.4e9, free_credit_margin: 178.3e9, free_credit_cash: 243.1e9, net_margin: 471e9, change_mom: 18.2e9, prev_margin_debt: 874.2e9, source: 'static_fallback' };
-  }
-  const debt = ld.margin_debt;
-  const prev = ld.prev_margin_debt;
-  const momChg = prev ? debt - prev : null;
-  const momPct = prev ? ((debt - prev) / prev * 100) : null;
-  // Context: margin debt as sentiment — rising = bullish leverage, falling sharply = forced deleveraging
-  const color = momPct == null ? '#ffcc00' : momPct > 5 ? '#ff8800' : momPct > 0 ? '#ffcc00' : momPct > -5 ? '#00ff88' : '#ff3355';
-  const signal = momPct == null ? '—' : momPct > 8 ? 'LEVERAGED EUPHORIA' : momPct > 3 ? 'RISING LEVERAGE' : momPct > -3 ? 'STABLE' : momPct > -8 ? 'DELEVERAGING' : 'FORCED SELLING';
-  const fmtB = v => { const abs=Math.abs(v); return (v<0?'-':'')+'$'+(abs>=1e12?(abs/1e12).toFixed(2)+'T':abs>=1e9?(abs/1e9).toFixed(1)+'B':(abs/1e6).toFixed(0)+'M'); };
-
-  el.innerHTML =
-    '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">' +
-      '<div style="text-align:center;">' +
-        '<div style="font-family:Share Tech Mono,monospace;font-size:36px;font-weight:900;color:'+color+';line-height:1;">'+fmtB(debt)+'</div>' +
-        '<div style="font-family:Orbitron,monospace;font-size:9px;letter-spacing:1.5px;color:'+color+';margin-top:4px;">'+signal+'</div>' +
-        (momPct!=null?'<div style="font-size:11px;color:'+(momPct>=0?'#ffcc00':'#ff3355')+';margin-top:4px;">'+(momPct>=0?'+':'')+momPct.toFixed(1)+'% MoM</div>':'') +
-      '</div>' +
-      '<div>' +
-        '<div style="font-size:12px;color:var(--text2);line-height:1.6;">FINRA margin debt is total borrowed money used to buy securities. ' +
-        'Rising margin debt signals leveraged optimism — investors confident enough to borrow. ' +
-        'Sharp drops are a red flag: forced deleveraging accelerates selloffs. Peaked at $936B in Oct 2021 before the 2022 bear market.</div>' +
-        '<div style="font-size:11px;color:var(--text3);margin-top:8px;">Free credit cash: <span style="color:#00ccff">'+fmtB(ld.free_credit_cash||0)+'</span> · ' +
-        'Free credit margin: <span style="color:#00ccff">'+fmtB(ld.free_credit_margin||0)+'</span></div>' +
-        '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Source: FINRA · Monthly · ' + (ld.date||'') + '</div>' +
-      '</div>' +
-    '</div>';
-}
-
-// ─────────────────────────────────────────────
-// AAII SENTIMENT
-// ─────────────────────────────────────────────
-async function loadAAII() {
-  const el = $('aaiiPanel');
-  if (!el) return;
-
-  // Historical AAII data — 26 weeks (oldest first). Update weekly.
-  const AAII_HISTORY = [
-    {d:'Nov 5',  bull:38.0, neu:25.8, bear:36.3},
-    {d:'Nov 12', bull:31.6, neu:19.2, bear:49.1},
-    {d:'Nov 19', bull:32.6, neu:23.9, bear:43.6},
-    {d:'Nov 26', bull:32.0, neu:25.3, bear:42.7},
-    {d:'Dec 3',  bull:44.3, neu:24.9, bear:30.8},
-    {d:'Dec 10', bull:44.6, neu:24.8, bear:30.6},
-    {d:'Dec 17', bull:44.1, neu:22.7, bear:33.2},
-    {d:'Dec 24', bull:37.4, neu:27.8, bear:34.8},
-    {d:'Dec 31', bull:42.0, neu:31.0, bear:27.0},
-    {d:'Jan 7',  bull:42.5, neu:27.5, bear:30.0},
-    {d:'Jan 14', bull:49.5, neu:22.3, bear:28.2},
-    {d:'Jan 21', bull:43.2, neu:24.1, bear:32.7},
-    {d:'Jan 28', bull:44.4, neu:24.8, bear:30.8},
-    {d:'Feb 4',  bull:39.7, neu:31.3, bear:29.0},
-    {d:'Feb 11', bull:38.5, neu:23.3, bear:38.1},
-    {d:'Feb 18', bull:34.5, neu:28.5, bear:36.9},
-    {d:'Feb 25', bull:33.2, neu:27.0, bear:39.8},
-    {d:'Mar 4',  bull:33.1, neu:31.4, bear:35.5},
-    {d:'Mar 11', bull:31.9, neu:21.7, bear:46.4},
-    {d:'Mar 18', bull:30.4, neu:17.6, bear:52.0},
-    {d:'Mar 25', bull:32.1, neu:18.1, bear:49.8},
-    {d:'Apr 1',  bull:33.6, neu:15.0, bear:51.4},
-  ];
-
-  try {
-    const r = await fetch('/sentiment?t='+Date.now());
-    if (!r.ok) throw new Error('AAII fetch failed');
-    const d = await r.json();
-
-    // Validate — scraper sometimes grabs wrong numbers; require plausible sum and spread
-    const rawBull = d.bullish, rawBear = d.bearish, rawNeu = d.neutral;
-    const sum = (rawBull||0) + (rawBear||0) + (rawNeu||0);
-    // Reject round numbers (60/20/20 type scrape failures) and historically impossible readings
-    const isRound = rawBull % 10 === 0 && rawNeu % 10 === 0 && rawBear % 10 === 0;
-    // Tighter sum check (95-105) and reject if any two values are identical multiples of 5
-    const twoEqual = (Math.abs(rawBull - rawNeu) < 0.5) || (Math.abs(rawBull - rawBear) < 0.5);
-    const dataValid = rawBull && rawBear && sum > 95 && sum < 105 && rawBull < 57 && rawBear < 75 && !isRound && !twoEqual;
-
-    const lastH = AAII_HISTORY[AAII_HISTORY.length-1];
-    const bull = dataValid ? rawBull : lastH.bull;
-    const bear = dataValid ? rawBear : lastH.bear;
-    const neu  = dataValid ? rawNeu  : lastH.neu;
-    const spread = bull - bear;
-    const spreadColor = spread > 0 ? '#00ff88' : spread < 0 ? '#ff3355' : '#ffcc00';
-    const avgBull = d.avg_bullish || 37.5, avgBear = d.avg_bearish || 31.0;
-    const dateLabel = d.date ? new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-
-    el.innerHTML =
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">'
-      +'<div style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:12px;text-align:center;">'
-      +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#00ff88;margin-bottom:6px;letter-spacing:1px;">BULLISH</div>'
-      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#00ff88">'+fmt(bull,1)+'%</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg '+avgBull+'%</div></div>'
-      +'<div style="background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.3);border-radius:4px;padding:12px;text-align:center;">'
-      +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#ffcc00;margin-bottom:6px;letter-spacing:1px;">NEUTRAL</div>'
-      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#ffcc00">'+fmt(neu,1)+'%</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg 31.5%</div></div>'
-      +'<div style="background:rgba(255,51,85,0.08);border:1px solid rgba(255,51,85,0.3);border-radius:4px;padding:12px;text-align:center;">'
-      +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#ff3355;margin-bottom:6px;letter-spacing:1px;">BEARISH</div>'
-      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#ff3355">'+fmt(bear,1)+'%</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg '+avgBear+'%</div></div></div>'
-      +'<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;display:flex;justify-content:space-between;align-items:center;">'
-      +'<div><div style="font-family:\'Orbitron\',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">BULL-BEAR SPREAD</div>'
-      +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:28px;font-weight:bold;color:'+spreadColor+'">'+(spread>0?'+':'')+fmt(spread,1)+'%</div></div>'
-      +'<div style="text-align:right;"><div style="font-family:\'Orbitron\',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">SIGNAL</div>'
-      +'<div style="font-family:\'Orbitron\',monospace;font-size:13px;letter-spacing:2px;color:'+spreadColor+';margin-top:4px;padding:4px 10px;background:'+spreadColor+'22;border:1px solid '+spreadColor+'44;border-radius:3px;">'
-      +(spread < -20 ? 'CONTRARIAN BUY' : spread < -10 ? 'BEARISH EXTREME' : spread < 0 ? 'BEARISH' : spread > 20 ? 'CONTRARIAN SELL' : spread > 10 ? 'BULLISH EXTREME' : 'BULLISH')
-      +'</div></div></div>'
-      +'<div style="margin-top:8px;font-size:12px;color:var(--text3);text-align:center;">'
-      +(dataValid&&dateLabel?'Week ending '+dateLabel+' · ':'Using cached data · ')
-      +'AAII survey published weekly — extreme readings are contrarian signals'
-      +(dataValid?'':' <span style="color:#ffcc00;">(live fetch invalid — showing last known good)</span>')
-      +'</div>';
-
-    // Append live reading if it is a newer date than last hardcoded entry
-    const hist = AAII_HISTORY.slice();
-    if (dataValid && dateLabel && dateLabel !== lastH.d) {
-      hist.push({d: dateLabel, bull, neu, bear});
-    } else if (dataValid) {
-      hist[hist.length-1] = {d: lastH.d, bull, neu, bear};
-    }
-    renderAAIIChart(hist);
-
-  } catch(e) {
-    el.innerHTML = '<div class="no-data">AAII unavailable — '+e.message+'</div>';
-    renderAAIIChart(AAII_HISTORY);
-  }
-}
-
-function renderAAIIChart(data) {
-  const el = $('aaiiChart');
-  if (!el) return;
-  const W = 800, H = 200, PAD = {t:10, r:20, b:30, l:36};
-  const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
-  const n = data.length;
-  const xStep = cW / (n - 1);
-  const yScale = v => PAD.t + cH - (v / 60 * cH);
-
-  const line = (key, color) => {
-    const pts = data.map((d,i) => (PAD.l + i*xStep).toFixed(1)+','+yScale(d[key]).toFixed(1));
-    return '<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round"/>'
-      +'<circle cx="'+(PAD.l+(n-1)*xStep).toFixed(1)+'" cy="'+yScale(data[n-1][key]).toFixed(1)+'" r="3" fill="'+color+'"/>';
-  };
-
-  // Grid lines at 20, 40, 60%
-  const grid = [20,30,40,50,60].map(v=>{
-    const y = yScale(v).toFixed(1);
-    return '<line x1="'+PAD.l+'" x2="'+(PAD.l+cW)+'" y1="'+y+'" y2="'+y+'" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>'
-      +'<text x="'+(PAD.l-4)+'" y="'+(parseFloat(y)+4)+'" text-anchor="end" font-size="9" fill="#9090c0">'+v+'%</text>';
-  }).join('');
-
-  // X labels — every 3rd
-  const xlbls = data.map((d,i)=>{
-    if(i % 3 !== 0 && i !== n-1) return '';
-    const x = (PAD.l + i*xStep).toFixed(1);
-    return '<text x="'+x+'" y="'+(H-4)+'" text-anchor="middle" font-size="8" fill="#9090c0">'+d.d+'</text>';
-  }).join('');
-
-  // 37.5% avg bull line
-  const avgY = yScale(37.5).toFixed(1);
-  const avgLine = '<line x1="'+PAD.l+'" x2="'+(PAD.l+cW)+'" y1="'+avgY+'" y2="'+avgY+'" stroke="rgba(0,255,136,0.2)" stroke-width="1" stroke-dasharray="4,3"/>';
-
-  el.innerHTML = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;">'
-    + grid + avgLine
-    + line('bull','#00ff88')
-    + line('neu','#ffcc00')
-    + line('bear','#ff3355')
-    + xlbls
-    + '<text x="'+(PAD.l+cW-2)+'" y="'+(yScale(data[n-1].bull)-6)+'" font-size="8" fill="#00ff88" text-anchor="end">BULL '+fmt(data[n-1].bull,1)+'%</text>'
-    + '<text x="'+(PAD.l+cW-2)+'" y="'+(yScale(data[n-1].bear)+12)+'" font-size="8" fill="#ff3355" text-anchor="end">BEAR '+fmt(data[n-1].bear,1)+'%</text>'
-    + '</svg>'
-    + '<div style="display:flex;gap:16px;justify-content:center;margin-top:6px;font-size:11px;font-family:\'Share Tech Mono\',monospace;">'
-    + '<span style="color:#00ff88;">⬤ Bullish</span><span style="color:#ffcc00;">⬤ Neutral</span><span style="color:#ff3355;">⬤ Bearish</span>'
-    + '<span style="color:rgba(0,255,136,0.5);font-size:10px;">- - Bull avg 37.5%</span></div>';
-}
-
-// ─────────────────────────────────────────────
-// COT REPORT
-// ─────────────────────────────────────────────
-async function loadCOT() {
-  const el = $('cotPanel');
-  if (!el) return;
-  try {
-    const r = await fetch('/cot');
-    if (!r.ok) throw new Error('COT fetch failed');
-    const d = await r.json();
-    const fmtN = n => { if(n==null)return'—'; const a=Math.abs(n),s=n>=0?'+':'-'; return s+'$'+(a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(0)+'K':Math.round(a)); };
-    const fmtK = n => { if(n==null)return'—'; const a=Math.abs(n); return (a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(0)+'K':Math.round(a)); };
-    const clrN = n => n>0?'#00ff88':n<0?'#ff3355':'#ffcc00';
-    const days = d.days_since_report;
-    const freshnessColor = days==null?'var(--text3)':days<=7?'#00ff88':days<=14?'#ffcc00':'#ff3355';
-    const freshnessLabel = days==null?'':days===0?'Updated today':days===1?'1 day ago':`${days} days ago`;
-
-    // TFF groups
-    const groups = [
-      { label:'LEVERAGED MONEY / SPECULATORS', sublabel:'Hedge Funds & CTAs — fast money, most predictive signal',
-        l:d.lev_l, s:d.lev_s, net:d.lev_net, chg:d.chg_lev_net, color:'#ff8800', key:'lev' },
-      { label:'ASSET MANAGER', sublabel:'Pensions / Mutual Funds — institutional conviction',
-        l:d.asset_l, s:d.asset_s, net:d.asset_net, chg:d.chg_asset_net, color:'#00ccff', key:'asset' },
-      { label:'DEALER / INTERMEDIARY', sublabel:'Banks / Prime Brokers — typically short as hedge',
-        l:d.dealer_l, s:d.dealer_s, net:d.dealer_net, chg:d.chg_dealer_net, color:'#8855ff', key:'dealer' },
-      { label:'NON-REPORTABLE', sublabel:'Small traders / retail',
-        l:d.nonrept_l, s:d.nonrept_s, net:d.nonrept_net, chg:null, color:'#606080', key:'nr' },
-    ];
-
-    el.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">
-          Report: <span style="color:var(--text2);">${d.report_date||d.date||'—'}</span>
-          ${d.stale?'<span style="color:#ffcc00;margin-left:6px;">(CACHED)</span>':''}
-          · OI: <span style="color:var(--text2);">${fmtK(d.oi)}</span>
-        </div>
-        <span style="color:${freshnessColor};font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;">${freshnessLabel}</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        ${groups.map(g => `
-          <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${g.color};border-radius:4px;padding:10px;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:${g.color};letter-spacing:1px;margin-bottom:2px;">${g.label}</div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">${g.sublabel}</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${clrN(g.net)}">${fmtN(g.net)}</div>
-            <div style="display:flex;gap:10px;margin-top:5px;font-size:11px;">
-              <span style="color:#00ff88">▲ ${fmtK(g.l)}</span>
-              <span style="color:#ff3355">▼ ${fmtK(g.s)}</span>
-              ${g.chg!=null?`<span style="color:${clrN(g.chg)};margin-left:4px;">W/W ${fmtN(g.chg)}</span>`:''}
-            </div>
-          </div>`).join('')}
-      </div>
-      <div style="margin-top:8px;font-size:10px;color:var(--text3);text-align:center;">
-        TFF Report · S&P 500 Consolidated · CFTC · Released Fridays
-      </div>`;
-
-    loadCOTHistory();
-  } catch(e) {
-    el.innerHTML = `<div class="no-data">COT unavailable — ${e.message}</div>`;
-  }
-}
-
-async function loadCOTHistory() {
-  const el = $('cotHistoryChart');
-  if (!el) return;
-  try {
-    const r = await fetch('/cot?history=1');
-    if (!r.ok) throw new Error('fetch failed');
-    const d = await r.json();
-    const hist = d.history || [];
-    if (!hist.length) { el.innerHTML = '<div class="no-data" style="padding:12px;">COT history unavailable</div>'; return; }
-    renderCOTChart(el, hist);
-  } catch(e) {
-    el.innerHTML = `<div class="no-data" style="padding:12px;">COT history: ${e.message}</div>`;
-  }
-}
-
-function renderCOTChart(el, hist) {
-  const n = hist.length;
-  const W = 960, H = 220, PAD = {t:16, r:60, b:28, l:72};
-  const cW = W-PAD.l-PAD.r, cH = H-PAD.t-PAD.b;
-
-  const series = [
-    { key:'asset_net',  label:'Asset Manager / Institutional', color:'#00ccff', width:1.5, dash:'6,3' },
-    { key:'lev_net',    label:'Leveraged Money / Speculators',  color:'#ff8800', width:2.5, dash:'' },
-    { key:'dealer_net', label:'Dealer / Intermediary',          color:'#8855ff', width:1.5, dash:'' },
-  ];
-
-  // Scale Y axis to lev+dealer range (asset mgr is always large long and distorts scale)
-  // Asset mgr still drawn but may clip at top — that is fine, it's the least actionable line
-  const scalingVals = hist.flatMap(h => [h.lev_net||0, h.dealer_net||0]);
-  const allVals     = hist.flatMap(h => series.map(s => h[s.key]||0));
-  const minV = Math.min(...scalingVals), maxV = Math.max(...scalingVals);
-  const padV = (maxV-minV)*0.15;
-  const lo = minV-padV, hi = maxV+padV;
-
-  const toX = i => PAD.l + (i/Math.max(n-1,1))*cW;
-  const toY = v => PAD.t + cH - ((v-lo)/(hi-lo))*cH;
-  const fmtV = v => {
-    const a=Math.abs(v), s=v>=0?'+':'-';
-    return s+'$'+(a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(0)+'K':Math.round(a));
-  };
-
-  // Zero line
-  const zY = toY(0).toFixed(1);
-  const zeroLine = `<line x1="${PAD.l}" x2="${PAD.l+cW}" y1="${zY}" y2="${zY}" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="5,4"/>
-    <text x="${PAD.l-5}" y="${parseFloat(zY)+4}" text-anchor="end" font-size="9" fill="#909090" font-family="Share Tech Mono,monospace">0</text>`;
-
-  // Grid — pick ~4 clean rounded levels, skip if too close to zero line
-  const range = hi - lo;
-  const rawStep = range / 4;
-  const mag = Math.pow(10, Math.floor(Math.log10(Math.abs(rawStep)||1)));
-  const gStep = Math.round(rawStep/mag)*mag || mag;
-  let grid = '';
-  for (let v = Math.ceil(lo/gStep)*gStep; v <= hi; v += gStep) {
-    if (Math.abs(v) < gStep*0.3) continue; // skip near-zero duplicates
-    const y = toY(v).toFixed(1);
-    if (parseFloat(y) < PAD.t || parseFloat(y) > PAD.t+cH) continue;
-    grid += `<line x1="${PAD.l}" x2="${PAD.l+cW}" y1="${y}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-      <text x="${PAD.l-5}" y="${parseFloat(y)+4}" text-anchor="end" font-size="9" fill="#606080" font-family="Share Tech Mono,monospace">${fmtV(v)}</text>`;
-  }
-
-  // Subtle zero-band shading (just a thin stripe, not full fill)
-  const bandH = Math.max(2, Math.abs(toY(-gStep*0.15)-toY(gStep*0.15)));
-  const zeroBand = `<rect x="${PAD.l}" y="${parseFloat(zY)-1}" width="${cW}" height="2" fill="rgba(255,255,255,0.08)"/>`;
-
-  // Lines (with optional dash pattern)
-  const polyline = (key, color, w, dash='') => {
-    const pts = hist.map((h,i) => `${toX(i).toFixed(1)},${toY(h[key]||0).toFixed(1)}`).join(' ');
-    const dashAttr = dash ? `stroke-dasharray="${dash}"` : '';
-    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" ${dashAttr} clip-path="url(#cotClip)"/>`;
-  };
-
-  // End-of-line labels on right side
-  const endLabels = series.map(s => {
-    const v = hist[n-1][s.key]||0;
-    const x = toX(n-1), y = toY(v);
-    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${s.color}" stroke="#0a0a12" stroke-width="1.5"/>
-      <text x="${(x+10).toFixed(1)}" y="${(y+4).toFixed(1)}" font-size="9" fill="${s.color}" font-family="Share Tech Mono,monospace" font-weight="bold">${fmtV(v)}</text>`;
-  }).join('');
-
-  // X axis labels — month/year marks
-  const step = Math.max(1, Math.floor(n/10));
-  let xlbls = '';
-  hist.forEach((h,i) => {
-    if (i%step!==0 && i!==n-1) return;
-    const label = (h.date||'').slice(2,7).replace('-','/');
-    xlbls += `<text x="${toX(i).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="8" fill="#505070" font-family="Share Tech Mono,monospace">${label}</text>`;
-  });
-
-  el.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;border-radius:4px;">
-      <defs>
-        <clipPath id="cotClip">
-          <rect x="${PAD.l}" y="${PAD.t}" width="${cW}" height="${cH}"/>
-        </clipPath>
-      </defs>
-      <rect x="0" y="0" width="${W}" height="${H}" fill="#08080f" rx="4"/>
-      <rect x="${PAD.l}" y="${PAD.t}" width="${cW}" height="${cH}" fill="#0a0a14"/>
-      ${grid}${zeroLine}${zeroBand}
-      ${series.map(s => polyline(s.key, s.color, s.width, s.dash)).join('')}
-      ${endLabels}${xlbls}
-    </svg>
-    <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-top:8px;font-size:10px;font-family:'Share Tech Mono',monospace;">
-      <span style="color:#ff8800;">━━ Leveraged Money / Speculators (Hedge Funds): <b>${fmtV(hist[n-1].lev_net||0)}</b></span>
-      <span style="color:#8855ff;">━━ Dealer / Intermediary (Banks): <b>${fmtV(hist[n-1].dealer_net||0)}</b></span>
-      <span style="color:#00ccff;opacity:0.7;">╌╌ Asset Manager (Institutions): <b>${fmtV(hist[n-1].asset_net||0)}</b></span>
-    </div>
-    <div style="text-align:center;font-size:10px;color:var(--text3);margin-top:3px;">
-      Y-axis scaled to Lev Money + Dealer range · Asset Mgr line may clip (always large net long) · ${n} weeks · TFF Report
-    </div>`;
-}
-
-// All symbols to fetch live
-const LIVE_SYMBOLS = [
-  // Core
-  'SPY','QQQ','IWM','DIA','VXX','RSP',
-  // Indices (needed for ratios)
-  '^GSPC','ES=F',
-  // MAG7
-  'AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA',
-  // Sectors (11)
-  'XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU','XLC',
-  // Sub-sectors
-  'SMH','XBI','KRE','XRT','ITB','XOP','GDX','ARKK','XHB',
-  // Commodities
-  'GC=F','SI=F','CL=F','NG=F','HG=F',
-  // Crypto
-  'BTC-USD','ETH-USD',
-  // FX/Macro
-  'DX-Y.NYB',
-  // Bonds
-  '^TNX','^IRX','^TYX','^FVX','TLT','IEF','SHY','HYG','LQD','JNK',
-  // Volatility
-  '^VIX','^VIX3M','^VIX6M','^VVIX','^SKEW',
-  // Breadth
-  '^ADVN','^DECN','^NYA','^NYHGH','^NYLOW'
-];
-
-// Fetch live quotes — primary: our own /quotes Cloudflare function (server-side, no CORS)
-// Fallbacks: Yahoo direct, then third-party CORS proxies
-async function fetchLiveQuotes(symbols) {
-  const chunk = symbols.join(',');
-  const yahooFields = 'regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketPreviousClose';
-  const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk)}&fields=${yahooFields}`;
-
-  // Primary: our own Cloudflare function — server-side, no CORS issues
-  try {
-    const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 8000); // 8s timeout
-    const r = await fetch(`/quotes?symbols=${encodeURIComponent(chunk)}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: ctrl.signal
-    });
-    clearTimeout(tid);
-    if (r.ok) {
-      const data = await r.json();
-      if (data.quotes && Object.keys(data.quotes).length > 0) return data.quotes;
-    }
-  } catch(e) { /* CF function not deployed yet or timed out — fall through */ }
-
-  // Fallback 1: Yahoo direct (blocked by CORS in most browsers — expected)
-  try {
-    const r = await fetch(yahooUrl, { headers: { 'Accept': 'application/json' } });
-    if (r.ok) {
-      const data = await r.json();
-      const q = parseYahooQuotes(data);
-      if (q && Object.keys(q).length > 0) return q;
-    }
-  } catch(e) { /* CORS blocked — expected, falling through to proxy */ }
-
-  // Fallback 2: allorigins CORS proxy
-  try {
-    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(yahooUrl)}`;
-    const r = await fetch(proxy);
-    const wrapper = await r.json();
-    const data = JSON.parse(wrapper.contents);
-    const q = parseYahooQuotes(data);
-    if (q && Object.keys(q).length > 0) return q;
-  } catch(e) {}
-
-  // Fallback 3: corsproxy.io
-  try {
-    const proxy2 = `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`;
-    const r = await fetch(proxy2);
-    const data = await r.json();
-    return parseYahooQuotes(data);
-  } catch(e) {}
-
-  return null;
-}
-
-function parseYahooQuotes(data) {
-  const results = data?.quoteResponse?.result || [];
-  const quotes = {};
-  results.forEach(q => {
-    quotes[q.symbol] = {
-      price: q.regularMarketPrice,
-      change: q.regularMarketChange,
-      pct_change: q.regularMarketChangePercent,
-      volume: q.regularMarketVolume,
-      open: q.regularMarketOpen,
-      high: q.regularMarketDayHigh,
-      low: q.regularMarketDayLow,
-      prev_close: q.regularMarketPreviousClose
-    };
-  });
-  return quotes;
-}
-
-// Fetch SPY intraday OHLC via Cloudflare function
-async function fetchSPYIntraday() {
-  try {
-    const r = await fetch('/spyintraday');
-    if (r.ok) {
-      const d = await r.json();
-      // Always return the response — callers check d.available themselves.
-      // Checking d.open here meant pre-market responses (available:false, no open)
-      // were silently dropped, preventing the volume panel from updating.
-      if (d) return d;
-    }
-  } catch(e) {}
-  return null;
-}
-
-// Compute todays HVN from live intraday bars and inject into desk
-async function updateLiveHVN(spyData) {
-  const el = $('deskHvnLive');
-  if (!el) return;
-  // spyintraday gives us OHLCV but not per-bar. We can show a placeholder
-  // showing todays session high-volume price estimate (use mid of day range as proxy)
-  if (!spyData?.available) return;
-  const { open, high, low, close, volume } = spyData;
-  if (!open || !high || !low) return;
-  // Simple HVN estimate: price with most activity is near VWAP which we approximate
-  // as the midpoint weighted toward close (since we do not have per-bar data here)
-  const hvnEst = close || ((high + low + open) / 3);
-  const todayStr = new Date().toISOString().split('T')[0];
-  const grid = $('deskHvnGrid');
-  // If today already has a card in the grid, do not add
-  if (grid && grid.innerHTML.includes(todayStr.slice(5))) return;
-  const cur3 = parseFloat(close || 0);
-  const dist = hvnEst && cur3 ? cur3 - hvnEst : null;
-  const dc = dist > 0 ? '#00ff88' : dist < 0 ? '#ff3355' : 'var(--text2)';
-  const d = new Date();
-  const dayLabel = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
-  el.innerHTML = `
-    <div style="background:var(--bg3);border:1px solid var(--cyan);border-radius:3px;padding:10px;text-align:center;margin-bottom:8px;">
-      <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);margin-bottom:4px;">${dayLabel} TODAY (LIVE)</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:var(--cyan);">$${fmt(hvnEst,2)}</div>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px;">Session mid est · Vol: ${fmtK(volume||0)}</div>
-    </div>`;
-}
-
-// Fetch live Fear & Greed via Cloudflare function
-async function fetchLiveFG() {
-  try {
-    const r = await fetch('/fg');
-    if (r.ok) {
-      const d = await r.json();
-      if (d.value) return { value: d.value, label: d.label };
-    }
-  } catch(e) {}
-  return null;
-}
-
-// Live update indicator in top bar
-function setLiveStatus(status, time) {
-  // existing status indicators (topbar live dot etc.)
-  const dot = document.querySelector('.live-dot');
-  if (dot) {
-    dot.style.background = status === 'live' ? 'var(--green)' : status === 'updating' ? 'var(--yellow)' : 'var(--red)';
-  }
-  // Update Trading Desk timestamp strip
-  updateDeskTimestamp(status, time);
-}
-
-// Fix 4: Update the Trading Desk last-updated bar
-function updateDeskTimestamp(status, liveTime) {
-  const el = document.getElementById('deskUpdateBar');
-  if (!el) return;
-  const interval = isMarketOpen() ? '15s' : '60s';
-  const statusColor = status === 'live' ? '#00ff88' : status === 'updating' ? '#ffcc00' : '#ff3355';
-  const statusLabel = status === 'live' ? '● LIVE' : status === 'updating' ? '⟳ UPDATING' : '✕ OFFLINE';
-  const staticLabel = _lastStaticRefresh
-    ? new Date(_lastStaticRefresh).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT'
-    : 'pending';
-  el.innerHTML = `
-    <span style="color:${statusColor};font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;">${statusLabel}</span>
-    <span style="color:var(--border2);">·</span>
-    <span style="color:var(--text3);">QUOTES</span>
-    <span style="color:var(--text2);">${liveTime || '—'}</span>
-    <span style="color:var(--border2);">·</span>
-    <span style="color:var(--text3);">INTERVAL</span>
-    <span style="color:var(--cyan);">${interval}</span>
-    <span style="color:var(--border2);">·</span>
-    <span style="color:var(--text3);">STATIC DATA</span>
-    <span style="color:var(--text2);">${staticLabel}</span>
-    <span style="color:var(--border2);">·</span>
-    <span style="color:var(--text3);">STATIC REFRESH</span>
-    <span style="color:var(--cyan);">15 MIN</span>
-  `;
-}
-
-function updateStaticTimestamp() {
-  updateDeskTimestamp('live', _lastLiveSuccess
-    ? _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT'
-    : '—');
-}
-
-// Live-patch the key price level bar on every quote tick
-function updateLevelBar(price) {
-  const el = document.getElementById('deskLevelBar');
-  if (!el || !price) return;
-  const lv = window._spyLevels;
-  if (!lv) return;
-
-  // Update stored current price
-  lv.cur = price;
-
-  const fmt2 = n => n == null ? '—' : '$' + Number(n).toFixed(2);
-  const dist = (level) => {
-    if (level == null || !price) return { d: null, p: null };
-    return { d: price - level, p: (price - level) / level * 100 };
-  };
-  const sign = n => n >= 0 ? '+' : '';
-
-  const levels = [
-    { lbl: 'ALL-TIME HIGH', sub: fmt2(lv.SPY_ATH),         lvl: lv.SPY_ATH,        accent: '#ff8800' },
-    { lbl: '-10% FROM ATH', sub: fmt2(lv.ath10),           lvl: lv.ath10,           accent: '#ffcc00' },
-    { lbl: '-20% FROM ATH', sub: fmt2(lv.ath20),           lvl: lv.ath20,           accent: '#ff3355' },
-    { lbl: 'PREV WK CLOSE', sub: fmt2(lv.prevWeekClose),   lvl: lv.prevWeekClose,   accent: '#00ccff' },
-    { lbl: 'CUR WK OPEN',   sub: fmt2(lv.weekOpen),        lvl: lv.weekOpen,        accent: '#00ccff' },
-    { lbl: 'PREV MO CLOSE', sub: fmt2(lv.prevMonthClose),  lvl: lv.prevMonthClose,  accent: '#8855ff' },
-    { lbl: 'PREV YR CLOSE', sub: fmt2(lv.prevYearClose),   lvl: lv.prevYearClose,   accent: '#8855ff' },
-    { lbl: 'CUR YR OPEN',   sub: fmt2(lv.yearOpen),        lvl: lv.yearOpen,        accent: '#8855ff' },
-  ];
-
-  // Also patch live CHG/OPEN cell in price panel on every tick
-  const chgOpenEl = document.getElementById('deskChgOpen');
-  if (chgOpenEl) {
-    const todayOpenLive = window._spyLevels?.todayOpen || 0;
-    const chgFromOpen = price && todayOpenLive ? price - todayOpenLive : null;
-    const chgFromOpenPct = chgFromOpen && todayOpenLive ? chgFromOpen / todayOpenLive * 100 : null;
-    const cc2 = n => n >= 0 ? '#00ff88' : '#ff3355';
-    const cs2 = n => n >= 0 ? '+' : '';
-    if (chgFromOpen != null) {
-      chgOpenEl.style.color = cc2(chgFromOpen);
-      chgOpenEl.innerHTML = `<div style="font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;">${cs2(chgFromOpen)}${chgFromOpen.toFixed(2)}</div><div style="font-size:10px;">${cs2(chgFromOpenPct)}${chgFromOpenPct.toFixed(2)}%</div>`;
-    }
-  }
-
-  el.innerHTML = levels.map(({ lbl, sub, lvl, accent }) => {
-    const { d, p } = dist(lvl);
-    const abv = d != null && d >= 0;
-    const dc  = d == null ? 'var(--text3)' : abv ? '#00ff88' : '#ff3355';
-    const distLine = d != null
-      ? `<div style="color:${dc};font-size:11px;margin-top:2px;">${sign(d)}$${Math.abs(d).toFixed(2)}</div>
-         <div style="color:${dc};font-size:10px;">${sign(p)}${Math.abs(p).toFixed(2)}%</div>`
-      : `<div style="color:var(--text3);font-size:11px;">—</div>`;
-    return `<div style="padding:7px 8px;background:var(--bg2);text-align:center;border-right:1px solid var(--border);">
-      <div style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:0.5px;color:${accent};margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${lbl}</div>
-      <div style="font-size:12px;font-weight:bold;color:var(--text2);">${sub}</div>
-      ${distLine}
-    </div>`;
-  }).join('');
-}
-
-// Merge live quotes into market data object
-function mergeLiveData(md, liveQuotes, liveFG) {
-  const merged = JSON.parse(JSON.stringify(md)); // deep clone
-  if (liveQuotes) {
-    merged.quotes = merged.quotes || {};
-    Object.assign(merged.quotes, liveQuotes);
-  }
-  if (liveFG) merged.fear_greed = liveFG;
-  merged.updated = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
-  // Keep todayOpen in _spyLevels current so CHG/OPEN cell stays accurate
-  if (window._spyLevels && merged.quotes?.['SPY']?.open) {
-    window._spyLevels.todayOpen = merged.quotes['SPY'].open;
-  }
-  return merged;
-}
-
-// Live refresh — 15s during market hours, 60s otherwise
-let _liveInterval = null;
-let _lastLiveSuccess = null;
-let _lastStaticRefresh = null; // tracks when market_data.json was last re-fetched
-
-// Returns true if US equities market is currently open (ET, weekdays 9:30–16:00)
-function isMarketOpen() {
-  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const dow = et.getDay();
-  if (dow === 0 || dow === 6) return false;
-  const mins = et.getHours() * 60 + et.getMinutes();
-  return mins >= 9 * 60 + 30 && mins < 16 * 60;
-}
-
-// Returns true if pre-market or market hours (4 AM–4 PM ET weekdays)
-function isExtendedHours() {
-  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const dow = et.getDay();
-  if (dow === 0 || dow === 6) return false;
-  const mins = et.getHours() * 60 + et.getMinutes();
-  return mins >= 4 * 60 && mins < 16 * 60;
-}
-
-// Fetch and cache the current weeks opening price (Monday open, or first trading day)
-// Sources tried in order: intraday (if Mon), market_data weekly_em, _sd rows, /quotes
-async function fetchWeekOpen() {
-  try {
-    const pad = n => String(n).padStart(2, '0');
-    const ctNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    const dow = ctNow.getDay();
-    const isWeekend = dow === 0 || dow === 6;
-    const daysFromMon = dow === 0 ? 6 : dow - 1;
-    const monCT = new Date(ctNow);
-    monCT.setDate(ctNow.getDate() - daysFromMon);
-    const monStr = `${monCT.getFullYear()}-${pad(monCT.getMonth()+1)}-${pad(monCT.getDate())}`;
-
-    const applyWeekOpen = (val) => {
-      if (!val || isNaN(val)) return false;
-      window._spyWeekOpen = val;
-      if (window._spyLevels) {
-        window._spyLevels.weekOpen = val;
-        updateLevelBar(window._spyLevels?.cur);
-      }
-      try { localStorage.setItem('spy_week_open_v2', JSON.stringify({ monStr, weekOpen: val })); } catch(e) {}
-      return true;
-    };
-
-    // ── Check localStorage cache first ──────────────────────────────────────
-    try {
-      const cached = JSON.parse(localStorage.getItem('spy_week_open_v2') || 'null');
-      if (cached && cached.monStr === monStr && cached.weekOpen) {
-        applyWeekOpen(cached.weekOpen);
-        if (!isWeekend && dow !== 1) return; // Tue-Fri: cache is good enough
-      }
-    } catch(e) {}
-
-    // ── Source 1: /weekopen — server-side Yahoo fetch, works any day ─────────
-    try {
-      const r = await fetch('/weekopen?t=' + Date.now());
-      if (r.ok) {
-        const d = await r.json();
-        if (d.available && d.weekOpen) {
-          if (applyWeekOpen(d.weekOpen)) return;
-        }
-      }
-    } catch(e) { console.warn('[fetchWeekOpen] /weekopen failed:', e.message); }
-
-    // ── Source 2: market_data.json weekly_em week_open ───────────────────────
-    if (_md) {
-      const wems = _md.weekly_em || [];
-      const curWem = wems.find(w => !w.week_close) || wems[0];
-      if (curWem && curWem.week_open) {
-        if (applyWeekOpen(curWem.week_open)) return;
-      }
-    }
-
-    // ── Source 3: _sd daily data — first trading day of this week ───────────
-    if (_sd && _sd.length) {
-      const ctTodayStr = `${ctNow.getFullYear()}-${pad(ctNow.getMonth()+1)}-${pad(ctNow.getDate())}`;
-      const weekRows = _sd.filter(r => r.date >= monStr && r.date <= ctTodayStr);
-      const firstDay = weekRows.length ? weekRows[weekRows.length - 1] : null;
-      if (firstDay && firstDay.open) {
-        if (applyWeekOpen(firstDay.open)) return;
-      }
-    }
-
-    // ── Source 4: /spyintraday on Monday only ────────────────────────────────
-    if (!isWeekend && dow === 1) {
-      try {
-        const r = await fetch('/spyintraday?t=' + Date.now());
-        if (r.ok) {
-          const d = await r.json();
-          if (d.available && d.open) {
-            if (window._spyLevels) window._spyLevels.todayOpen = d.open;
-            applyWeekOpen(d.open);
-          }
-        }
-      } catch(e) {}
-    }
-
-  } catch(e) { console.warn('fetchWeekOpen error:', e); }
-}
-
-// Schedules the next live-quote refresh at the appropriate interval
-function scheduleLiveRefresh() {
-  if (_liveInterval) clearTimeout(_liveInterval);
-  const delay = isMarketOpen() ? 15000 : 60000;
-  _liveInterval = setTimeout(async () => {
-    await refreshLiveData();
-    scheduleLiveRefresh(); // reschedule after each cycle
-  }, delay);
-}
-
-// Lightweight WEM price update — runs every tick without rebuilding heavy SVG charts
-function updateWEMPrice(price) {
-  if (!price || !_md) return;
-  const wems = _md.weekly_em || [];
-  const cur  = wems.find(w => !w.week_close) || wems[0];
-  if (!cur) return;
-  const lo = cur.wem_low, hi = cur.wem_high, mid = cur.wem_mid;
-  const halfRange = cur.wem_range / 2;
-  if (!lo || !hi || !mid) return;
-
-  // Needle position
-  const pct = hi > lo ? Math.min(Math.max((price - lo) / (hi - lo) * 100, 2), 98) : 50;
-  const needle = $('wemTabNeedle');
-  if (needle) needle.style.left = pct + '%';
-  const nlbl = $('wemTabNeedleLabel'); if(nlbl) nlbl.textContent = '$'+fmt(price,2);
-
-  // Position text
-  const posText = $('wemTabPosText');
-  if (posText) {
-    const dte = cur.dte || '—';
-    posText.textContent = `SPY $${fmt(price,2)} · ${price>=lo&&price<=hi?'INSIDE WEM ✓':'OUTSIDE WEM ⚠'} · ±$${fmt(halfRange,2)} · DTE ${dte}`;
-  }
-
-  // Big cards — "from here" distances
-  const header = $('wemCurrentHeader');
-  if (header) {
-    header.innerHTML = `
-      <div class="wem-big-card">
-        <div class="wem-big-lbl">WEM LOW</div>
-        <div class="wem-big-val dn">$${fmt(lo,2)}</div>
-        <div class="wem-big-sub">${price>lo?'+':''}$${fmt(price-lo,2)} from here</div>
-      </div>
-      <div class="wem-big-card">
-        <div class="wem-big-lbl">MID (ANCHOR)</div>
-        <div class="wem-big-val">$${fmt(mid,2)}</div>
-        <div class="wem-big-sub">±$${fmt(halfRange,2)} range</div>
-      </div>
-      <div class="wem-big-card">
-        <div class="wem-big-lbl">WEM HIGH</div>
-        <div class="wem-big-val up">$${fmt(hi,2)}</div>
-        <div class="wem-big-sub">${price<hi?'+':''}$${fmt(hi-price,2)} from here</div>
-      </div>`;
-  }
-
-  // Z-score thermometer + bell curve — re-render fully if WEM tab is visible
-  const wemPanel = $('panel-wem');
-  if (wemPanel && wemPanel.classList.contains('active') && _md) {
-    try { renderWEM(_md); } catch(e) {}
-    return; // renderWEM already updated needle/header/posText above
-  }
-}
-
-
-async function refreshLiveData() {
-  if (!_md) return;
-  setLiveStatus('updating');
-
-  // Fix 3: Re-fetch market_data.json every 15 min to pick up workflow updates
-  const now = Date.now();
-  const staticRefreshInterval = 15 * 60 * 1000;
-  if (!_lastStaticRefresh || now - _lastStaticRefresh > staticRefreshInterval) {
-    try {
-      const [freshMd, freshSd] = await Promise.all([
-        fetch('market_data.json?t=' + now).then(r => r.json()),
-        fetch('spy_data.json?t=' + now).then(r => r.json()).catch(() => null)
-      ]);
-      if (freshMd) {
-        // Preserve any live patches already on _md (quotes, gex, fear_greed)
-        freshMd.quotes = _md.quotes;
-        freshMd.fear_greed = _md.fear_greed;
-        if (_md.gex?.flip_point) {
-          freshMd.gex = _md.gex;
-          // Preserve patched atm_iv from live GEX fetch
-          if (_md.gex.atm_iv) freshMd.gex.atm_iv = _md.gex.atm_iv;
-        }
-        if (_md.max_pain?.length) freshMd.max_pain = _md.max_pain;
-        _md = freshMd; window._macroMD = _md;
-      }
-      if (freshSd && freshSd.length) _sd = freshSd;
-      _lastStaticRefresh = now;
-      updateStaticTimestamp();
-      fetchWeekOpen(); // refresh week open from fresh sd data
-      // Re-render WEM fully on static refresh — WEM levels and IV can change
-      try { renderWEM(_md); } catch(e) {}
-    } catch(e) {
-      console.warn('Static JSON re-fetch failed:', e);
-    }
-  }
-
-  try {
-    const [liveQuotes, liveFG, spyOHLC] = await Promise.all([
-      fetchLiveQuotes(LIVE_SYMBOLS),
-      fetchLiveFG(),
-      fetchSPYIntraday()
-    ]);
-
-    // Even if full quote fetch fails, spyOHLC gives us SPY price from /spyintraday
-    // Build a minimal quotes object from intraday data so desk always updates
-    let effectiveQuotes = liveQuotes;
-    if ((!liveQuotes || Object.keys(liveQuotes).length === 0) && spyOHLC?.available) {
-      effectiveQuotes = {
-        'SPY': {
-          price:      spyOHLC.close,
-          change:     spyOHLC.change,
-          pct_change: spyOHLC.changePct,
-          volume:     spyOHLC.volume,
-          open:       spyOHLC.open,
-          high:       spyOHLC.high,
-          low:        spyOHLC.low,
-          prev_close: spyOHLC.prev_close,
-        }
-      };
-      console.log('Using spyOHLC as quote fallback, SPY:', spyOHLC.close);
-    }
-    
-    // Always patch SPY from spyOHLC first — this is the most accurate source
-    // (Cloudflare function hitting Yahoo v8 chart, 1-min bars, no CORS issues)
-    if (spyOHLC?.available) {
-      _spyIntraday = spyOHLC;
-      saveIntradayCache(spyOHLC);
-      _md.quotes = _md.quotes || {};
-      _md.quotes['SPY'] = _md.quotes['SPY'] || {};
-      // Override all SPY fields with live intraday data
-      _md.quotes['SPY'].price      = spyOHLC.close;
-      _md.quotes['SPY'].open       = spyOHLC.open;
-      _md.quotes['SPY'].high       = spyOHLC.high;
-      _md.quotes['SPY'].low        = spyOHLC.low;
-      _md.quotes['SPY'].volume     = spyOHLC.volume;
-      _md.quotes['SPY'].prev_close = spyOHLC.prev_close;
-      _md.quotes['SPY'].change     = spyOHLC.change;
-      _md.quotes['SPY'].pct_change = spyOHLC.changePct;
-    }
-
-    if (effectiveQuotes && Object.keys(effectiveQuotes).length > 0) {
-      // swap liveQuotes reference so rest of code works unchanged
-      const liveQuotes = effectiveQuotes;
-      const merged = mergeLiveData(_md, liveQuotes, liveFG);
-      // Re-apply spyOHLC on top of merged quotes — liveQuotes may have overwritten with stale data
-      if (spyOHLC?.available && merged.quotes['SPY']) {
-        merged.quotes['SPY'].price      = spyOHLC.close;
-        merged.quotes['SPY'].open       = spyOHLC.open;
-        merged.quotes['SPY'].high       = spyOHLC.high;
-        merged.quotes['SPY'].low        = spyOHLC.low;
-        merged.quotes['SPY'].volume     = spyOHLC.volume;
-        merged.quotes['SPY'].prev_close = spyOHLC.prev_close;
-        merged.quotes['SPY'].change     = spyOHLC.change;
-        merged.quotes['SPY'].pct_change = spyOHLC.changePct;
-      }
-      _md = merged; window._macroMD = _md;
-      
-      // Re-render all live-data-dependent tabs
-      renderHub(merged, _sd);
-      renderDesk(merged, _sd);
-      updateLevelBar(merged.quotes?.['SPY']?.price);
-      updateWEMPrice(merged.quotes?.['SPY']?.price);
-      renderOverview(merged);
-      loadFuturesChart();
-
-      renderVolatility(merged);
-      renderBreadth(merged, _sd);
-      renderSentiment(merged);
-      runPatternAlerts(merged, _sd);
-      renderGEX(merged);
-      
-      _lastLiveSuccess = new Date();
-      setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT');
-    } else if (spyOHLC?.available) {
-      // Quotes fetch failed but we have live SPY intraday — render with that
-      renderHub(_md, _sd);
-      renderDesk(_md, _sd);
-      updateLevelBar(_md.quotes?.['SPY']?.price);
-      updateWEMPrice(_md.quotes?.['SPY']?.price);
-      _lastLiveSuccess = new Date();
-      setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT (SPY only)');
-    } else {
-      setLiveStatus('offline', 'fetch failed');
-    }
-  } catch(e) {
-    console.error('Live refresh error:', e);
-    setLiveStatus('offline', 'error');
-  }
-}
-
-async function fetchLiveGEX() {
-  try {
-    const r = await fetch('/gex');
-    if (!r.ok) return null;
-    const d = await r.json();
-    if (d.error) return null;
-    return d;
-  } catch(e) { return null; }
-}
-
-// ─────────────────────────────────────────────
-// MAIN LOAD
-// ─────────────────────────────────────────────
-async function loadData(){
-  try{
-    // Fetch static data + live OHLC + F&G + live GEX all at once
-    const [md, sd, spyOHLC, liveFG, liveGEX] = await Promise.all([
-      fetch('market_data.json?t='+Date.now()).then(r=>r.json()),
-      fetch('spy_data.json?t='+Date.now()).then(r=>r.json()).catch(()=>[]),
-      fetchSPYIntraday(),
-      fetchLiveFG(),
-      fetchLiveGEX()
-    ]);
-
-    // Patch SPY quotes with real intraday OHLC immediately
-    if (spyOHLC && spyOHLC.available && md.quotes && md.quotes['SPY']) {
-      md.quotes['SPY'].open       = spyOHLC.open       || md.quotes['SPY'].open;
-      md.quotes['SPY'].high       = spyOHLC.high       || md.quotes['SPY'].high;
-      md.quotes['SPY'].low        = spyOHLC.low        || md.quotes['SPY'].low;
-      md.quotes['SPY'].volume     = spyOHLC.volume     || md.quotes['SPY'].volume;
-      md.quotes['SPY'].prev_close = spyOHLC.prev_close || md.quotes['SPY'].prev_close;
-      // Also patch current price — market_data.json is stale until next workflow run
-      if (spyOHLC.close) {
-        md.quotes['SPY'].price      = spyOHLC.close;
-        md.quotes['SPY'].change     = spyOHLC.change     ?? md.quotes['SPY'].change;
-        md.quotes['SPY'].pct_change = spyOHLC.changePct  ?? md.quotes['SPY'].pct_change;
-      }
-    }
-    // Patch F&G with CNN value immediately
-    if (liveFG) md.fear_greed = liveFG;
-    // Patch GEX + max pain with live CBOE data (overrides stale workflow data)
-    if (liveGEX?.gex?.flip_point) {
-      md.gex = liveGEX.gex;
-      // Patch atm_straddle into md.gex so daily EM can use real straddle price
-      if (liveGEX.atm_straddle) md.gex.atm_straddle = liveGEX.atm_straddle;
-      if (liveGEX.atm_call_mid) md.gex.atm_call_mid = liveGEX.atm_call_mid;
-      if (liveGEX.atm_put_mid)  md.gex.atm_put_mid  = liveGEX.atm_put_mid;
-      if (liveGEX.max_pain?.length) md.max_pain = liveGEX.max_pain;
-      if (liveGEX.walls_by_expiry?.length) md.walls_by_expiry = liveGEX.walls_by_expiry;
-      // Patch live atm_iv onto md.gex so WEM/EM panels can use it directly
-      // gex.js now targets Friday weekly expiry IV so this is correct for EM calcs
-      md.gex.atm_iv = liveGEX.atm_iv || liveGEX.gex?.atm_iv || null;
-      if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
-    }
-
-    _md=md; _sd=sd;
-    if (spyOHLC?.available) { _spyIntraday = spyOHLC; saveIntradayCache(spyOHLC); } // store live intraday for desk volume box
-    const safeRender = (fn, ...args) => { try { fn(...args); } catch(e) { console.error(fn.name, e); } };
-    safeRender(renderHub, md, sd);
-    safeRender(renderDesk, md, sd);
-    updateLevelBar(md?.quotes?.['SPY']?.price);
-    if (spyOHLC) updateLiveHVN(spyOHLC);
-    safeRender(renderOverview, md);
-    safeRender(renderOptions, md);
-    try { renderExpiryBehavior(md); } catch(e) {}
-    safeRender(renderVolatility, md);
-    safeRender(renderBonds, md);
-    safeRender(renderBreadth, md, sd);
-    safeRender(renderSentiment, md);
-    safeRender(renderPriceHistory, sd);
-    safeRender(renderTODStats);
-    safeRender(renderVolHistory, sd);
-    safeRender(renderWEM, md);
-    safeRender(renderVolume, sd, md);
-    safeRender(renderGEX, md);
-    await renderKeyEvents();
-    // AI features
-    runPatternAlerts(md,sd);
-    generateSummary(md,sd);
-    generateTradeIdeas(md,sd);
-    generateLevelAnalysis(md,sd);
-    generateVolumeAnalysis(md,sd);
-    generateRiskAssessment(md,sd);
-    generateEventImpact(md,sd);
-    
-    // Load AAII and COT async
-    loadAAII();
-    loadCOT();
-    renderLiquidity();
-    // Pre-load macro data in background
-    if (typeof renderMacro === 'function') window._macroPreloaded = false;
-    
-    // Fix 2: Dynamic interval — 15s during market hours, 60s otherwise
-    _lastStaticRefresh = Date.now(); // mark static data as just loaded
-    fetchWeekOpen(); // set week open immediately on load
-    updateStaticTimestamp();
-    scheduleLiveRefresh();
-    setInterval(async () => {
-      const fresh = await fetchLiveGEX();
-      if (fresh?.gex?.flip_point && _md) {
-        _md.gex = fresh.gex;
-        if (fresh.atm_iv) _md.gex.atm_iv = fresh.atm_iv;
-        if (fresh.max_pain?.length) _md.max_pain = fresh.max_pain;
-        if (fresh.walls_by_expiry?.length) _md.walls_by_expiry = fresh.walls_by_expiry;
-        if (fresh.pcr_vol && _md.options_summary) _md.options_summary.pc_ratio_vol = fresh.pcr_vol;
-        renderGEX(_md);
-        renderDesk(_md, _sd);
-        renderOptions(_md);
-      }
-    }, 300000); // every 5 minutes
-
-    // Refresh all AI sections every 30 minutes
-    setInterval(() => {
-      if (_md && _sd) {
-        generateSummary(_md, _sd);
-        generateTradeIdeas(_md, _sd);
-        generateLevelAnalysis(_md, _sd);
-        generateVolumeAnalysis(_md, _sd);
-        generateRiskAssessment(_md, _sd);
-        runPatternAlerts(_md, _sd);
-      }
-    }, 1800000); // every 30 minutes
-    
-  }catch(e){console.error('Load error:',e);}
-}
-loadData();
-
-function _renderGapOHLCBlocks(sd) {
-  if(!sd || sd.length <= 1) return;
-  const $ = id => document.getElementById(id);
-  const fmt = (v,d) => { d = d==null?1:d; return v==null?'--':Number(v).toFixed(d); };
-  const gapStatCardsEl = $('gapStatCards');
-  const gapSizeChartEl = $('gapSizeChart');
-  const gapByDayEl     = $('gapByDayChart');
-  const gapTimingEl    = $('gapCloseTimingChart');
-  const gapTableEl     = $('gapHistBody');
-
-  if(gapStatCardsEl && sd.length > 1) {
-    // Build gap dataset from OHLC
-    const gaps = [];
-    for(let i=0; i<sd.length-1; i++){
-      const today2=sd[i], prev2=sd[i+1];
-      if(!today2.open||!prev2.close||!today2.high||!today2.low||!today2.close) continue;
-      const gapAmt = today2.open - prev2.close;
-      if(Math.abs(gapAmt) < 0.05) continue; // filter micro gaps
-      const gapPct = (gapAmt/prev2.close)*100;
-      const dir = gapAmt > 0 ? 'UP' : 'DOWN';
-      // Gap filled same day?
-      // Gap up filled if price traded back down to prev close (low <= prevClose)
-      // Gap down filled if price traded back up to prev close (high >= prevClose)
-      const filledSameDay = dir==='UP'
-        ? today2.low  <= prev2.close
-        : today2.high >= prev2.close;
-      // Day of week
-      const d2 = new Date(today2.date+'T12:00:00');
-      const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d2.getDay()];
-      gaps.push({
-        date: today2.date, dow,
-        prevClose: prev2.close,
-        open: today2.open,
-        high: today2.high,
-        low: today2.low,
-        close: today2.close,
-        gapAmt, gapPct, dir, filledSameDay
-      });
-    }
-
-    const gapsUp   = gaps.filter(g=>g.dir==='UP');
-    const gapsDn   = gaps.filter(g=>g.dir==='DOWN');
-    const fillUp   = gapsUp.filter(g=>g.filledSameDay);
-    const fillDn   = gapsDn.filter(g=>g.filledSameDay);
-    const avgGapUp = gapsUp.length ? gapsUp.reduce((a,g)=>a+g.gapAmt,0)/gapsUp.length : 0;
-    const avgGapDn = gapsDn.length ? gapsDn.reduce((a,g)=>a+g.gapAmt,0)/gapsDn.length : 0;
-    const avgGapUpPct = gapsUp.length ? gapsUp.reduce((a,g)=>a+g.gapPct,0)/gapsUp.length : 0;
-    const avgGapDnPct = gapsDn.length ? gapsDn.reduce((a,g)=>a+g.gapPct,0)/gapsDn.length : 0;
-    const largestUp = gapsUp.length ? Math.max(...gapsUp.map(g=>g.gapAmt)) : 0;
-    const largestDn = gapsDn.length ? Math.min(...gapsDn.map(g=>g.gapAmt)) : 0;
-
-    // Stat cards
-    gapStatCardsEl.innerHTML = [
-      {l:'TOTAL GAPS',       v:gaps.length,                  sub:`${sd.length} days analyzed`,    c:'var(--cyan)'},
-      {l:'GAP UPS',          v:gapsUp.length,                sub:fmt(gapsUp.length/gaps.length*100,1)+'% of gaps',  c:'#00ff88'},
-      {l:'GAP DOWNS',        v:gapsDn.length,                sub:fmt(gapsDn.length/gaps.length*100,1)+'% of gaps',  c:'#ff3355'},
-      {l:'UP FILL RATE',     v:fmt(fillUp.length/Math.max(gapsUp.length,1)*100,1)+'%', sub:`${fillUp.length} of ${gapsUp.length} filled same day`, c:'#00ff88'},
-      {l:'DOWN FILL RATE',   v:fmt(fillDn.length/Math.max(gapsDn.length,1)*100,1)+'%', sub:`${fillDn.length} of ${gapsDn.length} filled same day`, c:'#ff3355'},
-      {l:'OVERALL FILL RATE',v:fmt((fillUp.length+fillDn.length)/Math.max(gaps.length,1)*100,1)+'%', sub:`${fillUp.length+fillDn.length} total filled`,  c:'#ffcc00'},
-    ].map(({l,v,sub,c})=>`<div style="background:var(--bg3);border:1px solid var(--border);border-top:3px solid ${c};border-radius:3px;padding:10px;text-align:center;">
-      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">${l}</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${c};">${v}</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:3px;">${sub}</div>
+  // IV PANEL
+  const ivEl=$('optsIVPanel');
+  if(ivEl){
+    const vix=q['^VIX']?.price||0;
+    const wem=md.weekly_em?.[0];
+    const dailyEM = atm_iv && cur ? (cur * atm_iv * Math.sqrt(1/365) * 0.7).toFixed(2) : null;
+    ivEl.innerHTML=[
+      {l:'ATM IV', v:atm_iv?fmt(atm_iv_pct,2)+'%':'—', c:atm_iv_pct>25?'#ff3355':atm_iv_pct>18?'#ff8800':atm_iv_pct>12?'#ffcc00':'#00ff88'},
+      {l:'VIX (30d)',     v:vix?fmt(vix,2)+'%':'—',                              c:vix>25?'#ff3355':vix>18?'#ff8800':'#ffcc00'},
+      {l:'Daily EM (±)',  v:dailyEM?'$'+dailyEM:'—',                             c:'var(--text2)'},
+      {l:'WEM High',      v:wem?.wem_high?'$'+fmt(wem.wem_high,2):'—',          c:'#00ff88'},
+      {l:'WEM Low',       v:wem?.wem_low?'$'+fmt(wem.wem_low,2):'—',            c:'#ff3355'},
+      {l:'WEM Range (±)', v:wem?.wem_range?'$'+fmt(wem.wem_range/2,2):'—',      c:'var(--text2)'},
+    ].map(r=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:11px;color:var(--text3);">${r.l}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:bold;color:${r.c};">${r.v}</span>
     </div>`).join('');
-
-    // Gap size distribution chart
-    if(gapSizeChartEl) {
-      const bins = [
-        {label:'0-0.25%', min:0,    max:0.25},
-        {label:'0.25-0.5%', min:0.25, max:0.5},
-        {label:'0.5-1%', min:0.5,  max:1.0},
-        {label:'1-1.5%', min:1.0,  max:1.5},
-        {label:'1.5-2%', min:1.5,  max:2.0},
-        {label:'>2%',    min:2.0,  max:999},
-      ];
-      const countUp = bins.map(b=>gapsUp.filter(g=>Math.abs(g.gapPct)>=b.min&&Math.abs(g.gapPct)<b.max).length);
-      const countDn = bins.map(b=>gapsDn.filter(g=>Math.abs(g.gapPct)>=b.min&&Math.abs(g.gapPct)<b.max).length);
-      const maxCount = Math.max(...countUp,...countDn,1);
-      const gap2=4;
-      gapSizeChartEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:${gap2}px;">`+
-        bins.map((b,i)=>`
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">${b.label}</div>
-            <div style="display:flex;flex-direction:column;gap:2px;">
-              <div style="display:flex;align-items:center;gap:4px;">
-                <div style="flex:1;height:9px;background:var(--bg3);border-radius:1px;overflow:hidden;">
-                  <div style="width:${(countUp[i]/maxCount*100).toFixed(1)}%;height:100%;background:#00ff88;border-radius:1px;"></div>
-                </div>
-                <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#00ff88;width:22px;text-align:right;">${countUp[i]}</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:4px;">
-                <div style="flex:1;height:9px;background:var(--bg3);border-radius:1px;overflow:hidden;">
-                  <div style="width:${(countDn[i]/maxCount*100).toFixed(1)}%;height:100%;background:#ff3355;border-radius:1px;"></div>
-                </div>
-                <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#ff3355;width:22px;text-align:right;">${countDn[i]}</span>
-              </div>
-            </div>
-          </div>`).join('')+
-        `</div><div style="display:flex;gap:12px;margin-top:6px;font-size:10px;">
-          <span style="color:#00ff88;">■ Gap Up</span>
-          <span style="color:#ff3355;">■ Gap Down</span>
-          <span style="color:var(--text3);">avg up: +$${fmt(avgGapUp,2)} (+${fmt(avgGapUpPct,2)}%)</span>
-          <span style="color:var(--text3);">avg dn: -$${fmt(Math.abs(avgGapDn),2)} (${fmt(avgGapDnPct,2)}%)</span>
-        </div>`;
-    }
-
-    // Fill rate by day of week
-    if(gapByDayEl) {
-      const days2 = ['Mon','Tue','Wed','Thu','Fri'];
-      const dayStats = days2.map(d=>{
-        const dayGaps = gaps.filter(g=>g.dow===d);
-        const filled  = dayGaps.filter(g=>g.filledSameDay);
-        return { d, total:dayGaps.length, filled:filled.length, rate:dayGaps.length?filled.length/dayGaps.length*100:0 };
-      });
-      gapByDayEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">`+
-        dayStats.map(ds=>{
-          const c = ds.rate>70?'#00ff88':ds.rate>50?'#ffcc00':'#ff3355';
-          return `<div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text2);width:28px;">${ds.d}</span>
-            <div style="flex:1;height:18px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-              <div style="width:${ds.rate.toFixed(1)}%;height:100%;background:${c};border-radius:2px;"></div>
-            </div>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${c};width:38px;">${fmt(ds.rate,0)}%</span>
-            <span style="font-size:11px;color:var(--text3);">${ds.filled}/${ds.total}</span>
-          </div>`;
-        }).join('')+'</div>'+
-        `<div style="font-size:10px;color:var(--text3);margin-top:6px;">% of gaps filled by weekday</div>`;
-    }
-
-    // Gap close timing (filled intraday breakdown)
-    if(gapTimingEl) {
-      const filledAll = gaps.filter(g=>g.filledSameDay);
-      const notFilled = gaps.filter(g=>!g.filledSameDay);
-      // Categorize: gap up filled = bearish reversal day? gap down filled = bullish recovery?
-      const gapUpFilledBull = gapsUp.filter(g=>g.filledSameDay&&g.close>g.prevClose); // filled but still closed up
-      const gapUpFilledBear = gapsUp.filter(g=>g.filledSameDay&&g.close<=g.prevClose); // filled and reversed
-      const gapDnFilledBull = gapsDn.filter(g=>g.filledSameDay&&g.close>=g.prevClose); // filled and recovered
-      const gapDnFilledBear = gapsDn.filter(g=>g.filledSameDay&&g.close<g.prevClose);  // filled, kept going
-      const items = [
-        {l:'Gap Up → filled, closed above prev', v:gapUpFilledBull.length, c:'#00ff88'},
-        {l:'Gap Up → filled, reversed below prev',v:gapUpFilledBear.length, c:'#ff8800'},
-        {l:'Gap Up → NOT filled',                 v:gapsUp.filter(g=>!g.filledSameDay).length, c:'#00ff8844'},
-        {l:'Gap Down → filled, recovered',        v:gapDnFilledBull.length, c:'#00ccff'},
-        {l:'Gap Down → filled, kept dropping',    v:gapDnFilledBear.length, c:'#ff3355'},
-        {l:'Gap Down → NOT filled',               v:gapsDn.filter(g=>!g.filledSameDay).length, c:'#ff335544'},
-      ];
-      const maxV = Math.max(...items.map(i=>i.v),1);
-      gapTimingEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:5px;">`+
-        items.map(({l,v,c})=>`<div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:80px;flex-shrink:0;height:16px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-            <div style="width:${(v/maxV*100).toFixed(1)}%;height:100%;background:${c};border-radius:2px;"></div>
-          </div>
-          <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${c};width:22px;">${v}</span>
-          <span style="font-size:11px;color:var(--text3);line-height:1.3;">${l}</span>
-        </div>`).join('')+'</div>'+
-        `<div style="font-size:10px;color:var(--text3);margin-top:8px;">Largest gap up: +$${fmt(largestUp,2)} · Largest gap dn: -$${fmt(Math.abs(largestDn),2)}</div>`;
-    }
-
-    // Gap table
-    if(gapTableEl) {
-      gapTableEl.innerHTML = [...gaps].map(g=>{
-        const c = g.dir==='UP'?'#00ff88':'#ff3355';
-        const fillC = g.filledSameDay?'#00ff88':'#ff3355';
-        return `<tr>
-          <td>${g.date}</td>
-          <td style="color:var(--text2);">$${fmt(g.prevClose,2)}</td>
-          <td style="color:${c};">$${fmt(g.open,2)}</td>
-          <td style="color:${c};font-weight:bold;">${g.gapAmt>=0?'+':''}$${fmt(g.gapAmt,2)}</td>
-          <td style="color:${c};">${g.gapPct>=0?'+':''}${fmt(g.gapPct,2)}%</td>
-          <td style="color:${c};font-family:'Orbitron',monospace;font-size:9px;">${g.dir}</td>
-          <td style="color:${fillC};font-family:'Orbitron',monospace;font-size:9px;">${g.filledSameDay?'✓ YES':'✗ NO'}</td>
-          <td class="up">$${fmt(g.high,2)}</td>
-          <td class="dn">$${fmt(g.low,2)}</td>
-          <td style="color:${g.close>=g.open?'#00ff88':'#ff3355'};">$${fmt(g.close,2)}</td>
-        </tr>`;
-      }).join('');
-    }
   }
 
+  // VOLUME PANEL
+  const volEl=$('optsVolumePanel');
+  if(volEl){
+    volEl.innerHTML=[
+      {l:'Total Volume',   v:totalVol?fmtK(totalVol):'—',    c:'var(--text1)'},
+      {l:'Total OI',       v:totalOI?fmtK(totalOI):'—',      c:'var(--text1)'},
+      {l:'Nearest OI',     v:mp[0]?.total_oi?fmtK(mp[0].total_oi):'—', c:'var(--cyan)'},
+      {l:'Friday OI',      v:fridayExp?.total_oi?fmtK(fridayExp.total_oi):'—',  c:'#ffcc00'},
+      {l:'Monthly OI',     v:monthlyExp?.total_oi?fmtK(monthlyExp.total_oi):'—',c:'#ff8800'},
+      {l:'PCR OI',         v:pcrOI?fmt(pcrOI,3):'—',         c:!pcrOI?'var(--text2)':pcrOI<0.7?'#00ff88':pcrOI<1.0?'#ffcc00':'#ff3355'},
+    ].map(r=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:11px;color:var(--text3);">${r.l}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:bold;color:${r.c};">${r.v}</span>
+    </div>`).join('');
+  }
+
+  // FLOW SIGNALS
+  const flowEl=$('optsFlowPanel');
+  if(flowEl){
+    const gexC=gex.net_gex>0?'#00ff88':gex.net_gex<0?'#ff3355':'#ffcc00';
+    const nearMP=mp[0]?.max_pain;
+    const mpDist=nearMP&&cur?Math.abs(nearMP-cur):null;
+    flowEl.innerHTML=[
+      {l:'GEX Regime',    v:gex.net_gex>0?'▲ POSITIVE — Stabilizing':gex.net_gex<0?'▼ NEGATIVE — Destabilizing':'Neutral', c:gexC},
+      {l:'Net GEX',       v:gex.net_gex?(gex.net_gex/1e9).toFixed(2)+'B':'—',  c:gexC},
+      {l:'PCR Signal',    v:!pcr?'—':pcr<0.7?'Heavy call buying':pcr>1.2?'Heavy put buying':'Balanced flow', c:pcrC},
+      {l:'IV Signal',     v:!atm_iv?'—':atm_iv>25?'High — elevated fear':atm_iv<12?'Low — complacency':'Normal range', c:'#8855ff'},
+      {l:'Max Pain Dist', v:mpDist!=null?'$'+fmt(mpDist,2)+' away':'—',         c:mpDist<3?'#00ff88':mpDist<8?'#ffcc00':'var(--text2)'},
+      {l:'Call Wall',     v:callWall?'$'+fmt(callWall,0)+' ('+(callWall&&cur?(sign2(callWall-cur)+fmt(callWall-cur,2)):'')+')':'—', c:'#00ff88'},
+      {l:'Put Wall',      v:putWall?'$'+fmt(putWall,0)+' ('+(putWall&&cur?(sign2(cur-putWall)+fmt(cur-putWall,2)):'')+')':'—',  c:'#ff3355'},
+    ].map(r=>`<div style="padding:5px 0;border-bottom:1px solid var(--border);">
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:1px;">${r.l}</div>
+      <div style="font-size:12px;color:${r.c};font-weight:bold;">${r.v}</div>
+    </div>`).join('');
+  }
+
+  // MAX PAIN TABLE
+  const todayStr4 = today3.toISOString().slice(0,10);
+  $('optsMpBody').innerHTML=mp.length?mp.map((m,i)=>{
+    const dist=cur?m.max_pain-cur:null;
+    const expDate=new Date(m.expiry+'T12:00:00'), expDow=expDate.getDay();
+    const isFri=expDow===5, isMon=expDow===1, isWed=expDow===3;
+    const isToday=m.expiry===todayStr4, isFriOpex=m.expiry===thisFriStr, isMonthly=m.expiry===monthlyOpexStr;
+    const typeLabel = isToday?'0DTE':isMonthly?'MONTHLY OPEX':isFriOpex?'WEEKLY OPEX':isWed?'WED 0DTE':isMon?'MON 0DTE':'—';
+    const typeColor = isToday?'#ff3355':isMonthly?'#ff8800':isFriOpex?'#ffcc00':'var(--text3)';
+    const badge = i===0?'<span style="background:#00ccff22;color:#00ccff;font-size:9px;padding:1px 4px;border-radius:2px;margin-left:5px;">NEAREST</span>':'';
+    return `<tr>
+      <td class="${i===0?'mp-near':''}">${m.expiry}${badge}</td>
+      <td><span style="font-family:'Orbitron',monospace;font-size:8px;color:${typeColor};background:${typeColor}22;padding:1px 5px;border-radius:2px;">${typeLabel}</span></td>
+      <td class="${i===0?'mp-near':''}" style="font-weight:bold;">$${fmt(m.max_pain,2)}</td>
+      <td>${m.total_oi?fmtK(m.total_oi):'—'}</td>
+      <td class="${dist>0?'up':dist<0?'dn':''}">${dist!=null?(sign2(dist)+'$'+fmt(Math.abs(dist),2)):'—'}</td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="5" class="no-data">No data</td></tr>';
+  // Expiry behavior
+  try { renderExpiryBehavior(md); } catch(e) { console.warn('expiry:', e); }
 }
 
-// ─── GEX INTRADAY INTERVAL MAP ───────────────────────────────────────────────
-async function renderGEXIntradayMap() {
-  const el = document.getElementById('gexIntradayContent');
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSION VOLATILITY PROFILE — 5-min historical chart with lookback + DOW toggles
+// ─────────────────────────────────────────────────────────────────────────────
+let _svpLookback = 'all';
+let _svpDow      = 'all';
+
+window._svpSetLookback = function(val) { _svpLookback = val; renderSessionVolProfile(); };
+window._svpSetDow      = function(val) { _svpDow = val;      renderSessionVolProfile(); };
+
+function renderSessionVolProfile() {
+  const el = $('volSessionProfile');
   if (!el) return;
-  el.innerHTML = '<div class="no-data" style="padding:32px;">Loading GEX interval data...</div>';
 
-  let snapshots = [];
-  let intradayErr = null;
-  try {
-    const r = await fetch('/gex-history?type=intraday');
-    const d = await r.json();
-    snapshots = d.snapshots || [];
-    if (d.error) intradayErr = d.error;
-  } catch(e) { intradayErr = e.message; }
-
-  // Also get current live GEX to show latest state even if KV is empty
-  let liveGex = null;
-  try {
-    const md = window._md || {};
-    if (md.gex && md.gex.flip_point) liveGex = md.gex;
-  } catch(e) {}
-
-  // Merge live into snapshots if not already represented
-  if (liveGex) {
-    const now = new Date();
-    const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    const t = `${String(et.getHours()).padStart(2,'0')}:${String(et.getMinutes()).padStart(2,'0')}`;
-    if (!snapshots.some(s => s.t === t)) {
-      snapshots.push({ t, ts: now.toISOString(), flip: liveGex.flip_point, sup: liveGex.support, res: liveGex.resistance, net: liveGex.net_gex, spot: liveGex.spot, regime: liveGex.regime });
-    }
-  }
-
-  const spot = liveGex?.spot || (snapshots.length ? snapshots[snapshots.length-1].spot : 0);
-
-  // ── KV not bound notice ──────────────────────────────────────────────────
-  const kvNotice = intradayErr && intradayErr.includes('KV') ? `
-    <div style="background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.3);border-radius:4px;padding:10px 16px;margin-bottom:14px;font-size:11px;color:#ffcc00;font-family:'Share Tech Mono',monospace;">
-      ⚠ KV NOT BOUND — Add GEX_HISTORY KV namespace in Cloudflare Pages → Settings → Functions → KV bindings. Data will accumulate automatically once bound.
-    </div>` : '';
-
-  if (!snapshots.length) {
-    el.innerHTML = kvNotice + `
-      <div style="padding:40px;text-align:center;color:var(--text3);">
-        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;margin-bottom:8px;">⬡ NO INTRADAY GEX DATA YET</div>
-        <div style="font-size:12px;line-height:1.8;">
-          ${intradayErr && !intradayErr.includes('KV') ? `Error: ${intradayErr}<br>` : ''}
-          Data builds automatically as /gex is polled during market hours.<br>
-          Snapshots stored every 5 minutes · Today's map appears at ~9:35 AM ET
-        </div>
-      </div>`;
+  if (typeof SESSION_VOL_PROFILE === 'undefined') {
+    el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text3);">Session vol profile data not loaded.</div>';
     return;
   }
 
-  // ── Canvas chart ────────────────────────────────────────────────────────
-  // Collect price range
-  const allPrices = snapshots.flatMap(s => [s.spot, s.flip, s.sup, s.res].filter(Boolean));
-  const minP = Math.min(...allPrices) - 2;
-  const maxP = Math.max(...allPrices) + 2;
+  // Build key for data lookup
+  const key = _svpDow === 'all'
+    ? _svpLookback
+    : `${_svpLookback}_${_svpDow}`;
+  const profile = SESSION_VOL_PROFILE[key];
 
-  const regime = liveGex?.regime || snapshots[snapshots.length-1]?.regime || '';
-  const isPos = (liveGex?.net_gex || snapshots[snapshots.length-1]?.net || 0) > 0;
-  const regimeColor = isPos ? '#00ff88' : '#ff3355';
-  const fmtB = n => { if (!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
-  const lastSnap = snapshots[snapshots.length-1];
-
-  el.innerHTML = kvNotice + `
-    <!-- Explanation panel -->
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px 20px;margin-bottom:14px;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;">⬡ WHAT IS THE GEX MAP?</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;font-size:12px;color:var(--text2);line-height:1.7;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:2px;margin-bottom:6px;">HOW IT'S BUILT</div>
-          <p style="margin:0 0 8px;">GEX (Gamma Exposure) measures the total dollar gamma that market makers hold across all open SPY options contracts. It's calculated by summing each strike's gamma × open interest × 100 × spot price, separately for calls and puts, then netting them.</p>
-          <p style="margin:0 0 8px;">The data is pulled from live options chains and stored as a snapshot every 5 minutes during market hours. Each bar on the chart represents one snapshot — you're watching dealer positioning evolve in real time.</p>
-        </div>
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:2px;margin-bottom:6px;">HOW TO READ IT</div>
-          <div style="margin-bottom:6px;"><span style="color:#ffcc00;font-family:'Share Tech Mono',monospace;">FLIP POINT</span> — The price where net GEX crosses zero. Below this, dealers are short gamma and price can accelerate. Above it, they're long gamma and price gets dampened.</div>
-          <div style="margin-bottom:6px;"><span style="color:#00ff88;font-family:'Share Tech Mono',monospace;">RESISTANCE</span> — Heavy call gamma above spot. Dealers short calls hedge by selling into rallies here, creating a ceiling.</div>
-          <div style="margin-bottom:6px;"><span style="color:#ff3355;font-family:'Share Tech Mono',monospace;">SUPPORT</span> — Heavy put gamma below spot. Dealers short puts hedge by buying dips here, creating a floor.</div>
-          <div><span style="color:var(--cyan);font-family:'Share Tech Mono',monospace;">REGIME</span> — Positive GEX = dealers are long gamma = market stabilizing force. Negative GEX = dealers are short gamma = moves tend to expand and momentum dominates.</div>
-        </div>
-      </div>
-      <div style="margin-top:12px;padding:10px 14px;background:rgba(0,204,255,0.05);border-left:3px solid rgba(0,204,255,0.4);border-radius:3px;font-size:11px;color:var(--text3);line-height:1.6;">
-        Think of positive GEX as a rubber band — price gets pulled back toward equilibrium. Negative GEX is the opposite: a spark plug. When dealers are short gamma, small moves beget larger ones. The flip point is the line between these two regimes.
-      </div>
-    </div>
-
-    <!-- Header row -->
-    <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:10px;align-items:center;margin-bottom:14px;">
-      <div>
-        <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);">⬡ GEX INTERVAL MAP — INTRADAY</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px;">${snapshots.length} snapshots · updates every 5 min · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'})} ET</div>
-      </div>
-      <div style="text-align:center;padding:8px 14px;background:rgba(0,204,255,0.07);border:1px solid rgba(0,204,255,0.25);border-radius:4px;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);margin-bottom:3px;">FLIP</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:var(--cyan);">$${fmt(lastSnap?.flip,2)}</div>
-      </div>
-      <div style="text-align:center;padding:8px 14px;background:rgba(255,51,85,0.07);border:1px solid rgba(255,51,85,0.25);border-radius:4px;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:#ff3355;margin-bottom:3px;">SUPPORT</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#ff3355;">$${fmt(lastSnap?.sup,2)}</div>
-      </div>
-      <div style="text-align:center;padding:8px 14px;background:rgba(0,255,136,0.07);border:1px solid rgba(0,255,136,0.25);border-radius:4px;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:#00ff88;margin-bottom:3px;">RESISTANCE</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:15px;color:#00ff88;">$${fmt(lastSnap?.res,2)}</div>
-      </div>
-      <div style="text-align:center;padding:8px 14px;background:${regimeColor}11;border:1px solid ${regimeColor}44;border-radius:4px;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:${regimeColor};margin-bottom:3px;">NET GEX</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${regimeColor};">${fmtB(lastSnap?.net)}</div>
-      </div>
-    </div>
-    <!-- Canvas -->
-    <div style="position:relative;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;">
-      <canvas id="gexIntradayCanvas" style="width:100%;display:block;"></canvas>
-    </div>
-    <!-- Legend -->
-    <div style="display:flex;gap:20px;margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);">
-      <span><span style="color:var(--cyan);">━━</span> SPOT PRICE</span>
-      <span><span style="color:#ffcc00;">• • •</span> GAMMA FLIP</span>
-      <span><span style="color:#ff3355;">• • •</span> GEX SUPPORT</span>
-      <span><span style="color:#00ff88;">• • •</span> GEX RESISTANCE</span>
-      <span style="margin-left:auto;color:var(--text3);">Regime: <span style="color:${regimeColor};">${regime}</span></span>
-    </div>
-    <!-- Snapshot table -->
-    <details style="margin-top:14px;">
-      <summary style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);cursor:pointer;padding:6px 0;">SNAPSHOT LOG (${snapshots.length} records)</summary>
-      <div style="overflow-x:auto;margin-top:8px;">
-        <table style="width:100%;font-family:'Share Tech Mono',monospace;font-size:11px;border-collapse:collapse;">
-          <thead><tr style="color:var(--text3);border-bottom:1px solid var(--border);">
-            <th style="padding:4px 8px;text-align:left;">TIME</th>
-            <th style="padding:4px 8px;text-align:right;">SPOT</th>
-            <th style="padding:4px 8px;text-align:right;color:#ffcc00;">FLIP</th>
-            <th style="padding:4px 8px;text-align:right;color:#ff3355;">SUPPORT</th>
-            <th style="padding:4px 8px;text-align:right;color:#00ff88;">RESISTANCE</th>
-            <th style="padding:4px 8px;text-align:right;">NET GEX</th>
-          </tr></thead>
-          <tbody>
-            ${[...snapshots].reverse().slice(0,30).map(s => {
-              const n = s.net||0;
-              const nc = n>0?'#00ff88':'#ff3355';
-              return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
-                <td style="padding:3px 8px;color:var(--text2);">${s.t}</td>
-                <td style="padding:3px 8px;text-align:right;color:var(--cyan);">$${fmt(s.spot,2)}</td>
-                <td style="padding:3px 8px;text-align:right;color:#ffcc00;">$${fmt(s.flip,2)}</td>
-                <td style="padding:3px 8px;text-align:right;color:#ff3355;">$${fmt(s.sup,2)}</td>
-                <td style="padding:3px 8px;text-align:right;color:#00ff88;">$${fmt(s.res,2)}</td>
-                <td style="padding:3px 8px;text-align:right;color:${nc};">${fmtB(n)}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </details>
-  `;
-
-  // ── Draw canvas ──────────────────────────────────────────────────────────
-  const _drawGexCanvas = () => {
-    const canvas = document.getElementById('gexIntradayCanvas');
-    if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    const W = (canvas.parentElement.clientWidth || canvas.closest('[style]')?.clientWidth || 800) - 24;
-    if (W < 10) { setTimeout(_drawGexCanvas, 200); return; }
-    const H = Math.max(260, Math.round(W * 0.28));
-    canvas.width  = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width  = W + 'px';
-    canvas.style.height = H + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-
-    const pad = { l: 58, r: 16, t: 16, b: 32 };
-    const cw = W - pad.l - pad.r;
-    const ch = H - pad.t - pad.b;
-    const n  = snapshots.length;
-
-    const toX = i => pad.l + (i / Math.max(n-1,1)) * cw;
-    const toY = v => pad.t + ch - ((v - minP) / (maxP - minP)) * ch;
-
-    // Background
-    ctx.fillStyle = '#0c0c14';
-    ctx.fillRect(0, 0, W, H);
-
-    // Horizontal grid
-    const priceStep = cw > 400 ? 2 : 5;
-    const gridStart = Math.ceil(minP / priceStep) * priceStep;
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 1;
-    ctx.font = `10px 'Share Tech Mono', monospace`;
-    ctx.fillStyle = '#606080';
-    ctx.textAlign = 'right';
-    for (let p = gridStart; p <= maxP; p += priceStep) {
-      const y = toY(p);
-      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
-      ctx.fillText('$' + p.toFixed(0), pad.l - 4, y + 3);
-    }
-
-    // Time labels
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#606080';
-    const timeStep = Math.max(1, Math.floor(n / 8));
-    snapshots.forEach((s, i) => {
-      if (i % timeStep !== 0 && i !== n-1) return;
-      ctx.fillText(s.t, toX(i), H - pad.b + 14);
-    });
-
-    // Helper: draw dotted line for a level series
-    const drawDots = (color, key, radius=3) => {
-      ctx.fillStyle = color;
-      snapshots.forEach((s, i) => {
-        if (!s[key]) return;
-        const x = toX(i), y = toY(s[key]);
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI*2);
-        ctx.fill();
-      });
-    };
-
-    // Helper: draw connected line
-    const drawLine = (color, key, width=2, dash=[]) => {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.setLineDash(dash);
-      ctx.beginPath();
-      let started = false;
-      snapshots.forEach((s, i) => {
-        if (!s[key]) return;
-        const x = toX(i), y = toY(s[key]);
-        if (!started) { ctx.moveTo(x, y); started = true; }
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-      ctx.setLineDash([]);
-    };
-
-    // Shade above/below flip
-    snapshots.forEach((s, i) => {
-      if (!s.flip || !s.spot) return;
-      const x1 = toX(i);
-      const x2 = i < n-1 ? toX(i+1) : x1+1;
-      const aboveFlip = s.spot > s.flip;
-      ctx.fillStyle = aboveFlip ? 'rgba(0,255,136,0.04)' : 'rgba(255,51,85,0.04)';
-      ctx.fillRect(x1, pad.t, x2-x1, ch);
-    });
-
-    // Draw GEX levels as dotted trails
-    drawLine('#ff335544', 'sup',  1, [3,3]);
-    drawLine('#00ff8844', 'res',  1, [3,3]);
-    drawLine('#ffcc0066', 'flip', 1.5, [4,3]);
-    drawDots('#ff3355', 'sup',  2.5);
-    drawDots('#00ff88', 'res',  2.5);
-    drawDots('#ffcc00', 'flip', 3.5);
-
-    // Spot price line (solid, prominent)
-    drawLine('rgba(0,204,255,0.9)', 'spot', 2.5);
-
-    // Current spot dot
-    if (spot && snapshots.length) {
-      const lx = toX(n-1), ly = toY(spot);
-      ctx.beginPath(); ctx.arc(lx, ly, 5, 0, Math.PI*2);
-      ctx.fillStyle = '#00ccff'; ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
-      // Label
-      ctx.fillStyle = '#00ccff';
-      ctx.textAlign = 'left';
-      ctx.font = `bold 11px 'Share Tech Mono', monospace`;
-      ctx.fillText('$' + fmt(spot,2), lx+8, ly+4);
-    }
-  };
-  setTimeout(_drawGexCanvas, 100);
-}
-
-// ─── GEX DAILY HISTORY CHART (added to GEX tab) ──────────────────────────────
-async function renderGEXDailyHistory() {
-  const el = document.getElementById('gexDailyHistory');
-  if (!el) return;
-  el.innerHTML = '<div style="padding:16px;color:var(--text3);font-size:12px;">Loading daily GEX history...</div>';
-
-  let history = [];
-  let err = null;
-  try {
-    const r = await fetch('/gex-history?type=daily&days=90');
-    const d = await r.json();
-    history = d.snapshots || d.history || [];
-    if (d.error) err = d.error;
-  } catch(e) { err = e.message; }
-
-  if (!history.length) {
-    el.innerHTML = `
-      <div style="padding:20px;text-align:center;color:var(--text3);">
-        <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;margin-bottom:6px;">⬡ NO DAILY HISTORY YET</div>
-        <div style="font-size:11px;line-height:1.8;">
-          ${err ? `${err}<br>` : ''}
-          Daily GEX levels build automatically. After market hours today the first record will appear.<br>
-          ${err && err.includes('KV') ? '<span style="color:#ffcc00;">→ Bind GEX_HISTORY KV namespace in Cloudflare Pages → Settings → Functions</span>' : ''}
-        </div>
-      </div>`;
+  if (!profile || !profile.length) {
+    el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text3);">Not enough data for this filter combination.</div>';
     return;
   }
 
-  // Price range
-  const allPrices = history.flatMap(d => [d.spot, d.flip, d.sup, d.res].filter(Boolean));
-  const minP = Math.min(...allPrices) - 3;
-  const maxP = Math.max(...allPrices) + 3;
-  const fmtB = n => { if (!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
-
-  el.innerHTML = `
-    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:10px;">
-      ⬡ GEX LEVEL HISTORY — ${history.length} TRADING DAYS · FLIP / SUPPORT / RESISTANCE vs PRICE
-    </div>
-    <div style="position:relative;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;">
-      <canvas id="gexDailyCanvas" style="width:100%;display:block;"></canvas>
-    </div>
-    <div style="display:flex;gap:20px;margin-top:8px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);">
-      <span><span style="color:var(--cyan);">━━</span> SPOT</span>
-      <span><span style="color:#ffcc00;">━━</span> GAMMA FLIP</span>
-      <span><span style="color:#ff3355;">- -</span> SUPPORT</span>
-      <span><span style="color:#00ff88;">- -</span> RESISTANCE</span>
-    </div>
-    <!-- Regime bar -->
-    <div style="margin-top:12px;overflow-x:auto;">
-      <div style="display:flex;gap:2px;height:8px;border-radius:3px;overflow:hidden;min-width:300px;">
-        ${history.map(d => {
-          const pos = (d.net||0) > 0;
-          return `<div style="flex:1;background:${pos?'rgba(0,255,136,0.5)':'rgba(255,51,85,0.5)'}" title="${d.date}: ${d.regime||''} ${fmtB(d.net)}"></div>`;
-        }).join('')}
-      </div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text3);margin-top:3px;">
-        GEX REGIME: <span style="color:#00ff88;">█</span> POSITIVE (stabilizing) &nbsp; <span style="color:#ff3355;">█</span> NEGATIVE (destabilizing)
-      </div>
-    </div>
-  `;
-
-  requestAnimationFrame(() => {
-    const canvas = document.getElementById('gexDailyCanvas');
-    if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    const W = canvas.parentElement.clientWidth - 24;
-    const H = Math.max(220, Math.round(W * 0.22));
-    canvas.width  = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width  = W + 'px';
-    canvas.style.height = H + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-
-    const pad = { l: 58, r: 16, t: 12, b: 28 };
-    const cw = W - pad.l - pad.r;
-    const ch = H - pad.t - pad.b;
-    const n  = history.length;
-
-    const toX = i => pad.l + (i / Math.max(n-1,1)) * cw;
-    const toY = v => pad.t + ch - ((v - minP) / (maxP - minP)) * ch;
-
-    ctx.fillStyle = '#0c0c14';
-    ctx.fillRect(0, 0, W, H);
-
-    // Grid
-    const priceStep = (maxP - minP) > 30 ? 10 : 5;
-    const gridStart = Math.ceil(minP / priceStep) * priceStep;
-    ctx.font = `10px 'Share Tech Mono', monospace`;
-    ctx.fillStyle = '#606080';
-    ctx.textAlign = 'right';
-    for (let p = gridStart; p <= maxP; p += priceStep) {
-      const y = toY(p);
-      ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
-      ctx.fillText('$'+p.toFixed(0), pad.l-4, y+3);
-    }
-
-    // Date labels
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#606080';
-    const step = Math.max(1, Math.floor(n/8));
-    history.forEach((d,i) => {
-      if (i%step!==0 && i!==n-1) return;
-      const label = d.date.slice(5); // MM-DD
-      ctx.fillText(label, toX(i), H-pad.b+14);
-    });
-
-    const drawLine = (color, key, width, dash=[]) => {
-      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash);
-      ctx.beginPath();
-      let started = false;
-      history.forEach((d,i) => {
-        if (!d[key]) return;
-        const x=toX(i), y=toY(d[key]);
-        if (!started) { ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
-      });
-      ctx.stroke();
-      ctx.setLineDash([]);
-    };
-
-    // Shade spot vs flip
-    history.forEach((d,i) => {
-      if (!d.flip || !d.spot) return;
-      const x1=toX(i), x2=i<n-1?toX(i+1):x1+1;
-      ctx.fillStyle = d.spot>d.flip ? 'rgba(0,255,136,0.04)' : 'rgba(255,51,85,0.04)';
-      ctx.fillRect(x1, pad.t, x2-x1, ch);
-    });
-
-    drawLine('rgba(255,51,85,0.5)',   'sup',  1, [4,3]);
-    drawLine('rgba(0,255,136,0.5)',   'res',  1, [4,3]);
-    drawLine('rgba(255,204,0,0.85)',  'flip', 2);
-    drawLine('rgba(0,204,255,0.95)',  'spot', 2.5);
-
-    // Latest dot
-    const last = history[n-1];
-    if (last?.spot) {
-      const lx=toX(n-1), ly=toY(last.spot);
-      ctx.beginPath(); ctx.arc(lx,ly,4,0,Math.PI*2);
-      ctx.fillStyle='#00ccff'; ctx.fill();
-    }
-  });
-}
-
-// ─── MACRO DASHBOARD ─────────────────────────────────────────────────────────
-let _macroData = null;
-let _macroLoading = false;
-
-async function renderMacro() {
-  const el = document.getElementById('macroContent');
-  if (!el) return;
-  if (_macroLoading) return;
-
-  if (_macroData) {
-    const count = Object.keys(_macroData.series || {}).length;
-    if (count >= 50) { _renderMacroHTML(_macroData); return; }
-    _macroData = null; // partial response — re-fetch
+  // Convert ET timestamps to CT (subtract 1 hour)
+  function etToCT(ts) {
+    const [h, m] = ts.split(':').map(Number);
+    let ch = h - 1;
+    if (ch < 0) ch += 24;
+    return `${ch}:${String(m).padStart(2, '0')}`;
   }
 
-  _macroLoading = true;
-  el.innerHTML = `<div style="padding:60px;text-align:center;color:var(--text3);">
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;margin-bottom:12px;">LOADING MACRO DATA</div>
-    <div style="font-size:12px;">Fetching from Federal Reserve FRED database...</div>
-  </div>`;
+  // Get current CT time for "now" highlight
+  const nowCT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+  const nowMins = nowCT.getHours() * 60 + nowCT.getMinutes();
 
-  try {
-    const r = await fetch('/fred?t=' + Date.now());
-    if (!r.ok) throw new Error('FRED endpoint returned ' + r.status);
-    _macroData = await r.json();
-    _macroLoading = false;
-    _renderMacroHTML(_macroData);
-  } catch(e) {
-    _macroLoading = false;
-    el.innerHTML = `<div style="padding:40px;text-align:center;color:#ff3355;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;margin-bottom:8px;">FRED DATA UNAVAILABLE</div>
-      <div style="font-size:12px;color:var(--text3);">${e.message}</div>
-      <div style="margin-top:12px;font-size:11px;color:var(--text3);">Make sure FRED_API_KEY is set in Cloudflare Pages environment variables.</div>
-    </div>`;
+  function tsToMins(ts) {
+    const [h, m] = ts.split(':').map(Number);
+    return h * 60 + m;
   }
-}
 
-async function generateMacroAI(data) {
-  const el = document.getElementById('macroAIText');
-  if (!el) return;
+  const maxAvg = Math.max(...profile.map(b => b.avg));
+  const minAvg = Math.min(...profile.map(b => b.avg));
+  const median = [...profile].sort((a,b)=>a.avg-b.avg)[Math.floor(profile.length/2)].avg;
 
-  const S = data.series || {};
-  const regime = data.regime || {};
-
-  // Build a rich data summary for the AI
-  const fmt1 = v => v == null ? 'N/A' : Number(v).toFixed(1);
-  const fmt2 = v => v == null ? 'N/A' : Number(v).toFixed(2);
-  const trend = id => S[id]?.trend || 'unknown';
-  const val = id => S[id]?.latest;
-  const yoy = id => S[id]?.change_yoy_pct;
-
-  const dataContext = `
-MACRO REGIME: ${regime.regime} (score: ${regime.score}/100)
-Signal breakdown: ${(regime.signals||[]).map(s => `${s.label}: ${s.val}`).join(', ')}
-
-INFLATION:
-- Core PCE (Fed target): ${fmt1(val('PCEPILFE'))}% | YoY change: ${fmt1(yoy('PCEPILFE'))}pp | Trend: ${trend('PCEPILFE')}
-- Core CPI: ${fmt1(val('CPILFESL'))}% | YoY: ${fmt1(yoy('CPILFESL'))}pp | Trend: ${trend('CPILFESL')}
-- 10Y Breakeven Inflation (market expectation): ${fmt1(val('T10YIE'))}%
-
-EMPLOYMENT:
-- Unemployment Rate: ${fmt1(val('UNRATE'))}% | Trend: ${trend('UNRATE')}
-- Initial Jobless Claims: ${fmt1(val('ICSA'))}K/week | Trend: ${trend('ICSA')}
-- Job Openings (JOLTS): ${fmt1(val('JTSJOL'))}M | Trend: ${trend('JTSJOL')}
-- U-6 Underemployment: ${fmt1(val('U6RATE'))}%
-
-GROWTH:
-- Real GDP Growth: ${fmt1(val('A191RL1Q225SBEA'))}% annualized | Trend: ${trend('A191RL1Q225SBEA')}
-- Industrial Production trend: ${trend('INDPRO')}
-
-MONETARY POLICY:
-- Fed Funds Rate: ${fmt1(val('FEDFUNDS'))}%
-- Fed Balance Sheet: $${fmt1(val('WALCL'))}B | Trend: ${trend('WALCL')}
-- M2 Money Supply trend: ${trend('M2SL')}
-- Reverse Repo (RRP): $${fmt1(val('RRPONTSYD'))}B | Trend: ${trend('RRPONTSYD')}
-
-RATES & CREDIT:
-- Yield Curve (10Y-2Y): ${fmt2(val('T10Y2Y'))}% | Trend: ${trend('T10Y2Y')}
-- 10Y Treasury: ${fmt2(val('DGS10'))}%
-- High Yield Credit Spread: ${fmt2(val('BAMLH0A0HYM2'))}% | Trend: ${trend('BAMLH0A0HYM2')}
-
-CONSUMER:
-- Michigan Consumer Sentiment: ${fmt1(val('UMCSENT'))} | Trend: ${trend('UMCSENT')}
-- Personal Savings Rate: ${fmt1(val('PSAVERT'))}%`;
-
-  const systemPrompt = `You are a world-class macroeconomic analyst writing for a sophisticated trading dashboard. Your audience ranges from professional traders to curious retail investors. Your job is to take the economic data provided and write a clear, intelligent, and compelling narrative about the current macroeconomic environment and what it means for markets.
-
-STYLE GUIDELINES:
-- Write in flowing prose, not bullet points or headers
-- 4-6 paragraphs, each focused on a distinct theme
-- Start with the big picture regime and what defines it right now
-- Weave the data points naturally into the narrative — do NOT just list numbers. Use numbers only when they add real meaning
-- Connect the dots between different indicators — how inflation affects Fed policy, which affects rates, which affects stocks
-- Reference historical parallels where genuinely relevant
-- End with what to watch going forward — the key risks and the scenarios that could change the picture
-- Be intellectually honest — acknowledge uncertainty and conflicting signals
-- Write as if explaining to a smart friend who understands markets but is not an economist
-- Do not use phrases like "it is worth noting" or "it is important to remember" — just say it directly
-- Tone: confident, analytical, clear, slightly conversational but never dumbed down`;
-
-  const userMsg = `Here is the current macroeconomic data:
-${dataContext}
-
-Write your macro analysis. Be thorough and tell the complete story of where we are in the economic cycle, what is driving markets, and what risks and opportunities lie ahead. Aim for 5-6 substantive paragraphs.`;
-
-  try {
-    const reply = await callAI([{ role: 'user', content: userMsg }], systemPrompt, 1200);
-    if (el) {
-      // Format paragraphs with proper spacing
-      const paras = reply.split('\n\n').filter(p => p.trim());
-
-
-      el.innerHTML = paras.map(p =>
-        `<p style="margin:0 0 14px;line-height:1.9;">${p.trim()}</p>`
-      ).join('');
-    }
-  } catch(e) {
-    if (el) el.innerHTML = `<span style="color:var(--text3);font-style:italic;">AI analysis unavailable: ${e.message}</span>`;
+  // Color: heatmap from green (low vol) → yellow → orange → red (high vol)
+  function volColor(v) {
+    const pct = (v - minAvg) / (maxAvg - minAvg);
+    if (pct > 0.75) return '#ff3355';
+    if (pct > 0.50) return '#ff8800';
+    if (pct > 0.25) return '#ffcc00';
+    return '#00cc88';
   }
-}
 
-async function refreshMacroAI() {
-  const el = document.getElementById('macroAIText');
-  if (el) el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Regenerating analysis...</span>';
-  if (_macroData) await generateMacroAI(_macroData);
-}
+  const fbtn = (lbl, active, fn) =>
+    `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
 
-function _renderMacroHTML(data) {
-  const el = document.getElementById('macroContent');
-  if (!el || !data) return;
+  // 'year' key = current calendar year (computed by Python pipeline automatically)
+  const curYear = new Date().getFullYear();
+  const lbBtns = [
+    fbtn('ALL HISTORY', _svpLookback==='all',  "_svpSetLookback('all')"),
+    fbtn('12 MONTHS',   _svpLookback==='12m',  "_svpSetLookback('12m')"),
+    fbtn(String(curYear), _svpLookback==='year', "_svpSetLookback('year')"),
+  ].join(' ');
 
-  const S = data.series || {};
-  const regime = data.regime || {};
-  const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
-  const fmt1 = v => v == null ? '—' : Number(v).toFixed(1);
-  const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%';
-  const fmtB = v => {
-    if (v == null) return '—';
-    const abs = Math.abs(v), sign = v < 0 ? '-' : '';
-    if (abs >= 1e12) return sign + '$' + (abs/1e12).toFixed(2) + 'T';
-    if (abs >= 1e9)  return sign + '$' + (abs/1e9).toFixed(1) + 'B';
-    if (abs >= 1e6)  return sign + '$' + (abs/1e6).toFixed(1) + 'M';
-    return sign + '$' + Math.round(abs).toLocaleString();
-  };
-  const trendIcon = t => t === 'rising' ? '▲' : t === 'falling' ? '▼' : '→';
-  const trendColor = (t, goodDir) => {
-    if (goodDir === 'up')   return t === 'rising' ? '#00ff88' : t === 'falling' ? '#ff3355' : '#ffcc00';
-    if (goodDir === 'down') return t === 'falling' ? '#00ff88' : t === 'rising' ? '#ff3355' : '#ffcc00';
-    return '#ffcc00';
-  };
+  const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(d =>
+    fbtn(d === 'all' ? 'ALL DAYS' : d.toUpperCase(), _svpDow === d, `_svpSetDow('${d}')`)
+  ).join(' ');
 
-  // SVG line chart
-  const lineChart = (history, color, unit, height=80) => {
-    if (!history || history.length < 2) return '';
-    const vals = history.map(h => h.v).filter(v => v != null);
-    const dates = history.filter(h => h.v != null).map(h => h.d);
-    if (vals.length < 2) return '';
-    const min = Math.min(...vals), max = Math.max(...vals);
-    const range = max - min || Math.abs(min) * 0.1 || 1;
-    const W = 400, H = height, PAD = 4;
-    const x = i => PAD + (i / (vals.length - 1)) * (W - PAD*2);
-    const y = v => H - PAD - ((v - min) / range) * (H - PAD*2);
-    const pts = vals.map((v,i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-    const fillPts = `${x(0).toFixed(1)},${H} ` + pts + ` ${x(vals.length-1).toFixed(1)},${H}`;
-    // X-axis labels - first, middle, last
-    const labelIdxs = [0, Math.floor(vals.length/2), vals.length-1];
-    const xLabels = labelIdxs.map(i =>
-      `<text x="${x(i).toFixed(1)}" y="${H+12}" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8" font-family="Share Tech Mono,monospace">${dates[i]||''}</text>`
-    ).join('');
-    // Y-axis labels
-    const yLabels = [min, (min+max)/2, max].map((v,i) => {
-      const yp = [H-PAD, H/2, PAD][i];
-      const label = unit==='%' ? v.toFixed(1)+'%' : Math.abs(v)>=1000 ? (v/1000).toFixed(1)+'K' : v.toFixed(1);
-      return `<text x="${W+4}" y="${yp+3}" fill="rgba(255,255,255,0.3)" font-size="8" font-family="Share Tech Mono,monospace">${label}</text>`;
-    }).join('');
-    return `<svg width="100%" viewBox="0 0 ${W+40} ${H+18}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:10px;overflow:visible;">
-      <defs><linearGradient id="cg${color.replace('#','')}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.3"/><stop offset="100%" stop-color="${color}" stop-opacity="0.02"/></linearGradient></defs>
-      <polygon points="${fillPts}" fill="url(#cg${color.replace('#','')})" />
-      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
-      <circle cx="${x(vals.length-1).toFixed(1)}" cy="${y(vals[vals.length-1]).toFixed(1)}" r="3" fill="${color}"/>
-      ${xLabels}${yLabels}
-    </svg>`;
-  };
-  // Keep spark as alias for small inline use
-  const spark = lineChart;
+  // Session count label
+  const nSessions = profile[0]?.n ? Math.round(profile[0].n / 5) : '?'; // /5 because 5 bars per bucket
 
-  const seriesCard = (id, desc, explain, historicalNote) => {
-    const s = S[id];
-    if (!s) return `<div class="panel" style="opacity:0.4;"><div style="font-size:11px;color:var(--text3);">${desc} — no data</div></div>`;
-    const isGood = s.good_direction;
-    const tc = trendColor(s.trend, isGood);
-    const yoyStr = s.change_yoy != null ? ` · ${s.change_yoy > 0 ? '+' : ''}${fmt1(s.change_yoy)}${s.unit === '%' ? 'pp' : ''} YoY` : '';
-    const chgStr = s.change != null ? ` ${s.change > 0 ? '+' : ''}${fmt2(s.change)} vs prior` : '';
-    const color = tc;
-    const fredUrl = `https://fred.stlouisfed.org/series/${id}`;
-    return `<div class="panel" style="border-top:3px solid ${color};">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${color};margin-bottom:3px;">${desc}</div>
-          <div style="font-size:10px;color:var(--text3);">FRED: <a href="${fredUrl}" target="_blank" style="color:var(--text3);text-decoration:none;">${id}</a> · ${s.freq} · ${s.latest_date}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:20px;color:${color};">${trendIcon(s.trend)}</div>
-          <div style="font-size:9px;color:${color};">${s.trend.toUpperCase()}</div>
-        </div>
+  const bars = profile.map(b => {
+    const ctTs = etToCT(b.ts);
+    const bMins = tsToMins(ctTs);
+    const isNow = nowMins >= bMins && nowMins < bMins + 5;
+    const barH = Math.round((b.avg / maxAvg) * 100);
+    const c = isNow ? 'var(--cyan)' : volColor(b.avg);
+    const isHour = b.ts.endsWith(':00');
+    // Show CT label only on the hour
+    const label = isHour ? ctTs.replace(':00','') + (parseInt(ctTs) >= 12 ? 'pm' : 'am') : '';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;position:relative;"
+               title="${ctTs} CT · $${b.avg.toFixed(4)} avg range · ${isNow ? 'NOW' : ''}">
+      ${isNow ? `<div style="position:absolute;top:-14px;font-family:'Orbitron',monospace;font-size:7px;color:var(--cyan);">NOW</div>` : ''}
+      <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:80px;background:var(--bg3);border-radius:2px 2px 0 0;overflow:hidden;${isNow?'border:1px solid var(--cyan);':''}">
+        <div style="width:100%;background:${c};opacity:${isNow?1:0.75};height:${barH}%;border-radius:2px 2px 0 0;transition:height 0.3s;"></div>
       </div>
-      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px;">
-        ${s.show_yoy && s.change_yoy_pct != null ? `
-          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${fmt1(s.change_yoy_pct)}%</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">YoY</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text3);">index: ${fmt1(s.latest)}</div>
-        ` : `
-          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${fmt1(s.latest)}${s.unit === '%' ? '%' : ''}</div>
-          ${s.change != null ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">${chgStr}</div>` : ''}
-        `}
-      </div>
-      ${!s.show_yoy && yoyStr ? `<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">${yoyStr}</div>` : ''}
-      ${lineChart(s.history, color, s.unit, 90)}
-      ${explain ? `<div style="font-size:12px;color:var(--text2);margin-top:10px;line-height:1.7;border-top:1px solid var(--border);padding-top:10px;">${explain}</div>` : ''}
-      ${historicalNote ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;line-height:1.6;padding:8px;background:rgba(255,255,255,0.03);border-radius:3px;">📚 ${historicalNote}</div>` : ''}
-    </div>`;
-  };
-
-  // Section header
-  const sectionHdr = (title, color, subtitle) =>
-    `<div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:${color};margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid ${color}33;">
-      ⬡ ${title}${subtitle ? `<span style="font-size:9px;color:var(--text3);font-family:'Share Tech Mono',monospace;letter-spacing:0;margin-left:12px;">${subtitle}</span>` : ''}
-    </div>`;
-
-  // Regime gauge
-  const regScore = regime.score || 0;
-  const regColor = regime.color || '#ffcc00';
-  const regLabel = regime.regime || 'MIXED';
-  const gaugeW = Math.max(2, Math.min(98, ((regScore + 100) / 200) * 100));
-
-  const regimeExplain = {
-    'GOLDILOCKS':  'Low inflation + strong employment + positive yield curve + tight credit spreads. The ideal environment for equities. Historically produces the strongest sustained bull markets.',
-    'EXPANSION':   'Growth is positive but some pressures are building. Equities typically perform well but volatility may increase. Watch for inflation or credit spreads to signal the next phase.',
-    'MIXED':       'Conflicting signals across macro indicators. Some factors are supportive, others are headwinds. Markets tend to be choppy. Requires stock selection rather than broad bets.',
-    'SLOWDOWN':    'Growth is decelerating. Employment may be softening, credit spreads widening. Historically a challenging period for cyclicals. Defensives and bonds start to outperform.',
-    'CONTRACTION': 'Recession conditions. Multiple indicators in the red. Cash and defensive positioning historically protect capital. Bear markets deepen until leading indicators turn.',
-  }[regLabel] || '';
-
-  const regimeHistory = {
-    'GOLDILOCKS':  '1995-1999 (tech boom), 2003-2007 (pre-GFC), 2013-2018 (post-QE recovery) all featured similar conditions.',
-    'EXPANSION':   '2010-2012 and 2021 showed expansion regimes before tipping into more challenging environments.',
-    'MIXED':       '2015-2016 and 2019 were mixed regimes — markets made new highs eventually but with significant corrections along the way.',
-    'SLOWDOWN':    '1999-2000, 2007, and Q4 2018 all showed similar slowdown readings before corrections.',
-    'CONTRACTION': '2001-2002, 2008-2009, and early 2020 were contraction regimes — each eventually recovered, but required patience.',
-  }[regLabel] || '';
-
-  const signalsHTML = (regime.signals || []).map(sig =>
-    `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);min-width:90px;">${sig.label}</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${sig.color};min-width:100px;">${sig.val}</div>
-      <div style="font-size:11px;color:var(--text2);flex:1;">${sig.detail}</div>
-    </div>`
-  ).join('');
-
-  // Trigger AI analysis after data loads
-  setTimeout(() => generateMacroAI(data), 100);
-
-  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
-
-    <!-- WELCOME PANEL -->
-    <div style="background:linear-gradient(135deg,rgba(0,204,255,0.06),rgba(136,85,255,0.04));border:1px solid rgba(0,204,255,0.15);border-radius:6px;padding:18px 20px;margin-bottom:16px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:260px;">
-          <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ MACRO ECONOMICS DASHBOARD</div>
-          <div style="font-size:14px;color:var(--text1);font-weight:600;margin-bottom:8px;line-height:1.5;">What moves markets? It starts here.</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.8;">
-            This tab tracks the economic forces that professional investors, central banks, and hedge funds watch every day.
-            You do not need a finance degree to use it — every number has a plain-English explanation below it.
-            Start with the <strong style="color:var(--cyan);">Regime Gauge</strong> at the top to get the big picture, 
-            then scroll through each section to understand why markets are behaving the way they are.
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:240px;">
-          ${[
-            ['📡','Live Data','Pulled directly from the Federal Reserve every hour'],
-            ['📚','Plain English','Every metric explained so anyone can understand it'],
-            ['📈','Charts','Up to 3 years of history on every indicator'],
-            ['🔗','Sourced','Every number links back to its original FRED page'],
-          ].map(([icon,title,desc]) => '<div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:10px 12px;">' +
-            '<div style="font-size:16px;margin-bottom:4px;">' + icon + '</div>' +
-            '<div style="font-family:Orbitron,monospace;font-size:8px;color:var(--cyan);margin-bottom:3px;">' + title + '</div>' +
-            '<div style="font-size:10px;color:var(--text3);line-height:1.4;">' + desc + '</div>' +
-          '</div>').join('')}
-        </div>
-      </div>
-
-      <!-- Data source explanation -->
-      <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.07);">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">WHERE DOES THIS DATA COME FROM?</div>
-        <div style="font-size:12px;color:var(--text2);line-height:1.8;">
-          All data is sourced from <strong style="color:var(--text1);">FRED</strong> — the Federal Reserve Economic Database maintained by the 
-          St. Louis Federal Reserve Bank. FRED is the gold standard source for US economic data, used by the Federal Reserve itself, 
-          the IMF, the World Bank, and every major financial institution. It aggregates data from the 
-          <strong style="color:var(--text1);">Bureau of Labor Statistics (BLS)</strong>, the 
-          <strong style="color:var(--text1);">Bureau of Economic Analysis (BEA)</strong>, the 
-          <strong style="color:var(--text1);">Federal Reserve Board</strong>, and other official sources.
-          Data updates on FRED's own schedule — inflation monthly, jobs weekly, GDP quarterly.
-          This dashboard fetches fresh data every time you open the tab.
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
-          ${[
-            ['FRED','fred.stlouisfed.org','Federal Reserve Economic Database — primary source'],
-            ['BLS','bls.gov','Bureau of Labor Statistics — jobs, inflation, wages'],
-            ['BEA','bea.gov','Bureau of Economic Analysis — GDP, trade, investment'],
-            ['Federal Reserve','federalreserve.gov','Fed balance sheet, rates, monetary policy'],
-          ].map(([name,url,desc]) => '<div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.07);border-radius:3px;padding:7px 10px;flex:1;min-width:160px;">' +
-            '<div style="font-family:Orbitron,monospace;font-size:8px;color:var(--cyan);margin-bottom:2px;">' + name + '</div>' +
-            '<div style="font-size:9px;color:var(--text3);margin-bottom:3px;">' + url + '</div>' +
-            '<div style="font-size:10px;color:var(--text2);">' + desc + '</div>' +
-          '</div>').join('')}
-        </div>
-      </div>
-
-      <!-- Section guide -->
-      <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.07);">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">WHAT EACH SECTION COVERS</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;">
-          ${[
-            ['#ff8800','INFLATION','Are prices rising too fast? The Fed targets 2%. Above that, rates go up and stocks face headwinds.'],
-            ['#00ff88','EMPLOYMENT','Are people working? Jobs drive spending, spending drives growth. The Fed watches this as closely as inflation.'],
-            ['#00ccff','GROWTH','How fast is the economy actually expanding? GDP, spending, and industrial output tell the story.'],
-            ['#8855ff','MONETARY','What is the Fed doing with money supply and its balance sheet? This directly moves asset prices.'],
-            ['#ffcc00','RATES & CREDIT','The price of money. Yield curve shape predicts recessions. Credit spreads measure fear.'],
-            ['#ff8800','CONSUMER','Are people confident? Consumer spending is 70% of GDP — sentiment leads actual spending.'],
-          ].map(([c,t,d]) => '<div style="border-left:2px solid ' + c + ';padding:6px 10px;background:rgba(0,0,0,0.15);border-radius:0 3px 3px 0;">' +
-            '<div style="font-family:Orbitron,monospace;font-size:8px;color:' + c + ';margin-bottom:3px;">' + t + '</div>' +
-            '<div style="font-size:10px;color:var(--text2);line-height:1.4;">' + d + '</div>' +
-          '</div>').join('')}
-        </div>
-      </div>
-    </div>
-
-    <!-- MACRO REGIME GAUGE -->
-    <div class="panel" style="margin-bottom:16px;border-left:4px solid ${regColor};">
-      <div style="display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;margin-bottom:14px;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:6px;">⬡ MACRO REGIME GAUGE</div>
-          <div style="font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:${regColor};">${regLabel}</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.7;max-width:600px;">${regimeExplain}</div>
-          ${regimeHistory ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic;">📚 Similar periods: ' + regimeHistory + '</div>' : ''}
-        </div>
-        <div style="text-align:center;">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:42px;font-weight:900;color:${regColor};">${regScore > 0 ? '+' : ''}${regScore}</div>
-          <div style="font-size:10px;color:var(--text3);">REGIME SCORE</div>
-          <div style="font-size:10px;color:var(--text3);">-100 → +100</div>
-        </div>
-      </div>
-      <!-- Gauge bar -->
-      <div style="position:relative;height:12px;background:linear-gradient(90deg,#ff3355,#ff8800,#ffcc00,#88cc00,#00ff88);border-radius:6px;margin-bottom:16px;">
-        <div style="position:absolute;left:${gaugeW}%;top:-4px;transform:translateX(-50%);width:4px;height:20px;background:#fff;border-radius:2px;box-shadow:0 0 8px rgba(255,255,255,0.8);"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);font-family:'Orbitron',monospace;margin-bottom:14px;">
-        <span>CONTRACTION</span><span>SLOWDOWN</span><span>MIXED</span><span>EXPANSION</span><span>GOLDILOCKS</span>
-      </div>
-      <!-- Signal breakdown -->
-      <div style="border-top:1px solid var(--border);padding-top:10px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">SIGNAL BREAKDOWN</div>
-        ${signalsHTML}
-      </div>
-    </div>
-
-    <!-- AI MACRO OVERVIEW -->
-    <div class="panel" id="macroAIOverview" style="margin-bottom:16px;border-left:4px solid #8855ff;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#8855ff;">⬡ AI MACRO ANALYSIS</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Generated from live FRED data · Powered by Grok</div>
-        </div>
-        <button onclick="refreshMacroAI()" style="background:rgba(136,85,255,0.1);border:1px solid rgba(136,85,255,0.3);color:#8855ff;padding:5px 12px;border-radius:3px;cursor:pointer;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH</button>
-      </div>
-      <div id="macroAIText" style="font-size:13px;color:var(--text2);line-height:1.9;">
-        <span style="color:var(--text3);font-style:italic;">Generating analysis...</span>
-      </div>
-    </div>
-
-    <!-- INTRO BANNER -->
-    <div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:14px 18px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8;">
-      <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">⬡ WHAT IS THIS TAB?</div>
-      This tab tracks the key economic forces that drive markets — the same data the Federal Reserve, hedge funds, and institutional investors watch every day. 
-      Data is pulled directly from the <strong style="color:var(--text1);">Federal Reserve Economic Database (FRED)</strong> — the most comprehensive source of US economic data.
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px;font-size:10px;">
-        ${[
-          ['#ff8800','INFLATION','How fast prices are rising. The Fed targets 2% inflation — above that, they raise rates which pressures stocks.'],
-          ['#00ff88','EMPLOYMENT','Jobs data drives consumer spending and Fed policy. Strong employment = strong economy but also inflation risk.'],
-          ['#00ccff','GROWTH','GDP, retail sales, industrial output — how fast the economy is actually expanding.'],
-          ['#8855ff','MONETARY','Fed tools: balance sheet size, money supply, and liquidity — directly impacts asset prices.'],
-          ['#ffcc00','RATES & CREDIT','Interest rates and credit spreads tell you the market fear level and the cost of money.'],
-        ].map(([c,t,d]) => '<div style="background:var(--bg2);border-radius:3px;padding:8px;border-left:2px solid ' + c + ';">' +
-          '<div style="color:' + c + ';font-family:Orbitron,monospace;font-size:7px;margin-bottom:4px;">' + t + '</div>' + d +
-        '</div>').join('')}
-      </div>
-    </div>
-
-    <!-- INFLATION -->
-    ${sectionHdr('INFLATION', '#ff8800', 'How fast prices are rising · Fed target: 2% Core PCE')}
-    <div style="background:rgba(255,136,0,0.04);border:1px solid rgba(255,136,0,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      <strong style="color:var(--text1);">What is inflation?</strong> Inflation is the rate at which prices rise across the economy. The Fed targets 2% "Core PCE" — if inflation is above that, the Fed raises interest rates to slow the economy, which typically hurts stocks. 
-      Below target, the Fed can cut rates to stimulate growth, which is bullish for markets.
-      The two most-watched measures are <strong>CPI</strong> (what you pay at the store) and <strong>Core PCE</strong> (what the Fed officially targets — excludes food and energy which are volatile).
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      ${seriesCard('CPILFESL', 'Core CPI (Ex Food/Energy)',
-        'The Fed secondary inflation watch. Strips out volatile food and energy to show underlying price pressure. Above 3% starts to concern markets.',
-        'In 2022, Core CPI peaked at 6.6% — the highest since 1982. The Fed raised rates 525bps in 16 months to fight it.')}
-      ${seriesCard('PCEPILFE', 'Core PCE — Fed Target',
-        'The Federal Reserve official inflation target is 2% Core PCE. This is the number that directly drives Fed rate decisions. Below 2% = dovish. Above 3% = hawkish.',
-        'The last time Core PCE was sustainably at 2% was 2018-2019. Post-COVID peak was 5.6% in early 2022.')}
-      ${seriesCard('CPIAUCSL', 'Headline CPI (All Items)',
-        'The broadest inflation measure — includes food and energy. This is what you feel at the grocery store and gas pump. The Fed focuses on Core PCE but headline CPI drives consumer psychology.',
-        'Peaked at 9.1% in June 2022 — highest since 1981. The Fed raised rates 525bps in 16 months to fight it. Shelter and services have been the last holdouts.')}
-      ${seriesCard('T10YIE', '10-Year Breakeven Inflation',
-        'What the bond market expects inflation to average over the next 10 years. Derived from TIPS vs nominal Treasuries. This is forward-looking — tells you where inflation is headed, not where it has been.',
-        'Spikes above 3% occurred in 2022 and during post-COVID reopening. Below 2% signals deflation risk — historically rare outside recessions.')}
-    </div>
-
-      ${seriesCard('DFII10', '10-Year Real Yield (TIPS)',
-        'The "real" interest rate after inflation. Rising real yields = tighter financial conditions, headwind for equities and gold. Negative real yields = financial repression = bullish for risk assets.',
-        'Real yields went deeply negative (-1.5%) in 2021-2022 during the inflation surge. Normalization above 2% historically precedes equity compression.')}
-
-    <!-- EMPLOYMENT -->
-    ${sectionHdr('EMPLOYMENT', '#00ff88', 'Labor market health · Fed dual mandate')}
-    <div style="background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      <strong style="color:var(--text1);">Why does employment matter?</strong> The Fed has a "dual mandate" — stable prices AND maximum employment. 
-      Strong employment means consumers spend, companies profit, and the economy grows. But too-strong employment means wage inflation and the Fed keeps rates higher for longer.
-      <strong>Unemployment rate</strong> is the headline, but <strong>Initial Jobless Claims</strong> is the most real-time indicator — released every Thursday, it shows how many people filed for unemployment that week.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      ${seriesCard('UNRATE', 'Unemployment Rate',
-        'The percentage of the labor force actively seeking work. "Full employment" is generally considered 4-4.5%. Below 4% = overheated labor market. Above 6% = recession territory.',
-        'COVID hit 14.7% in April 2020 — the highest since the Great Depression. Recovered to 3.4% by early 2023, one of the lowest readings ever recorded.')}
-      ${seriesCard('ICSA', 'Initial Jobless Claims (Weekly)',
-        'New unemployment insurance filings each week. The most real-time jobs indicator available. Below 250K = healthy. Above 350K = warning sign. Spikes precede recessions.',
-        'Claims surged to 6.9 million in March 2020. They stayed below 250K for most of 2022-2023, signaling the labor market held up despite rate hikes.')}
-      ${seriesCard('JTSJOL', 'Job Openings (JOLTS)',
-        'How many jobs are available but unfilled. High openings = employers need workers = wage pressure. Low openings = labor demand cooling = Fed can relax.',
-        'Job openings peaked at 12 million in 2022 — a historically unprecedented 2 jobs per unemployed person. The "soft landing" narrative gained credibility as openings fell without unemployment spiking.')}
-      ${seriesCard('PAYEMS', 'Nonfarm Payrolls (Monthly Change)',
-        'The most-watched monthly jobs report. How many jobs were added or lost. Above 200K = strong. 100-200K = healthy. Below 100K = slowing. Negative = recession alarm.',
-        'COVID wiped 22M jobs in 2 months. The recovery added them back faster than any prior cycle — a structural mystery that economists still debate.')}
-      ${seriesCard('CCSA', 'Continuing Jobless Claims',
-        'People who filed for unemployment last week AND the week before. A leading indicator of labor market deterioration. Rising continuing claims = people struggling to find work after losing jobs.',
-        'Continuing claims below 1.8M = tight market. Above 2.5M = labor market loosening. Spikes above 3M historically signal recession.')}
-      ${seriesCard('U6RATE', 'U-6 Underemployment Rate',
-        'The broadest labor market measure — includes part-time workers who want full-time and discouraged workers who stopped looking. Always higher than headline U-3.',
-        'U-6 peaked at 22.9% during COVID. Rising U-6 often signals broader slowdown before headline unemployment catches up.')}
-      ${seriesCard('JTSQUL', 'Quits Rate',
-        'The percentage of workers voluntarily quitting their jobs. High quits = workers are confident they can find better jobs (tight labor market). Falling quits = workers are nervous about leaving.',
-        'The "Great Resignation" pushed quits to a record 3.0% in 2021-2022. The quits rate is a leading indicator of wage growth — workers quit for better pay. Now normalizing signals wage pressure easing.')}
-      ${seriesCard('CES0500000003', 'Average Hourly Earnings',
-        'Average hourly wages across all private sector workers. Wage growth above 4% YoY typically signals inflationary pressure. The Fed watches this closely as a key inflation input.',
-        'Wages surged 6-7% YoY in 2022 — the fastest pace since the early 1980s and a major contributor to the services inflation that proved sticky even as goods inflation faded.')}
-      ${seriesCard('OPHNFB', 'Nonfarm Business Productivity',
-        'Output per hour worked — the most important long-run economic variable. Rising productivity allows wages to rise without inflation. Falling productivity means growth requires more workers.',
-        'Productivity collapsed -3.5% in 2022 — the worst since 1948. Rebounded strongly in 2023-2024. The AI productivity question: will technology finally show up in the productivity data? The Solow Paradox redux.')}
-    </div>
-
-    <!-- GROWTH -->
-    ${sectionHdr('ECONOMIC GROWTH', '#00ccff', 'GDP, spending, output')}
-    <div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      <strong style="color:var(--text1);">What drives growth?</strong> GDP is the total value of everything produced in the US. Two consecutive quarters of negative GDP = technical recession.
-      Retail sales tell you if consumers are spending (70% of GDP is consumer spending).
-      Industrial production shows factory and manufacturing output — a leading indicator of corporate earnings.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      ${seriesCard('A191RL1Q225SBEA', 'Real GDP Growth (QoQ Ann.)',
-        'The broadest measure of economic output — total value of goods and services produced. "Real" means adjusted for inflation. Two negative quarters = technical recession.',
-        'The US has avoided recession despite the most aggressive Fed tightening cycle since the 1980s. GDP contracted briefly in H1 2022 but rebounded strongly — the "no landing" outcome.')}
-      ${seriesCard('RETAILSMNSA', 'Retail Sales',
-        'Monthly measure of consumer spending at stores and online. Consumer spending is ~70% of US GDP, so this is the single most important growth indicator. Inflation-adjusted matters more than nominal.',
-        'Retail sales collapsed 16% in April 2020, then surged as stimulus hit. The post-COVID spending boom drove both growth and inflation simultaneously — an unusual combination.')}
-      ${seriesCard('INDPRO', 'Industrial Production Index',
-        'Output from manufacturing, mining, and utilities. A leading indicator for corporate earnings — when factories slow down, profits follow.',
-        'Peaked in late 2022 and has been flat to declining since — a "manufacturing recession" even as services held up.')}
-      ${seriesCard('HOUST', 'Housing Starts',
-        'Number of new residential construction projects begun each month. Housing is one of the most interest-rate-sensitive sectors. Starts collapse when mortgage rates rise.',
-        'Housing starts fell 30% from peak in 2022 as mortgage rates surged. The "lock-in effect" — existing homeowners refusing to sell and give up 3% mortgages — created a historic housing supply crunch.')}
-      ${seriesCard('PERMIT', 'Building Permits',
-        'Authorizations to begin new construction — a leading indicator for housing starts. Permits lead starts by 1-2 months.',
-        'Permits peak and trough before starts — watching permits gives advance warning of the housing cycle direction.')}
-      ${seriesCard('PCE', 'Personal Consumption Expenditures',
-        'Total consumer spending — 70% of US GDP. The most important growth driver. PCE tracks what people actually spend, not what they could spend.',
-        'PCE surged 10%+ YoY in 2021 as stimulus-fueled demand hit a supply-constrained economy — the direct cause of the 2022 inflation surge.')}
-      ${seriesCard('DSPIC96', 'Real Disposable Personal Income',
-        'Inflation-adjusted income after taxes. Real income growth supports sustainable spending. When spending grows faster than income, consumers are drawing down savings or taking on debt.',
-        'Real disposable income fell in 2021-2022 even as nominal wages rose because inflation eroded purchasing power faster than wages increased — the source of consumer frustration despite "low unemployment."')}
-      ${seriesCard('BOPGSTB', 'US Trade Balance',
-        'Exports minus imports. Negative = trade deficit (US imports more than it exports). The trade deficit matters because it represents money flowing out of the US economy.',
-        'The US has run a trade deficit continuously since 1975. Surged to record -$100B/month in 2022 as consumers bought imported goods with stimulus money. Trade policy (tariffs) is explicitly about changing this.')}
-      ${seriesCard('ISRATIO', 'Inventory to Sales Ratio',
-        'How many months of inventory businesses have relative to sales. Rising ratio = demand weakening or supply overshooting. A key leading indicator for production cutbacks.',
-        'Inventory/sales spiked in 2022 as supply chains recovered just as consumer demand was weakening — leading to the "inventory recession" in manufacturing.')}
-      ${seriesCard('CSUSHPISA', 'Case-Shiller Home Price Index',
-        'Nationwide home price index — the gold standard for tracking US housing prices. Includes repeat-sale methodology to track actual price changes.',
-        'Home prices rose 40% from 2020-2022 — the largest 2-year gain ever recorded. Fell 5% in 2022-2023 then re-accelerated. Affordability hit the worst levels since records began.')}
-    </div>
-
-    <!-- MONETARY & LIQUIDITY -->
-    ${sectionHdr('MONETARY POLICY & LIQUIDITY', '#8855ff', 'Fed balance sheet, money supply, net liquidity')}
-    <div style="background:rgba(136,85,255,0.04);border:1px solid rgba(136,85,255,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      <strong style="color:var(--text1);">Why does liquidity matter for stocks?</strong> When the Fed expands its balance sheet (QE), it injects money into the financial system. That money needs somewhere to go — and it often goes into stocks and other risk assets.
-      <strong>Net Liquidity = Fed Balance Sheet − Reverse Repo − Treasury General Account.</strong> 
-      Rising net liquidity historically correlates strongly with rising stock prices. The RRP and TGA are like "parking lots" for money — when that money flows back into markets, it is a bullish tailwind.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      ${seriesCard('WALCL', 'Fed Balance Sheet (Total Assets)',
-        'The size of the Federal Reserve balance sheet — all the bonds and assets it owns. Grew explosively during QE programs. Now shrinking via QT (Quantitative Tightening). A falling balance sheet is a headwind for risk assets.',
-        'The Fed balance sheet went from $900B (2008) to $4.5T (2015) to $8.9T (peak 2022) after COVID stimulus. It peaked at $8.97T in April 2022 and has been declining since.')}
-      ${seriesCard('M2SL', 'M2 Money Supply',
-        'Total money in the economy: cash, checking accounts, savings accounts, and money market funds. Growing M2 = more money available = inflationary and bullish for assets. Shrinking M2 = rare, deflationary, and happened in 2022-2023.',
-        'M2 contracted YoY in 2022-2023 for the first time since the 1930s. Historically, sustained M2 contraction has preceded every major recession.')}
-      ${seriesCard('RRPONTSYD', 'Overnight Reverse Repo (RRP)',
-        'Money parked at the Fed overnight by money market funds. When RRP is high, money is sitting idle rather than circulating in markets. As RRP drains, that liquidity can flow back into risk assets — a bullish signal.',
-        'RRP ballooned to $2.6T in 2023 as money market funds preferred Fed-guaranteed overnight rates over T-bills. The drain of RRP to near-zero in 2024 provided a significant liquidity tailwind.')}
-      ${seriesCard('WTREGEN', 'Treasury General Account (TGA)',
-        'The US Government checking account at the Fed. When Treasury spends from TGA, money flows into the economy (bullish). When Treasury rebuilds TGA, it drains liquidity (bearish). Debt ceiling cycles make this volatile.',
-        'The debt ceiling fight in 2023 caused TGA to drop to near-zero, then Treasury refilled it rapidly after resolution — draining $700B+ from markets in weeks and contributing to summer volatility.')}
-      ${seriesCard('WSHOMCG', 'Fed MBS Holdings',
-        'Fed holdings of mortgage-backed securities. The Fed bought MBS to suppress mortgage rates. Slow runoff means the private market must absorb supply the Fed once bought — keeping mortgage rates elevated.',
-        'Fed MBS peaked at $2.7T in 2022. Unlike Treasuries, MBS prepay unpredictably — making QT less controllable and keeping the Fed in the housing market longer than intended.')}
-      ${seriesCard('TREAST', 'Fed Treasury Holdings',
-        'Fed holdings of US Treasury securities — the core of QE/QT. When the Fed holds Treasuries, it suppresses yields. Reducing holdings forces the market to absorb supply.',
-        'Fed Treasury holdings peaked at $5.7T in 2022. The ongoing unwind forces primary dealers and foreign holders to absorb what the Fed no longer buys — structural upward pressure on yields.')}
-      ${seriesCard('BOGMBASE', 'Monetary Base',
-        'Currency in circulation + bank reserves at the Fed. The rawest money measure. The foundation from which the banking system creates credit.',
-        'Exploded from $800B to $6T in the QE era. The transmission from base money to broad money to inflation operates with long and variable lags — explaining why 2020-2021 QE only showed up in inflation in 2022.')}
-      ${seriesCard('TOTRESNS', 'Bank Reserves at the Fed',
-        'Cash commercial banks keep on deposit at the Federal Reserve. High reserves = banks have capacity to lend. Critically important for understanding the plumbing of QT.',
-        'Reserves collapsed to near zero before 2008 (banks held minimum required). After QE, reserves exploded to $4T+. The Fed pays interest on these reserves — effectively paying banks to not lend, controlling inflation.')}
-    </div>
-
-    <!-- RATES & CREDIT -->
-    ${sectionHdr('INTEREST RATES & CREDIT', '#ffcc00', 'The price of money · risk appetite')}
-    <div style="background:rgba(255,204,0,0.04);border:1px solid rgba(255,204,0,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      <strong style="color:var(--text1);">Rates tell the whole story.</strong> Interest rates are the price of money. Higher rates make bonds more attractive relative to stocks, increase borrowing costs, and slow growth.
-      The <strong>yield curve</strong> (10Y minus 2Y) is one of the most reliable recession predictors in history — it has inverted before every recession since 1955.
-      <strong>High-yield credit spreads</strong> show how much extra yield investors demand to hold risky corporate bonds vs safe Treasuries — a real-time fear gauge for the credit markets.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      ${seriesCard('FEDFUNDS', 'Fed Funds Rate',
-        'The benchmark interest rate set by the Federal Reserve at each FOMC meeting. This is the single most important policy tool. Higher = restrictive (fights inflation). Lower = accommodative (stimulates growth).',
-        'The fastest rate hiking cycle since 1980: 0% to 5.5% in 16 months (March 2022 - July 2023). Prior cycles: 2004-2006 (1% to 5.25%), 2015-2018 (0% to 2.5%).')}
-      ${seriesCard('T10Y2Y', 'Yield Curve (10Y minus 2Y)',
-        'When short-term rates are higher than long-term rates, the curve is "inverted" (negative). This means bond markets expect the economy to slow — historically the most reliable recession signal with ~12-18 month lead time.',
-        'The yield curve inverted in 2022 and stayed negative for the longest period since the 1980s. It has preceded every US recession since 1955. The question is always timing — inversion to recession averages 12-18 months.')}
-      ${seriesCard('DGS10', '10-Year Treasury Yield',
-        'The benchmark long-term interest rate. Affects mortgage rates, corporate bonds, and stock valuations. Higher 10Y = headwind for stocks (higher discount rate for future earnings). Watch for moves above/below key levels.',
-        'The 10Y yield hit 0.5% in 2020 (all-time low) and peaked at 5.0% in October 2023. The 4-5% range is historically "normal" but felt extreme after a decade of near-zero rates.')}
-      ${seriesCard('DGS2', '2-Year Treasury Yield',
-        'The most Fed-sensitive Treasury. Moves almost in lockstep with Fed Funds expectations. Rising = market pricing more hikes or higher-for-longer. Falling = pricing cuts.',
-        'The 2Y yield inverted below the 10Y in 2022 — the yield curve inversion that historically precedes recessions. Watch for dis-inversion as a recession confirmation signal.')}
-      ${seriesCard('MORTGAGE30US', '30-Year Mortgage Rate',
-        'The rate most Americans actually pay to buy a home. Peaked above 8% in late 2023 — highest since 2000. Every 1% move = ~$250/month on a $400K loan. Housing affordability destroyed.',
-        'The 2020-2021 rate of 2.7-3% created a "lock-in" effect — millions of homeowners will not sell because they would lose their rate. This structural supply freeze is keeping home prices elevated.')}
-      ${seriesCard('BAMLC0A0CM', 'Investment Grade Credit Spread',
-        'How much more yield IG corporate bonds pay vs Treasuries. Below 1% = complacency. Above 2% = stress. Above 3% = crisis. IG spreads are tighter than HY and move less dramatically.',
-        'IG spreads hit record tights in 2021 at ~0.8%. Widened to 1.6% in 2022 rate shock. Current levels are a key indicator of whether large-cap US companies face funding stress.')}
-      ${seriesCard('BAMLH0A0HYM2', 'High Yield Credit Spread',
-        'The extra yield investors demand to hold "junk" bonds vs safe Treasuries. Tight spreads = calm markets. Wide spreads = stress and tightening financial conditions.',
-        'HY spreads blew out to 11% in March 2020 and 8.5% in 2022. Compressed to near record lows of 2.8% in 2024 — pricing in almost no default risk.')}
-      ${seriesCard('DGS30', '30-Year Treasury Yield',
-        'Long bond yield. Sensitive to inflation expectations and fiscal sustainability concerns. A rising 30Y relative to 10Y signals "term premium" — investors demanding more compensation for long-duration risk.',
-        'The 30Y briefly traded at 5.18% in 2023 — highest since 2007. The term premium (extra compensation for duration) returning after a decade of near-zero is a structural shift for asset allocation.')}
-      ${seriesCard('T10Y3M', 'Yield Curve (10Y minus 3M)',
-        'Alternative yield curve measure. Some economists prefer this over 10Y-2Y as a recession predictor. The NY Fed uses this in their recession probability model.',
-        'Inverted more deeply than 10Y-2Y in 2023. NY Fed recession probability model peaked above 70% — the highest since the early 1980s. A reminder that yield curve inversions signal probabilities, not certainties.')}
-    </div>
-
-    <!-- CONSUMER -->
-    ${sectionHdr('CONSUMER HEALTH', '#ff8800', 'Spending · credit · confidence · savings')}
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      ${seriesCard('UMCSENT', 'UMich Consumer Sentiment',
-        'Monthly survey of ~600 households on their financial situation and economic outlook. Forward-looking — low confidence leads to less spending.',
-        'Collapsed to 50 in June 2022 — lower than during the 2008 crisis — even without a technical recession. The "vibecession" phenomenon.')}
-      ${seriesCard('DRCCLACBS', 'Credit Card Delinquency Rate',
-        'Percentage of credit card balances 30+ days past due. The canary in the consumer coal mine. Rising delinquencies = consumers running out of financial buffer. Precedes defaults by 2-4 quarters.',
-        'Delinquencies hit historic lows in 2021 due to stimulus. Rising sharply since 2022 as the stimulus cushion depleted. Now above pre-COVID levels for the first time — a critical watch signal.')}
-      ${seriesCard('REVOLSL', 'Revolving Credit (Credit Cards)',
-        'Total outstanding credit card debt. Americans have been putting more on cards as savings depleted. At record highs above $1.1T. Rising revolving credit + rising delinquencies = consumer stress.',
-        'Revolving credit collapsed in 2020 as stimulus allowed paydowns. The subsequent surge above $1T is structural — lower-income consumers increasingly dependent on credit for necessities.')}
-      ${seriesCard('PSAVERT', 'Personal Savings Rate',
-        'Percentage of disposable income saved rather than spent. High = potential spending fuel. Low = consumers stretched.',
-        'Surged to 33% in April 2020 then crashed as consumers spent down their stimulus buffer.')}
-      ${seriesCard('DRSFRMACBS', 'Mortgage Delinquency Rate',
-        'Percentage of mortgages past due. Spiked to 10% in 2010 during the housing crisis. Rising delinquencies forecast foreclosures and housing price pressure.',
-        'Remained low post-COVID due to forbearance programs and home price appreciation. A key watch item as adjustable-rate mortgages reset.')}
-      ${seriesCard('TOTALSL', 'Total Consumer Credit',
-        'All consumer debt: credit cards + auto loans + student loans. Measures total household leverage.',
-        'Exceeded $5T for the first time in 2024. The quality of this debt (who holds it, at what rates) matters as much as the quantity.')}
-    </div>
-
-    <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;">
-      Data: Federal Reserve Economic Database (FRED) · St. Louis Fed · Updated ${data.updated ? new Date(data.updated).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}) : 'recently'}
-    </div>
-  </div>`;
-}
-
-// ─── CIVILIZATIONAL TRANSITION DASHBOARD ─────────────────────────────────────
-let _transitionData = null;
-let _transitionLoading = false;
-
-async function renderTransition() {
-  const el = document.getElementById('transitionContent');
-  if (!el) return;
-  if (_transitionLoading) return;
-  if (_transitionData) { _renderTransitionHTML(_transitionData); return; }
-
-  _transitionLoading = true;
-  el.innerHTML = `<div style="padding:60px;text-align:center;">
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;color:#8855ff;margin-bottom:12px;">⬡ LOADING TRANSITION DATA</div>
-    <div style="font-size:12px;color:var(--text3);">Fetching FRED productivity, labor, investment, and debt data...</div>
-  </div>`;
-
-  try {
-    const r = await fetch('/transition?t=' + Date.now());
-    if (!r.ok) throw new Error('Endpoint returned ' + r.status);
-    _transitionData = await r.json();
-    _transitionLoading = false;
-    _renderTransitionHTML(_transitionData);
-  } catch(e) {
-    _transitionLoading = false;
-    el.innerHTML = `<div style="padding:40px;text-align:center;color:#ff3355;">
-      <div style="font-family:'Orbitron',monospace;font-size:10px;margin-bottom:8px;">DATA UNAVAILABLE</div>
-      <div style="font-size:12px;color:var(--text3);">${e.message}</div>
-    </div>`;
-  }
-}
-
-function _renderTransitionHTML(data) {
-  const el = document.getElementById('transitionContent');
-  if (!el || !data) return;
-
-  const score = data.bridge_score || 35;
-  const outcomes = data.outcomes || {};
-  const prod = data.productivity_signal || {};
-  const ulc = data.ulc_signal || {};
-  const disp = data.displacement_signal || {};
-  const ls = data.labor_share || {};
-  const capex = data.ai_capex || [];
-  const hist = data.historical_transitions || [];
-  const debtScenarios = data.debt_scenarios || [];
-
-  const fmt1 = v => v == null ? '—' : Number(v).toFixed(1);
-  const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
-
-  // Bridge phase label and colors
-  const phaseInfo = score >= 95 ? { label: 'THE POP', sub: 'Transformation becoming visible. Field narrowing.', color: '#ff3355', glow: 'rgba(255,51,85,0.3)' }
-    : score >= 80 ? { label: 'PRE-POP', sub: 'Infrastructure sufficient. Survivors hardening.', color: '#ff8800', glow: 'rgba(255,136,0,0.3)' }
-    : score >= 60 ? { label: 'LATE BRIDGE', sub: 'Productivity beginning to show. Concentration narrowing.', color: '#ffcc00', glow: 'rgba(255,204,0,0.3)' }
-    : score >= 30 ? { label: 'MID BRIDGE', sub: 'Building at scale. Transformation not yet visible in data.', color: '#00ccff', glow: 'rgba(0,204,255,0.3)' }
-    : { label: 'EARLY BRIDGE', sub: 'Infrastructure deployment underway. Long runway ahead.', color: '#8855ff', glow: 'rgba(136,85,255,0.3)' };
-
-  // Outcome colors
-  const outColors = {
-    arrival:         { label: 'ARRIVAL',          color: '#00ff88', desc: 'Transformation completes. Bridge holds. Pop is clean.' },
-    bridge_collapse: { label: 'BRIDGE COLLAPSE',  color: '#ff3355', desc: 'Funding breaks before transformation completes. 1929 scenario.' },
-    false_dawn:      { label: 'FALSE DAWN',        color: '#ff8800', desc: 'Partial transformation. Not enough to justify debt carried.' },
-    dark_arrival:    { label: 'DARK ARRIVAL',      color: '#ffcc00', desc: 'Transformation succeeds. Distributional failure fractures society.' },
-    infinite_bridge: { label: 'INFINITE BRIDGE',  color: '#8855ff', desc: 'Bubble self-sustains indefinitely. Transformation always almost here.' },
-  };
-
-  // SVG line chart helper
-  const miniChart = (history, color, h=60) => {
-    if (!history || history.length < 2) return '';
-    const vals = history.map(p => p.v).filter(v => v != null);
-    if (vals.length < 2) return '';
-    const min = Math.min(...vals), max = Math.max(...vals);
-    const range = max - min || Math.abs(min)*0.1 || 1;
-    const W = 300, H = h, P = 3;
-    const x = i => P + (i/(vals.length-1))*(W-P*2);
-    const y = v => H - P - ((v-min)/range)*(H-P*2);
-    const pts = vals.map((v,i) => x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
-    const fill = `${x(0).toFixed(1)},${H} ${pts} ${x(vals.length-1).toFixed(1)},${H}`;
-    return `<svg width="100%" viewBox="0 0 ${W+40} ${H+14}" style="display:block;margin-top:8px;overflow:visible;">
-      <defs><linearGradient id="tg${color.replace('#','')}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
-        <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
-      </linearGradient></defs>
-      <polygon points="${fill}" fill="url(#tg${color.replace('#','')})"/>
-      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
-      <circle cx="${x(vals.length-1).toFixed(1)}" cy="${y(vals[vals.length-1]).toFixed(1)}" r="3" fill="${color}"/>
-      <text x="${W+4}" y="${y(vals[vals.length-1]).toFixed(1)+3}" fill="${color}" font-size="9" font-family="Share Tech Mono,monospace">${fmt1(vals[vals.length-1])}</text>
-      <text x="${P}" y="${H+12}" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Share Tech Mono,monospace">${history[0]?.d||''}</text>
-      <text x="${W-20}" y="${H+12}" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Share Tech Mono,monospace">${history[history.length-1]?.d||''}</text>
-    </svg>`;
-  };
-
-  // AI Capex bar chart
-  const capexChart = () => {
-    const W = 420, H = 100, P = 8;
-    const vals = capex.map(d => d.b);
-    const max = Math.max(...vals);
-    const bW = (W - P*2) / capex.length - 2;
-    const bars = capex.map((d, i) => {
-      const bH = ((d.b / max) * (H - 20));
-      const bX = P + i * ((W-P*2)/capex.length);
-      const bY = H - bH - 4;
-      const color = d.est ? 'rgba(136,85,255,0.5)' : d.y >= 2023 ? '#00ccff' : 'rgba(0,204,255,0.35)';
-      const label = d.y >= 2020 ? String(d.y).slice(2) : '';
-      return `<rect x="${bX.toFixed(1)}" y="${bY.toFixed(1)}" width="${bW.toFixed(1)}" height="${bH.toFixed(1)}" fill="${color}" rx="1"/>
-        ${label ? `<text x="${(bX+bW/2).toFixed(1)}" y="${H}" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="7" font-family="Orbitron,monospace">${label}</text>` : ''}
-        ${d.est ? '' : (d.y >= 2024 ? `<text x="${(bX+bW/2).toFixed(1)}" y="${(bY-3).toFixed(1)}" text-anchor="middle" fill="#00ccff" font-size="7" font-family="Share Tech Mono,monospace">$${d.b}B</text>` : '')}`;
-    }).join('');
-    const estLine = `<text x="${W-2}" y="16" text-anchor="end" fill="rgba(136,85,255,0.7)" font-size="8" font-family="Orbitron,monospace">— EST</text>`;
-    return `<svg width="100%" viewBox="0 0 ${W} ${H+10}" style="display:block;margin-top:6px;">${bars}${estLine}</svg>`;
-  };
-
-  // Debt scenario chart
-  const debtChart = () => {
-    if (!debtScenarios.length) return '';
-    const W = 340, H = 100, P = 6;
-    const allVals = debtScenarios.flatMap(s => s.points.map(p => p.debt_gdp));
-    const min = Math.min(...allVals)*0.95, max = Math.max(...allVals)*1.02;
-    const years = debtScenarios[0].points.map(p => p.y);
-    const x = i => P + (i/(years.length-1))*(W-P*2);
-    const y = v => H - P - ((v-min)/(max-min))*(H-P*2);
-    const lines = debtScenarios.map(s => {
-      const pts = s.points.map((p,i) => x(i).toFixed(1)+','+y(p.debt_gdp).toFixed(1)).join(' ');
-      const last = s.points[s.points.length-1];
-      return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-linejoin="round" stroke-dasharray="${s.name==='Conservative'?'':''}"/>
-        <text x="${(x(s.points.length-1)+4).toFixed(1)}" y="${y(last.debt_gdp).toFixed(1)+3}" fill="${s.color}" font-size="8" font-family="Share Tech Mono,monospace">${last.debt_gdp}%</text>`;
-    }).join('');
-    const xLabels = [0, Math.floor(years.length/2), years.length-1].map(i =>
-      `<text x="${x(i).toFixed(1)}" y="${H+10}" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8" font-family="Share Tech Mono,monospace">${years[i]}</text>`
-    ).join('');
-    // Current line
-    const curY = y(data.debt_gdp_current?.v || 120);
-    const curLine = `<line x1="${P}" y1="${curY.toFixed(1)}" x2="${(W-P).toFixed(1)}" y2="${curY.toFixed(1)}" stroke="rgba(255,255,255,0.15)" stroke-dasharray="2,3" stroke-width="1"/>
-      <text x="${P+2}" y="${(curY-3).toFixed(1)}" fill="rgba(255,255,255,0.3)" font-size="7" font-family="Orbitron,monospace">NOW</text>`;
-    return `<svg width="100%" viewBox="0 0 ${W+50} ${H+16}" style="display:block;overflow:visible;">${curLine}${lines}${xLabels}</svg>`;
-  };
-
-  // Score factors
-  const factorsHTML = (data.score_factors||[]).map(f =>
-    `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);min-width:160px;">${f.f}</div>
-      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);min-width:80px;">${f.v}</div>
-      <div style="font-family:'Orbitron',monospace;font-size:8px;color:${f.signal.includes('ACCEL')||f.signal.includes('RESOLV')?'#00ff88':f.signal.includes('EARLY')?'#8855ff':'#ffcc00'};letter-spacing:1px;">${f.signal}</div>
-    </div>`
-  ).join('');
-
-  // Historical analogs
-  const histHTML = hist.map(h => {
-    const isCurrent = !h.peak_year;
-    const bg = isCurrent ? 'rgba(0,204,255,0.06)' : 'var(--bg2)';
-    const border = isCurrent ? '1px solid rgba(0,204,255,0.3)' : '1px solid var(--border)';
-    return `<div style="background:${bg};border:${border};border-radius:4px;padding:12px 14px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:9px;color:${isCurrent?'var(--cyan)':'var(--text2)'};letter-spacing:1px;">${h.name}</div>
-          <div style="font-size:10px;color:var(--text3);">${h.period}</div>
-        </div>
-        ${h.peak_pct_gdp ? `<div style="text-align:right;">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;color:var(--text1);">${h.peak_pct_gdp}%</div>
-          <div style="font-size:9px;color:var(--text3);">peak capex/GDP</div>
-        </div>` : `<div style="text-align:right;">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);">~1.05% now</div>
-          <div style="font-size:9px;color:var(--text3);">est. 2.5-3% peak</div>
-        </div>`}
-      </div>
-      <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:6px;">${h.notes}</div>
-      <div style="font-size:10px;color:var(--text3);font-style:italic;">Survivors: ${h.survivors}</div>
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:${isHour?(isNow?'var(--cyan)':'var(--text2)'):'transparent'};white-space:nowrap;">${label||'·'}</div>
     </div>`;
   }).join('');
 
-  setTimeout(() => generateTransitionAI(data), 200);
+  // Top/bottom 5 slots
+  const sorted = [...profile].sort((a,b) => b.avg - a.avg);
+  const top3 = sorted.slice(0,3).map(b => `${etToCT(b.ts)} CT ($${b.avg.toFixed(3)})`).join(' · ');
+  const bot3 = sorted.slice(-3).map(b => `${etToCT(b.ts)} CT ($${b.avg.toFixed(3)})`).join(' · ');
 
-  el.innerHTML = `<div style="padding:14px 16px;max-width:1400px;margin:0 auto;">
-
-    <!-- PHASE HEADER -->
-    <div class="panel" style="margin-bottom:16px;background:linear-gradient(135deg,var(--bg2),${phaseInfo.glow} 200%);border-left:4px solid ${phaseInfo.color};position:relative;overflow:hidden;">
-      <div style="position:absolute;top:0;right:0;width:200px;height:100%;background:radial-gradient(ellipse at right,${phaseInfo.glow},transparent);pointer-events:none;"></div>
-      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:3px;color:var(--text3);margin-bottom:8px;">⬡ CIVILIZATIONAL TRANSITION MONITOR</div>
-      <div style="display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:${phaseInfo.color};margin-bottom:4px;">${phaseInfo.label}</div>
-          <div style="font-size:13px;color:var(--text2);line-height:1.6;">${phaseInfo.sub}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:6px;">The bridge between the old economy and the new one. Every indicator here asks: are we still building, or approaching arrival?</div>
-        </div>
-        <div style="text-align:center;min-width:100px;">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:48px;font-weight:900;color:${phaseInfo.color};line-height:1;">${score}</div>
-          <div style="font-size:9px;color:var(--text3);font-family:'Orbitron',monospace;letter-spacing:1px;">BRIDGE SCORE</div>
-          <div style="font-size:9px;color:var(--text3);">0 = early · 100 = pop</div>
-        </div>
-      </div>
-      <!-- Phase bar -->
-      <div style="position:relative;height:8px;background:linear-gradient(90deg,#8855ff,#00ccff,#ffcc00,#ff8800,#ff3355);border-radius:4px;margin:14px 0 8px;">
-        <div style="position:absolute;left:${score}%;top:-4px;transform:translateX(-50%);width:3px;height:16px;background:#fff;border-radius:2px;box-shadow:0 0 8px rgba(255,255,255,0.9);"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--text3);font-family:'Orbitron',monospace;margin-bottom:12px;">
-        <span>EARLY<br>BRIDGE</span><span>MID<br>BRIDGE</span><span>LATE<br>BRIDGE</span><span>PRE-<br>POP</span><span>THE<br>POP</span>
-      </div>
-      <!-- Signal breakdown -->
-      <div style="border-top:1px solid var(--border);padding-top:10px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">SCORE COMPONENTS</div>
-        ${factorsHTML}
-      </div>
-    </div>
-
-    <!-- AI NARRATIVE -->
-    <div class="panel" id="transitionAIPanel" style="margin-bottom:16px;border-left:4px solid #8855ff;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#8855ff;">⬡ AI TRANSITION ANALYSIS</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Generated from live transition indicators · Updated on load</div>
-        </div>
-        <button onclick="refreshTransitionAI()" style="background:rgba(136,85,255,0.1);border:1px solid rgba(136,85,255,0.3);color:#8855ff;padding:5px 12px;border-radius:3px;cursor:pointer;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH</button>
-      </div>
-      <div id="transitionAIText" style="font-size:13px;color:var(--text2);line-height:1.9;">
-        <span style="color:var(--text3);font-style:italic;">Generating analysis...</span>
-      </div>
-    </div>
-
-    <!-- OUTCOME PROBABILITIES -->
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#8855ff;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(136,85,255,0.3);">⬡ OUTCOME SCENARIOS — NOT FORECASTS, MODEL OUTPUTS</div>
-    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      The old vocabulary does not apply here. "Soft landing" and "hard landing" describe oscillations around a stable mean. We are not oscillating — we are transitioning between two fundamentally different economic regimes. These are the five actual scenarios.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:20px;">
-      ${Object.entries(outColors).map(([k, o]) => {
-        const pct = outcomes[k] || 0;
-        return `<div class="panel" style="border-top:3px solid ${o.color};">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${o.color};letter-spacing:1px;margin-bottom:6px;">${o.label}</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);margin-bottom:4px;">${pct}%</div>
-          <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:8px;"><div style="width:${pct}%;height:100%;background:${o.color};border-radius:2px;transition:width 1s;"></div></div>
-          <div style="font-size:11px;color:var(--text2);line-height:1.5;">${o.desc}</div>
-        </div>`;
-      }).join('')}
-    </div>
-
-    <!-- AI CAPEX TRAJECTORY -->
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#00ccff;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(0,204,255,0.3);">⬡ AI INFRASTRUCTURE CAPEX — THE FUEL</div>
-    <div class="panel" style="margin-bottom:16px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
-        <div style="text-align:center;background:var(--bg3);border-radius:3px;padding:10px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">2024 ACTUAL</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#00ccff;">$285B</div>
-          <div style="font-size:10px;color:var(--text3);">1.05% of US GDP</div>
-        </div>
-        <div style="text-align:center;background:var(--bg3);border-radius:3px;padding:10px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">2025 ESTIMATE</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:#8855ff;">$427B</div>
-          <div style="font-size:10px;color:var(--text3);">+50% YoY · 1.52% GDP</div>
-        </div>
-        <div style="text-align:center;background:var(--bg3);border-radius:3px;padding:10px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">RAILWAY PEAK (1840s)</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:var(--text3);">6.0%</div>
-          <div style="font-size:10px;color:var(--text3);">of GDP — we are early</div>
-        </div>
-      </div>
-      ${capexChart()}
-      <div style="font-size:11px;color:var(--text2);margin-top:12px;line-height:1.7;border-top:1px solid var(--border);padding-top:10px;">
-        <strong style="color:var(--text1);">What this measures:</strong> Annual capital expenditure by the 8 largest AI infrastructure companies (Amazon, Alphabet, Microsoft, Meta, Nvidia, Oracle, Apple, Broadcom). This is the primary funding mechanism of the transition — every dollar of elevated equity valuation is ultimately financing this buildout. Analyst estimates have undershot actual spending by 30%+ for two consecutive years. Consensus now projects $562B in 2026. Purple bars are estimates.
-      </div>
-      <div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Sources: Company filings, Goldman Sachs Research, RBC Wealth Management, Morgan Stanley Cloud Capex Tracker. Data through 2024 actual; 2025-2027 consensus estimates.</div>
-    </div>
-
-    <!-- LABOR SUBSTITUTION -->
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#00ff88;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(0,255,136,0.3);">⬡ LABOR SUBSTITUTION SIGNAL — IS AI DOING THE WORK YET?</div>
-    <div style="background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.1);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      The most important question in this transition is not whether AI will replace human labor — it is <strong style="color:var(--text1);">when that replacement becomes measurable in aggregate data</strong>. Output rising while hours worked stay flat means something other than humans did the marginal work. This is the Solow Paradox resolving in real time. It has not fully appeared yet. When it does, it will be the clearest confirmation that the bridge is working.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;">
-      <div class="panel" style="border-top:3px solid #00ff88;">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ff88;margin-bottom:4px;">NONFARM PRODUCTIVITY GROWTH</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: PRS85006092 · Quarterly</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${fmt1(prod.recent_avg)}%</div>
-        <div style="font-size:11px;color:${(prod.vs_longrun||0) > 0 ? '#00ff88' : 'var(--text3)'};">${(prod.vs_longrun||0) > 0 ? '+' : ''}${fmt1(prod.vs_longrun)}pp vs 1950-1999 avg (2.2%)</div>
-        ${miniChart(prod.history, '#00ff88')}
-        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">The Solow Paradox: "You can see the computer age everywhere except in the productivity statistics." The paradox eventually resolved for the internet — productivity surged 1995-2005. We are watching for the same resolution with AI. <strong style="color:${prod.solow_resolved ? '#00ff88' : '#ffcc00'};">${prod.solow_resolved ? 'Signal: RESOLVING' : 'Signal: NOT YET VISIBLE'}</strong></div>
-      </div>
-      <div class="panel" style="border-top:3px solid ${ulc.trend === 'falling' ? '#00ff88' : '#ff8800'};">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${ulc.trend === 'falling' ? '#00ff88' : '#ff8800'};margin-bottom:4px;">UNIT LABOR COSTS</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: ULCNFB · When falling, AI is doing marginal work</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${fmt1(ulc.current)}</div>
-        <div style="font-size:11px;color:${ulc.trend === 'falling' ? '#00ff88' : '#ff8800'};">${ulc.trend === 'falling' ? '▼ FALLING — AI leverage appearing' : '▲ RISING — human economy still dominant'}</div>
-        ${miniChart(ulc.history, ulc.trend === 'falling' ? '#00ff88' : '#ff8800')}
-        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">When output grows faster than labor cost, something other than additional human labor is driving that output. Falling unit labor costs with rising output is the most direct measurable signal of AI doing productive work at scale.</div>
-      </div>
-      <div class="panel" style="border-top:3px solid ${disp.yoy_pct < -1 ? '#00ff88' : '#8855ff'};">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${disp.yoy_pct < -1 ? '#00ff88' : '#8855ff'};margin-bottom:4px;">INFORMATION SECTOR EMPLOYMENT</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: CEU5000000001 · Knowledge worker displacement</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${disp.current ? (disp.current/1000).toFixed(1)+'M' : '—'}</div>
-        <div style="font-size:11px;color:${disp.yoy_pct < 0 ? '#00ff88' : 'var(--text3)'};">${fmt1(disp.yoy_pct)}% YoY · ${fmt1(disp.pct_below_peak)}% below peak</div>
-        ${miniChart(disp.history, '#8855ff')}
-        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">The information sector is ground zero for AI displacement. When employment falls here while output per worker rises, the substitution is becoming real. This is not cyclical — these jobs do not come back in the same form.</div>
-      </div>
-      <div class="panel" style="border-top:3px solid ${ls.change_5yr < -1 ? '#00ff88' : '#ffcc00'};">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${ls.change_5yr < -1 ? '#00ff88' : '#ffcc00'};margin-bottom:4px;">LABOR SHARE OF OUTPUT</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: PRS85006151 · Falling = capital replacing labor</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${fmt1(ls.current)}%</div>
-        <div style="font-size:11px;color:${ls.change_5yr < 0 ? '#00ff88' : 'var(--text3)'};">${ls.change_5yr > 0 ? '+' : ''}${fmt1(ls.change_5yr)}pp over 5 years</div>
-        ${miniChart(ls.history, ls.change_5yr < -1 ? '#00ff88' : '#ffcc00')}
-        <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">The share of total economic output that goes to workers as wages. A structural decline means capital — increasingly, AI — is capturing a larger share of value creation. This is the distributional signal. It measures who benefits from the transition.</div>
-      </div>
-    </div>
-
-    <!-- DEBT BRIDGE -->
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ffcc00;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,204,0,0.3);">⬡ THE DEBT BRIDGE — HOW LONG CAN IT HOLD?</div>
-    <div class="panel" style="margin-bottom:16px;">
-      <div style="font-size:12px;color:var(--text2);line-height:1.8;margin-bottom:12px;">
-        <strong style="color:var(--text1);">The paper's central insight reframed:</strong> Current US debt of ~$36T looks unsustainable against current GDP of ~$29.7T (121%). But debt sustainability is not a function of current GDP. It is a function of <em>future GDP</em>. If AI delivers the productivity gains it is being valued for, the denominator expands dramatically — and the debt, unchanged in nominal terms, becomes manageable. These three scenarios show what debt/GDP looks like in 2030 and 2035 under different AI productivity assumptions. The question is not whether the debt is sustainable today. It is whether the transformation arrives before the debt becomes binding.
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
-        ${debtScenarios.map(s => {
-          const end = s.points[s.points.length-1];
-          const mid = s.points[Math.floor(s.points.length/2)];
-          return `<div style="background:var(--bg3);border-radius:3px;padding:10px;border-top:2px solid ${s.color};">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:${s.color};margin-bottom:4px;">${s.name.toUpperCase()}</div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">${s.label}</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:var(--text);">${mid.debt_gdp}% by ${mid.y}</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${s.color};">${end.debt_gdp}% by ${end.y}</div>
-          </div>`;
-        }).join('')}
-      </div>
-      ${debtChart()}
-      <div style="font-size:10px;color:var(--text3);margin-top:8px;font-style:italic;">Model assumptions: $36.2T current debt, ~5.5% annual deficit, productivity lag of ~2 years before AI gains appear in GDP. Conservative: +1.5%/yr extra productivity from 2027. Base: +3%/yr. Bull: +6%/yr. These are scenarios, not forecasts.</div>
-    </div>
-
-    <!-- HISTORICAL TRANSITIONS -->
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:var(--text3);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);">⬡ HISTORICAL INFRASTRUCTURE TRANSITIONS — THE PRECEDENTS</div>
-    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      Every major infrastructure transition followed the same arc: capital floods in, most companies fail, the networks survive, productivity eventually vindicates the investment. The question for each was never whether the technology was real — it was whether the financing structure could survive the interval between commitment and delivery.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:16px;">
-      ${histHTML}
-    </div>
-
-    <!-- SURVIVOR FRAMEWORK -->
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ff8800;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,136,0,0.3);">⬡ THE SURVIVOR FRAMEWORK — WHO MAKES IT THROUGH THE POP</div>
-    <div class="panel" style="margin-bottom:16px;border-left:4px solid #ff8800;">
-      <div style="font-size:12px;color:var(--text2);line-height:1.8;margin-bottom:12px;">
-        The pop does not destroy the transformation. It destroys the vehicle. Cisco lost 80% in 2000 and never recovered — because Cisco was infrastructure for the internet, not the internet itself. The survivors of every transition are the companies that ended up owning the <strong style="color:var(--text1);">intelligence layer</strong> — the thing the entire economy ran on top of.
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
-        ${[
-          { era: 'Railways (1840s)', died: 'Equipment makers, most railway cos', survived: 'Companies owning the actual rail networks', color: 'var(--text3)' },
-          { era: 'Electrification (1920s)', died: 'Utility speculators, most appliance cos', survived: 'GE, Westinghouse — companies that became electrical infrastructure', color: 'var(--text3)' },
-          { era: 'Internet (2000)', died: 'Cisco (-80%), Webvan, Pets.com, 4,000+ cos', survived: 'Amazon, Google — companies that became the layer everything runs on', color: 'var(--text3)' },
-          { era: 'AI (?)', died: 'GPU manufacturers? Cloud infrastructure? Most AI apps?', survived: 'Companies that own the model weights + universal distribution at scale', color: '#ff8800' },
-        ].map(r => `<div style="background:var(--bg3);border-radius:3px;padding:10px;border-top:2px solid ${r.color};">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${r.color};margin-bottom:6px;">${r.era}</div>
-          <div style="font-size:10px;color:#ff3355;margin-bottom:4px;line-height:1.4;">✕ ${r.died}</div>
-          <div style="font-size:10px;color:#00ff88;line-height:1.4;">✓ ${r.survived}</div>
-        </div>`).join('')}
-      </div>
-      <div style="margin-top:12px;padding:10px 12px;background:rgba(255,136,0,0.06);border-radius:3px;font-size:11px;color:var(--text2);line-height:1.7;">
-        <strong style="color:#ff8800;">The critical diagnostic:</strong> Watch for the moment when AI infrastructure companies (hyperscalers, GPU makers, data center builders) begin selling off while a small number of AI-native companies continue to appreciate. That spread — builders down, intelligence-layer up — is the pop beginning. The field is narrowing to its survivors.
-      </div>
-    </div>
-
-    <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;">
-      Productivity & labor data: BLS via FRED · Debt projections: model outputs only · AI capex: company filings + GS/RBC/MS research · Updated ${data.updated ? new Date(data.updated).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'recently'}
-    </div>
-  </div>`;
-}
-
-async function generateTransitionAI(data) {
-  const el = document.getElementById('transitionAIText');
-  if (!el) return;
-
-  const score = data.bridge_score || 35;
-  const outcomes = data.outcomes || {};
-  const prod = data.productivity_signal || {};
-  const ulc = data.ulc_signal || {};
-  const disp = data.displacement_signal || {};
-
-  const context = `
-BRIDGE PHASE: Score ${score}/100
-Current phase: ${score >= 80 ? 'Pre-Pop' : score >= 60 ? 'Late Bridge' : score >= 30 ? 'Mid Bridge' : 'Early Bridge'}
-
-OUTCOME PROBABILITIES:
-- Arrival (clean transition): ${outcomes.arrival}%
-- Bridge Collapse (1929 scenario): ${outcomes.bridge_collapse}%
-- False Dawn (partial transformation): ${outcomes.false_dawn}%
-- Dark Arrival (transformation succeeds, distribution fails): ${outcomes.dark_arrival}%
-- Infinite Bridge (perpetual anticipation): ${outcomes.infinite_bridge}%
-
-AI INFRASTRUCTURE CAPEX:
-- 2024 actual: $285B (1.05% of GDP)
-- 2025 estimate: $427B (1.52% of GDP)
-- Analyst estimates have undershot actual by 30%+ for 2 consecutive years
-- Railway peak was 6% of GDP — we are still early in the buildout
-
-PRODUCTIVITY SIGNAL:
-- Recent nonfarm productivity growth: ${prod.recent_avg}% (long-run avg 2.2%)
-- Above long-run average by: ${prod.vs_longrun}pp
-- Solow Paradox resolved: ${prod.solow_resolved ? 'YES — acceleration visible' : 'NOT YET — transformation not yet in data'}
-
-UNIT LABOR COSTS: ${ulc.trend} — ${ulc.trend === 'falling' ? 'AI leverage appearing in output' : 'Human economy still dominant'}
-
-INFORMATION SECTOR EMPLOYMENT: ${(disp.current/1000)?.toFixed(1)}M workers, ${disp.yoy_pct?.toFixed(1)}% YoY, ${disp.pct_below_peak?.toFixed(1)}% below peak`;
-
-  const system = `You are the most sophisticated macroeconomic analyst alive, deeply fluent in the Transitional Inflation Hypothesis — the idea that what appears to be a bubble may actually be a purposive bridge between two fundamentally different economic regimes. You understand that standard cyclical terminology (soft landing, hard landing, stagflation) does not apply here. We are not oscillating around a mean — we are transitioning between regimes.
-
-The five possible outcomes are: ARRIVAL (transformation completes, bridge holds, pop is clean), BRIDGE COLLAPSE (financing breaks before completion — the 1929 scenario), FALSE DAWN (partial transformation, not enough to justify debt carried), DARK ARRIVAL (transformation succeeds but distributional failure fractures society), INFINITE BRIDGE (perpetual anticipation, transformation always almost here).
-
-Write for an intelligent audience that understands markets but may not be economists. Be direct, insightful, intellectually honest about uncertainty. Write in flowing prose — no bullet points. 4-5 substantial paragraphs. Connect the data to the theory. Tell the story of where we are in the transition, what the signals are saying, and what the most important things to watch are. This is not financial advice — this is the most honest possible reading of a civilizational inflection point.`;
-
-  try {
-    const reply = await callAI([{ role: 'user', content: `Here is the current transition data:
-${context}
-
-Write your analysis of where we are in the civilizational transition. Be thorough, honest, and brilliant.` }], system, 1400);
-    if (el) {
-      const paras = reply.split('\n\n').filter(p => p.trim());
-
-
-      el.innerHTML = paras.map(p => `<p style="margin:0 0 14px;line-height:1.9;">${p.trim()}</p>`).join('');
-    }
-  } catch(e) {
-    if (el) el.innerHTML = `<span style="color:var(--text3);font-style:italic;">AI analysis unavailable: ${e.message}</span>`;
-  }
-}
-
-async function refreshTransitionAI() {
-  const el = document.getElementById('transitionAIText');
-  if (el) el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Regenerating...</span>';
-  if (_transitionData) await generateTransitionAI(_transitionData);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SOVEREIGN CHESS — The Geopolitical Financial Realignment
-// Tracks: Japan economy, US Treasury ownership, crypto endgame thesis
-// ═══════════════════════════════════════════════════════════════════════════
-
-let _sovereignData = null;
-let _sovereignLoading = false;
-
-async function renderSovereign(force) {
-  const el = document.getElementById('sovereignChessContent') || document.getElementById('sovereignContent');
-  if (!el) return;
-  if (_sovereignLoading) return;
-  // Use cache only if it has enough series and force-refresh not requested
-  if (_sovereignData && !force) {
-    const count = Object.keys(_sovereignData.series || {}).length;
-    if (count >= 50) { _renderSovereignHTML(_sovereignData); return; }
-    // Cache is partial — discard and re-fetch
-    _sovereignData = null;
-  }
-
-  el.innerHTML = '<div style="padding:40px;text-align:center;">' +
-    '<div style="font-family:Orbitron,monospace;font-size:10px;letter-spacing:2px;color:#ffcc00;margin-bottom:8px;">⬡ SOVEREIGN CHESS</div>' +
-    '<div style="font-size:12px;color:var(--text3);">Loading geopolitical financial data from FRED...</div>' +
-    '<div style="font-size:11px;color:var(--text3);margin-top:8px;">Fetching ' + Object.keys(window._FRED_SERIES_COUNT || {}).length + ' economic series — may take a few seconds</div>' +
-  '</div>';
-
-  _sovereignLoading = true;
-  try {
-    const r = await fetch('/fred?t=' + Date.now());
-    if (!r.ok) throw new Error('FRED endpoint ' + r.status);
-    const data = await r.json();
-    const count = Object.keys(data.series || {}).length;
-    if (count < 10) throw new Error('Only ' + count + ' series returned — FRED API may be rate limiting. Try again in 30 seconds.');
-    _sovereignData = data;
-    _renderSovereignHTML(_sovereignData);
-  } catch(e) {
-    el.innerHTML = '<div style="padding:40px;text-align:center;color:#ff3355;">' +
-      '<div style="font-family:Orbitron,monospace;font-size:10px;margin-bottom:8px;">DATA UNAVAILABLE</div>' +
-      '<div style="font-size:12px;">' + e.message + '</div>' +
-      '<div style="margin-top:16px;"><button onclick="renderSovereign(true)" style="background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.3);color:#ffcc00;padding:8px 20px;border-radius:4px;cursor:pointer;font-family:Orbitron,monospace;font-size:9px;letter-spacing:1px;">↻ RETRY</button></div>' +
-    '</div>';
-  }
-  _sovereignLoading = false;
-}
-
-function _renderSovereignHTML(data) {
-  const el = document.getElementById('sovereignChessContent') || document.getElementById('sovereignContent');
-  if (!el || !data) return;
-
-  const S = data.series || {};
-  const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
-  const fmt1 = v => v == null ? '—' : Number(v).toFixed(1);
-  const fmtB = v => {
-    if (v == null) return '—';
-    const abs = Math.abs(v), sign = v < 0 ? '-' : '';
-    if (abs >= 1e12) return sign + '$' + (abs/1e12).toFixed(2) + 'T';
-    if (abs >= 1e9)  return sign + '$' + (abs/1e9).toFixed(1) + 'B';
-    if (abs >= 1e6)  return sign + '$' + (abs/1e6).toFixed(1) + 'M';
-    return sign + '$' + Math.round(abs).toLocaleString();
-  };
-  const trendArrow = t => t === 'rising' ? '▲' : t === 'falling' ? '▼' : '→';
-  const trendColor = t => t === 'rising' ? '#00ff88' : t === 'falling' ? '#ff3355' : '#ffcc00';
-
-  // Mini sparkline SVG
-  const spark = (history, color = '#00ccff', h = 50) => {
-    if (!history || history.length < 2) return '';
-    const vals = history.map(d => d.v).filter(v => v != null);
-    if (vals.length < 2) return '';
-    const min = Math.min(...vals), max = Math.max(...vals);
-    const range = max - min || Math.abs(min) * 0.05 || 1;
-    const W = 200, H = h, P = 3;
-    const x = i => P + (i / (vals.length - 1)) * (W - P*2);
-    const y = v => H - P - ((v - min) / range) * (H - P*2);
-    const pts = vals.map((v,i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-    const fill = `${x(0).toFixed(1)},${H} ` + pts + ` ${x(vals.length-1).toFixed(1)},${H}`;
-    return `<svg width="${W}" height="${H}" style="display:block;width:100%;height:${H}px;">
-      <polygon points="${fill}" fill="${color}" opacity="0.12"/>
-      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.9"/>
-      <circle cx="${x(vals.length-1)}" cy="${y(vals[vals.length-1])}" r="2.5" fill="${color}"/>
-    </svg>`;
-  };
-
-  // Data card
-  const dataCard = (title, value, unit, change, changeLabel, history, color, desc) => {
-    const chgColor = change == null ? 'var(--text3)' : change > 0 ? '#00ff88' : change < 0 ? '#ff3355' : '#ffcc00';
-    return `<div class="panel" style="border-top:2px solid ${color};">
-      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">${title}</div>
-      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;">
-        <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:${color};">${value}</div>
-        <div style="font-size:11px;color:var(--text3);">${unit}</div>
-      </div>
-      ${change != null ? `<div style="font-size:11px;color:${chgColor};margin-bottom:6px;">${change > 0 ? '+' : ''}${fmt2(change)} ${changeLabel}</div>` : ''}
-      ${spark(history, color, 45)}
-      ${desc ? `<div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;">${desc}</div>` : ''}
-    </div>`;
-  };
-
-  // Section header
-  const secHdr = (icon, title, subtitle, color) => `
-    <div style="display:flex;align-items:center;gap:12px;margin:24px 0 12px;padding-bottom:8px;border-bottom:1px solid ${color}44;">
-      <div style="font-size:20px;">${icon}</div>
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
       <div>
-        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:${color};">${title}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px;">${subtitle}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:5px;">LOOKBACK</div>
+        <div style="display:flex;gap:5px;">${lbBtns}</div>
       </div>
+      <div>
+        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:5px;">DAY OF WEEK</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">${dowBtns}</div>
+      </div>
+      <div style="text-align:right;font-size:10px;color:var(--text3);">
+        <div>${profile.length} buckets · ~${nSessions} sessions</div>
+        <div style="margin-top:2px;">avg 5-min range · Central Time · top 10% trimmed</div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:flex-end;gap:1px;padding:18px 0 4px;overflow:hidden;margin-bottom:6px;">
+      ${bars}
+    </div>
+
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding:8px;background:var(--bg3);border-radius:4px;">
+      <div style="font-size:10px;">
+        <span style="color:var(--text3);">HIGHEST VOL: </span>
+        <span style="color:#ff3355;font-family:'Share Tech Mono',monospace;">${top3}</span>
+      </div>
+      <div style="font-size:10px;">
+        <span style="color:var(--text3);">LOWEST VOL: </span>
+        <span style="color:#00cc88;font-family:'Share Tech Mono',monospace;">${bot3}</span>
+      </div>
+    </div>
+    <div style="margin-top:6px;font-size:10px;color:var(--text3);">
+      <span style="display:inline-block;width:10px;height:10px;background:#ff3355;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>High vol &nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#ff8800;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Elevated &nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#ffcc00;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Normal &nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#00cc88;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Quiet
+    </div>`;
+}
+
+function renderVolatility(md){
+  const q=md.quotes||{};
+  const vs=q['^VIX'], v3=q['^VIX3M'], v6=q['^VIX6M'];
+  const vvix=q['^VVIX'], skew=q['^SKEW'], vxx=q['VXX']||{};
+  const spy=q['SPY']||{};
+  const vix=vs?.price||0;
+  const atm_iv = md.gex?.atm_iv || md.weekly_em?.[0]?.atm_iv;
+  const wem = md.weekly_em?.[0] || {};
+  const opt = md.options_summary || {};
+  const sd = typeof _sd !== 'undefined' ? _sd : [];
+
+  const vColor=vix<15?'#00ff88':vix<20?'#88cc00':vix<25?'#ffcc00':vix<35?'#ff8800':'#ff3355';
+  const vRegime=vix<15?'LOW VOL':vix<20?'CALM':vix<25?'ELEVATED':vix<35?'HIGH VOL':'EXTREME';
+  const vvixVal=vvix?.price||0, skewVal=skew?.price||0;
+  const vvixColor=vvixVal>120?'#ff3355':vvixVal>100?'#ff8800':vvixVal>85?'#ffcc00':'#00ff88';
+  const vvixLabel=vvixVal>120?'PANIC':vvixVal>100?'STRESSED':vvixVal>85?'ELEVATED':'CALM';
+  const skewColor=skewVal>145?'#ff3355':skewVal>135?'#ff8800':skewVal>125?'#ffcc00':'#00ff88';
+  const skewLabel=skewVal>145?'EXTREME TAIL':skewVal>135?'HIGH TAIL':skewVal>125?'ELEVATED':'NORMAL';
+  // Use last known IV: atm_iv (live) → static_wem_iv (last close) → null
+  const staticIv = wem.static_wem_iv||null;
+  const spyIv = atm_iv ? atm_iv*100 : (staticIv ? staticIv*100 : null);
+  const ivColor=spyIv>30?'#ff3355':spyIv>20?'#ff8800':spyIv>15?'#ffcc00':'#00ff88';
+
+  // ── ROW 1: Big vol cards ──────────────────────────────────────────────────
+  const bigVolCard=(label,value,sublabel,color,change,desc)=>`
+    <div class="panel" style="text-align:center;border-top:3px solid ${color};">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:${color};margin-bottom:8px;">${label}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:36px;font-weight:900;color:${color};">${value}</div>
+      <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:${color};margin-top:4px;padding:3px 8px;background:${color}22;border-radius:3px;display:inline-block;">${sublabel}</div>
+      ${change!=null?`<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text2);margin-top:6px;">${sign(change)}${fmt(change,2)} today</div>`:''}
+      <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.4;">${desc}</div>
     </div>`;
 
-  // Pull live quotes for Japanese stocks
-  const lq = window._macroMD?.quotes || {};
-  const japanStocks = [
-    { sym: '6758.T', name: 'Sony',         desc: 'AI/entertainment/sensors' },
-    { sym: '9984.T', name: 'SoftBank',     desc: 'AI/tech investment arm' },
-    { sym: '6861.T', name: 'Keyence',      desc: 'Factory automation' },
-    { sym: '6954.T', name: 'FANUC',        desc: 'Industrial robots' },
-    { sym: '8035.T', name: 'Tokyo Electron',desc: 'Semiconductor equipment' },
-    { sym: '6723.T', name: 'Renesas',      desc: 'Auto/industrial chips' },
-    { sym: '7203.T', name: 'Toyota',       desc: 'Robotics/EV/hydrogen' },
-    { sym: '6902.T', name: 'DENSO',        desc: 'Auto tech/sensors' },
-    { sym: 'NTDOY',  name: 'Nintendo',     desc: 'Consumer tech/IP' },
-    { sym: 'MFG',    name: 'Mitsubishi UFJ',desc: 'Japan banking/UST' },
-    { sym: 'NMR',    name: 'Nomura',       desc: 'Japan investment bank' },
-  ];
+  $('volMainRow').innerHTML=`
+    ${bigVolCard('VIX',fmt(vix,2),vRegime,vColor,vs?.change,'Equity vol. Options fear gauge.')}
+    ${bigVolCard('VVIX',vvixVal?fmt(vvixVal,1):'—',vvixLabel,vvixColor,vvix?.change,'Vol of vol — how erratic VIX is.')}
+    ${bigVolCard('SKEW',skewVal?fmt(skewVal,1):'—',skewLabel,skewColor,skew?.change,'Tail risk. High = crash protection demand.')}
+    ${bigVolCard('VXX',vxx.price?fmt(vxx.price,2):'—',vxx.price?(vxx.pct_change>2?'FEAR SPIKE':vxx.pct_change>0?'RISING':vxx.pct_change<-2?'COLLAPSING':'FALLING'):'—',vxx.price?(vxx.pct_change>2?'#ff3355':vxx.pct_change>0?'#ff8800':vxx.pct_change<-2?'#00ff88':'#88cc00'):'var(--text3)',vxx.change,'VXX ETF — short-term VIX futures.')}
+    ${bigVolCard('ATM IV',spyIv?fmt(spyIv,1)+'%':'—',spyIv?(spyIv>30?'EXPENSIVE':spyIv>20?'ELEVATED':spyIv>12?'NORMAL':'CHEAP'):'—',ivColor,null,'SPY implied vol from options chain.')}`;
 
-  // Treasury ownership data
-  const japanUST  = S.FDHBJA;
-  const chinaUST  = S.FDHBCHI;
-  const totalForeign = S.FDHBFIN;
+  // ── ROW 2A: Intraday Range vs ATR ────────────────────────────────────────
+  const atrEl=$('volRangeATR');
+  if(atrEl){
+    // Compute ATR from sd (daily_ohlcv rows)
+    const rows=sd.slice(0,21).filter(r=>r.close);
+    const trs=rows.slice(0,-1).map((r,i)=>{
+      const prev=rows[i+1];
+      if(!prev?.close)return r.high-r.low;
+      return Math.max(r.high-r.low, Math.abs(r.high-prev.close), Math.abs(r.low-prev.close));
+    }).filter(v=>v>0);
+    const atr5  = trs.length>=5  ? trs.slice(0,5).reduce((a,b)=>a+b,0)/5  : null;
+    const atr10 = trs.length>=10 ? trs.slice(0,10).reduce((a,b)=>a+b,0)/10 : null;
+    const atr20 = trs.length>=20 ? trs.slice(0,20).reduce((a,b)=>a+b,0)/20 : null;
+    const todayRow=rows[0];
+    const todayRange = todayRow ? (todayRow.high||0)-(todayRow.low||0) : (spy.high&&spy.low?spy.high-spy.low:null);
+    const liveRange = spy.high&&spy.low ? spy.high-spy.low : null;
+    const useRange = liveRange||todayRange;
+    const pctOfATR = useRange&&atr5 ? useRange/atr5*100 : null;
+    const rangeRemaining = atr5&&useRange ? Math.max(atr5-useRange,0) : null;
+    const rc=pctOfATR==null?'var(--text3)':pctOfATR>100?'#ff3355':pctOfATR>75?'#ff8800':pctOfATR>50?'#ffcc00':'#00ff88';
 
-  // Japan economy
-  const jpyusd    = S.DEXJPUS;
-  const jpn10y    = S.IRLTLT01JPM156N;
-  const jpnUnemp  = S.JPNURQPDS;
-  const jpnCpi    = S.JPNCPIALLMINMEI;
-  const jpnGdp    = S.JPNRGDPEXP;
-
-  // Crypto + dollar
-  const dxy       = S.DTWEXBGS;
-  const usdJpy    = S.DEXJPUS;
-  const usdCny    = S.DEXCHUS;
-
-  // Compute Japan vs China gap in UST holdings
-  const japanLatest = japanUST?.latest;
-  const chinaLatest = chinaUST?.latest;
-  const gapBillions = japanLatest && chinaLatest ? japanLatest - chinaLatest : null;
-
-  // Build Japan vs China holdings chart data
-  const buildComparisonChart = () => {
-    if (!japanUST?.history || !chinaUST?.history) return '';
-    const jHist = japanUST.history.slice(-36);
-    const cHist = chinaUST.history.slice(-36);
-    // Align by date
-    const dates = jHist.map(d => d.d);
-    const jVals = jHist.map(d => d.v);
-    const cVals = dates.map(d => {
-      const found = chinaUST.history.find(h => h.d === d);
-      return found ? found.v : null;
-    });
-
-    const allVals = [...jVals, ...cVals.filter(v => v != null)];
-    const minV = Math.min(...allVals) * 0.95;
-    const maxV = Math.max(...allVals) * 1.02;
-    const range = maxV - minV;
-    const W = 800, H = 180, PL = 60, PR = 20, PT = 20, PB = 30;
-    const iW = W - PL - PR, iH = H - PT - PB;
-    const x = i => PL + (i / (dates.length - 1)) * iW;
-    const y = v => PT + iH - ((v - minV) / range) * iH;
-
-    const jLine = jVals.map((v,i) => (i===0?'M':'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
-    const cLine = cVals.map((v,i) => v != null ? ((i===0||cVals[i-1]==null?'M':'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)) : '').filter(Boolean).join(' ');
-
-    // Label indices
-    const labelIdxs = [0, Math.floor(dates.length/4), Math.floor(dates.length/2), Math.floor(3*dates.length/4), dates.length-1];
-
-    return `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;">
-      <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+iH}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-      <line x1="${PL}" y1="${PT+iH}" x2="${PL+iW}" y2="${PT+iH}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-      ${[0,0.25,0.5,0.75,1].map(pct => {
-        const val = minV + pct * range;
-        const yy = y(val);
-        return `<line x1="${PL}" y1="${yy.toFixed(1)}" x2="${PL+iW}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-          <text x="${PL-5}" y="${(yy+4).toFixed(1)}" text-anchor="end" fill="rgba(255,255,255,0.3)" font-size="9" font-family="Share Tech Mono,monospace">$${(val/1000).toFixed(0)}B</text>`;
-      }).join('')}
-      ${labelIdxs.map(i => `<text x="${x(i).toFixed(1)}" y="${H-5}" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="9" font-family="Share Tech Mono,monospace">${dates[i]?.slice(0,7)||''}</text>`).join('')}
-      <path d="${jLine}" fill="none" stroke="#00ccff" stroke-width="2" opacity="0.9"/>
-      <path d="${cLine}" fill="none" stroke="#ff3355" stroke-width="2" opacity="0.9"/>
-      <text x="${PL+iW-60}" y="${y(jVals[jVals.length-1])-8}" fill="#00ccff" font-size="10" font-family="Orbitron,monospace">JAPAN</text>
-      <text x="${PL+iW-60}" y="${y(cVals.filter(v=>v!=null).slice(-1)[0]||minV)+14}" fill="#ff3355" font-size="10" font-family="Orbitron,monospace">CHINA</text>
-    </svg>`;
-  };
-
-  try {
-  el.innerHTML = `<div style="padding:16px 16px;max-width:1400px;margin:0 auto;">
-
-    <!-- THESIS HEADER -->
-    <div style="background:linear-gradient(135deg,rgba(255,204,0,0.06),rgba(0,204,255,0.03));border:1px solid rgba(255,204,0,0.2);border-radius:6px;padding:18px 20px;margin-bottom:20px;">
-      <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:3px;color:#ffcc00;margin-bottom:10px;">⬡ SOVEREIGN CHESS — THE GREAT REALIGNMENT</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#00ccff;letter-spacing:1px;margin-bottom:6px;">THE JAPAN THESIS</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.7;">Japan's decade-plus of stagnation ends as they become a pivotal partner in the US tech buildout. Their robotics, semiconductor, and manufacturing DNA positions them for a boom that rivals the 80s-90s — but this time as a <strong style="color:#00ccff;">strategic ally</strong>, not a competitor.</div>
-        </div>
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;letter-spacing:1px;margin-bottom:6px;">THE TREASURY THESIS</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.7;">The US wants its debt held by allies, not adversaries. Japan (#1 foreign holder) and the strategic displacement of China (#2) from US Treasuries is <strong style="color:#ffcc00;">not accidental</strong>. Watch the spread widen. This is the financial front of a 100-year dominance play.</div>
-        </div>
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#8855ff;letter-spacing:1px;margin-bottom:6px;">THE CRYPTO ENDGAME</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.7;">The US will not allow a rival reserve currency to survive. Bitcoin will be used, controlled, and ultimately replaced by a <strong style="color:#8855ff;">US-backed digital dollar</strong> — the full faith and credit of the United States, digitized. The "public execution" of crypto will make the lesson stick.</div>
-        </div>
-      </div>
-    </div>
-
-    ${secHdr('🏛️', 'US TREASURY OWNERSHIP — WHO HOLDS AMERICA\'S DEBT', 'Monthly TIC data from US Treasury via FRED · Japan vs China displacement', '#ffcc00')}
-
-    <!-- KEY METRICS ROW -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
-      <div class="panel" style="border-top:2px solid #00ccff;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">JAPAN HOLDINGS</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#00ccff;">${japanLatest ? '$' + (japanLatest/1000).toFixed(1) + 'T' : '—'}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">#1 Foreign Holder</div>
-        <div style="font-size:11px;color:${japanUST?.trend ? trendColor(japanUST.trend) : 'var(--text3)'};margin-top:4px;">${japanUST?.trend ? trendArrow(japanUST.trend) + ' ' + japanUST.trend : '—'}</div>
-      </div>
-      <div class="panel" style="border-top:2px solid #ff3355;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">CHINA HOLDINGS</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#ff3355;">${chinaLatest ? '$' + (chinaLatest/1000).toFixed(1) + 'T' : '—'}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">#2 Foreign Holder</div>
-        <div style="font-size:11px;color:${chinaUST?.trend ? trendColor(chinaUST.trend) : 'var(--text3)'};margin-top:4px;">${chinaUST?.trend ? trendArrow(chinaUST.trend) + ' ' + chinaUST.trend : '—'}</div>
-      </div>
-      <div class="panel" style="border-top:2px solid #ffcc00;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">JAPAN vs CHINA GAP</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#ffcc00;">${gapBillions ? '$' + Math.abs(gapBillions).toFixed(0) + 'B' : '—'}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">Japan leads by</div>
-        <div style="font-size:11px;color:${gapBillions > 0 ? '#00ccff' : '#ff3355'};margin-top:4px;">${gapBillions > 0 ? '▲ Japan ahead' : '▼ China ahead'}</div>
-      </div>
-      <div class="panel" style="border-top:2px solid #8855ff;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">TOTAL FOREIGN</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#8855ff;">${totalForeign?.latest ? '$' + (totalForeign.latest/1000).toFixed(1) + 'T' : '—'}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">All Foreign Holdings</div>
-        <div style="font-size:11px;color:${totalForeign?.trend ? trendColor(totalForeign.trend) : 'var(--text3)'};margin-top:4px;">${totalForeign?.trend ? trendArrow(totalForeign.trend) + ' ' + totalForeign.trend : '—'}</div>
-      </div>
-    </div>
-
-    <!-- JAPAN vs CHINA CHART -->
-    <div class="panel" style="margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#ffcc00;">⬡ JAPAN vs CHINA — US TREASURY HOLDINGS ($B)</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Monthly TIC data · Source: US Treasury via FRED</div>
-        </div>
-        <div style="display:flex;gap:16px;font-size:11px;font-family:'Share Tech Mono',monospace;">
-          <span style="color:#00ccff;">━━ Japan</span>
-          <span style="color:#ff3355;">━━ China</span>
-        </div>
-      </div>
-      ${buildComparisonChart()}
-      <div style="margin-top:12px;font-size:12px;color:var(--text2);line-height:1.7;padding:10px;background:rgba(255,204,0,0.04);border-radius:3px;border-left:3px solid #ffcc00;">
-        <strong style="color:#ffcc00;">What to watch:</strong> China has been reducing UST holdings since 2013 peak (~$1.3T). Japan has held steady and is now the clear #1. 
-        A sustained divergence — Japan growing, China shrinking — is the financial signature of the US-China decoupling. 
-        Every $100B China sells that Japan (or another ally) absorbs is a transfer of leverage.
-      </div>
-    </div>
-
-    ${secHdr('🗾', 'JAPAN ECONOMY — THE SLEEPING GIANT AWAKENS', 'Live FRED data · BOJ policy · Inflation era begins after 30 years', '#00ccff')}
-
-    <div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.1);border-radius:4px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
-      Japan spent 30+ years in deflationary stagnation — the very scenario the US fears. Now, for the first time since the 1990s, Japan has <strong style="color:#00ccff;">real inflation</strong>, a <strong style="color:#00ccff;">weak yen driving export competitiveness</strong>, a government actively pushing corporate governance reform, and the world's most sophisticated robotics and semiconductor equipment manufacturers sitting at the center of the AI buildout supply chain.
-      The BOJ's decade of negative rates created a massive carry trade. As rates normalize, that unwind creates volatility — but also signals a fundamental regime change in the Japanese economy.
-    </div>
-
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
-      ${dataCard('USD/JPY EXCHANGE RATE', jpyusd?.latest ? fmt1(jpyusd.latest) : '—', '¥ per $', jpyusd?.change, 'vs prev', jpyusd?.history, '#00ccff',
-        'Yen weakness = Japan exports cheaper globally. Drives corporate profits for Toyota, Sony, Nintendo. Also imports inflation — forcing BOJ to act.')}
-      ${dataCard('JAPAN 10Y BOND YIELD', jpn10y?.latest ? fmt2(jpn10y.latest) + '%' : '—', '', jpn10y?.change, 'pp vs prev', jpn10y?.history, '#ffcc00',
-        'BOJ held 10Y at near-zero for a decade via YCC. Rising yield = normalization. Watch for BOJ to lose control of the curve — that is the global volatility trigger.')}
-      ${dataCard('JAPAN UNEMPLOYMENT', jpnUnemp?.latest ? fmt1(jpnUnemp.latest) + '%' : '—', '', jpnUnemp?.change, 'pp vs prev', jpnUnemp?.history, '#00ff88',
-        'Japan unemployment near 50-year lows. Full employment + rising wages = domestic consumption story finally works. Critical for non-export GDP growth.')}
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
-      ${dataCard('JAPAN CPI (YoY)', jpnCpi?.latest ? fmt1(jpnCpi.latest) + '%' : '—', 'YoY', jpnCpi?.change_yoy, 'pp YoY chg', jpnCpi?.history, '#ff8800',
-        'Japan CPI above 2% for the first time since the 1990s. This is the end of deflation. For 30 years Japanese consumers hoarded cash because prices fell — that behavior is reversing.')}
-      ${dataCard('JAPAN REAL GDP GROWTH', jpnGdp?.latest ? fmt1(jpnGdp.latest) + '%' : '—', 'QoQ Ann.', jpnGdp?.change, 'pp vs prev Q', jpnGdp?.history, '#8855ff',
-        'Japan GDP oscillates between contraction and modest growth. The AI/tech buildout thesis says this breaks structurally higher as capex floods in and robotics drives productivity.')}
-      <div class="panel" style="border-top:2px solid #ffcc00;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:8px;">JAPAN TECH SECTOR</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Key names in the AI/robotics buildout</div>
-        ${japanStocks.slice(0,6).map(s => {
-          const q = lq[s.sym] || {};
-          const price = q.price ? '$' + q.price.toFixed(2) : '\u2014';
-          const chg = q.pct_change;
-          const chgColor = chg == null ? 'var(--text3)' : chg > 0 ? '#00ff88' : '#ff3355';
-          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">' +
-            '<div>' +
-              '<span style="font-family:Share Tech Mono,monospace;font-size:12px;color:var(--text);">' + s.name + '</span>' +
-              '<span style="font-size:9px;color:var(--text3);margin-left:6px;">' + s.desc + '</span>' +
-            '</div>' +
-            '<div style="text-align:right;">' +
-              '<div style="font-family:Share Tech Mono,monospace;font-size:12px;">' + price + '</div>' +
-              (chg != null ? '<div style="font-size:10px;color:' + chgColor + ';">' + (chg > 0 ? '+' : '') + chg.toFixed(2) + '%</div>' : '') +
-            '</div>' +
-          '</div>';
-        }).join('')}
-        <div style="font-size:10px;color:var(--text3);margin-top:6px;">Live prices via market data feed</div>
-      </div>
-    </div>
-
-    <!-- Rapidus & semiconductor sovereignty -->
-    <div class="panel" style="margin-bottom:16px;border-left:3px solid #00ccff;">
-      <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ccff;letter-spacing:2px;margin-bottom:8px;">⬡ JAPAN SEMICONDUCTOR SOVEREIGNTY — RAPIDUS & THE CHIP ALLIANCE</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:4px;">RAPIDUS</div>
-          Japan's moon-shot: 2nm chip fab by 2027 in partnership with IBM. Government-backed, strategically critical. Breaks decades of reliance on TSMC/Samsung. If successful, Japan becomes the third node in the US-allied semiconductor triangle (US design → TSMC/Japan fab → global supply).
-        </div>
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:4px;">TSMC JAPAN (JASM)</div>
-          TSMC's Kumamoto fab — $20B+ investment, subsidized by Japanese government. Already producing 12/16nm chips. Phase 2 planned. This is Japan becoming the backup fab location for the free world's chip supply — strategic redundancy against Taiwan scenarios.
-        </div>
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;margin-bottom:4px;">EQUIPMENT DOMINANCE</div>
-          Tokyo Electron (TEL), Screen Holdings, and Shin-Etsu already supply 20-30% of global semiconductor equipment and materials. Japan does not need to build fabs — they control the machines that build the chips. This is leverage the US cannot afford to lose.
-        </div>
-      </div>
-    </div>
-
-    ${secHdr('₿', 'THE CRYPTO ENDGAME — SUN TZU & THE DIGITAL DOLLAR', 'BTC dominance · CBDC progress · The strategic execution', '#8855ff')}
-
-    <div style="background:rgba(136,85,255,0.05);border:1px solid rgba(136,85,255,0.15);border-radius:4px;padding:14px 16px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8;">
-      The United States holds the reserve currency — the source of its global financial dominance. No rational actor in Washington will allow a decentralized alternative to meaningfully compete with the dollar. 
-      The strategy: <strong style="color:#8855ff;">use it, control it, replace it</strong>. Approve ETFs (legitimize). Buy Bitcoin reserves (control supply). Regulate on-ramps (control flow). Meanwhile build the CBDC infrastructure. 
-      When ready: trigger a crisis of confidence in crypto — regulatory, security, or geopolitical — and introduce the US Digital Dollar backed by the full faith and credit of the United States government. 
-      Bitcoin becomes the cautionary tale that sells the safe alternative. <strong style="color:#8855ff;">Sun Tzu: appear weak when you are strong.</strong>
-    </div>
-
-    <!-- Crypto metrics -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
-      ${(() => {
-        const btc = lq['BTC-USD'] || {};
-        const eth = lq['ETH-USD'] || {};
-        const dxyData = S.DTWEXBGS;
-        const cards = [
-          { label: 'BITCOIN', val: btc.price ? '$' + btc.price.toLocaleString('en-US', {maximumFractionDigits:0}) : '—', sub: btc.pct_change != null ? (btc.pct_change > 0 ? '+' : '') + btc.pct_change.toFixed(2) + '% today' : '', color: '#ff8800', note: 'Risk asset + liquidity signal. Inverse to dollar strength.' },
-          { label: 'ETHEREUM', val: eth.price ? '$' + eth.price.toLocaleString('en-US', {maximumFractionDigits:0}) : '—', sub: eth.pct_change != null ? (eth.pct_change > 0 ? '+' : '') + eth.pct_change.toFixed(2) + '% today' : '', color: '#8855ff', note: 'Smart contract platform. CBDC rails will likely use similar tech.' },
-          { label: 'TRADE-WEIGHTED DOLLAR', val: dxyData?.latest ? fmt1(dxyData.latest) : '—', sub: dxyData?.trend ? trendArrow(dxyData.trend) + ' ' + dxyData.trend : '', color: '#00ccff', note: 'Broad dollar index vs trading partners. Crypto trades inversely.' },
-          { label: 'USD/CNY', val: S.DEXCHUS?.latest ? fmt2(S.DEXCHUS.latest) : '—', sub: S.DEXCHUS?.trend ? trendArrow(S.DEXCHUS.trend) + ' ' + S.DEXCHUS.trend : '', color: '#ffcc00', note: 'Yuan vs dollar. China\'s currency manipulation tool and UST selling pressure indicator.' },
-        ];
-        return cards.map(c => `
-          <div class="panel" style="border-top:2px solid ${c.color};">
-            <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">${c.label}</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${c.color};margin-bottom:4px;">${c.val}</div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">${c.sub}</div>
-            <div style="font-size:11px;color:var(--text2);line-height:1.4;">${c.note}</div>
-          </div>`).join('');
-      })()}
-    </div>
-
-    <!-- CBDC Scoreboard -->
-    <div class="panel" style="margin-bottom:16px;">
-      <div style="font-family:'Orbitron',monospace;font-size:9px;color:#8855ff;letter-spacing:2px;margin-bottom:12px;">⬡ CBDC GLOBAL RACE — WHERE COUNTRIES STAND</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
-        ${[
-          { country: 'CHINA', cbdc: 'Digital Yuan (e-CNY)', status: 'LIVE', color: '#ff3355', detail: 'Fully deployed. 140M+ wallets. Used for domestic payments. Strategic test bed for replacing SWIFT.' },
-          { country: 'USA', cbdc: 'Digital Dollar / FedNow', color: '#00ccff', status: 'IN PROGRESS', detail: 'FedNow (2023) is the rails. Retail CBDC politically controversial. Executive orders signal intent. Watch Treasury/Fed coordination.' },
-          { country: 'EU', cbdc: 'Digital Euro', status: 'PILOT', color: '#ffcc00', detail: 'ECB pilot phase. 2025-2026 decision point. Designed to work alongside cash. Privacy protections politically required.' },
-          { country: 'JAPAN', cbdc: 'Digital Yen', status: 'PILOT', color: '#00ff88', detail: 'BOJ running pilot since 2021. Japan positioned as US CBDC ally — interoperability with digital dollar is the strategic prize.' },
-          { country: 'UK', cbdc: 'Digital Pound', status: 'RESEARCH', color: '#ffcc00', detail: 'HM Treasury + Bank of England consultation. Called "Britcoin" informally. Decision expected 2025-2026.' },
-          { country: 'RUSSIA', cbdc: 'Digital Ruble', status: 'PILOT', color: '#ff8800', detail: 'Accelerated post-sanctions. Designed to bypass SWIFT. Interoperability with China e-CNY = parallel financial system in progress.' },
-        ].map(c => `
-          <div style="background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${c.color};border-radius:3px;padding:10px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-              <div style="font-family:'Orbitron',monospace;font-size:9px;color:${c.color};">${c.country}</div>
-              <div style="font-family:'Orbitron',monospace;font-size:7px;padding:2px 6px;border:1px solid ${c.color}44;border-radius:2px;color:${c.color};">${c.status}</div>
-            </div>
-            <div style="font-size:10px;color:var(--text2);font-weight:600;margin-bottom:4px;">${c.cbdc}</div>
-            <div style="font-size:11px;color:var(--text3);line-height:1.5;">${c.detail}</div>
-          </div>`).join('')}
-      </div>
-    </div>
-
-    ${secHdr('🌍', 'DOLLAR SYSTEM ARCHITECTURE — THE FULL PICTURE', 'Exchange rates · Treasury demand · Petrodollar dynamics', '#00ff88')}
-
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
-      ${dataCard('USD/JPY', jpyusd?.latest ? fmt1(jpyusd.latest) : '—', '¥ per $1', jpyusd?.change, 'vs prev', jpyusd?.history, '#00ccff', 'Yen carry trade unwind = global volatility. BOJ normalization timeline is the key unknown.')}
-      ${dataCard('USD/CNY', S.DEXCHUS?.latest ? fmt2(S.DEXCHUS.latest) : '—', '¥ per $1', S.DEXCHUS?.change, 'vs prev', S.DEXCHUS?.history, '#ff3355', 'China manages yuan carefully. Devaluation = competitive pressure. Revaluation = sign of strength.')}
-      ${dataCard('USD/EUR', S.DEXUSEU?.latest ? fmt2(S.DEXUSEU.latest) : '—', '$ per €1', S.DEXUSEU?.change, 'vs prev', S.DEXUSEU?.history, '#ffcc00', 'Euro-dollar parity is a stress signal. EUR strength = dollar weakness = commodity tailwind.')}
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;">
-      ${dataCard('TRADE-WEIGHTED DOLLAR INDEX', S.DTWEXBGS?.latest ? fmt1(S.DTWEXBGS.latest) : '—', 'Index', S.DTWEXBGS?.change, 'vs prev', S.DTWEXBGS?.history, '#00ccff', 'Broadest measure of dollar strength vs all trading partners. Rising dollar = tighter global financial conditions, EM stress, commodity headwinds.')}
-      ${dataCard('GOLD (LONDON FIX)', S.GOLDAMGBD228NLBM?.latest ? '$' + S.GOLDAMGBD228NLBM.latest.toLocaleString('en-US',{maximumFractionDigits:0}) : '—', '$/oz', S.GOLDAMGBD228NLBM?.change, 'vs prev', S.GOLDAMGBD228NLBM?.history, '#ffcc00', 'Gold is the anti-dollar. Central banks (especially China, Russia, India) have been buying aggressively since 2022 sanctions showed dollar reserves can be frozen. De-dollarization in action.')}
-    </div>
-
-    <!-- AI Analysis button -->
-    <div class="panel" style="border-left:4px solid #ffcc00;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#ffcc00;">⬡ AI SOVEREIGN ANALYSIS</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Grok synthesizes the current geopolitical financial situation</div>
-        </div>
-        <button onclick="generateSovereignAI()" style="background:rgba(255,204,0,0.1);border:1px solid rgba(255,204,0,0.4);color:#ffcc00;padding:6px 14px;border-radius:3px;cursor:pointer;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;">⬡ GENERATE ANALYSIS</button>
-      </div>
-      <div id="sovereignAIText" style="font-size:13px;color:var(--text2);line-height:1.9;">
-        <span style="color:var(--text3);font-style:italic;">Click Generate Analysis to get a current AI synthesis of the sovereign chess board.</span>
-      </div>
-    </div>
-
-    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);text-align:right;padding:8px 0;">
-      Data: FRED (US Treasury TIC, BOJ, OECD) · Updated: ${data.updated ? new Date(data.updated).toLocaleString() : '—'} · ${data.seriesCount || Object.keys(S).length} of 64 series loaded <button onclick="renderSovereign(true)" style="margin-left:12px;background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.25);color:#ffcc00;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:Orbitron,monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH DATA</button>
-    </div>
-  </div>`;
-  } catch(sovereignErr) {
-    el.innerHTML = '<div style="padding:40px;text-align:center;color:#ff3355;">' +
-      '<div style="font-family:Orbitron,monospace;font-size:10px;margin-bottom:8px;">RENDER ERROR</div>' +
-      '<div style="font-size:12px;">' + sovereignErr.message + '</div></div>';
-    console.error('Sovereign render error:', sovereignErr);
-  }
-
-  // Auto-generate AI analysis
-  setTimeout(generateSovereignAI, 500);
-}
-
-async function generateSovereignAI() {
-  const el = document.getElementById('sovereignAIText');
-  if (!el) return;
-  el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Generating analysis...</span>';
-
-  const S = _sovereignData?.series || {};
-  const lq = window._macroMD?.quotes || {};
-  const btc = lq['BTC-USD'];
-  const jpyusd = S.DEXJPUS;
-  const japanUST = S.FDHBJA;
-  const chinaUST = S.FDHBCHI;
-  const dxy = S.DTWEXBGS;
-  const jpn10y = S.IRLTLT01JPM156N;
-
-  const context = `Current Sovereign Chess data:
-- Japan US Treasury holdings: $${japanUST?.latest ? (japanUST.latest/1000).toFixed(2) + 'T' : 'N/A'} (trend: ${japanUST?.trend || 'N/A'})
-- China US Treasury holdings: $${chinaUST?.latest ? (chinaUST.latest/1000).toFixed(2) + 'T' : 'N/A'} (trend: ${chinaUST?.trend || 'N/A'})
-- Japan vs China gap: $${japanUST?.latest && chinaUST?.latest ? ((japanUST.latest - chinaUST.latest)/1000).toFixed(2) + 'T Japan lead' : 'N/A'}
-- USD/JPY: ${jpyusd?.latest?.toFixed(2) || 'N/A'} (trend: ${jpyusd?.trend || 'N/A'})
-- Japan 10Y yield: ${jpn10y?.latest?.toFixed(2) || 'N/A'}% (trend: ${jpn10y?.trend || 'N/A'})
-- Trade-weighted dollar: ${dxy?.latest?.toFixed(1) || 'N/A'} (trend: ${dxy?.trend || 'N/A'})
-- Bitcoin: $${btc?.price ? btc.price.toLocaleString('en-US', {maximumFractionDigits:0}) : 'N/A'} (${btc?.pct_change ? (btc.pct_change > 0 ? '+' : '') + btc.pct_change.toFixed(2) + '%' : 'N/A'} today)`;
-
-  try {
-    const resp = await fetch('/ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system: `You are a geopolitical financial strategist with deep expertise in sovereign debt markets, currency wars, and the strategic use of financial systems as instruments of national power. You understand the long game being played between the US, Japan, and China over Treasury markets and reserve currency dominance. You also understand the crypto endgame thesis — that the US will ultimately use and then replace Bitcoin with a government-backed digital dollar. Write in clear, direct, analytical prose. 3-4 paragraphs. Be specific about what the current data signals. Connect dots that mainstream analysts miss.`,
-        messages: [{ role: 'user', content: `Here is the current sovereign financial data:\n\n${context}\n\nAnalyze the current state of the sovereign chess board. What are the data telling us about the Japan-US alliance, the China displacement from Treasuries, dollar dynamics, and where we are in the crypto endgame? What should a sophisticated investor be watching right now?` }],
-        max_tokens: 1200
-      })
-    });
-    const data = await resp.json();
-    const text = data.content || '';
-    if (el) {
-      el.innerHTML = text.split('\n\n').filter(p => p.trim()).map(p => `<p style="margin-bottom:14px;">${p.trim()}</p>`).join('');
+    let html='';
+    if(useRange!=null){
+      html+=`<div style="text-align:center;padding:10px;background:${rc}11;border:1px solid ${rc}33;border-radius:4px;margin-bottom:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">TODAY'S RANGE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:900;color:${rc};">$${fmt(useRange,2)}</div>
+        ${pctOfATR!=null?`<div style="font-family:'Orbitron',monospace;font-size:10px;color:${rc};margin-top:4px;">${fmt(pctOfATR,0)}% OF ATR(5)</div>`:''}
+      </div>`;
+      if(pctOfATR!=null){
+        const barW=Math.min(pctOfATR,100).toFixed(1);
+        html+=`<div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:8px;position:relative;">
+          <div style="width:${barW}%;height:100%;background:${rc};border-radius:4px;"></div>
+          <div style="position:absolute;left:100%;top:-3px;transform:translateX(-1px);width:2px;height:14px;background:rgba(255,255,255,0.3);"></div>
+        </div>`;
+      }
     }
-  } catch(e) {
-    if (el) el.innerHTML = `<span style="color:var(--text3);">Analysis unavailable: ${e.message}</span>`;
+    html+=`<div style="display:flex;flex-direction:column;gap:5px;">`;
+    [[atr5,'ATR(5) — 1wk avg'],[atr10,'ATR(10) — 2wk avg'],[atr20,'ATR(20) — 1mo avg']].forEach(([v,l])=>{
+      if(!v)return;
+      html+=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:12px;color:var(--text3);">${l}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--text);">$${fmt(v,2)}</span>
+      </div>`;
+    });
+    if(rangeRemaining!=null){
+      const rrc=rangeRemaining<1?'#00ff88':rangeRemaining<3?'#ffcc00':'var(--text2)';
+      html+=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:12px;color:var(--text3);">Range remaining</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${rrc};">$${fmt(rangeRemaining,2)}</span>
+      </div>`;
+    }
+    html+=`</div>`;
+    html+=`<div style="margin-top:8px;font-size:11px;color:var(--text3);">${pctOfATR!=null?(pctOfATR>100?'⚠ Range exceeded ATR — extended move. Mean reversion risk.':pctOfATR>75?'Day largely played out. Less opportunity remaining.':pctOfATR>50?'More than half of average range used.':'Early in range. More move likely ahead.'):'Awaiting price data.'}</div>`;
+    atrEl.innerHTML=html;
+  }
+
+  // ── ROW 2B: Expected Move Calculator ─────────────────────────────────────
+  const emEl=$('volExpectedMove');
+  if(emEl&&spyIv){
+    const spot=spy.price||wem.wem_mid||640;
+    const iv=spyIv/100;
+    const sqrt252=Math.sqrt(252), sqrt52=Math.sqrt(52), sqrt12=Math.sqrt(12);
+    const dailyEM  = spot*iv/sqrt252;
+    const weeklyEM = spot*iv/sqrt52;
+    const monthlyEM= spot*iv/sqrt12;
+    const dailyH=spot+dailyEM, dailyL=spot-dailyEM;
+    const wemH=wem.wem_high||spot+weeklyEM, wemL=wem.wem_low||spot-weeklyEM;
+    const spyPct=spy.pct_change||0;
+    const pctOfDailyEM=dailyEM?Math.abs(spyPct)/100*spot/dailyEM*100:null;
+
+    emEl.innerHTML=`
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="padding:8px;background:var(--bg3);border-radius:4px;border-left:3px solid ${ivColor};">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">DAILY EM (±1σ)</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${ivColor};">±$${fmt(dailyEM,2)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">$${fmt(dailyL,2)} — $${fmt(dailyH,2)}</div>
+          ${pctOfDailyEM!=null?`
+          <div style="margin-top:8px;">
+            <div style="position:relative;height:10px;background:var(--bg2);border-radius:5px;overflow:hidden;">
+              <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:rgba(255,255,255,0.25);z-index:2;"></div>
+              ${spyPct >= 0
+                ? `<div style="position:absolute;left:50%;top:0;width:${Math.min(pctOfDailyEM/2,50).toFixed(1)}%;height:100%;background:${pctOfDailyEM>80?"#ff3355":pctOfDailyEM>50?"#ff8800":"#00ff88"};border-radius:0 5px 5px 0;"></div>`
+                : `<div style="position:absolute;right:50%;top:0;width:${Math.min(pctOfDailyEM/2,50).toFixed(1)}%;height:100%;background:${pctOfDailyEM>80?"#ff3355":pctOfDailyEM>50?"#ff8800":"#00ff88"};border-radius:5px 0 0 5px;"></div>`
+              }
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:3px;">
+              <span style="font-size:9px;color:var(--text3);">▼ DN</span>
+              <span style="font-size:10px;color:${pctOfDailyEM>80?"#ff3355":pctOfDailyEM>50?"#ff8800":"#00ff88"};">${spyPct>=0?"▲":"▼"} ${fmt(pctOfDailyEM,0)}% used</span>
+              <span style="font-size:9px;color:var(--text3);">UP ▲</span>
+            </div>
+          </div>`:''}
+        </div>
+        <div style="padding:8px;background:var(--bg3);border-radius:4px;border-left:3px solid var(--cyan);">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">WEEKLY EM (±1σ)</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--cyan);">±$${fmt(weeklyEM,2)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">WEM: $${fmt(wemL,2)} — $${fmt(wemH,2)}</div>
+        </div>
+        <div style="padding:8px;background:var(--bg3);border-radius:4px;border-left:3px solid #8855ff;">
+          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">MONTHLY EM (±1σ)</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:#8855ff;">±$${fmt(monthlyEM,2)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">$${fmt(spot-monthlyEM,2)} — $${fmt(spot+monthlyEM,2)}</div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);">Based on ATM IV ${fmt(spyIv,1)}% · Spot $${fmt(spot,2)}</div>
+      </div>`;
+  } else if(emEl){
+    emEl.innerHTML='<div class="no-data">Awaiting IV data</div>';
+  }
+
+  // ── ROW 2C: IV Rank & Percentile ─────────────────────────────────────────
+  const ivRankEl=$('volIVRank');
+  if(ivRankEl&&spyIv){
+    // Use weekly_em history to compute IV rank
+    const wems=md.weekly_em||[];
+    const ivHistory=wems.map(w=>w.atm_iv?w.atm_iv*100:null).filter(v=>v!=null);
+    const ivRank=ivHistory.length>1?ivHistory.slice(1).filter(v=>v<spyIv).length/(ivHistory.length-1)*100:null;
+    const ivMin=ivHistory.length?Math.min(...ivHistory):null;
+    const ivMax=ivHistory.length?Math.max(...ivHistory):null;
+    const rankColor=ivRank==null?'var(--text3)':ivRank>80?'#ff3355':ivRank>60?'#ff8800':ivRank>40?'#ffcc00':'#00ff88';
+    const rankLabel=ivRank==null?'—':ivRank>80?'EXPENSIVE — sell premium':ivRank>60?'ELEVATED — favor spreads':ivRank>40?'NORMAL — neutral':ivRank>20?'CHEAP — buy premium':'VERY CHEAP — long vol';
+
+    ivRankEl.innerHTML=`
+      <div style="text-align:center;padding:12px;background:${rankColor}11;border:1px solid ${rankColor}33;border-radius:4px;margin-bottom:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">IV PERCENTILE</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:36px;font-weight:900;color:${rankColor};">${ivRank!=null?fmt(ivRank,0)+'%':'—'}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:${rankColor};margin-top:4px;">${rankLabel.split('—')[0].trim()}</div>
+      </div>
+      ${ivRank!=null?`<div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:8px;">
+        <div style="width:${fmt(ivRank,1)}%;height:100%;background:linear-gradient(90deg,#00ff88,#ffcc00,#ff3355);border-radius:4px;"></div>
+      </div>`:''}
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text3);">Current IV</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${rankColor};">${fmt(spyIv,1)}%</span>
+        </div>
+        ${ivMin!=null?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text3);">${ivHistory.length}wk Low</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#00ff88;">${fmt(ivMin,1)}%</span>
+        </div>`:''}
+        ${ivMax!=null?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;color:var(--text3);">${ivHistory.length}wk High</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#ff3355;">${fmt(ivMax,1)}%</span>
+        </div>`:''}
+        <div style="margin-top:6px;font-size:12px;color:var(--text2);line-height:1.5;">${rankLabel.includes('—')?rankLabel.split('—')[1].trim():rankLabel}</div>
+      </div>`;
+  }
+
+  // ── ROW 3A: VIX Term Structure ────────────────────────────────────────────
+  const mv=Math.max(vix,v3?.price||0,v6?.price||0,40);
+  $('volVixTerm').innerHTML=[{l:'VIX SPOT',d:vs},{l:'VIX 3M',d:v3},{l:'VIX 6M',d:v6}].map(({l,d})=>{
+    if(!d)return '';
+    const w=(d.price/mv*100).toFixed(1);
+    const c=d.price<20?'#00ff88':d.price<30?'#ffcc00':'#ff3355';
+    return `<div class="vix-row" style="margin-bottom:10px;">
+      <span class="vix-name">${l}</span>
+      <div class="vix-bar-wrap"><div class="vix-bar-fill" style="width:${w}%;background:${c}88"></div></div>
+      <span class="vix-val" style="color:${c}">${fmt(d.price,1)}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${d.change>0?'#ff3355':'#00ff88'};margin-left:6px;">${sign(d.change)}${fmt(d.change,2)}</span>
+    </div>`;
+  }).join('');
+
+  if(vs&&v3){
+    const isC=v3.price>vix;
+    const sc=isC?'#00ff88':'#ff8800';
+    const sdiff=((v3.price-vix)/vix*100).toFixed(2);
+    $('contangoBox').innerHTML=`
+      <div class="cond-row" style="margin-bottom:6px;">
+        <span class="cond-key">Structure</span>
+        <span style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;padding:3px 8px;border-radius:3px;color:${sc};background:${sc}22;border:1px solid ${sc}44;">${isC?'CONTANGO':'BACKWARDATION'}</span>
+      </div>
+      <div class="cond-row" style="margin-bottom:4px;">
+        <span class="cond-key">3M vs Spot</span>
+        <span class="cond-val" style="color:${sc}">${sign(v3.price-vix)}${fmt(v3.price-vix,2)} (${sdiff}%)</span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.5;">${isC?'Normal structure. Near-term fear lower than future expectations. Calm today.':'Inverted. Near-term fear exceeds future. Acute stress or event risk.'}</div>`;
+  }
+
+  // ── ROW 3B: Options Flow ──────────────────────────────────────────────────
+  const flowEl=$('volOptionsFlow');
+  if(flowEl){
+    const pcr=opt.pc_ratio_vol||0;
+    const pco=opt.pc_ratio_oi||0;
+    const cv=opt.call_volume||0, pv=opt.put_volume||0;
+    const co=opt.call_oi||0, po=opt.put_oi||0;
+    const totalV=(cv+pv)||1, totalO=(co+po)||1;
+    const callPctV=(cv/totalV*100).toFixed(1), putPctV=(pv/totalV*100).toFixed(1);
+    const pcrColor=pcr>1.5?'#ff3355':pcr>1.0?'#ff8800':pcr<0.7?'#00ff88':'#ffcc00';
+    const pcrLabel=pcr>1.5?'BEARISH — heavy put flow':pcr>1.0?'SLIGHTLY BEARISH':pcr<0.7?'BULLISH — call flow dominant':'NEUTRAL';
+    const fmtV=v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':String(v);
+
+    flowEl.innerHTML=`
+      <div style="text-align:center;padding:10px;background:${pcrColor}11;border:1px solid ${pcrColor}33;border-radius:4px;margin-bottom:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;">P/C RATIO (VOLUME)</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:900;color:${pcrColor};">${fmt(pcr,2)}</div>
+        <div style="font-size:11px;color:${pcrColor};margin-top:4px;">${pcrLabel}</div>
+      </div>
+      <div style="height:12px;background:var(--bg3);border-radius:6px;overflow:hidden;margin-bottom:8px;display:flex;">
+        <div style="width:${callPctV}%;background:#00ff88;border-radius:6px 0 0 6px;"></div>
+        <div style="width:${putPctV}%;background:#ff3355;border-radius:0 6px 6px 0;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:12px;">
+        <span style="color:#00ff88;">■ Calls ${callPctV}%</span>
+        <span style="color:#ff3355;">■ Puts ${putPctV}%</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;">
+        ${[['Call Vol',fmtV(cv),'#00ff88'],['Put Vol',fmtV(pv),'#ff3355'],['Call OI',fmtV(co),'#00ff8888'],['Put OI',fmtV(po),'#ff335588'],['P/C OI',fmt(pco,2),'var(--text2)']].map(([l,v,c])=>`
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+            <span style="color:var(--text3);">${l}</span>
+            <span style="font-family:'Share Tech Mono',monospace;color:${c};">${v}</span>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // ── ROW 3C: Signals ───────────────────────────────────────────────────────
+  const signals=[];
+  if(vix>30&&vvixVal>100) signals.push({c:'#ff3355',t:`VIX ${fmt(vix,1)} + VVIX ${fmt(vvixVal,1)} — double fear. VIX elevated AND unstable. Heightened realized vol ahead.`});
+  else if(vix>25) signals.push({c:'#ff8800',t:`VIX ${fmt(vix,1)} — above normal. Options premium rich. Favor selling premium or defined-risk spreads.`});
+  else if(vix<15) signals.push({c:'#00ff88',t:`VIX ${fmt(vix,1)} — very low. Complacency. Consider buying cheap protection here.`});
+  if(skewVal>140) signals.push({c:'#ff3355',t:`SKEW ${fmt(skewVal,1)} — extreme tail risk pricing. Institutions loading downside protection.`});
+  else if(skewVal>130) signals.push({c:'#ff8800',t:`SKEW ${fmt(skewVal,1)} — elevated. Market pricing meaningful crash risk.`});
+  if(vvixVal>110) signals.push({c:'#ff3355',t:`VVIX ${fmt(vvixVal,1)} — extreme. VIX itself is thrashing. Often marks panic peaks.`});
+  if(vs&&v3&&v3.price<vix) signals.push({c:'#ff8800',t:`VIX backwardation — near-term fear exceeds forward. Acute stress event in progress.`});
+  if(opt.pc_ratio_vol>1.5) signals.push({c:'#ff3355',t:`P/C ratio ${fmt(opt.pc_ratio_vol,2)} — heavy put buying. Bearish directional flow or defensive hedging.`});
+  else if(opt.pc_ratio_vol<0.7) signals.push({c:'#00ff88',t:`P/C ratio ${fmt(opt.pc_ratio_vol,2)} — call-heavy. Bullish directional flow dominant.`});
+  if(vxx.pct_change>5) signals.push({c:'#ff3355',t:`VXX +${fmt(vxx.pct_change,1)}% — short-term vol futures surging. Fear accelerating intraday.`});
+
+  $('volSignals').innerHTML=signals.length?signals.map(s=>`
+    <div style="display:flex;gap:10px;padding:9px 10px;border-left:3px solid ${s.c};background:${s.c}11;border-radius:0 4px 4px 0;margin-bottom:7px;font-size:13px;color:var(--text);line-height:1.5;">
+      <div style="width:8px;height:8px;border-radius:50%;background:${s.c};flex-shrink:0;margin-top:4px;box-shadow:0 0 5px ${s.c}88;"></div>
+      <span>${s.t}</span>
+    </div>`).join(''):`<div style="padding:12px;font-size:13px;color:var(--text2);">No unusual volatility signals. Market vol conditions appear normal.</div>`;
+
+  // ── ROW 4A: Session Vol Profile (5-min, historical) ─────────────────────
+  const profEl=$('volSessionProfile');
+  if(profEl) renderSessionVolProfile();
+
+  // ── ROW 4B: Range History Chart ───────────────────────────────────────────
+  const histEl=$('volRangeHistory');
+  if(histEl&&sd.length>1){
+    const recent=sd.slice(0,15).reverse();
+    const ranges2=recent.map(r=>({date:r.date,range:(r.high||0)-(r.low||0),close:r.close})).filter(r=>r.range>0);
+    if(ranges2.length){
+      const maxR=Math.max(...ranges2.map(r=>r.range));
+      const avgR=ranges2.reduce((a,r)=>a+r.range,0)/ranges2.length;
+      // ATR line from full sd
+      const trs2=sd.slice(0,21).map((r,i)=>{
+        if(!sd[i+1]?.close)return r.high-r.low;
+        return Math.max(r.high-r.low,Math.abs(r.high-sd[i+1].close),Math.abs(r.low-sd[i+1].close));
+      }).filter(v=>v>0);
+      const atr5b=trs2.length>=5?trs2.slice(0,5).reduce((a,b)=>a+b,0)/5:null;
+
+      histEl.innerHTML=`
+        <div style="display:flex;align-items:flex-end;gap:3px;height:100px;padding:4px 0;margin-bottom:8px;">
+          ${ranges2.map((r,i)=>{
+            const h=(r.range/maxR*88).toFixed(1);
+            const isToday=i===ranges2.length-1;
+            const c=r.range>avgR*1.3?'#ff3355':r.range>avgR*0.8?'#ffcc00':'#00ff88';
+            const d=new Date(r.date+'T12:00:00');
+            const lbl=['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()];
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+              <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${isToday?'var(--cyan)':c};">$${r.range.toFixed(1)}</div>
+              <div style="width:100%;height:${h}px;background:${isToday?'var(--cyan)':c};border-radius:2px 2px 0 0;opacity:${isToday?'1':'0.7'};"></div>
+              <div style="font-family:'Orbitron',monospace;font-size:7px;color:${isToday?'var(--cyan)':'var(--text3)'};">${lbl}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+          ${[
+            ['AVG RANGE',`$${fmt(avgR,2)}`,'var(--text2)'],
+            ['ATR(5)',atr5b?`$${fmt(atr5b,2)}`:'—','#ffcc00'],
+            ['MAX RANGE',`$${fmt(maxR,2)}`,'#ff3355'],
+          ].map(([l,v,c])=>`<div style="background:var(--bg3);border-radius:3px;padding:6px;text-align:center;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${l}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${c};">${v}</div>
+          </div>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--text3);">Last ${ranges2.length} sessions · green=below avg · yellow=avg · red=elevated</div>`;
+    } else {
+      histEl.innerHTML='<div class="no-data">Awaiting historical data</div>';
+    }
   }
 }
+
+
+function renderBonds(md){
+  const q = md.quotes || {};
+  const tnx = q['^TNX']||{}, irx = q['^IRX']||{}, fvx = q['^FVX']||{}, tyx = q['^TYX']||{};
+  const tlt = q['TLT']||{}, hyg = q['HYG']||{}, lqd = q['LQD']||{}, jnk = q['JNK']||{};
+  const ief = q['IEF']||{}, shy = q['SHY']||{};
+  const spy = q['SPY']||{}, qqq = q['QQQ']||{};
+  const mv = md.move_index;
+
+  const t2  = irx.price, t5 = fvx.price, t10 = tnx.price, t30 = tyx.price;
+  const s2_10 = t10 && t2  ? t10 - t2  : null;
+  const s5_30 = t30 && t5  ? t30 - t5  : null;
+  const chg10 = tnx.change || 0;
+  const chg2  = irx.change  || 0;
+
+  // Curve regime: steepener/flattener x bull/bear
+  const spreadChg = chg10 - chg2; // positive = steepening, negative = flattening
+  const ratesDir  = (chg10 + chg2) / 2; // positive = rates rising (bear), negative (bull)
+  let curveRegime, regimeColor, regimeDesc;
+  if(t10 && t2) {
+    if(ratesDir > 0.01 && spreadChg > 0.005)      { curveRegime='BEAR STEEPENER'; regimeColor='#ff3355'; regimeDesc='Rates rising, long-end faster. Inflation fear.'; }
+    else if(ratesDir > 0.01 && spreadChg <= 0.005) { curveRegime='BEAR FLATTENER'; regimeColor='#ff8800'; regimeDesc='Rates rising, short-end faster. Tightening cycle.'; }
+    else if(ratesDir < -0.01 && spreadChg > 0.005) { curveRegime='BULL STEEPENER'; regimeColor='#ffcc00'; regimeDesc='Rates falling, long-end faster. Recession pricing.'; }
+    else if(ratesDir < -0.01 && spreadChg <= 0.005){ curveRegime='BULL FLATTENER'; regimeColor='#00ff88'; regimeDesc='Rates falling, short-end faster. Safe haven bid.'; }
+    else                                             { curveRegime='SIDEWAYS';       regimeColor='var(--text3)'; regimeDesc='No clear directional regime today.'; }
+  } else { curveRegime='—'; regimeColor='var(--text3)'; regimeDesc='Awaiting yield data.'; }
+
+  // HYG/TLT ratio as risk gauge
+  const hygTlt = hyg.price && tlt.price ? hyg.price / tlt.price : null;
+  const hygTltChg = hyg.pct_change != null && tlt.pct_change != null ? hyg.pct_change - tlt.pct_change : null;
+  const creditRisk = hygTltChg === null ? 'UNKNOWN' : hygTltChg > 0.3 ? 'RISK-ON' : hygTltChg < -0.3 ? 'RISK-OFF' : 'NEUTRAL';
+  const creditColor = creditRisk==='RISK-ON'?'#00ff88':creditRisk==='RISK-OFF'?'#ff3355':'#ffcc00';
+
+  // HYG vs LQD spread (high yield vs investment grade divergence)
+  const hygLqdDiv = hyg.pct_change != null && lqd.pct_change != null ? hyg.pct_change - lqd.pct_change : null;
+
+  // Regime score
+  let score = 0;
+  const scoreItems = [];
+  if(s2_10 !== null) {
+    if(s2_10 < 0)         { score -= 2; scoreItems.push({c:'#ff3355', t:'Curve INVERTED'}); }
+    else if(s2_10 < 0.25) { score -= 1; scoreItems.push({c:'#ff8800', t:'Curve flat'}); }
+    else                  { score += 1; scoreItems.push({c:'#00ff88', t:'Curve normal/steep'}); }
+  }
+  if(curveRegime==='BEAR STEEPENER')      { score -= 2; scoreItems.push({c:'#ff3355', t:'Bear steepener active'}); }
+  else if(curveRegime==='BULL STEEPENER') { score -= 1; scoreItems.push({c:'#ffcc00', t:'Bull steepener — recession risk'}); }
+  else if(curveRegime==='BULL FLATTENER') { score += 1; scoreItems.push({c:'#00ff88', t:'Bull flattener — safe haven'}); }
+  if(creditRisk==='RISK-OFF') { score -= 2; scoreItems.push({c:'#ff3355', t:'Credit in risk-off mode'}); }
+  else if(creditRisk==='RISK-ON') { score += 1; scoreItems.push({c:'#00ff88', t:'Credit confirming risk-on'}); }
+  if(mv) {
+    if(mv.value > 130)      { score -= 2; scoreItems.push({c:'#ff3355', t:'MOVE extreme — bond stress'}); }
+    else if(mv.value > 100) { score -= 1; scoreItems.push({c:'#ff8800', t:'MOVE elevated'}); }
+    else                    { score += 1; scoreItems.push({c:'#00ff88', t:'MOVE calm'}); }
+  }
+  if(t10 > 4.5) { score -= 1; scoreItems.push({c:'#ff8800', t:'10Y above 4.5% — equity pressure'}); }
+
+  const regScore = score >= 2 ? 'RISK-ON' : score >= 0 ? 'NEUTRAL' : score >= -2 ? 'DEFENSIVE' : 'RISK-OFF';
+  const regScoreColor = score >= 2 ? '#00ff88' : score >= 0 ? '#ffcc00' : score >= -2 ? '#ff8800' : '#ff3355';
+
+  // ── REGIME SCORE ─────────────────────────────────────────────────────────
+  const regEl = $('bondsRegime');
+  if(regEl) {
+    let html = '<div style="text-align:center;padding:12px 0;margin-bottom:12px;border-bottom:1px solid var(--border);">';
+    html += '<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--text3);margin-bottom:6px;letter-spacing:2px;">RISK REGIME</div>';
+    html += '<div style="font-family:Share Tech Mono,monospace;font-size:26px;font-weight:900;color:'+regScoreColor+';">'+regScore+'</div>';
+    html += '<div style="font-family:Share Tech Mono,monospace;font-size:13px;color:var(--text3);margin-top:4px;">score: '+(score>=0?'+':'')+score+'</div>';
+    html += '</div>';
+    scoreItems.forEach(s => {
+      html += '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;">';
+      html += '<div style="width:6px;height:6px;border-radius:50%;background:'+s.c+';flex-shrink:0;box-shadow:0 0 4px '+s.c+'88;"></div>';
+      html += '<span style="font-size:12px;color:var(--text2);">'+s.t+'</span></div>';
+    });
+    regEl.innerHTML = html;
+  }
+
+  // ── NARRATIVE ────────────────────────────────────────────────────────────
+  const narEl = $('bondsNarrative');
+  if(narEl) {
+    const lines2 = [];
+    // Curve regime narrative
+    if(curveRegime !== '—') lines2.push({c:regimeColor, t:curveRegime+': '+regimeDesc});
+    // Spread narrative
+    if(s2_10 !== null) {
+      if(s2_10 < 0) lines2.push({c:'#ff3355', t:'2s10s INVERTED at '+fmt(s2_10,3)+'% — historically precedes recession by 12-18 months'});
+      else lines2.push({c:s2_10<0.5?'#ffcc00':'#00ff88', t:'2s10s spread at +'+fmt(s2_10,3)+'% — '+(s2_10<0.25?'very flat, watch for inversion':'curve healthy')});
+    }
+    // Credit narrative
+    if(hygTltChg !== null) {
+      if(hygTltChg > 0.5)        lines2.push({c:'#00ff88', t:'HYG outperforming TLT by '+fmt(hygTltChg,2)+'% — credit confirming risk appetite'});
+      else if(hygTltChg < -0.5)  lines2.push({c:'#ff3355', t:'TLT outperforming HYG by '+fmt(Math.abs(hygTltChg),2)+'% — flight to safety, credit stress'});
+      else                        lines2.push({c:'#ffcc00', t:'HYG/TLT spread neutral ('+fmt(hygTltChg,2)+'%) — no conviction in credit'});
+    }
+    // HYG vs LQD
+    if(hygLqdDiv !== null) {
+      if(hygLqdDiv > 0.3)       lines2.push({c:'#00ff88', t:'HYG outperforming LQD — junk bonds bid, risk appetite strong'});
+      else if(hygLqdDiv < -0.3) lines2.push({c:'#ff3355', t:'LQD outperforming HYG — quality flight, avoid risk assets'});
+    }
+    // MOVE
+    if(mv) {
+      if(mv.value > 130)      lines2.push({c:'#ff3355', t:'MOVE at '+fmt(mv.value,1)+' — extreme bond vol signals equity vulnerability'});
+      else if(mv.value > 100) lines2.push({c:'#ff8800', t:'MOVE at '+fmt(mv.value,1)+' — bond market unsettled, watch rate spikes'});
+      else                    lines2.push({c:'#00ff88', t:'MOVE at '+fmt(mv.value,1)+' — bond market calm, supportive for equities'});
+    }
+    // 10Y level
+    if(t10) {
+      if(t10 > 4.5)      lines2.push({c:'#ff3355', t:'10Y at '+fmt(t10,3)+'% — duration pressure on growth/tech; equity multiples compressed'});
+      else if(t10 > 4.0) lines2.push({c:'#ff8800', t:'10Y at '+fmt(t10,3)+'% — elevated but manageable; watch for further moves'});
+      else               lines2.push({c:'#00ff88', t:'10Y at '+fmt(t10,3)+'% — supportive level for risk assets'});
+    }
+    narEl.innerHTML = lines2.map(l =>
+      '<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);">'
+      +'<div style="width:8px;height:8px;border-radius:50%;background:'+l.c+';flex-shrink:0;margin-top:3px;box-shadow:0 0 6px '+l.c+'88;"></div>'
+      +'<span style="font-size:13px;color:var(--text2);line-height:1.5;">'+l.t+'</span></div>'
+    ).join('') || '<div class="no-data">Awaiting data</div>';
+  }
+
+  // ── YIELD CURVE ──────────────────────────────────────────────────────────
+  const yieldEl = $('bondsYieldCurve');
+  if(yieldEl) {
+    const pts = [{l:'2YR',p:t2,c:irx.change},{l:'5YR',p:t5,c:fvx.change},{l:'10YR',p:t10,c:tnx.change},{l:'30YR',p:t30,c:tyx.change}].filter(y=>y.p);
+    const mx = pts.length ? Math.max(...pts.map(y=>y.p)) : 5;
+    const mn = pts.length ? Math.min(...pts.map(y=>y.p)) : 0;
+    const rng = mx - mn || 0.01;
+    const rc = v => v > 0 ? '#ff3355' : v < 0 ? '#00ff88' : 'var(--text2)';
+    let html = pts.map(y => {
+      const w = ((y.p-mn)/rng*70+10).toFixed(1);
+      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+        +'<span style="font-family:Orbitron,monospace;font-size:9px;color:var(--text3);width:32px;">'+y.l+'</span>'
+        +'<div style="flex:1;height:10px;background:var(--bg3);border-radius:2px;overflow:hidden;">'
+        +'<div style="width:'+w+'%;height:100%;background:'+rc(y.c)+';opacity:0.7;border-radius:2px;"></div></div>'
+        +'<span style="font-family:Share Tech Mono,monospace;font-size:14px;font-weight:bold;color:'+rc(y.c)+';width:50px;text-align:right;">'+fmt(y.p,3)+'%</span>'
+        +'<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:'+rc(y.c)+';width:48px;text-align:right;">'+(y.c!=null?(y.c>=0?'+':'')+fmt(y.c,3):'')+'</span>'
+        +'</div>';
+    }).join('');
+    // 2s10s spread bar
+    if(s2_10 !== null) {
+      const sc = s2_10 < 0 ? '#ff3355' : s2_10 < 0.25 ? '#ff8800' : '#00ff88';
+      const sl = s2_10 < 0 ? 'INVERTED' : s2_10 < 0.25 ? 'FLAT' : s2_10 < 0.75 ? 'NORMAL' : 'STEEP';
+      html += '<div style="margin-top:12px;padding:10px;background:'+sc+'11;border:1px solid '+sc+'33;border-radius:4px;text-align:center;">'
+        +'<div style="font-family:Orbitron,monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">2s10s SPREAD</div>'
+        +'<div style="font-family:Share Tech Mono,monospace;font-size:22px;font-weight:900;color:'+sc+';">'+(s2_10>=0?'+':'')+fmt(s2_10,3)+'%</div>'
+        +'<div style="font-family:Orbitron,monospace;font-size:9px;color:'+sc+';margin-top:2px;">'+sl+'</div></div>';
+    }
+    yieldEl.innerHTML = html || '<div class="no-data">Awaiting yield data</div>';
+  }
+
+  // ── CURVE REGIME + INTRADAY ───────────────────────────────────────────────
+  const spreadEl = $('bondsSpread');
+  if(spreadEl) {
+    let html = '<div style="margin-bottom:12px;padding:12px;background:'+regimeColor+'11;border:1px solid '+regimeColor+'33;border-radius:4px;">'
+      +'<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;">CURVE REGIME TODAY</div>'
+      +'<div style="font-family:Share Tech Mono,monospace;font-size:18px;font-weight:bold;color:'+regimeColor+';">'+curveRegime+'</div>'
+      +'<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+regimeDesc+'</div></div>';
+    // Intraday moves
+    const rc = v => v > 0 ? '#ff3355' : v < 0 ? '#00ff88' : 'var(--text2)';
+    const irow = (lbl, val, chg) => '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">'
+      +'<span style="font-family:Orbitron,monospace;font-size:9px;color:var(--text3);">'+lbl+'</span>'
+      +'<span style="font-family:Share Tech Mono,monospace;font-size:14px;font-weight:bold;">'+fmt(val,3)+'%</span>'
+      +'<span style="font-family:Share Tech Mono,monospace;font-size:12px;color:'+rc(chg)+';">'+(chg>=0?'+':'')+fmt(chg,3)+'</span>'
+      +'<span style="font-size:10px;color:'+rc(chg)+';">'+(chg>0.05?'▲ RISING':chg<-0.05?'▼ FALLING':'— FLAT')+'</span></div>';
+    html += '<div style="font-family:Orbitron,monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;margin-top:4px;">INTRADAY RATE MOVES</div>';
+    if(t2)  html += irow('2YR',  t2,  chg2);
+    if(t10) html += irow('10YR', t10, chg10);
+    if(t30) html += irow('30YR', t30, tyx.change||0);
+    // Spread change narrative
+    if(t10 && t2) {
+      const sc = spreadChg > 0.01 ? '#ff8800' : spreadChg < -0.01 ? '#00ccff' : 'var(--text3)';
+      html += '<div style="margin-top:10px;padding:6px 8px;background:var(--bg3);border-radius:3px;font-size:12px;color:'+sc+';">'
+        +(spreadChg > 0.01 ? '↗ Curve steepening today — long-end rising faster' : spreadChg < -0.01 ? '↘ Curve flattening today — short-end rising faster' : '→ Curve movement minimal today')
+        +'</div>';
+    }
+    spreadEl.innerHTML = html;
+  }
+
+  // ── CREDIT RISK GAUGE ─────────────────────────────────────────────────────
+  const creditEl = $('bondsCredit');
+  if(creditEl) {
+    const pc = v => v > 0 ? '#00ff88' : v < 0 ? '#ff3355' : 'var(--text2)';
+    let html = '<div style="text-align:center;margin-bottom:12px;padding:10px;background:'+creditColor+'11;border:1px solid '+creditColor+'33;border-radius:4px;">'
+      +'<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;">CREDIT SIGNAL</div>'
+      +'<div style="font-family:Share Tech Mono,monospace;font-size:22px;font-weight:900;color:'+creditColor+';">'+creditRisk+'</div>';
+    if(hygTltChg !== null) html += '<div style="font-size:12px;color:var(--text3);margin-top:2px;">HYG vs TLT: '+(hygTltChg>=0?'+':'')+fmt(hygTltChg,2)+'%</div>';
+    html += '</div>';
+    // ETF rows
+    [[hyg,'HYG','Hi Yield'],[lqd,'LQD','IG Corp'],[jnk,'JNK','Junk'],[tlt,'TLT','20yr+']].forEach(([d,sym,name]) => {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">'
+        +'<div><span style="font-family:Orbitron,monospace;font-size:9px;color:var(--text2);">'+sym+'</span>'
+        +' <span style="font-size:10px;color:var(--text3);">'+name+'</span></div>'
+        +'<div style="text-align:right;">'
+        +'<div style="font-family:Share Tech Mono,monospace;font-size:13px;">'+(d.price?'$'+fmt(d.price,2):'—')+'</div>'
+        +'<div style="font-size:11px;color:'+pc(d.change)+';">'+(d.pct_change!=null?(d.pct_change>=0?'+':'')+fmt(d.pct_change,2)+'%':'—')+'</div>'
+        +'</div></div>';
+    });
+    // HYG/LQD divergence note
+    if(hygLqdDiv !== null && Math.abs(hygLqdDiv) > 0.2) {
+      const dc = hygLqdDiv > 0 ? '#00ff88' : '#ff3355';
+      html += '<div style="margin-top:8px;padding:6px 8px;background:'+dc+'11;border-radius:3px;font-size:12px;color:'+dc+';">'
+        +(hygLqdDiv > 0.3 ? 'HYG beating LQD — junk bid, risk appetite intact' : 'LQD beating HYG — quality flight, credit stress building')
+        +'</div>';
+    }
+    creditEl.innerHTML = html;
+  }
+
+  // ── TREASURY ETFs ─────────────────────────────────────────────────────────
+  const treasEl = $('bondsTreasury');
+  if(treasEl) {
+    const pc = v => v > 0 ? '#00ff88' : v < 0 ? '#ff3355' : 'var(--text2)';
+    let html = '';
+    [[shy,'SHY','1-3yr Short'],[ief,'IEF','7-10yr Mid'],[tlt,'TLT','20yr+ Long']].forEach(([d,sym,name]) => {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);">'
+        +'<div><div style="font-family:Orbitron,monospace;font-size:10px;color:var(--text2);">'+sym+'</div>'
+        +'<div style="font-size:11px;color:var(--text3);">'+name+'</div></div>'
+        +'<div style="text-align:right;">'
+        +'<div style="font-family:Share Tech Mono,monospace;font-size:15px;font-weight:bold;">'+(d.price?'$'+fmt(d.price,2):'—')+'</div>'
+        +'<div style="font-size:11px;color:'+pc(d.change)+';">'+(d.pct_change!=null?(d.pct_change>=0?'+':'')+fmt(d.pct_change,2)+'%':'—')+'</div>'
+        +'</div></div>';
+    });
+    if(mv) {
+      const mc = mv.value>130?'#ff3355':mv.value>100?'#ff8800':mv.value>80?'#ffcc00':'#00ff88';
+      html += '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--bg3);border-radius:3px;">'
+        +'<div><div style="font-family:Orbitron,monospace;font-size:9px;color:var(--text3);">MOVE INDEX</div>'
+        +'<div style="font-size:11px;color:var(--text3);">Bond vol gauge</div></div>'
+        +'<div style="text-align:right;">'
+        +'<div style="font-family:Share Tech Mono,monospace;font-size:20px;font-weight:bold;color:'+mc+';">'+fmt(mv.value,1)+'</div>'
+        +'<div style="font-family:Orbitron,monospace;font-size:8px;color:'+mc+';">'+(mv.value>130?'EXTREME':mv.value>100?'ELEVATED':mv.value>80?'ABOVE AVG':'CALM')+'</div>'
+        +'</div></div>';
+    }
+    treasEl.innerHTML = html || '<div class="no-data">Awaiting data</div>';
+  }
+
+  // ── CROSS-ASSET SIGNALS ───────────────────────────────────────────────────
+  const sigEl = $('bondsSignals');
+  if(sigEl) {
+    const sigs = [];
+    // Yields vs equities
+    if(t10 && qqq.pct_change != null) {
+      if(chg10 > 0.05 && qqq.pct_change < -0.5)
+        sigs.push({c:'#ff3355', t:'10Y rising + QQQ falling — duration pressure. Tech vulnerable.'});
+      else if(chg10 > 0.05 && qqq.pct_change > 0.5)
+        sigs.push({c:'#ffcc00', t:'10Y rising with QQQ — equities ignoring rate pressure for now.'});
+      else if(chg10 < -0.05 && qqq.pct_change > 0.5)
+        sigs.push({c:'#00ff88', t:'Yields falling + QQQ rising — soft landing narrative confirmed.'});
+    }
+    if(t10 && hyg.pct_change != null) {
+      if(chg10 > 0.05 && hyg.pct_change < -0.3)
+        sigs.push({c:'#ff3355', t:'Yields up + HYG down — tightening liquidity. Danger zone.'});
+      else if(chg10 < -0.05 && hyg.pct_change > 0.3)
+        sigs.push({c:'#00ff88', t:'Yields falling + HYG rising — soft landing. Risk-on confirmed.'});
+    }
+    if(spy.pct_change != null && tlt.pct_change != null) {
+      if(spy.pct_change < -1 && tlt.pct_change > 0.3)
+        sigs.push({c:'#ff8800', t:'SPY down + TLT up — classic risk-off. But check if credit confirms.'});
+      else if(spy.pct_change < -1 && hyg.pct_change != null && hyg.pct_change < 0)
+        sigs.push({c:'#ff3355', t:'SPY + HYG both falling — credit confirming equity selloff. Risk real.'});
+      else if(spy.pct_change < -1 && hyg.pct_change != null && hyg.pct_change > -0.1)
+        sigs.push({c:'#ffcc00', t:'SPY falling but HYG holding — credit not confirming. May be equity-specific.'});
+    }
+    // Curve steepening + equities signal
+    if(curveRegime === 'BEAR STEEPENER' && spy.pct_change != null && spy.pct_change < 0)
+      sigs.push({c:'#ff3355', t:'Bear steepener + SPY falling — inflation/growth stagflation fear. Defensive.'});
+    if(curveRegime === 'BULL STEEPENER')
+      sigs.push({c:'#ffcc00', t:'Bull steepener — bond market pricing recession. Watch cyclicals.'});
+    if(!sigs.length)
+      sigs.push({c:'var(--text3)', t:'No strong cross-asset signal today. Monitor for divergences.'});
+    sigEl.innerHTML = sigs.map(s =>
+      '<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);">'
+      +'<div style="width:8px;height:8px;border-radius:50%;background:'+s.c+';flex-shrink:0;margin-top:3px;box-shadow:0 0 6px '+s.c+'88;"></div>'
+      +'<span style="font-size:13px;color:var(--text2);line-height:1.5;">'+s.t+'</span></div>'
+    ).join('');
+  }
+  try { renderBondsAdditions(md); } catch(e) { console.warn("bondsAdditions:", e); }
+}
+
+// ─── GEX TAB ADDITIONS ───────────────────────────────────────────────────────
