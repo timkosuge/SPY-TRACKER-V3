@@ -41,6 +41,13 @@ export async function onRequest(context) {
       }), { headers });
     }
 
+    if (type === 'list') {
+      // List all available intraday keys so client can find the most recent
+      const list = await kv.list({ prefix: 'gex:intraday:' });
+      const dates = (list.keys || []).map(k => k.name.replace('gex:intraday:', '')).sort().reverse();
+      return new Response(JSON.stringify({ dates }), { headers });
+    }
+
     return new Response(JSON.stringify({ error: 'Unknown type', snapshots: [] }), { headers });
 
   } catch(e) {
