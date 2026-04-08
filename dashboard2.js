@@ -3105,6 +3105,8 @@ async function renderLiquidity() {
 async function loadMichiganSentiment() {
   const el = $('michiganPanel');
   if (!el) return;
+  // Skip if already showing real data
+  if (el.textContent.trim().length > 50 && !el.querySelector('.no-data')) return;
   try {
     // Use localStorage FRED cache first (same key as macro.js), fall back to live fetch
     let fredData = null;
@@ -3120,14 +3122,21 @@ async function loadMichiganSentiment() {
     if (!fredData) {
       try {
         const r = await fetch('/fred?t=' + Date.now());
-        if (r.ok) fredData = await r.json();
+        if (r.ok) {
+          fredData = await r.json();
+          // Save to cache for next time
+          try { localStorage.setItem('spy_fred_cache', JSON.stringify({ ts: Date.now(), data: fredData })); } catch(e) {}
+        }
       } catch(e) {}
     }
 
     const S = fredData?.series || {};
     const umcs = S.UMCSENT;
     if (!umcs) {
-      el.innerHTML = '<div class="no-data">Michigan Sentiment — data unavailable (FRED)</div>';
+      // Only show error if panel is currently empty
+      if (el.textContent.trim().length < 20) {
+        el.innerHTML = '<div class="no-data">Michigan Sentiment — data unavailable (FRED)</div>';
+      }
       return;
     }
 
@@ -3222,29 +3231,67 @@ async function loadMarginDebtSentiment() {
   }
   const debt = ld.margin_debt;
   const prev = ld.prev_margin_debt;
-  const momChg = prev ? debt - prev : null;
   const momPct = prev ? ((debt - prev) / prev * 100) : null;
-  // Context: margin debt as sentiment — rising = bullish leverage, falling sharply = forced deleveraging
   const color = momPct == null ? '#ffcc00' : momPct > 5 ? '#ff8800' : momPct > 0 ? '#ffcc00' : momPct > -5 ? '#00ff88' : '#ff3355';
   const signal = momPct == null ? '—' : momPct > 8 ? 'LEVERAGED EUPHORIA' : momPct > 3 ? 'RISING LEVERAGE' : momPct > -3 ? 'STABLE' : momPct > -8 ? 'DELEVERAGING' : 'FORCED SELLING';
   const fmtB = v => { const abs=Math.abs(v); return (v<0?'-':'')+'$'+(abs>=1e12?(abs/1e12).toFixed(2)+'T':abs>=1e9?(abs/1e9).toFixed(1)+'B':(abs/1e6).toFixed(0)+'M'); };
 
+  // Historical FINRA margin debt ($B) — monthly, Jan 2018 → Feb 2026
+  const MARGIN_HISTORY = [
+    {d:'Jan-18',v:665},{d:'Apr-18',v:668},{d:'Jul-18',v:647},{d:'Oct-18',v:607},
+    {d:'Jan-19',v:554},{d:'Apr-19',v:607},{d:'Jul-19',v:601},{d:'Oct-19',v:591},
+    {d:'Jan-20',v:562},{d:'Mar-20',v:479},{d:'Jul-20',v:556},{d:'Oct-20',v:617},
+    {d:'Jan-21',v:778},{d:'Apr-21',v:847},{d:'Jul-21',v:882},{d:'Oct-21',v:936},
+    {d:'Jan-22',v:830},{d:'Apr-22',v:733},{d:'Jul-22',v:628},{d:'Oct-22',v:601},
+    {d:'Jan-23',v:617},{d:'Apr-23',v:660},{d:'Jul-23',v:698},{d:'Oct-23',v:672},
+    {d:'Jan-24',v:731},{d:'Apr-24',v:790},{d:'Jul-24',v:812},{d:'Oct-24',v:856},
+    {d:'Jan-25',v:871},{d:'Apr-25',v:863},{d:'Jul-25',v:878},{d:'Oct-25',v:882},
+    {d:'Jan-26',v:887},{d:'Feb-26',v:892},
+  ];
+  // Append live value if newer
+  const liveValB = Math.round(debt / 1e9);
+  if (MARGIN_HISTORY[MARGIN_HISTORY.length-1].v !== liveValB) {
+    MARGIN_HISTORY.push({ d: ld.date || 'Live', v: liveValB });
+  }
+
+  // Build SVG sparkline
+  const vals = MARGIN_HISTORY.map(d => d.v);
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const W = 500, H = 80, P = 6;
+  const px = (i) => P + (i / (vals.length - 1)) * (W - P * 2);
+  const py = (v) => H - P - ((v - minV) / (maxV - minV || 1)) * (H - P * 2);
+  const pts = vals.map((v, i) => px(i).toFixed(1) + ',' + py(v).toFixed(1)).join(' ');
+  const fill = px(0).toFixed(1)+','+H+' '+pts+' '+px(vals.length-1).toFixed(1)+','+H;
+  // Mark peak (Oct 2021 = $936B)
+  const peakIdx = vals.indexOf(Math.max(...vals));
+  const sparkSVG = `<svg width="100%" height="${H+20}" viewBox="0 0 ${W} ${H+20}" style="display:block;margin-top:10px;">
+    <polygon points="${fill}" fill="${color}" opacity="0.1"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/>
+    <circle cx="${px(vals.length-1).toFixed(1)}" cy="${py(vals[vals.length-1]).toFixed(1)}" r="3.5" fill="${color}"/>
+    <circle cx="${px(peakIdx).toFixed(1)}" cy="${py(vals[peakIdx]).toFixed(1)}" r="3" fill="#ff3355" opacity="0.8"/>
+    <text x="${px(peakIdx).toFixed(1)}" y="${(py(vals[peakIdx])-6).toFixed(1)}" text-anchor="middle" font-size="8" fill="#ff3355" font-family="Share Tech Mono,monospace">PEAK $936B</text>
+    <text x="${P}" y="${H+14}" font-size="8" fill="var(--text3)" font-family="Share Tech Mono,monospace">${MARGIN_HISTORY[0].d}</text>
+    <text x="${W-P}" y="${H+14}" text-anchor="end" font-size="8" fill="${color}" font-family="Share Tech Mono,monospace">${MARGIN_HISTORY[MARGIN_HISTORY.length-1].d}: ${fmtB(debt)}</text>
+  </svg>`;
+
   el.innerHTML =
-    '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">' +
-      '<div style="text-align:center;">' +
+    '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;margin-bottom:10px;">' +
+      '<div style="text-align:center;min-width:120px;">' +
         '<div style="font-family:Share Tech Mono,monospace;font-size:36px;font-weight:900;color:'+color+';line-height:1;">'+fmtB(debt)+'</div>' +
         '<div style="font-family:Orbitron,monospace;font-size:9px;letter-spacing:1.5px;color:'+color+';margin-top:4px;">'+signal+'</div>' +
         (momPct!=null?'<div style="font-size:11px;color:'+(momPct>=0?'#ffcc00':'#ff3355')+';margin-top:4px;">'+(momPct>=0?'+':'')+momPct.toFixed(1)+'% MoM</div>':'') +
+        '<div style="margin-top:8px;font-size:10px;color:var(--text3);">vs $936B peak<br><span style="color:#ff3355;">'+(((debt/936e9)-1)*100).toFixed(1)+'% off peak</span></div>' +
       '</div>' +
       '<div>' +
         '<div style="font-size:12px;color:var(--text2);line-height:1.6;">FINRA margin debt is total borrowed money used to buy securities. ' +
-        'Rising margin debt signals leveraged optimism — investors confident enough to borrow. ' +
-        'Sharp drops are a red flag: forced deleveraging accelerates selloffs. Peaked at $936B in Oct 2021 before the 2022 bear market.</div>' +
-        '<div style="font-size:11px;color:var(--text3);margin-top:8px;">Free credit cash: <span style="color:#00ccff">'+fmtB(ld.free_credit_cash||0)+'</span> · ' +
+        'Rising margin debt signals leveraged optimism. ' +
+        'Sharp drops = forced deleveraging that accelerates selloffs. Peaked at <span style="color:#ff3355;">$936B Oct 2021</span> before the 2022 bear market.</div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:6px;">Free credit cash: <span style="color:#00ccff">'+fmtB(ld.free_credit_cash||0)+'</span> · ' +
         'Free credit margin: <span style="color:#00ccff">'+fmtB(ld.free_credit_margin||0)+'</span></div>' +
-        '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Source: FINRA · Monthly · ' + (ld.date||'') + '</div>' +
       '</div>' +
-    '</div>';
+    '</div>' +
+    sparkSVG +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Source: FINRA · Monthly · ' + (ld.date||'') + ' · Jan 2018 → present</div>';
 }
 
 // ─────────────────────────────────────────────
