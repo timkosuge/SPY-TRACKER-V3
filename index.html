@@ -6036,17 +6036,33 @@ function handleImagePaste(e, target) {
       if (!file) continue;
       const reader = new FileReader();
       reader.onload = (ev) => {
-        const dataUrl = ev.target.result;
-        // Warn if too large for DB (>500KB base64)
-        if (dataUrl.length > 600000) {
-          alert('Image is too large to send (max ~450KB). Try a screenshot of a smaller area or compress it first.');
-          return;
-        }
-        if (target === 'floor') {
-          floorSendContent(dataUrl);
-        } else {
-          chatSendContent(dataUrl);
-        }
+        const img = new Image();
+        img.onload = () => {
+          // Resize to max 1200px wide, compress to JPEG 0.7
+          const MAX = 1200;
+          let w = img.width, h = img.height;
+          if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          let quality = 0.75;
+          let dataUrl = canvas.toDataURL('image/jpeg', quality);
+          // If still too big, compress more
+          while (dataUrl.length > 500000 && quality > 0.2) {
+            quality -= 0.1;
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+          if (dataUrl.length > 600000) {
+            alert('Image is still too large after compression. Try a smaller crop.');
+            return;
+          }
+          if (target === 'floor') {
+            floorSendContent(dataUrl);
+          } else {
+            chatSendContent(dataUrl);
+          }
+        };
+        img.src = ev.target.result;
       };
       reader.readAsDataURL(file);
       return;
