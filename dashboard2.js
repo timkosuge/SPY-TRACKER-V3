@@ -4221,7 +4221,7 @@ async function loadData(){
     loadCOT();
     renderLiquidity();
     // Pre-load macro data in background
-    if (typeof renderMacro === 'function') window._macroPreloaded = false;
+    if (typeof renderMacro === 'function') { window._macroPreloaded = false; window._macroRendered = false; }
     
     // Fix 2: Dynamic interval — 15s during market hours, 60s otherwise
     _lastStaticRefresh = Date.now(); // mark static data as just loaded
