@@ -105,7 +105,7 @@ export async function onRequest(context) {
   const headers = {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "max-age=300",
+    "Cache-Control": "no-store, no-cache, must-revalidate",
   };
 
   try {
