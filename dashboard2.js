@@ -3155,7 +3155,7 @@ async function loadMichiganSentiment() {
       if (vals.length < 2) return '';
       const min = Math.min(...vals), max = Math.max(...vals);
       const range = max - min || 1;
-      const W = 400, H = h, P = 4;
+      const W = 500, H = h, P = 4;
       const x = i => P + (i / (vals.length-1)) * (W - P*2);
       const y = v => H - P - ((v-min)/range) * (H - P*2);
       const pts = vals.map((v,i) => x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
@@ -3180,8 +3180,8 @@ async function loadMichiganSentiment() {
     const vsAvg = avg10y ? (val - parseFloat(avg10y)).toFixed(1) : null;
 
     el.innerHTML =
-      '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">' +
-        '<div style="text-align:center;">' +
+      '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;margin-bottom:10px;">' +
+        '<div style="text-align:center;min-width:120px;">' +
           '<div style="font-family:Share Tech Mono,monospace;font-size:42px;font-weight:900;color:'+color+';line-height:1;">'+val.toFixed(1)+'</div>' +
           '<div style="font-family:Orbitron,monospace;font-size:9px;letter-spacing:1.5px;color:'+color+';margin-top:4px;">'+signal+'</div>' +
           (chg!=null?'<div style="font-size:11px;color:'+(chg>=0?'#00ff88':'#ff3355')+';margin-top:4px;">'+(chg>=0?'+':'')+chg.toFixed(1)+' vs prior</div>':'') +
@@ -3190,10 +3190,10 @@ async function loadMichiganSentiment() {
           '<div style="font-size:12px;color:var(--text2);line-height:1.6;">University of Michigan survey of ~500 consumers on personal finances and broader economy. One of the longest-running sentiment series — data back to 1952. ' +
           'Readings above 90 signal consumer confidence driving spending. Below 60 = recessionary pessimism.</div>' +
           (avg10y?'<div style="font-size:11px;color:var(--text3);margin-top:6px;">Historical avg (this period): <span style="color:'+color+'">'+avg10y+'</span> · Current '+(vsAvg>=0?'<span style="color:#00ff88">+'+vsAvg+' above avg</span>':'<span style="color:#ff8800">'+vsAvg+' below avg</span>')+'</div>':'') +
-          spark(history, color, 60) +
-          '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Source: FRED / University of Michigan · Monthly · ' + (umcs.latest_date||'') + '</div>' +
         '</div>' +
-      '</div>';
+      '</div>' +
+      spark(history, color, 80) +
+      '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Source: FRED / University of Michigan · Monthly · ' + (umcs.latest_date||'') + '</div>';
 
   } catch(e) {
     if ($('michiganPanel')) $('michiganPanel').innerHTML = '<div class="no-data">Michigan Sentiment unavailable: ' + e.message + '</div>';
