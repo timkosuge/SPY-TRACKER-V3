@@ -344,31 +344,35 @@ function renderWOMMonthGrid() {
     if (!weeks.length) return '<div style="color:var(--text3);font-size:11px;padding:8px;">No data</div>';
 
     const maxAbs = Math.max(...weeks.map(w => Math.abs(w.avg || 0)), 0.1);
-    const H = 70, barW = 28, gap = 8, P = 4;
-    const totalW = weeks.length * (barW + gap) - gap + P * 2;
+    // Fixed viewBox: 200 wide, 80 tall — bars live in rows 10–60, labels above/below
+    const VW = 200, VH = 80;
+    const barZone = 42; // px height available for bars (rows 12–54)
+    const zeroY = 54;   // baseline (zero line)
+    const n = weeks.length;
+    const barW = Math.min(28, (VW - 16) / n - 6);
+    const totalBarW = n * barW + (n - 1) * 6;
+    const startX = (VW - totalBarW) / 2;
 
     const bars = weeks.map((w, i) => {
-      const x = P + i * (barW + gap);
+      const x = startX + i * (barW + 6);
       const col = (w.avg || 0) >= 0 ? '#00ff88' : '#ff3355';
       const pct = Math.abs(w.avg || 0) / maxAbs;
-      const bh = Math.max(pct * (H - 20), 2);
-      const by = (w.avg || 0) >= 0 ? H - bh - 4 : H - 4;
-      const labelY = (w.avg || 0) >= 0 ? by - 3 : by + bh + 10;
+      const bh = Math.max(pct * barZone, 2);
+      const by = (w.avg || 0) >= 0 ? zeroY - bh : zeroY;
+      const cx = x + barW / 2;
+      // value label: above positive bars, below negative bars
+      const valY = (w.avg || 0) >= 0 ? by - 2 : by + bh + 8;
       return `
-        <rect x="${x}" y="${by}" width="${barW}" height="${bh}" fill="${col}" opacity="0.75" rx="2"/>
-        <text x="${x + barW/2}" y="${labelY}" text-anchor="middle" font-size="8" fill="${col}" font-family="Share Tech Mono,monospace">${(w.avg>=0?'+':'')}${w.avg.toFixed(2)}%</text>
-        <text x="${x + barW/2}" y="${H + 4}" text-anchor="middle" font-size="8" fill="var(--text3)" font-family="Orbitron,monospace">${w.label}</text>
-        <text x="${x + barW/2}" y="${H + 13}" text-anchor="middle" font-size="7" fill="${col}" font-family="Share Tech Mono,monospace">${w.wr.toFixed(0)}%</text>`;
+        <rect x="${x.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}" opacity="0.8" rx="1.5"/>
+        <text x="${cx.toFixed(1)}" y="${valY.toFixed(1)}" text-anchor="middle" font-size="7" fill="${col}" font-family="Share Tech Mono,monospace">${(w.avg>=0?'+':'')}${w.avg.toFixed(2)}%</text>
+        <text x="${cx.toFixed(1)}" y="${(zeroY+10).toFixed(1)}" text-anchor="middle" font-size="7" fill="var(--text3)" font-family="Orbitron,monospace">${w.label}</text>
+        <text x="${cx.toFixed(1)}" y="${(zeroY+18).toFixed(1)}" text-anchor="middle" font-size="6.5" fill="${col}" font-family="Share Tech Mono,monospace">${w.wr.toFixed(0)}%</text>`;
     }).join('');
 
-    // Zero line
-    const zeroY = H - 4;
-    const svg = `<svg width="100%" viewBox="0 0 ${totalW} ${H+16}" style="display:block;overflow:visible;">
-      <line x1="${P}" y1="${H-4}" x2="${totalW-P}" y2="${H-4}" stroke="var(--border2)" stroke-width="0.5"/>
+    return `<svg width="100%" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid meet" style="display:block;overflow:hidden;">
+      <line x1="4" y1="${zeroY}" x2="${VW-4}" y2="${zeroY}" stroke="var(--border2)" stroke-width="0.75"/>
       ${bars}
     </svg>`;
-
-    return svg;
   };
 
   // Build cumulative line chart for one month
@@ -381,24 +385,28 @@ function renderWOMMonthGrid() {
     const validWeeks = weeks.map((v,i) => ({v, i})).filter(w => w.v !== null);
     if (validWeeks.length < 2) return '';
 
-    // Cumulative return
     let cum = 0;
     const cumPts = [];
     validWeeks.forEach(w => { cum += w.v; cumPts.push({ i: w.i, v: cum }); });
 
-    const W = 120, H = 30;
+    const VW = 200, VH = 36;
+    const pad = 6;
     const minV = Math.min(...cumPts.map(p=>p.v));
     const maxV = Math.max(...cumPts.map(p=>p.v));
     const range = maxV - minV || 0.1;
-    const px = i => 4 + (i / 4) * (W - 8);
-    const py = v => H - 4 - ((v - minV) / range) * (H - 8);
+    const px = i => pad + (i / 4) * (VW - pad * 2);
+    const py = v => (VH - pad) - ((v - minV) / range) * (VH - pad * 2);
     const pts = cumPts.map(p => `${px(p.i).toFixed(1)},${py(p.v).toFixed(1)}`).join(' ');
     const lastCol = cum >= 0 ? '#00ff88' : '#ff3355';
+    const lastPt = cumPts[cumPts.length - 1];
+    const labelX = px(lastPt.i) > VW * 0.7 ? px(lastPt.i) - 2 : px(lastPt.i) + 2;
+    const labelAnchor = px(lastPt.i) > VW * 0.7 ? 'end' : 'start';
 
-    return `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;margin-top:4px;">
-      <polyline points="${pts}" fill="none" stroke="${lastCol}" stroke-width="1.5" opacity="0.8"/>
-      <circle cx="${px(cumPts[cumPts.length-1].i).toFixed(1)}" cy="${py(cumPts[cumPts.length-1].v).toFixed(1)}" r="2.5" fill="${lastCol}"/>
-      <text x="${W-2}" y="${py(cumPts[cumPts.length-1].v)+3}" text-anchor="end" font-size="7" fill="${lastCol}" font-family="Share Tech Mono,monospace">${cum>=0?'+':''}${cum.toFixed(2)}%</text>
+    return `<svg width="100%" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:3px;overflow:hidden;">
+      <line x1="${pad}" y1="${py(0).toFixed(1)}" x2="${VW-pad}" y2="${py(0).toFixed(1)}" stroke="var(--border2)" stroke-width="0.5" stroke-dasharray="2,2"/>
+      <polyline points="${pts}" fill="none" stroke="${lastCol}" stroke-width="1.5" opacity="0.9"/>
+      <circle cx="${px(lastPt.i).toFixed(1)}" cy="${py(lastPt.v).toFixed(1)}" r="2" fill="${lastCol}"/>
+      <text x="${labelX.toFixed(1)}" y="${(py(lastPt.v)-2).toFixed(1)}" text-anchor="${labelAnchor}" font-size="6.5" fill="${lastCol}" font-family="Share Tech Mono,monospace">${cum>=0?'+':''}${cum.toFixed(2)}%</text>
     </svg>`;
   };
 
