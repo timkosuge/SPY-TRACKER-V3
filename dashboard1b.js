@@ -1305,7 +1305,7 @@ function _renderAnalogChart(D, analogs) {
     : analogs;
 
   requestAnimationFrame(() => {
-    const W=canvas.offsetWidth||900, H=canvas.offsetHeight||380;
+    const W=canvas.offsetWidth||900, H=canvas.offsetHeight||560;
     canvas.width=W; canvas.height=H;
     const ctx=canvas.getContext('2d');
     const pad={l:56,r:16,t:24,b:50};
