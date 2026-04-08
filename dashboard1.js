@@ -1558,17 +1558,17 @@ function renderIntradayPattern(md, sd) {
 
   const dataStart = P.length ? P[P.length-1].d : '—';
   const dataEnd   = P.length ? P[0].d : '—';
+  const explainHtml = '<div style="margin-bottom:10px;padding:8px 12px;background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;font-size:11px;color:var(--text3);line-height:1.7;">'
+    + '<span style="font-family:Orbitron,monospace;font-size:8px;color:var(--cyan);letter-spacing:1px;">HOW TO READ THIS — </span>'
+    + 'Looks at <b style="color:var(--text2);">' + total + ' historical sessions</b> (out of ' + P.length + ' total, ' + dataStart + ' to ' + dataEnd + ') that opened with the same gap type and moved the same direction in the first 30 minutes. '
+    + '<b style="color:var(--text2);">Follow-thru</b> = % of those days the first-30-min direction held all day. '
+    + '<b style="color:var(--text2);">Avg Day Range</b> = typical H-L on similar days. '
+    + '<b style="color:var(--text2);">Avg Close</b> = avg open-to-close return. '
+    + '<b style="color:var(--text2);">Gap Fill</b> = % that traded back to prior close same day. '
+    + 'Bar chart = how those ' + total + ' sessions ended.'
+    + '</div>';
 
-  el.innerHTML = `
-    <div style="margin-bottom:10px;padding:8px 12px;background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;font-size:11px;color:var(--text3);line-height:1.7;">
-      <span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);letter-spacing:1px;">HOW TO READ THIS — </span>
-      Looks at <strong style="color:var(--text2);">${total} historical sessions</strong> (out of ${P.length} total, ${dataStart} → ${dataEnd}) that opened with the same gap type and moved the same direction in the first 30 minutes.
-      <strong style="color:var(--text2);">Follow-thru</strong> = % of those days where the first-30-min direction held all day.
-      <strong style="color:var(--text2);">Avg Day Range</strong> = typical high-to-low on similar days.
-      <strong style="color:var(--text2);">Avg Close</strong> = avg open-to-close % return.
-      <strong style="color:var(--text2);">Gap Fill</strong> = % of gap-up/down days that traded back to prior close same day.
-      The bar chart shows how those ${total} sessions ended: Trend Up / Reversal / Range / Trend Down.
-    </div>
+  el.innerHTML = explainHtml + `
     <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">
       <div style="min-width:190px;display:flex;flex-direction:column;gap:6px;">
         <div style="padding:8px 12px;background:${gtColor}15;border:1px solid ${gtColor}44;border-left:3px solid ${gtColor};border-radius:3px;">
