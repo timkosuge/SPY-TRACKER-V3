@@ -1305,7 +1305,7 @@ function _renderAnalogChart(D, analogs) {
     : analogs;
 
   requestAnimationFrame(() => {
-    const W=canvas.offsetWidth||900, H=canvas.offsetHeight||560;
+    const W=canvas.offsetWidth||900, H=canvas.offsetHeight||380;
     canvas.width=W; canvas.height=H;
     const ctx=canvas.getContext('2d');
     const pad={l:56,r:16,t:24,b:50};
@@ -5237,20 +5237,21 @@ function renderLargeGapStats() {
   const fillColor = v => v >= 50 ? '#00ff88' : v >= 35 ? '#ffcc00' : '#ff8800';
   const retColor  = v => v > 0.1 ? '#00ff88' : v < -0.1 ? '#ff3355' : 'var(--text2)';
 
-  // Tab buttons (use data-lgkey to avoid inline onclick quoting issues)
+  // Tab buttons
   const tabs = D.thresholds.map(t => {
-    const key = t.toFixed(1);
+    const key = String(t);
     const active = key === thr;
     const freq = overall.freq[key];
-    const bg    = active ? 'rgba(0,204,255,0.15)' : 'var(--bg3)';
-    const bdr   = active ? 'var(--cyan)' : 'var(--border)';
-    const col   = active ? 'var(--cyan)' : 'var(--text2)';
-    const sub   = active ? 'var(--cyan)' : 'var(--text3)';
-    const cnt   = freq ? freq.up_n + '\u2191 ' + freq.dn_n + '\u2193' : '';
-    return '<button data-lgkey="' + key + '" style="font-family:Orbitron,monospace;font-size:9px;letter-spacing:1px;padding:5px 14px;background:' + bg + ';border:1px solid ' + bdr + ';border-radius:3px;color:' + col + ';cursor:pointer;">'
-      + '\u2265' + t + '%'
-      + '<span style="display:block;font-size:8px;color:' + sub + ';margin-top:1px;">' + cnt + '</span>'
-      + '</button>';
+    return `<button onclick="window._lgActive='${key}';renderLargeGapStats();"
+      style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:5px 14px;
+             background:${active ? 'rgba(0,204,255,0.15)' : 'var(--bg3)'};
+             border:1px solid ${active ? 'var(--cyan)' : 'var(--border)'};
+             border-radius:3px;color:${active ? 'var(--cyan)' : 'var(--text2)'};cursor:pointer;">
+      ≥${t}%
+      <span style="display:block;font-size:8px;color:${active ? 'var(--cyan)' : 'var(--text3)'};margin-top:1px;">
+        ${freq ? freq.up_n + '↑ ' + freq.dn_n + '↓' : ''}
+      </span>
+    </button>`;
   }).join('');
 
   // Frequency overview bar
@@ -5437,12 +5438,4 @@ function renderLargeGapStats() {
     </div>` : ''}
 
   </div>`;
-
-  // Event delegation for threshold buttons (avoids inline onclick quoting issues)
-  el.querySelectorAll('button[data-lgkey]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      window._lgActive = btn.getAttribute('data-lgkey');
-      renderLargeGapStats();
-    });
-  });
 }
