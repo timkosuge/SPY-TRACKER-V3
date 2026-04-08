@@ -393,6 +393,7 @@ window._M = (() => {
 
   // Global refresh function — clears cache and re-renders
   window.fredRefresh = async function() {
+    window._macroForceRefresh = true;
     const btn = document.getElementById('fredRefreshBtn');
     if (btn) { btn.textContent = '↻ REFRESHING...'; btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none'; }
     localStorage.removeItem(FRED_CACHE_KEY);
@@ -536,7 +537,21 @@ window._M = (() => {
     const el = $('macroContent');
     if (!el) return;
 
-    el.innerHTML = buildHTML(d, regime);
+    // Skip re-render if already populated — preserve state across tab switches
+    // Only re-render if empty or forced via fredRefresh()
+    if (el.children.length > 3 && !window._macroForceRefresh) {
+      _updateFredTimestamp();
+      return;
+    }
+    window._macroForceRefresh = false;
+
+    try {
+      el.innerHTML = buildHTML(d, regime);
+    } catch(buildErr) {
+      console.error('[macro] buildHTML error:', buildErr);
+      el.innerHTML = '<div style="padding:20px;color:#ff3355;">Macro render error: ' + buildErr.message + '</div>';
+      return;
+    }
     bindToggles();
     _updateFredTimestamp();
     loadLiveData(d);           // async overlay
@@ -1025,7 +1040,7 @@ window._M = (() => {
           </div>
           <div style="text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">TROUGH</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:colorDn);">$${m2.trough}T</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:14px;color:${colorDn};">$${m2.trough}T</div>
           </div>
           <div style="text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">CURRENT</div>
