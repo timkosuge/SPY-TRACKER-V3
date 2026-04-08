@@ -3078,8 +3078,8 @@ async function spyPlayerInit() {
   }
   const audio = document.getElementById('spyAudio');
   const audioB = document.getElementById('spyAudioB');
-  audio.volume = 0.25;
-  audioB.volume = 0.25;
+  audio.volume = 0.10;
+  audioB.volume = 0.10;
   // ended handler - only fire if not crossfading (crossfade handles transition)
   audio.addEventListener('ended', () => { if (!SPY_PLAYER.crossfading && !SPY_PLAYER.loop) spyNext(); });
   audioB.addEventListener('ended', () => { if (!SPY_PLAYER.crossfading && !SPY_PLAYER.loop) spyNext(); });
@@ -3169,8 +3169,8 @@ function spyCrossfadeNext() {
   const fade = setInterval(() => {
     step++;
     const progress = step / steps;
-    currentAudio.volume = Math.max(0, startVol * (1 - progress));
-    nextAudio.volume    = Math.min(startVol, startVol * progress);
+    currentAudio.volume = Math.max(0, 0.10 * (1 - progress));
+    nextAudio.volume    = Math.min(0.10, 0.10 * progress);
     if (step >= steps) {
       clearInterval(fade);
       currentAudio.pause();
@@ -3257,7 +3257,7 @@ function spyMute() {
     if (slider) slider.value = 0;
     if (icon) icon.textContent = '🔇';
   } else {
-    audio.volume = SPY_PLAYER._prevVol || 0.25;
+    audio.volume = SPY_PLAYER._prevVol || 0.10;
     if (slider) slider.value = audio.volume;
     if (icon) icon.textContent = '🔊';
   }
@@ -6863,7 +6863,7 @@ function openSecretPlayer3() {
 
   if (!_secretAudio3) {
     _secretAudio3 = new Audio();
-    _secretAudio3.volume = 0.25;
+    _secretAudio3.volume = 0.10;
     _secretAudio3.addEventListener('ended', () => { _secretTrackIndex3=(_secretTrackIndex3+1)%SECRET_TRACKS_3.length; _secretLoadTrack3(_secretTrackIndex3); _secretAudio3.play(); _updateSecretPlayer3(); });
   }
 
@@ -6952,7 +6952,7 @@ function openSecretPlayer2() {
 
   if (!_secretAudio2) {
     _secretAudio2 = new Audio();
-    _secretAudio2.volume = 0.25;
+    _secretAudio2.volume = 0.10;
     _secretAudio2.addEventListener('ended', () => { _secretTrackIndex2 = (_secretTrackIndex2 + 1) % SECRET_TRACKS_2.length; _secretLoadTrack2(_secretTrackIndex2); _secretAudio2.play(); _updateSecretPlayer2(); });
   }
 
@@ -7043,7 +7043,7 @@ function openSecretPlayer() {
 
   if (!_secretAudio) {
     _secretAudio = new Audio();
-    _secretAudio.volume = 0.25;
+    _secretAudio.volume = 0.10;
     _secretAudio.addEventListener('ended', () => { _secretTrackIndex = (_secretTrackIndex + 1) % SECRET_TRACKS.length; _secretLoadTrack(_secretTrackIndex); _secretAudio.play(); _updateSecretPlayer(); });
   }
 
