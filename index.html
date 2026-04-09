@@ -4075,8 +4075,6 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     const W = fc.offsetWidth || 420, H = fc.offsetHeight || 400;
     [fc,rc,gc].forEach(c=>{ c.width=W; c.height=H; });
     const fx=fc.getContext('2d'), rx=rc.getContext('2d'), gx=gc.getContext('2d');
-    // Draw circuit board once on dedicated BG canvas (not dimmed by face opacity)
-    drawCircuitBG();
     const cx=W/2;
     const scale = H/540;
     const yHair=95*scale, yBrow=185*scale, yEye=204*scale;
@@ -4159,7 +4157,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
       const traceCount = 18;
       for(let i=0;i<traceCount;i++){
         const ty = (H*0.06) + (i/(traceCount-1))*(H*0.88);
-        const a = 0.18 + Math.sin(i*0.7)*0.06;
+        const a = 0.06 + Math.sin(i*0.7)*0.02;
         bx.strokeStyle = `rgba(0,200,110,${a.toFixed(3)})`;
         bx.lineWidth = 0.7;
         bx.beginPath(); bx.moveTo(0,ty); bx.lineTo(W,ty); bx.stroke();
@@ -4168,25 +4166,25 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
       const vCount = 14;
       for(let i=0;i<vCount;i++){
         const tx = (i/(vCount-1))*W;
-        bx.strokeStyle = `rgba(0,180,100,0.10)`;
+        bx.strokeStyle = `rgba(0,180,100,0.04)`;
         bx.lineWidth = 0.7;
         bx.beginPath(); bx.moveTo(tx,0); bx.lineTo(tx,H); bx.stroke();
       }
       // Pre-baked nodes
       _circuitNodes.forEach(([xf,yf])=>{
-        bx.beginPath(); bx.arc(xf*W, yf*H, 2.2, 0, Math.PI*2);
-        bx.fillStyle='rgba(0,255,140,0.45)'; bx.fill();
-        bx.beginPath(); bx.arc(xf*W, yf*H, 4.5, 0, Math.PI*2);
-        bx.strokeStyle='rgba(0,220,120,0.18)'; bx.lineWidth=1; bx.stroke();
+        bx.beginPath(); bx.arc(xf*W, yf*H, 2.0, 0, Math.PI*2);
+        bx.fillStyle='rgba(0,255,140,0.20)'; bx.fill();
+        bx.beginPath(); bx.arc(xf*W, yf*H, 4.0, 0, Math.PI*2);
+        bx.strokeStyle='rgba(0,220,120,0.09)'; bx.lineWidth=1; bx.stroke();
       });
       // L-shaped traces with junction dots
       [[0.12,0.18,0.35,0.18,0.35,0.42],[0.65,0.28,0.84,0.28,0.84,0.52],
        [0.08,0.58,0.26,0.58,0.26,0.76],[0.74,0.52,0.90,0.52,0.90,0.80],
        [0.20,0.72,0.42,0.72,0.42,0.88],[0.55,0.15,0.78,0.15,0.78,0.38]].forEach(([x1,y1,x2,y2,x3,y3])=>{
-        bx.strokeStyle='rgba(0,220,120,0.22)'; bx.lineWidth=1.0;
+        bx.strokeStyle='rgba(0,220,120,0.09)'; bx.lineWidth=0.9;
         bx.beginPath(); bx.moveTo(x1*W,y1*H); bx.lineTo(x2*W,y2*H); bx.lineTo(x3*W,y3*H); bx.stroke();
-        bx.beginPath(); bx.arc(x2*W,y2*H,2.8,0,Math.PI*2);
-        bx.fillStyle='rgba(0,255,150,0.50)'; bx.fill();
+        bx.beginPath(); bx.arc(x2*W,y2*H,2.5,0,Math.PI*2);
+        bx.fillStyle='rgba(0,255,150,0.22)'; bx.fill();
       });
     }
 
@@ -4439,6 +4437,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     }
 
     function loop(){ tickState(); drawFace(); drawRain(); doGlitch(); _vegaRAF=requestAnimationFrame(loop); }
+    drawCircuitBG(); // draw once onto BG canvas at full opacity
     loop();
   };
 
