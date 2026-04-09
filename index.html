@@ -3908,9 +3908,10 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
 
   <!-- VEGA Face — collapsible -->
   <div id="vegaFaceWrap" style="position:relative;width:100%;height:400px;background:#000;overflow:hidden;flex-shrink:0;cursor:pointer;border-bottom:1px solid rgba(0,204,255,0.12);transition:height 0.3s ease;" onclick="vegaToggleFace()" title="Click to collapse">
-    <canvas id="vegaF" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;opacity:0.61;"></canvas>
-    <canvas id="vegaR" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;z-index:2;"></canvas>
-    <canvas id="vegaG" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;z-index:3;"></canvas>
+    <canvas id="vegaBG" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;z-index:1;"></canvas>
+    <canvas id="vegaF" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;opacity:0.61;z-index:2;"></canvas>
+    <canvas id="vegaR" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;z-index:3;"></canvas>
+    <canvas id="vegaG" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;z-index:4;"></canvas>
     <div style="position:absolute;bottom:6px;right:8px;font-family:'Orbitron',monospace;font-size:7px;color:rgba(0,200,255,0.4);letter-spacing:2px;pointer-events:none;">VEGA v9 ▲</div>
   </div>
 
@@ -4074,6 +4075,8 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     const W = fc.offsetWidth || 420, H = fc.offsetHeight || 400;
     [fc,rc,gc].forEach(c=>{ c.width=W; c.height=H; });
     const fx=fc.getContext('2d'), rx=rc.getContext('2d'), gx=gc.getContext('2d');
+    // Draw circuit board once on dedicated BG canvas (not dimmed by face opacity)
+    drawCircuitBG();
     const cx=W/2;
     const scale = H/540;
     const yHair=95*scale, yBrow=185*scale, yEye=204*scale;
@@ -4144,45 +4147,51 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
       }
     })();
 
-    function drawFace() {
-      fx.clearRect(0,0,W,H); fx.fillStyle='#000'; fx.fillRect(0,0,W,H);
+    // Draw circuit board once onto the BG canvas (full opacity, behind face)
+    function drawCircuitBG() {
+      const bgc = document.getElementById('vegaBG');
+      if (!bgc) return;
+      bgc.width = W; bgc.height = H;
+      const bx = bgc.getContext('2d');
+      bx.clearRect(0,0,W,H);
 
-      // ── Circuit-board background ──────────────────────────────────────
       // Horizontal PCB traces
       const traceCount = 18;
       for(let i=0;i<traceCount;i++){
         const ty = (H*0.06) + (i/(traceCount-1))*(H*0.88);
-        const a = 0.09 + Math.sin(i*0.7)*0.03;
-        fx.strokeStyle = `rgba(0,160,90,${a.toFixed(3)})`;
-        fx.lineWidth = 0.6;
-        fx.beginPath(); fx.moveTo(0,ty); fx.lineTo(W,ty); fx.stroke();
+        const a = 0.18 + Math.sin(i*0.7)*0.06;
+        bx.strokeStyle = `rgba(0,200,110,${a.toFixed(3)})`;
+        bx.lineWidth = 0.7;
+        bx.beginPath(); bx.moveTo(0,ty); bx.lineTo(W,ty); bx.stroke();
       }
       // Vertical traces
       const vCount = 14;
       for(let i=0;i<vCount;i++){
         const tx = (i/(vCount-1))*W;
-        fx.strokeStyle = `rgba(0,140,80,0.06)`;
-        fx.lineWidth = 0.6;
-        fx.beginPath(); fx.moveTo(tx,0); fx.lineTo(tx,H); fx.stroke();
+        bx.strokeStyle = `rgba(0,180,100,0.10)`;
+        bx.lineWidth = 0.7;
+        bx.beginPath(); bx.moveTo(tx,0); bx.lineTo(tx,H); bx.stroke();
       }
       // Pre-baked nodes
       _circuitNodes.forEach(([xf,yf])=>{
-        fx.beginPath(); fx.arc(xf*W, yf*H, 1.4, 0, Math.PI*2);
-        fx.fillStyle='rgba(0,210,120,0.18)'; fx.fill();
-        // tiny halo
-        fx.beginPath(); fx.arc(xf*W, yf*H, 3, 0, Math.PI*2);
-        fx.strokeStyle='rgba(0,200,110,0.07)'; fx.lineWidth=0.8; fx.stroke();
+        bx.beginPath(); bx.arc(xf*W, yf*H, 2.2, 0, Math.PI*2);
+        bx.fillStyle='rgba(0,255,140,0.45)'; bx.fill();
+        bx.beginPath(); bx.arc(xf*W, yf*H, 4.5, 0, Math.PI*2);
+        bx.strokeStyle='rgba(0,220,120,0.18)'; bx.lineWidth=1; bx.stroke();
       });
-      // L-shaped traces
+      // L-shaped traces with junction dots
       [[0.12,0.18,0.35,0.18,0.35,0.42],[0.65,0.28,0.84,0.28,0.84,0.52],
        [0.08,0.58,0.26,0.58,0.26,0.76],[0.74,0.52,0.90,0.52,0.90,0.80],
        [0.20,0.72,0.42,0.72,0.42,0.88],[0.55,0.15,0.78,0.15,0.78,0.38]].forEach(([x1,y1,x2,y2,x3,y3])=>{
-        fx.strokeStyle='rgba(0,180,100,0.10)'; fx.lineWidth=0.8;
-        fx.beginPath(); fx.moveTo(x1*W,y1*H); fx.lineTo(x2*W,y2*H); fx.lineTo(x3*W,y3*H); fx.stroke();
-        // junction dot
-        fx.beginPath(); fx.arc(x2*W,y2*H,2,0,Math.PI*2);
-        fx.fillStyle='rgba(0,220,130,0.22)'; fx.fill();
+        bx.strokeStyle='rgba(0,220,120,0.22)'; bx.lineWidth=1.0;
+        bx.beginPath(); bx.moveTo(x1*W,y1*H); bx.lineTo(x2*W,y2*H); bx.lineTo(x3*W,y3*H); bx.stroke();
+        bx.beginPath(); bx.arc(x2*W,y2*H,2.8,0,Math.PI*2);
+        bx.fillStyle='rgba(0,255,150,0.50)'; bx.fill();
       });
+    }
+
+    function drawFace() {
+      fx.clearRect(0,0,W,H); fx.fillStyle='#000'; fx.fillRect(0,0,W,H);
 
       fx.save();
       // Face outline — rounded jaw, tighter chin
