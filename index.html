@@ -3824,7 +3824,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   <div id="aiPanelHeader" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.08);background:#0f0f1a;flex-shrink:0;">
     <span id="aiPanelTitle" style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#00ccff;flex:1;">VEGA</span>
     <span id="aiProviderBadge" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#00ff88;">● GROK</span>
-    <button id="vegaMuteBtn" onclick="vegaToggleMute()" title="Mute/unmute voice" style="background:none;border:none;color:#00ccff;cursor:pointer;padding:2px 6px;font-size:14px;line-height:1;">🔊</button>
+    <button id="vegaMuteBtn" onclick="vegaToggleMute()" title="Mute/unmute voice" style="background:none;border:none;color:#555;cursor:pointer;padding:2px 6px;font-size:14px;line-height:1;">🔊</button>
     <button id="aiSettingsBtn" onclick="toggleAISettings()" style="background:none;border:none;color:#666;cursor:pointer;padding:2px 6px;font-size:13px;">⚙</button>
     <button id="aiCloseBtn" onclick="toggleChat()" style="background:none;border:none;color:#666;cursor:pointer;padding:2px 6px;font-size:16px;line-height:1;">×</button>
   </div>
@@ -3840,12 +3840,11 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     </div>
     <label style="display:block;color:#888;font-size:10px;margin:0 0 3px;">VOICE</label>
     <select id="vegaVoiceSel" style="width:100%;background:#111;border:1px solid #333;color:#ccc;padding:5px 8px;border-radius:3px;font-family:inherit;font-size:11px;box-sizing:border-box;margin-bottom:8px;">
-      <option value="eve">eve — calm, clear (default)</option>
-      <option value="aria">aria — warm, expressive</option>
-      <option value="dusk">dusk — deep, smooth</option>
-      <option value="ember">ember — energetic</option>
-      <option value="cove">cove — mellow</option>
-      <option value="maple">maple — bright</option>
+      <option value="eve">eve — expressive female (default)</option>
+      <option value="ara">ara — warm female</option>
+      <option value="leo">leo — smooth male</option>
+      <option value="rex">rex — deep male</option>
+      <option value="sal">sal — neutral</option>
     </select>
     <label style="display:block;color:#888;font-size:10px;margin:0 0 3px;">VOLUME</label>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -3961,44 +3960,86 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   window.vegaSpeak = async function(text) {
     if (!text || !text.trim()) return;
     const s = JSON.parse(localStorage.getItem('spyAI') || '{}');
-    if (s.vegaVoiceEnabled === false) return; // respect mute setting
+    if (s.vegaVoiceEnabled === false) return;
     const voice = s.vegaVoice || 'eve';
     const vol = s.vegaVolume != null ? s.vegaVolume : 0.85;
+
+    const muteBtn = document.getElementById('vegaMuteBtn');
+
     try {
       const resp = await fetch('/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: text.slice(0, 1500), voice_id: voice })
       });
-      if (!resp.ok) return;
-      const arrayBuf = await resp.arrayBuffer();
 
-      // Init AudioContext on first use
-      if (!STATE.audioCtx) {
-        STATE.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        STATE.analyser = STATE.audioCtx.createAnalyser();
-        STATE.analyser.fftSize = 256;
-        STATE.freqData = new Uint8Array(STATE.analyser.frequencyBinCount);
-        // Gain node for volume control
-        STATE.gainNode = STATE.audioCtx.createGain();
-        STATE.gainNode.connect(STATE.audioCtx.destination);
-        STATE.analyser.connect(STATE.gainNode);
+      if (!resp.ok) {
+        const errText = await resp.text();
+        console.error('VEGA TTS HTTP error:', resp.status, errText);
+        return;
       }
-      const ctx = STATE.audioCtx;
-      if (ctx.state === 'suspended') await ctx.resume();
-      STATE.gainNode.gain.setValueAtTime(vol, ctx.currentTime);
 
-      const audioBuf = await ctx.decodeAudioData(arrayBuf);
-      const src = ctx.createBufferSource();
-      src.buffer = audioBuf;
-      src.connect(STATE.analyser);
-      // Stop any currently playing
-      if (STATE._currentSrc) { try { STATE._currentSrc.stop(); } catch(e){} }
-      STATE._currentSrc = src;
+      const arrayBuf = await resp.arrayBuffer();
+      if (!arrayBuf || arrayBuf.byteLength === 0) {
+        console.error('VEGA TTS: empty buffer');
+        return;
+      }
+
+      // Stop anything currently playing
+      if (STATE._audioEl) {
+        STATE._audioEl.pause();
+        STATE._audioEl.src = '';
+        STATE.speaking = false;
+        STATE.mouthTarget = 0;
+      }
+
+      // Use blob URL + <audio> element — works in all browsers without gesture restriction
+      const blob = new Blob([arrayBuf], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.volume = vol;
+      STATE._audioEl = audio;
+
+      // Hook analyser for mouth sync if AudioContext available
+      try {
+        if (!STATE.audioCtx || STATE.audioCtx.state === 'closed') {
+          STATE.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          STATE.analyser = STATE.audioCtx.createAnalyser();
+          STATE.analyser.fftSize = 256;
+          STATE.freqData = new Uint8Array(STATE.analyser.frequencyBinCount);
+          STATE.analyser.connect(STATE.audioCtx.destination);
+        }
+        if (STATE.audioCtx.state === 'suspended') await STATE.audioCtx.resume();
+        const src = STATE.audioCtx.createMediaElementSource(audio);
+        src.connect(STATE.analyser);
+      } catch(e) {
+        // analyser not critical — playback still works without it
+        console.warn('VEGA analyser init skipped:', e.message);
+      }
+
       STATE.speaking = true;
-      src.start(0);
-      src.onended = () => { STATE.speaking = false; STATE.mouthTarget = 0; STATE._currentSrc = null; };
-    } catch(e) { console.warn('VEGA TTS error:', e); }
+      if (muteBtn) muteBtn.textContent = '🔊';
+
+      audio.onended = () => {
+        STATE.speaking = false;
+        STATE.mouthTarget = 0;
+        STATE._audioEl = null;
+        URL.revokeObjectURL(url);
+      };
+
+      audio.onerror = (e) => {
+        console.error('VEGA audio play error:', e);
+        STATE.speaking = false;
+        STATE._audioEl = null;
+        URL.revokeObjectURL(url);
+      };
+
+      await audio.play();
+
+    } catch(e) {
+      console.error('VEGA TTS exception:', e);
+      STATE.speaking = false;
+    }
   };
 
   window.vegaStartFace = function() {
@@ -4381,7 +4422,8 @@ function _vegaUpdateMuteBtn(enabled) {
   const btn = document.getElementById('vegaMuteBtn');
   if (!btn) return;
   btn.textContent = enabled ? '🔊' : '🔇';
-  btn.style.color = enabled ? '#00ccff' : '#555';
+  btn.style.color = enabled ? '#00ccff' : '#444';
+  btn.title = enabled ? 'Voice on — click to mute' : 'Voice muted — click to unmute';
 }
 
 function vegaToggleMute() {
