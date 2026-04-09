@@ -3824,13 +3824,42 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   <div id="aiPanelHeader" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.08);background:#0f0f1a;flex-shrink:0;">
     <span id="aiPanelTitle" style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#00ccff;flex:1;">VEGA</span>
     <span id="aiProviderBadge" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#00ff88;">● GROK</span>
+    <button id="vegaMuteBtn" onclick="vegaToggleMute()" title="Mute/unmute voice" style="background:none;border:none;color:#00ccff;cursor:pointer;padding:2px 6px;font-size:14px;line-height:1;">🔊</button>
     <button id="aiSettingsBtn" onclick="toggleAISettings()" style="background:none;border:none;color:#666;cursor:pointer;padding:2px 6px;font-size:13px;">⚙</button>
     <button id="aiCloseBtn" onclick="toggleChat()" style="background:none;border:none;color:#666;cursor:pointer;padding:2px 6px;font-size:16px;line-height:1;">×</button>
   </div>
 
   <!-- Settings panel -->
-  <div id="aiSettingsPanel" style="display:none;padding:12px;border-bottom:1px solid rgba(255,255,255,0.08);background:#0a0a12;flex-shrink:0;font-family:'Share Tech Mono',monospace;font-size:11px;">
-    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.5px;color:#aaa;margin-bottom:10px;">LOCAL AI — OLLAMA</div>
+  <div id="aiSettingsPanel" style="display:none;padding:12px;border-bottom:1px solid rgba(255,255,255,0.08);background:#0a0a12;flex-shrink:0;font-family:'Share Tech Mono',monospace;font-size:11px;max-height:260px;overflow-y:auto;">
+
+    <!-- VOICE SECTION -->
+    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.5px;color:#00ccff;margin-bottom:8px;">VEGA VOICE — GROK TTS</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <input type="checkbox" id="vegaVoiceEnabled" style="width:auto;accent-color:#00ccff;" checked>
+      <span style="font-size:12px;color:#ccc;">Voice enabled</span>
+    </div>
+    <label style="display:block;color:#888;font-size:10px;margin:0 0 3px;">VOICE</label>
+    <select id="vegaVoiceSel" style="width:100%;background:#111;border:1px solid #333;color:#ccc;padding:5px 8px;border-radius:3px;font-family:inherit;font-size:11px;box-sizing:border-box;margin-bottom:8px;">
+      <option value="eve">eve — calm, clear (default)</option>
+      <option value="aria">aria — warm, expressive</option>
+      <option value="dusk">dusk — deep, smooth</option>
+      <option value="ember">ember — energetic</option>
+      <option value="cove">cove — mellow</option>
+      <option value="maple">maple — bright</option>
+    </select>
+    <label style="display:block;color:#888;font-size:10px;margin:0 0 3px;">VOLUME</label>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <input type="range" id="vegaVolumeSlider" min="0" max="1" step="0.05" value="0.85"
+        style="flex:1;accent-color:#00ccff;cursor:pointer;"
+        oninput="document.getElementById('vegaVolDisplay').textContent=Math.round(this.value*100)+'%'">
+      <span id="vegaVolDisplay" style="color:#aaa;font-size:10px;width:32px;text-align:right;">85%</span>
+    </div>
+    <button onclick="vegaTestVoice()" style="background:rgba(0,204,255,0.08);border:1px solid rgba(0,204,255,0.25);color:#00ccff;padding:4px 10px;border-radius:3px;cursor:pointer;font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;margin-bottom:12px;">▶ TEST VOICE</button>
+
+    <div style="border-top:1px solid rgba(255,255,255,0.06);margin-bottom:10px;"></div>
+
+    <!-- OLLAMA SECTION -->
+    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.5px;color:#aaa;margin-bottom:8px;">LOCAL AI — OLLAMA</div>
     <div style="display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="ollamaEnabledChk" style="width:auto;accent-color:#00ccff;">
       <span style="font-size:12px;color:#ccc;">Use Ollama when available</span>
@@ -3930,11 +3959,15 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   // ── TTS / Voice ───────────────────────────────────────────────────────
   window.vegaSpeak = async function(text) {
     if (!text || !text.trim()) return;
+    const s = JSON.parse(localStorage.getItem('spyAI') || '{}');
+    if (s.vegaVoiceEnabled === false) return; // respect mute setting
+    const voice = s.vegaVoice || 'eve';
+    const vol = s.vegaVolume != null ? s.vegaVolume : 0.85;
     try {
       const resp = await fetch('/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.slice(0, 1500), voice_id: 'eve' })
+        body: JSON.stringify({ text: text.slice(0, 1500), voice_id: voice })
       });
       if (!resp.ok) return;
       const arrayBuf = await resp.arrayBuffer();
@@ -3945,18 +3978,25 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
         STATE.analyser = STATE.audioCtx.createAnalyser();
         STATE.analyser.fftSize = 256;
         STATE.freqData = new Uint8Array(STATE.analyser.frequencyBinCount);
-        STATE.analyser.connect(STATE.audioCtx.destination);
+        // Gain node for volume control
+        STATE.gainNode = STATE.audioCtx.createGain();
+        STATE.gainNode.connect(STATE.audioCtx.destination);
+        STATE.analyser.connect(STATE.gainNode);
       }
       const ctx = STATE.audioCtx;
       if (ctx.state === 'suspended') await ctx.resume();
+      STATE.gainNode.gain.setValueAtTime(vol, ctx.currentTime);
 
       const audioBuf = await ctx.decodeAudioData(arrayBuf);
       const src = ctx.createBufferSource();
       src.buffer = audioBuf;
       src.connect(STATE.analyser);
+      // Stop any currently playing
+      if (STATE._currentSrc) { try { STATE._currentSrc.stop(); } catch(e){} }
+      STATE._currentSrc = src;
       STATE.speaking = true;
       src.start(0);
-      src.onended = () => { STATE.speaking = false; STATE.mouthTarget = 0; };
+      src.onended = () => { STATE.speaking = false; STATE.mouthTarget = 0; STATE._currentSrc = null; };
     } catch(e) { console.warn('VEGA TTS error:', e); }
   };
 
@@ -4298,8 +4338,11 @@ function toggleChat() {
     trigger.classList.remove('has-unread');
     setTimeout(() => { const inp = document.getElementById('aiInput'); if(inp) inp.focus(); }, 50);
     if (!AI.marketContext) loadMarketContext();
-    // Start Vega face
-    setTimeout(() => { if (typeof vegaStartFace === 'function') vegaStartFace(); }, 80);
+    // Start Vega face and init voice controls
+    setTimeout(() => {
+      if (typeof vegaStartFace === 'function') vegaStartFace();
+      if (typeof _vegaLoadSettings === 'function') _vegaLoadSettings();
+    }, 80);
   } else {
     panel.style.display = 'none';
     const sp = document.getElementById('aiSettingsPanel');
@@ -4313,7 +4356,7 @@ function toggleAISettings() {
   if (!sp) return;
   const isOpen = sp.style.display === 'block';
   sp.style.display = isOpen ? 'none' : 'block';
-  if (!isOpen) testOllamaStatus();
+  if (!isOpen) { _vegaLoadSettings(); testOllamaStatus(); }
 }
 
 // ── Save settings ─────────────────────────────────────────────────────────
@@ -4322,11 +4365,56 @@ function saveAISettings() {
     ollamaEnabled: document.getElementById('ollamaEnabledChk')?.checked ?? false,
     ollamaUrl:     document.getElementById('ollamaUrlInput')?.value.trim() || 'http://localhost:11434',
     ollamaModel:   document.getElementById('ollamaModelSel')?.value || 'llama3.2:latest',
+    vegaVoiceEnabled: document.getElementById('vegaVoiceEnabled')?.checked ?? true,
+    vegaVoice:     document.getElementById('vegaVoiceSel')?.value || 'eve',
+    vegaVolume:    parseFloat(document.getElementById('vegaVolumeSlider')?.value ?? 0.85),
   };
   localStorage.setItem('spyAI', JSON.stringify(settings));
   const sp = document.getElementById('aiSettingsPanel');
   if (sp) sp.style.display = 'none';
   setBadge(settings.ollamaEnabled ? '● OLLAMA' : '● GROK', settings.ollamaEnabled ? '#00ff88' : '#00ccff');
+  _vegaUpdateMuteBtn(settings.vegaVoiceEnabled);
+}
+
+function _vegaUpdateMuteBtn(enabled) {
+  const btn = document.getElementById('vegaMuteBtn');
+  if (!btn) return;
+  btn.textContent = enabled ? '🔊' : '🔇';
+  btn.style.color = enabled ? '#00ccff' : '#555';
+}
+
+function vegaToggleMute() {
+  const s = JSON.parse(localStorage.getItem('spyAI') || '{}');
+  s.vegaVoiceEnabled = !s.vegaVoiceEnabled;
+  localStorage.setItem('spyAI', JSON.stringify(s));
+  _vegaUpdateMuteBtn(s.vegaVoiceEnabled);
+  // Sync checkbox if settings panel is open
+  const chk = document.getElementById('vegaVoiceEnabled');
+  if (chk) chk.checked = s.vegaVoiceEnabled;
+}
+
+function vegaTestVoice() {
+  if (typeof vegaSpeak === 'function') vegaSpeak("Hey. I'm VEGA. Market data loaded. Let's trade.");
+}
+
+function _vegaLoadSettings() {
+  const s = JSON.parse(localStorage.getItem('spyAI') || '{}');
+  const voiceEnabled = s.vegaVoiceEnabled !== false;
+  const vol = s.vegaVolume != null ? s.vegaVolume : 0.85;
+  const voice = s.vegaVoice || 'eve';
+  const chk = document.getElementById('vegaVoiceEnabled');
+  if (chk) chk.checked = voiceEnabled;
+  const sel = document.getElementById('vegaVoiceSel');
+  if (sel) sel.value = voice;
+  const slider = document.getElementById('vegaVolumeSlider');
+  if (slider) { slider.value = vol; document.getElementById('vegaVolDisplay').textContent = Math.round(vol*100)+'%'; }
+  const ollamaChk = document.getElementById('ollamaEnabledChk');
+  if (ollamaChk) ollamaChk.checked = s.ollamaEnabled ?? false;
+  const urlInp = document.getElementById('ollamaUrlInput');
+  if (urlInp) urlInp.value = s.ollamaUrl || 'http://localhost:11434';
+  const modelSel = document.getElementById('ollamaModelSel');
+  if (modelSel) modelSel.value = s.ollamaModel || 'llama3.2:latest';
+  _vegaUpdateMuteBtn(voiceEnabled);
 }
 
 // ── Test Ollama reachability ──────────────────────────────────────────────
