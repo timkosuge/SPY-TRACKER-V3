@@ -4113,16 +4113,56 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     // ── Draw face (redrawn every frame with animated parts) ────────────
     function drawFace() {
       fx.clearRect(0,0,W,H); fx.fillStyle='#000'; fx.fillRect(0,0,W,H);
+
+      // ── Faint circuit-board background (drawn before clipping) ───────
+      // Horizontal traces
+      const traceCount = 18;
+      for(let i=0;i<traceCount;i++){
+        const ty = (H*0.08) + (i/(traceCount-1))*(H*0.88);
+        const alpha = 0.018 + Math.sin(i*0.7)*0.008;
+        fx.strokeStyle = `rgba(0,180,120,${alpha})`;
+        fx.lineWidth = 0.5;
+        fx.beginPath(); fx.moveTo(0,ty); fx.lineTo(W,ty); fx.stroke();
+      }
+      // Vertical traces
+      const vCount = 14;
+      for(let i=0;i<vCount;i++){
+        const tx = (i/(vCount-1))*W;
+        fx.strokeStyle = `rgba(0,160,100,0.012)`;
+        fx.lineWidth = 0.5;
+        fx.beginPath(); fx.moveTo(tx,0); fx.lineTo(tx,H); fx.stroke();
+      }
+      // Circuit nodes — small dots at intersections
+      for(let r=0;r<traceCount;r+=3){
+        for(let c=0;c<vCount;c+=3){
+          const nx = (c/(vCount-1))*W;
+          const ny = (H*0.08)+(r/(traceCount-1))*(H*0.88);
+          if(Math.random()>0.55) continue;
+          fx.beginPath(); fx.arc(nx,ny,0.8,0,Math.PI*2);
+          fx.fillStyle=`rgba(0,220,140,0.06)`; fx.fill();
+        }
+      }
+      // A few longer L-shaped traces for circuit feel
+      [[0.15,0.2,0.38,0.2,0.38,0.45],[0.62,0.3,0.82,0.3,0.82,0.55],
+       [0.1,0.6,0.28,0.6,0.28,0.75],[0.72,0.55,0.88,0.55,0.88,0.78]].forEach(([x1,y1,x2,y2,x3,y3])=>{
+        fx.strokeStyle='rgba(0,200,120,0.03)'; fx.lineWidth=0.7;
+        fx.beginPath(); fx.moveTo(x1*W,y1*H); fx.lineTo(x2*W,y2*H); fx.lineTo(x3*W,y3*H); fx.stroke();
+        fx.beginPath(); fx.arc(x2*W,y2*H,1.2,0,Math.PI*2); fx.fillStyle='rgba(0,220,140,0.08)'; fx.fill();
+      });
+
       fx.save();
-      // Face outline path
+      // Face outline — chin pulled up, less pointy, rounder jaw
+      // yChin was 370*scale, reduce to 355 for less gap, soften chin point
+      const yChinAdj = yChin - 15*scale; // tighter chin
       fx.beginPath();
       fx.moveTo(cx,yHair-10*scale);
       fx.bezierCurveTo(cx-80*scale,yHair-12*scale,cx-104*scale,yBrow-8*scale,cx-102*scale,yEye+8*scale);
       fx.bezierCurveTo(cx-100*scale,yNoseB-18*scale,cx-90*scale,yNoseB+14*scale,cx-76*scale,yNoseB+44*scale);
-      fx.bezierCurveTo(cx-64*scale,yNoseB+72*scale,cx-46*scale,yChin+2*scale,cx-28*scale,yChin+18*scale);
-      fx.bezierCurveTo(cx-16*scale,yChin+26*scale,cx-6*scale,yChin+30*scale,cx,yChin+30*scale);
-      fx.bezierCurveTo(cx+6*scale,yChin+30*scale,cx+16*scale,yChin+26*scale,cx+28*scale,yChin+18*scale);
-      fx.bezierCurveTo(cx+46*scale,yChin+2*scale,cx+64*scale,yNoseB+72*scale,cx+76*scale,yNoseB+44*scale);
+      // Jaw curves — rounder, less angular at chin
+      fx.bezierCurveTo(cx-60*scale,yNoseB+68*scale,cx-40*scale,yChinAdj+8*scale,cx-22*scale,yChinAdj+20*scale);
+      fx.bezierCurveTo(cx-10*scale,yChinAdj+27*scale,cx-3*scale,yChinAdj+29*scale,cx,yChinAdj+29*scale);
+      fx.bezierCurveTo(cx+3*scale,yChinAdj+29*scale,cx+10*scale,yChinAdj+27*scale,cx+22*scale,yChinAdj+20*scale);
+      fx.bezierCurveTo(cx+40*scale,yChinAdj+8*scale,cx+60*scale,yNoseB+68*scale,cx+76*scale,yNoseB+44*scale);
       fx.bezierCurveTo(cx+90*scale,yNoseB+14*scale,cx+100*scale,yNoseB-18*scale,cx+102*scale,yEye+8*scale);
       fx.bezierCurveTo(cx+104*scale,yBrow-8*scale,cx+80*scale,yHair-12*scale,cx,yHair-10*scale);
       fx.closePath();
@@ -4131,23 +4171,54 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
       skinG.addColorStop(0.6,'#060f1a'); skinG.addColorStop(1,'#020810');
       fx.fillStyle=skinG; fx.fill(); fx.clip();
 
-      // Lighting
+      // ── Subsurface / depth lighting ──────────────────────────────────
+      // Forehead highlight
       const fhG=fx.createRadialGradient(cx,yHair+36*scale,4*scale,cx,yHair+55*scale,85*scale);
       fhG.addColorStop(0,'rgba(0,130,195,0.22)'); fhG.addColorStop(1,'rgba(0,0,0,0)');
       fx.fillStyle=fhG; fx.beginPath(); fx.ellipse(cx,yHair+50*scale,75*scale,56*scale,0,0,Math.PI*2); fx.fill();
-      [[cx-74*scale,yEye+28*scale,-0.2],[cx+74*scale,yEye+28*scale,0.2]].forEach(([ex,ey,a])=>{
-        const g=fx.createRadialGradient(ex,ey,0,ex,ey,60*scale);
-        g.addColorStop(0,'rgba(0,105,165,0.14)'); g.addColorStop(1,'rgba(0,0,0,0)');
-        fx.fillStyle=g; fx.beginPath(); fx.ellipse(ex,ey,60*scale,38*scale,a,0,Math.PI*2); fx.fill();
+
+      // Cheekbone highlights — give face more 3D width
+      [[cx-68*scale,yEye+40*scale,-0.2],[cx+68*scale,yEye+40*scale,0.2]].forEach(([ex,ey,a])=>{
+        const g=fx.createRadialGradient(ex,ey,0,ex,ey,55*scale);
+        g.addColorStop(0,'rgba(0,100,160,0.16)'); g.addColorStop(0.5,'rgba(0,70,120,0.06)'); g.addColorStop(1,'rgba(0,0,0,0)');
+        fx.fillStyle=g; fx.beginPath(); fx.ellipse(ex,ey,55*scale,32*scale,a,0,Math.PI*2); fx.fill();
       });
-      const jawG=fx.createRadialGradient(cx,yChin+10*scale,8*scale,cx,yChin+10*scale,130*scale);
-      jawG.addColorStop(0,'rgba(0,40,70,0.06)'); jawG.addColorStop(0.5,'rgba(0,0,0,0.25)'); jawG.addColorStop(1,'rgba(0,0,0,0.65)');
-      fx.fillStyle=jawG; fx.fillRect(cx-110*scale,yNoseB+50*scale,220*scale,yChin-yNoseB+60*scale);
+
+      // Temple shadows — push sides back
+      [[cx-98*scale,yBrow+20*scale],[cx+98*scale,yBrow+20*scale]].forEach(([tx,ty])=>{
+        const g=fx.createRadialGradient(tx,ty,0,tx,ty,52*scale);
+        g.addColorStop(0,'rgba(0,5,15,0.55)'); g.addColorStop(1,'rgba(0,0,0,0)');
+        fx.fillStyle=g; fx.beginPath(); fx.ellipse(tx,ty,52*scale,38*scale,0,0,Math.PI*2); fx.fill();
+      });
+
+      // Nose bridge highlight — vertical light strip down centre
+      const nbG=fx.createLinearGradient(cx-6*scale,yBrow+10*scale,cx+6*scale,yBrow+10*scale);
+      nbG.addColorStop(0,'rgba(0,0,0,0)'); nbG.addColorStop(0.5,'rgba(0,140,210,0.09)'); nbG.addColorStop(1,'rgba(0,0,0,0)');
+      fx.fillStyle=nbG; fx.fillRect(cx-12*scale,yBrow+8*scale,24*scale,yNoseB-yBrow-4*scale);
+
+      // Under-eye depth / orbital shadow
+      [[cx-46*scale,yEye+18*scale],[cx+46*scale,yEye+18*scale]].forEach(([ox,oy])=>{
+        const g=fx.createRadialGradient(ox,oy,2*scale,ox,oy,30*scale);
+        g.addColorStop(0,'rgba(0,6,18,0.35)'); g.addColorStop(1,'rgba(0,0,0,0)');
+        fx.fillStyle=g; fx.beginPath(); fx.ellipse(ox,oy,30*scale,16*scale,0,0,Math.PI*2); fx.fill();
+      });
+
+      // Jaw / chin shadow — darker, tighter, to reduce big-chin look
+      const jawG=fx.createRadialGradient(cx,yChinAdj,6*scale,cx,yChinAdj,90*scale);
+      jawG.addColorStop(0,'rgba(0,20,40,0.08)'); jawG.addColorStop(0.4,'rgba(0,0,0,0.35)'); jawG.addColorStop(1,'rgba(0,0,0,0.75)');
+      fx.fillStyle=jawG; fx.fillRect(cx-110*scale,yNoseB+60*scale,220*scale,yChinAdj-yNoseB+40*scale);
+
+      // Philtrum shadow (groove above lip)
+      const philG=fx.createLinearGradient(cx-5*scale,yNoseB+10*scale,cx+5*scale,yNoseB+10*scale);
+      philG.addColorStop(0,'rgba(0,0,0,0)'); philG.addColorStop(0.5,'rgba(0,5,15,0.28)'); philG.addColorStop(1,'rgba(0,0,0,0)');
+      fx.fillStyle=philG; fx.fillRect(cx-5*scale,yNoseB+8*scale,10*scale,yLip-yNoseB-4*scale);
+
+      // Subtle face contour lines
       fx.lineWidth=0.28*scale;
       for(let i=0;i<=18;i++){
-        const y=yHair+i*(yChin+30*scale-yHair)/18, t=(y-yHair)/(yChin+30*scale-yHair), sprd=Math.sin(t*Math.PI)*100*scale+4*scale;
+        const y=yHair+i*(yChinAdj+20*scale-yHair)/18, t=(y-yHair)/(yChinAdj+20*scale-yHair), sprd=Math.sin(t*Math.PI)*100*scale+4*scale;
         fx.beginPath(); fx.moveTo(cx-sprd,y); fx.quadraticCurveTo(cx,y-sprd*0.055,cx+sprd,y);
-        fx.strokeStyle=`rgba(0,148,208,${0.052+0.022*Math.sin(i*0.9)})`; fx.stroke();
+        fx.strokeStyle=`rgba(0,148,208,${0.042+0.018*Math.sin(i*0.9)})`; fx.stroke();
       }
       fx.restore();
 
@@ -4166,19 +4237,16 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
       // ── Animated Eyes ───────────────────────────────────────────────
       function drawEye(ecxBase, ecyBase, isLeft) {
         const s = isLeft ? -1 : 1;
-        // Apply gaze offset
         const ecx = ecxBase + STATE.gazeX;
         const ecy = ecyBase + STATE.gazeY;
         const ew=24*scale, eh=10*scale;
         const icx=ecxBase-s*ew, ocx=ecxBase+s*ew;
         const icy=ecyBase+2*scale, ocy=ecyBase+3*scale;
 
-        // Eye socket shadow
         const sg=fx.createRadialGradient(ecxBase,ecyBase+2*scale,2*scale,ecxBase,ecyBase+2*scale,38*scale);
         sg.addColorStop(0,'rgba(0,10,25,0.96)'); sg.addColorStop(0.6,'rgba(0,8,20,0.7)'); sg.addColorStop(1,'rgba(0,0,0,0)');
         fx.fillStyle=sg; fx.beginPath(); fx.ellipse(ecxBase,ecyBase+2*scale,40*scale,22*scale,0,0,Math.PI*2); fx.fill();
 
-        // Eye opening clipped — blinkT squashes the vertical height
         const openFactor = 1 - STATE.blinkT;
         fx.save(); fx.beginPath();
         fx.moveTo(icx,icy);
@@ -4188,7 +4256,6 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
         fx.fillStyle='rgba(2,14,26,0.93)'; fx.fill();
 
         if (openFactor > 0.05) {
-          // Iris
           const irx=ecx+s*1.5*scale, iry=ecy+0.5*scale, irR=9.5*scale;
           fx.beginPath(); fx.ellipse(irx,iry,irR+0.9*scale,irR+0.9*scale,0,0,Math.PI*2); fx.fillStyle='rgba(0,12,28,0.92)'; fx.fill();
           const iG=fx.createRadialGradient(irx-1.5*scale,iry-2*scale,0.5*scale,irx,iry,irR);
@@ -4202,16 +4269,13 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
             fx.strokeStyle='rgba(0,180,240,0.08)'; fx.lineWidth=0.3*scale; fx.stroke();
           }
           fx.restore();
-          // Pupil
           fx.beginPath(); fx.ellipse(irx,iry,4.8*scale,5.2*scale,0,0,Math.PI*2); fx.fillStyle='#000508'; fx.fill();
-          // Specular
           const spG=fx.createRadialGradient(irx+3.2*scale,iry-3.5*scale,0,irx+3.2*scale,iry-3.5*scale,2.8*scale);
           spG.addColorStop(0,'rgba(230,248,255,0.95)'); spG.addColorStop(1,'rgba(180,230,255,0)');
           fx.beginPath(); fx.ellipse(irx+3.2*scale,iry-3.5*scale,2.8*scale,2.0*scale,-0.3,0,Math.PI*2); fx.fillStyle=spG; fx.fill();
         }
         fx.restore();
 
-        // Eyelid close overlay — draws from centre outward as blinkT increases
         if (STATE.blinkT > 0) {
           fx.save(); fx.beginPath();
           fx.moveTo(icx,icy);
@@ -4222,8 +4286,6 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
           fx.fillStyle=`rgba(6,15,26,${STATE.blinkT})`; fx.fill();
           fx.restore();
         }
-
-        // Lashes (always on top of eyelid)
         fx.beginPath(); fx.moveTo(icx,icy); fx.bezierCurveTo(icx+s*10*scale,ecy-eh*(1-STATE.blinkT*0.8),ecx+s*5*scale,ecy-eh*1.5*(1-STATE.blinkT*0.5),ocx,ocy-3*scale*(1-STATE.blinkT));
         fx.strokeStyle='rgba(0,200,250,0.72)'; fx.lineWidth=1.1*scale; fx.stroke();
       }
@@ -4231,40 +4293,57 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
       drawEye(cx-46*scale, yEye, true);
       drawEye(cx+46*scale, yEye, false);
 
-      // Nose
-      fx.beginPath(); fx.moveTo(cx-16*scale,yNoseB-8*scale);
-      fx.bezierCurveTo(cx-20*scale,yNoseB-2*scale,cx-22*scale,yNoseB-10*scale,cx-19*scale,yNoseB+4*scale);
-      fx.bezierCurveTo(cx-16*scale,yNoseB+8*scale,cx-8*scale,yNoseB+10*scale,cx,yNoseB+8*scale);
-      fx.bezierCurveTo(cx+8*scale,yNoseB+10*scale,cx+16*scale,yNoseB+8*scale,cx+19*scale,yNoseB+4*scale);
-      fx.bezierCurveTo(cx+22*scale,yNoseB-10*scale,cx+20*scale,yNoseB-2*scale,cx+16*scale,yNoseB-8*scale);
-      fx.strokeStyle='rgba(0,125,185,0.28)'; fx.lineWidth=0.7*scale; fx.stroke();
+      // ── Nose — volumetric shading, no hard outline ───────────────────
+      // Nose tip volume — soft radial highlight
+      const noseTipG = fx.createRadialGradient(cx, yNoseB-2*scale, 1*scale, cx, yNoseB, 14*scale);
+      noseTipG.addColorStop(0,'rgba(0,110,170,0.13)'); noseTipG.addColorStop(0.6,'rgba(0,60,100,0.05)'); noseTipG.addColorStop(1,'rgba(0,0,0,0)');
+      fx.fillStyle=noseTipG; fx.beginPath(); fx.ellipse(cx,yNoseB-2*scale,14*scale,10*scale,0,0,Math.PI*2); fx.fill();
+      // Nostril shadows — filled ellipses, no stroke
+      [[-11,3,5,3.2,0.3],[11,3,5,3.2,-0.3]].forEach(([nx,ny,rw,rh,rot])=>{
+        const ng=fx.createRadialGradient(cx+nx*scale,yNoseB+ny*scale,0,cx+nx*scale,yNoseB+ny*scale,rw*scale);
+        ng.addColorStop(0,'rgba(0,2,8,0.55)'); ng.addColorStop(1,'rgba(0,0,0,0)');
+        fx.fillStyle=ng; fx.beginPath(); fx.ellipse(cx+nx*scale,yNoseB+ny*scale,rw*scale,rh*scale,rot,0,Math.PI*2); fx.fill();
+      });
+      // Nose bridge side shadows — push bridge forward
+      [-1,1].forEach(side=>{
+        const bx = cx + side*13*scale;
+        const bg = fx.createLinearGradient(bx,yBrow+30*scale, cx+side*7*scale, yBrow+30*scale);
+        bg.addColorStop(0,'rgba(0,3,12,0.18)'); bg.addColorStop(1,'rgba(0,0,0,0)');
+        fx.fillStyle=bg; fx.fillRect(Math.min(bx,cx+side*7*scale),yBrow+28*scale,6*scale,yNoseB-yBrow-20*scale);
+      });
+      // Very faint ala curves — just shadow, no line
+      [[-14,yNoseB+2*scale,7,5,0.2],[14,yNoseB+2*scale,7,5,-0.2]].forEach(([ax,ay,rw,rh,rot])=>{
+        fx.beginPath(); fx.ellipse(cx+ax*scale,ay,rw*scale,rh*scale,rot,0,Math.PI*2);
+        fx.strokeStyle='rgba(0,80,130,0.10)'; fx.lineWidth=0.6*scale; fx.stroke();
+      });
 
       // ── Animated Mouth ───────────────────────────────────────────────
-      const mw=36*scale, mCorner=yLip+1*scale;
-      const mo = STATE.mouthOpen; // 0=closed, 1=open
-      const openH = mo * 18 * scale; // max jaw drop
+      // Lip-to-chin gap tightened: mCorner moved up relative to yLip
+      const mw=32*scale, mCorner=yLip-2*scale; // narrower width, raised up slightly
+      const mo = STATE.mouthOpen;
+      const openH = mo * 16 * scale;
 
-      // Interior darkness when open
       if (mo > 0.02) {
         fx.beginPath();
         fx.moveTo(cx-mw+4*scale, mCorner+2*scale);
         fx.bezierCurveTo(cx-8*scale,mCorner+4*scale+openH*0.5, cx+8*scale,mCorner+4*scale+openH*0.5, cx+mw-4*scale,mCorner+2*scale);
-        fx.bezierCurveTo(cx+16*scale,mCorner+openH,cx-16*scale,mCorner+openH,cx-mw+4*scale,mCorner+2*scale);
+        fx.bezierCurveTo(cx+14*scale,mCorner+openH,cx-14*scale,mCorner+openH,cx-mw+4*scale,mCorner+2*scale);
         fx.fillStyle=`rgba(0,2,8,${0.7+mo*0.25})`; fx.fill();
       }
-
-      // Upper lip — rises slightly when open
+      // Upper lip
       fx.beginPath(); fx.moveTo(cx-mw,mCorner+2*scale);
-      fx.bezierCurveTo(cx-26*scale,mCorner-4*scale-openH*0.15,cx-14*scale,mCorner-7*scale-openH*0.1,cx-5*scale,mCorner-5*scale-openH*0.1);
-      fx.bezierCurveTo(cx-2*scale,mCorner-6*scale-openH*0.1,cx+2*scale,mCorner-6*scale-openH*0.1,cx+5*scale,mCorner-5*scale-openH*0.1);
-      fx.bezierCurveTo(cx+14*scale,mCorner-7*scale-openH*0.1,cx+26*scale,mCorner-4*scale-openH*0.15,cx+mw,mCorner+2*scale);
-      fx.strokeStyle='rgba(0,170,232,0.58)'; fx.lineWidth=1.0*scale; fx.stroke();
-
-      // Lower lip — drops down
+      fx.bezierCurveTo(cx-22*scale,mCorner-3*scale-openH*0.15,cx-12*scale,mCorner-6*scale-openH*0.1,cx-4*scale,mCorner-5*scale-openH*0.1);
+      fx.bezierCurveTo(cx-1*scale,mCorner-6*scale-openH*0.1,cx+1*scale,mCorner-6*scale-openH*0.1,cx+4*scale,mCorner-5*scale-openH*0.1);
+      fx.bezierCurveTo(cx+12*scale,mCorner-6*scale-openH*0.1,cx+22*scale,mCorner-3*scale-openH*0.15,cx+mw,mCorner+2*scale);
+      fx.strokeStyle='rgba(0,170,232,0.55)'; fx.lineWidth=1.0*scale; fx.stroke();
+      // Lower lip — tighter drop
       fx.beginPath(); fx.moveTo(cx-mw,mCorner+2*scale);
-      fx.bezierCurveTo(cx-mw+8*scale,mCorner+16*scale+openH,cx-14*scale,mCorner+26*scale+openH,cx,mCorner+26*scale+openH);
-      fx.bezierCurveTo(cx+14*scale,mCorner+26*scale+openH,cx+mw-8*scale,mCorner+16*scale+openH,cx+mw,mCorner+2*scale);
-      fx.strokeStyle='rgba(0,138,200,0.40)'; fx.lineWidth=0.85*scale; fx.stroke();
+      fx.bezierCurveTo(cx-mw+7*scale,mCorner+13*scale+openH,cx-12*scale,mCorner+20*scale+openH,cx,mCorner+20*scale+openH);
+      fx.bezierCurveTo(cx+12*scale,mCorner+20*scale+openH,cx+mw-7*scale,mCorner+13*scale+openH,cx+mw,mCorner+2*scale);
+      fx.strokeStyle='rgba(0,138,200,0.38)'; fx.lineWidth=0.85*scale; fx.stroke();
+      // Lip shadow line
+      fx.beginPath(); fx.moveTo(cx-mw+4*scale,mCorner+2*scale); fx.lineTo(cx+mw-4*scale,mCorner+2*scale);
+      fx.strokeStyle='rgba(0,60,100,0.15)'; fx.lineWidth=0.5*scale; fx.stroke();
 
       // Fades
       [[0,H-60,W,60,'rgba(0,0,0,0)','rgba(0,0,0,0.9)',true],
