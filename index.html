@@ -3858,10 +3858,10 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   </div>
 
   <!-- VEGA Face — collapsible -->
-  <div id="vegaFaceWrap" style="position:relative;width:100%;height:200px;background:#000;overflow:hidden;flex-shrink:0;cursor:pointer;border-bottom:1px solid rgba(0,204,255,0.12);transition:height 0.3s ease;" onclick="vegaToggleFace()" title="Click to collapse">
-    <canvas id="vegaF" width="420" height="200" style="position:absolute;inset:0;display:block;width:100%;height:100%;"></canvas>
-    <canvas id="vegaR" width="420" height="200" style="position:absolute;inset:0;display:block;width:100%;height:100%;z-index:2;"></canvas>
-    <canvas id="vegaG" width="420" height="200" style="position:absolute;inset:0;display:block;width:100%;height:100%;z-index:3;"></canvas>
+  <div id="vegaFaceWrap" style="position:relative;width:100%;height:400px;background:#000;overflow:hidden;flex-shrink:0;cursor:pointer;border-bottom:1px solid rgba(0,204,255,0.12);transition:height 0.3s ease;" onclick="vegaToggleFace()" title="Click to collapse">
+    <canvas id="vegaF" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;opacity:0.72;"></canvas>
+    <canvas id="vegaR" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;z-index:2;"></canvas>
+    <canvas id="vegaG" width="420" height="400" style="position:absolute;inset:0;display:block;width:100%;height:100%;z-index:3;"></canvas>
     <div style="position:absolute;bottom:6px;right:8px;font-family:'Orbitron',monospace;font-size:7px;color:rgba(0,200,255,0.4);letter-spacing:2px;pointer-events:none;">VEGA v9 ▲</div>
   </div>
 
@@ -3908,11 +3908,11 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     if (!fc || !rc || !gc) return;
     _vegaStarted = true;
 
-    const W = fc.offsetWidth || 420, H = fc.offsetHeight || 200;
+    const W = fc.offsetWidth || 420, H = fc.offsetHeight || 400;
     [fc,rc,gc].forEach(c=>{ c.width=W; c.height=H; });
     const fx=fc.getContext('2d'), rx=rc.getContext('2d'), gx=gc.getContext('2d');
     const cx=W/2;
-    // Scale landmarks to fit 200px height (original was 540px)
+    // Scale landmarks to fit 400px height (original was 540px)
     const scale = H/540;
     const yHair=95*scale, yBrow=185*scale, yEye=204*scale;
     const yNoseB=278*scale, yLip=310*scale, yChin=370*scale;
@@ -4040,8 +4040,8 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     const CHARS='アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン01101001010111000110100101110010001101110100011010';
     function getFaceMask(xpos){ const dx=Math.abs(xpos-cx); if(dx>106*scale)return 0.48; if(Math.abs(xpos-(cx-46*scale))<26*scale||Math.abs(xpos-(cx+46*scale))<26*scale)return 0.15; if(dx<18*scale)return 0.18; return 0.20+(dx/(106*scale))*0.28; }
     function makeLayer(n,szFn,speedFn,lenFn,of){ return Array.from({length:n},(_,i)=>{ const xpos=of+(i/(n-1))*(W-of*2); const base=getFaceMask(xpos); return {x:xpos,y:-Math.random()*H*1.5,speed:speedFn(),len:lenFn(),chars:Array.from({length:48},()=>CHARS[Math.floor(Math.random()*CHARS.length)]),rate:1+Math.floor(Math.random()*5),timer:Math.floor(Math.random()*30),base,bright:base*(0.6+Math.random()*0.7),sz:szFn(),lead:Math.random()>0.22}; }); }
-    const layerA=makeLayer(80,()=>Math.random()>0.75?11:9,()=>0.3+Math.random()*2.8,()=>6+Math.floor(Math.random()*18),0.5);
-    const layerB=makeLayer(60,()=>9,()=>0.25+Math.random()*2.2,()=>5+Math.floor(Math.random()*14),1.2);
+    const layerA=makeLayer(240,()=>Math.random()>0.75?11:9,()=>0.3+Math.random()*2.8,()=>6+Math.floor(Math.random()*18),0.5);
+    const layerB=makeLayer(180,()=>9,()=>0.25+Math.random()*2.2,()=>5+Math.floor(Math.random()*14),1.2);
     const allDrops=[...layerA,...layerB];
 
     function drawRain(){
@@ -4100,7 +4100,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     const label = wrap.querySelector('div');
     if (wrap.style.height === '0px' || wrap.style.height === '') {
       // collapsed → expand
-      wrap.style.height = '200px';
+      wrap.style.height = '400px';
       wrap.style.borderBottomWidth = '1px';
       if (label) label.textContent = 'VEGA v9 ▲';
       window.vegaStartFace();
