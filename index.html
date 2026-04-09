@@ -4111,54 +4111,65 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
     }
 
     // ── Draw face (redrawn every frame with animated parts) ────────────
+    // ── Pre-bake circuit nodes (outside drawFace to avoid flicker) ───
+    const _circuitNodes = [];
+    (function(){
+      const trC=18, vC=14;
+      for(let r=0;r<trC;r+=2){
+        for(let c=0;c<vC;c+=2){
+          if(Math.random()>0.5) continue;
+          _circuitNodes.push([c/(vC-1), 0.08+(r/(trC-1))*0.88]);
+        }
+      }
+    })();
+
     function drawFace() {
       fx.clearRect(0,0,W,H); fx.fillStyle='#000'; fx.fillRect(0,0,W,H);
 
-      // ── Faint circuit-board background (drawn before clipping) ───────
-      // Horizontal traces
+      // ── Circuit-board background ──────────────────────────────────────
+      // Horizontal PCB traces
       const traceCount = 18;
       for(let i=0;i<traceCount;i++){
-        const ty = (H*0.08) + (i/(traceCount-1))*(H*0.88);
-        const alpha = 0.018 + Math.sin(i*0.7)*0.008;
-        fx.strokeStyle = `rgba(0,180,120,${alpha})`;
-        fx.lineWidth = 0.5;
+        const ty = (H*0.06) + (i/(traceCount-1))*(H*0.88);
+        const a = 0.09 + Math.sin(i*0.7)*0.03;
+        fx.strokeStyle = `rgba(0,160,90,${a.toFixed(3)})`;
+        fx.lineWidth = 0.6;
         fx.beginPath(); fx.moveTo(0,ty); fx.lineTo(W,ty); fx.stroke();
       }
       // Vertical traces
       const vCount = 14;
       for(let i=0;i<vCount;i++){
         const tx = (i/(vCount-1))*W;
-        fx.strokeStyle = `rgba(0,160,100,0.012)`;
-        fx.lineWidth = 0.5;
+        fx.strokeStyle = `rgba(0,140,80,0.06)`;
+        fx.lineWidth = 0.6;
         fx.beginPath(); fx.moveTo(tx,0); fx.lineTo(tx,H); fx.stroke();
       }
-      // Circuit nodes — small dots at intersections
-      for(let r=0;r<traceCount;r+=3){
-        for(let c=0;c<vCount;c+=3){
-          const nx = (c/(vCount-1))*W;
-          const ny = (H*0.08)+(r/(traceCount-1))*(H*0.88);
-          if(Math.random()>0.55) continue;
-          fx.beginPath(); fx.arc(nx,ny,0.8,0,Math.PI*2);
-          fx.fillStyle=`rgba(0,220,140,0.06)`; fx.fill();
-        }
-      }
-      // A few longer L-shaped traces for circuit feel
-      [[0.15,0.2,0.38,0.2,0.38,0.45],[0.62,0.3,0.82,0.3,0.82,0.55],
-       [0.1,0.6,0.28,0.6,0.28,0.75],[0.72,0.55,0.88,0.55,0.88,0.78]].forEach(([x1,y1,x2,y2,x3,y3])=>{
-        fx.strokeStyle='rgba(0,200,120,0.03)'; fx.lineWidth=0.7;
+      // Pre-baked nodes
+      _circuitNodes.forEach(([xf,yf])=>{
+        fx.beginPath(); fx.arc(xf*W, yf*H, 1.4, 0, Math.PI*2);
+        fx.fillStyle='rgba(0,210,120,0.18)'; fx.fill();
+        // tiny halo
+        fx.beginPath(); fx.arc(xf*W, yf*H, 3, 0, Math.PI*2);
+        fx.strokeStyle='rgba(0,200,110,0.07)'; fx.lineWidth=0.8; fx.stroke();
+      });
+      // L-shaped traces
+      [[0.12,0.18,0.35,0.18,0.35,0.42],[0.65,0.28,0.84,0.28,0.84,0.52],
+       [0.08,0.58,0.26,0.58,0.26,0.76],[0.74,0.52,0.90,0.52,0.90,0.80],
+       [0.20,0.72,0.42,0.72,0.42,0.88],[0.55,0.15,0.78,0.15,0.78,0.38]].forEach(([x1,y1,x2,y2,x3,y3])=>{
+        fx.strokeStyle='rgba(0,180,100,0.10)'; fx.lineWidth=0.8;
         fx.beginPath(); fx.moveTo(x1*W,y1*H); fx.lineTo(x2*W,y2*H); fx.lineTo(x3*W,y3*H); fx.stroke();
-        fx.beginPath(); fx.arc(x2*W,y2*H,1.2,0,Math.PI*2); fx.fillStyle='rgba(0,220,140,0.08)'; fx.fill();
+        // junction dot
+        fx.beginPath(); fx.arc(x2*W,y2*H,2,0,Math.PI*2);
+        fx.fillStyle='rgba(0,220,130,0.22)'; fx.fill();
       });
 
       fx.save();
-      // Face outline — chin pulled up, less pointy, rounder jaw
-      // yChin was 370*scale, reduce to 355 for less gap, soften chin point
-      const yChinAdj = yChin - 15*scale; // tighter chin
+      // Face outline — rounded jaw, tighter chin
+      const yChinAdj = yChin - 15*scale;
       fx.beginPath();
       fx.moveTo(cx,yHair-10*scale);
       fx.bezierCurveTo(cx-80*scale,yHair-12*scale,cx-104*scale,yBrow-8*scale,cx-102*scale,yEye+8*scale);
       fx.bezierCurveTo(cx-100*scale,yNoseB-18*scale,cx-90*scale,yNoseB+14*scale,cx-76*scale,yNoseB+44*scale);
-      // Jaw curves — rounder, less angular at chin
       fx.bezierCurveTo(cx-60*scale,yNoseB+68*scale,cx-40*scale,yChinAdj+8*scale,cx-22*scale,yChinAdj+20*scale);
       fx.bezierCurveTo(cx-10*scale,yChinAdj+27*scale,cx-3*scale,yChinAdj+29*scale,cx,yChinAdj+29*scale);
       fx.bezierCurveTo(cx+3*scale,yChinAdj+29*scale,cx+10*scale,yChinAdj+27*scale,cx+22*scale,yChinAdj+20*scale);
@@ -4171,49 +4182,31 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
       skinG.addColorStop(0.6,'#060f1a'); skinG.addColorStop(1,'#020810');
       fx.fillStyle=skinG; fx.fill(); fx.clip();
 
-      // ── Subsurface / depth lighting ──────────────────────────────────
-      // Forehead highlight
+      // ── Depth lighting ────────────────────────────────────────────────
       const fhG=fx.createRadialGradient(cx,yHair+36*scale,4*scale,cx,yHair+55*scale,85*scale);
       fhG.addColorStop(0,'rgba(0,130,195,0.22)'); fhG.addColorStop(1,'rgba(0,0,0,0)');
       fx.fillStyle=fhG; fx.beginPath(); fx.ellipse(cx,yHair+50*scale,75*scale,56*scale,0,0,Math.PI*2); fx.fill();
-
-      // Cheekbone highlights — give face more 3D width
       [[cx-68*scale,yEye+40*scale,-0.2],[cx+68*scale,yEye+40*scale,0.2]].forEach(([ex,ey,a])=>{
         const g=fx.createRadialGradient(ex,ey,0,ex,ey,55*scale);
         g.addColorStop(0,'rgba(0,100,160,0.16)'); g.addColorStop(0.5,'rgba(0,70,120,0.06)'); g.addColorStop(1,'rgba(0,0,0,0)');
         fx.fillStyle=g; fx.beginPath(); fx.ellipse(ex,ey,55*scale,32*scale,a,0,Math.PI*2); fx.fill();
       });
-
-      // Temple shadows — push sides back
       [[cx-98*scale,yBrow+20*scale],[cx+98*scale,yBrow+20*scale]].forEach(([tx,ty])=>{
         const g=fx.createRadialGradient(tx,ty,0,tx,ty,52*scale);
         g.addColorStop(0,'rgba(0,5,15,0.55)'); g.addColorStop(1,'rgba(0,0,0,0)');
         fx.fillStyle=g; fx.beginPath(); fx.ellipse(tx,ty,52*scale,38*scale,0,0,Math.PI*2); fx.fill();
       });
-
-      // Nose bridge highlight — vertical light strip down centre
-      const nbG=fx.createLinearGradient(cx-6*scale,yBrow+10*scale,cx+6*scale,yBrow+10*scale);
-      nbG.addColorStop(0,'rgba(0,0,0,0)'); nbG.addColorStop(0.5,'rgba(0,140,210,0.09)'); nbG.addColorStop(1,'rgba(0,0,0,0)');
-      fx.fillStyle=nbG; fx.fillRect(cx-12*scale,yBrow+8*scale,24*scale,yNoseB-yBrow-4*scale);
-
-      // Under-eye depth / orbital shadow
       [[cx-46*scale,yEye+18*scale],[cx+46*scale,yEye+18*scale]].forEach(([ox,oy])=>{
         const g=fx.createRadialGradient(ox,oy,2*scale,ox,oy,30*scale);
         g.addColorStop(0,'rgba(0,6,18,0.35)'); g.addColorStop(1,'rgba(0,0,0,0)');
         fx.fillStyle=g; fx.beginPath(); fx.ellipse(ox,oy,30*scale,16*scale,0,0,Math.PI*2); fx.fill();
       });
-
-      // Jaw / chin shadow — darker, tighter, to reduce big-chin look
       const jawG=fx.createRadialGradient(cx,yChinAdj,6*scale,cx,yChinAdj,90*scale);
       jawG.addColorStop(0,'rgba(0,20,40,0.08)'); jawG.addColorStop(0.4,'rgba(0,0,0,0.35)'); jawG.addColorStop(1,'rgba(0,0,0,0.75)');
       fx.fillStyle=jawG; fx.fillRect(cx-110*scale,yNoseB+60*scale,220*scale,yChinAdj-yNoseB+40*scale);
-
-      // Philtrum shadow (groove above lip)
       const philG=fx.createLinearGradient(cx-5*scale,yNoseB+10*scale,cx+5*scale,yNoseB+10*scale);
       philG.addColorStop(0,'rgba(0,0,0,0)'); philG.addColorStop(0.5,'rgba(0,5,15,0.28)'); philG.addColorStop(1,'rgba(0,0,0,0)');
       fx.fillStyle=philG; fx.fillRect(cx-5*scale,yNoseB+8*scale,10*scale,yLip-yNoseB-4*scale);
-
-      // Subtle face contour lines
       fx.lineWidth=0.28*scale;
       for(let i=0;i<=18;i++){
         const y=yHair+i*(yChinAdj+20*scale-yHair)/18, t=(y-yHair)/(yChinAdj+20*scale-yHair), sprd=Math.sin(t*Math.PI)*100*scale+4*scale;
@@ -4293,28 +4286,35 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
       drawEye(cx-46*scale, yEye, true);
       drawEye(cx+46*scale, yEye, false);
 
-      // ── Nose — volumetric shading, no hard outline ───────────────────
-      // Nose tip volume — soft radial highlight
-      const noseTipG = fx.createRadialGradient(cx, yNoseB-2*scale, 1*scale, cx, yNoseB, 14*scale);
-      noseTipG.addColorStop(0,'rgba(0,110,170,0.13)'); noseTipG.addColorStop(0.6,'rgba(0,60,100,0.05)'); noseTipG.addColorStop(1,'rgba(0,0,0,0)');
-      fx.fillStyle=noseTipG; fx.beginPath(); fx.ellipse(cx,yNoseB-2*scale,14*scale,10*scale,0,0,Math.PI*2); fx.fill();
-      // Nostril shadows — filled ellipses, no stroke
-      [[-11,3,5,3.2,0.3],[11,3,5,3.2,-0.3]].forEach(([nx,ny,rw,rh,rot])=>{
-        const ng=fx.createRadialGradient(cx+nx*scale,yNoseB+ny*scale,0,cx+nx*scale,yNoseB+ny*scale,rw*scale);
-        ng.addColorStop(0,'rgba(0,2,8,0.55)'); ng.addColorStop(1,'rgba(0,0,0,0)');
+      // ── Nose — bridge shadow + tip volume + nostril shadow ───────────
+      // Bridge side shadows — two dark strips either side of centre push the bridge forward
+      [-1,1].forEach(side=>{
+        const x0 = cx + side*12*scale, x1 = cx + side*5*scale;
+        const g = fx.createLinearGradient(x0, yBrow+20*scale, x1, yBrow+20*scale);
+        g.addColorStop(0,'rgba(0,2,10,0.32)'); g.addColorStop(1,'rgba(0,0,0,0)');
+        fx.fillStyle=g;
+        fx.fillRect(side>0?cx:cx-12*scale, yBrow+18*scale, 12*scale, yNoseB-yBrow-8*scale);
+      });
+      // Nose bridge centre highlight — narrow bright strip
+      const nbG=fx.createLinearGradient(cx-5*scale,0,cx+5*scale,0);
+      nbG.addColorStop(0,'rgba(0,0,0,0)'); nbG.addColorStop(0.5,'rgba(0,130,200,0.11)'); nbG.addColorStop(1,'rgba(0,0,0,0)');
+      fx.fillStyle=nbG; fx.fillRect(cx-5*scale,yBrow+18*scale,10*scale,yNoseB-yBrow-4*scale);
+      // Nose tip — soft roundness via radial fill
+      const ntG=fx.createRadialGradient(cx,yNoseB-4*scale,0,cx,yNoseB-2*scale,16*scale);
+      ntG.addColorStop(0,'rgba(0,120,185,0.14)'); ntG.addColorStop(0.5,'rgba(0,70,120,0.06)'); ntG.addColorStop(1,'rgba(0,0,0,0)');
+      fx.fillStyle=ntG; fx.beginPath(); fx.ellipse(cx,yNoseB-3*scale,16*scale,11*scale,0,0,Math.PI*2); fx.fill();
+      // Nostril shadows — pair of dark ovals, readable but not harsh
+      [[-10,4,7,4.5,0.25],[10,4,7,4.5,-0.25]].forEach(([nx,ny,rw,rh,rot])=>{
+        const ng=fx.createRadialGradient(cx+nx*scale,yNoseB+ny*scale,0.5*scale,cx+nx*scale,yNoseB+ny*scale,rw*scale);
+        ng.addColorStop(0,'rgba(0,1,6,0.62)'); ng.addColorStop(0.6,'rgba(0,2,10,0.2)'); ng.addColorStop(1,'rgba(0,0,0,0)');
         fx.fillStyle=ng; fx.beginPath(); fx.ellipse(cx+nx*scale,yNoseB+ny*scale,rw*scale,rh*scale,rot,0,Math.PI*2); fx.fill();
       });
-      // Nose bridge side shadows — push bridge forward
+      // Ala (wing) edge — very soft stroke each side, implies shape without hard line
       [-1,1].forEach(side=>{
-        const bx = cx + side*13*scale;
-        const bg = fx.createLinearGradient(bx,yBrow+30*scale, cx+side*7*scale, yBrow+30*scale);
-        bg.addColorStop(0,'rgba(0,3,12,0.18)'); bg.addColorStop(1,'rgba(0,0,0,0)');
-        fx.fillStyle=bg; fx.fillRect(Math.min(bx,cx+side*7*scale),yBrow+28*scale,6*scale,yNoseB-yBrow-20*scale);
-      });
-      // Very faint ala curves — just shadow, no line
-      [[-14,yNoseB+2*scale,7,5,0.2],[14,yNoseB+2*scale,7,5,-0.2]].forEach(([ax,ay,rw,rh,rot])=>{
-        fx.beginPath(); fx.ellipse(cx+ax*scale,ay,rw*scale,rh*scale,rot,0,Math.PI*2);
-        fx.strokeStyle='rgba(0,80,130,0.10)'; fx.lineWidth=0.6*scale; fx.stroke();
+        fx.beginPath();
+        fx.moveTo(cx+side*5*scale, yNoseB-2*scale);
+        fx.bezierCurveTo(cx+side*12*scale, yNoseB+1*scale, cx+side*14*scale, yNoseB+6*scale, cx+side*11*scale, yNoseB+8*scale);
+        fx.strokeStyle=`rgba(0,90,140,0.18)`; fx.lineWidth=0.8*scale; fx.stroke();
       });
 
       // ── Animated Mouth ───────────────────────────────────────────────
