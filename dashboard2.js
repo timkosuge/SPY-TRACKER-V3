@@ -4233,7 +4233,7 @@ async function loadData(){
       if (liveGEX.pcr_vol && md.options_summary) md.options_summary.pc_ratio_vol = liveGEX.pcr_vol;
     }
 
-    _md=md; _sd=sd;
+    _md=md; _sd=sd; window._sd=sd; window._md=md;
     if (spyOHLC?.available) { _spyIntraday = spyOHLC; saveIntradayCache(spyOHLC); } // store live intraday for desk volume box
     const safeRender = (fn, ...args) => { try { fn(...args); } catch(e) { console.error(fn.name, e); } };
     safeRender(renderHub, md, sd);
