@@ -3576,3 +3576,50 @@ function renderBonds(md){
 }
 
 // ─── GEX TAB ADDITIONS ───────────────────────────────────────────────────────
+
+// ── City Live Cam Easter Egg ──────────────────────────────────────────────────
+function openCityCam(city) {
+  const configs = {
+    london:  { label: '🇬🇧 LONDON LIVE',   ytId: 'WKGK_hYnlGE' },
+    tokyo:   { label: '🇯🇵 TOKYO LIVE',     ytId: 'dfVK7ld38Ys' },
+    newyork: { label: '🗽 NEW YORK LIVE',   ytId: 'VGnFLdQW39A' },
+  };
+  const cfg = configs[city];
+  if (!cfg) return;
+
+  const winId = 'cityCamWin_' + city;
+  const existing = document.getElementById(winId);
+  if (existing) { existing.remove(); return; }
+
+  // Offsets so multiple windows don't stack perfectly
+  const offsets = { london: 0, tokyo: 340, newyork: 680 };
+  const left = Math.min(offsets[city] || 0, window.innerWidth - 360);
+
+  const win = document.createElement('div');
+  win.id = winId;
+  win.style.cssText = [
+    'position:fixed', `bottom:20px`, `left:${left}px`,
+    'width:320px', 'background:var(--bg2)',
+    'border:1px solid var(--border2)', 'border-radius:6px',
+    'box-shadow:0 8px 32px rgba(0,0,0,0.8)', 'z-index:9998',
+    'display:flex', 'flex-direction:column', 'overflow:hidden',
+    "font-family:'Orbitron',monospace"
+  ].join(';');
+
+  win.innerHTML = `
+    <div id="${winId}_header" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);cursor:move;flex-shrink:0;">
+      <span style="font-size:9px;letter-spacing:2px;color:var(--cyan);">${cfg.label}</span>
+      <button onclick="document.getElementById('${winId}')?.remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text3)'">&#xD7;</button>
+    </div>
+    <iframe src="https://www.youtube.com/embed/${cfg.ytId}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1" style="width:100%;height:180px;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+  `;
+
+  // Draggable
+  const header = win.querySelector(`#${winId}_header`);
+  let dragging = false, ox = 0, oy = 0;
+  header.addEventListener('mousedown', e => { if (e.target.tagName === 'BUTTON') return; dragging = true; ox = e.clientX - win.getBoundingClientRect().left; oy = e.clientY - win.getBoundingClientRect().top; });
+  document.addEventListener('mousemove', e => { if (!dragging) return; win.style.left = (e.clientX - ox) + 'px'; win.style.top = (e.clientY - oy) + 'px'; win.style.bottom = 'auto'; });
+  document.addEventListener('mouseup', () => { dragging = false; });
+
+  document.body.appendChild(win);
+}
