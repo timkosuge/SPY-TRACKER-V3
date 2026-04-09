@@ -293,6 +293,27 @@
   .data-table tr:hover td{background:rgba(255,255,255,0.03);}
 
   /* ── MARKET HUB SPECIFIC ── */
+  #panel-hub {
+    position: relative;
+    overflow: hidden;
+  }
+  #panel-hub::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/NYSE_Front.jpg/1280px-NYSE_Front.jpg');
+    background-size: cover;
+    background-position: center 30%;
+    background-repeat: no-repeat;
+    opacity: 0.045;
+    pointer-events: none;
+    z-index: 0;
+    filter: grayscale(100%) contrast(1.2);
+  }
+  #panel-hub > * {
+    position: relative;
+    z-index: 1;
+  }
   .gauge-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}
   .gauge-svg{width:100%;max-width:180px;}
   .gauge-value{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;text-align:center;line-height:1;}
