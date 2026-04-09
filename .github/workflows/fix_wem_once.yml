@@ -15,13 +15,41 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Show DB rows before fix
+        run: |
+          python3 -c "
+          import sqlite3
+          conn = sqlite3.connect('spy_data.db')
+          rows = conn.execute('SELECT week_start, week_end, dte, week_close, closed_inside FROM weekly_em WHERE week_start >= \"2026-04-06\" ORDER BY week_start').fetchall()
+          print('BEFORE:')
+          for r in rows:
+              print(r)
+          conn.close()
+          "
+
       - name: Run WEM fix script
-        run: python fix_wem_db.py
+        run: python3 fix_wem_db.py
+
+      - name: Show DB rows after fix
+        run: |
+          python3 -c "
+          import sqlite3
+          conn = sqlite3.connect('spy_data.db')
+          rows = conn.execute('SELECT week_start, week_end, dte, week_close, closed_inside FROM weekly_em WHERE week_start >= \"2026-04-06\" ORDER BY week_start').fetchall()
+          print('AFTER:')
+          for r in rows:
+              print(r)
+          conn.close()
+          "
+
+      - name: Show git status
+        run: git status && git diff --stat
 
       - name: Commit fixed DB
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add spy_data.db
-          git commit -m "fix: correct bad WEM rows from Thursday short-week bug"
-          git push
+          git diff --cached --stat
+          git commit -m "fix: correct bad WEM rows from Thursday short-week bug" || echo "Nothing to commit"
+          git push || echo "Nothing to push"
