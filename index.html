@@ -7848,4 +7848,14 @@ function openNewsWindow() {
   ].join(';');
 
   win.innerHTML = `
-    <div id="newsWinHe
+    <div id="newsWinHeader" style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <span style="font-size:9px;letter-spacing:2px;color:var(--cyan);">⬡ LIVE NEWS</span>
+      <button onclick="document.getElementById('newsWindow')?.remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;">×</button>
+    </div>
+    <iframe id="newsWinFrame" src="https://finance.yahoo.com/news/" style="flex:1;border:none;width:100%;background:#000;"></iframe>
+  `;
+  document.body.appendChild(win);
+}
+</script>
+</body>
+</html>
