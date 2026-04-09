@@ -640,6 +640,19 @@ def fetch_spy_options_yf_fallback():
         print(f"  yf fallback error: {e}"); return {}
 
 # ── Weekly Expected Move ───────────────────────────────────────────────────────
+
+# US market holiday Fridays — market is CLOSED these days.
+# Add future dates as needed. The Thursday short-week WEM lock
+# ONLY fires when tomorrow (Friday) is in this set.
+HOLIDAY_FRIDAYS = {
+    '2025-04-18',  # Good Friday 2025
+    '2026-04-03',  # Good Friday 2026
+    '2027-03-26',  # Good Friday 2027
+    '2028-04-14',  # Good Friday 2028
+    '2029-03-30',  # Good Friday 2029
+    '2030-04-19',  # Good Friday 2030
+}
+
 def _get_vix_iv():
     """Fetch current VIX as decimal IV. Returns None on failure."""
     try:
@@ -770,7 +783,16 @@ def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=Fals
         week_open  = week_rows[0][0]  if week_rows else None
         week_high  = max(r[1] for r in week_rows) if week_rows else None
         week_low   = min(r[2] for r in week_rows) if week_rows else None
-        week_close = week_rows[-1][3] if week_rows else None
+
+        # Only mark week_close when today is the actual last trading day.
+        # On a normal week that's Friday. On a short week it's the Thursday
+        # before a holiday Friday. Any other day = week is still open.
+        next_day_str = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+        is_last_trading_day = (
+            today.weekday() == 4  # Friday
+            or (today.weekday() == 3 and next_day_str in HOLIDAY_FRIDAYS)  # Thu before holiday
+        )
+        week_close = (week_rows[-1][3] if week_rows else None) if is_last_trading_day else None
 
         weekly_gap = round(week_open - prev_close, 2) if week_open else None
         gap_filled = None; gap_fill_day = None
@@ -2300,12 +2322,17 @@ def main():
             except Exception as e:
                 print(f"  Next week static WEM error: {e}")
         elif ref.weekday() == 3:
-            # Short week (e.g. holiday Friday): treat Thursday as the anchor day
-            try:
-                print("  Thursday (short week) — locking next week static WEM...")
-                set_next_week_static_wem(conn, ref_str, atm_iv=atm_iv_live)
-            except Exception as e:
-                print(f"  Next week static WEM error (Thu): {e}")
+            # Only fire on short weeks where TOMORROW (Friday) is a market holiday.
+            # Checking HOLIDAY_FRIDAYS prevents this from running every Thursday.
+            next_friday_str = (ref + timedelta(days=1)).strftime("%Y-%m-%d")
+            if next_friday_str in HOLIDAY_FRIDAYS:
+                try:
+                    print(f"  Thursday before holiday Friday ({next_friday_str}) — locking next week static WEM...")
+                    set_next_week_static_wem(conn, ref_str, atm_iv=atm_iv_live)
+                except Exception as e:
+                    print(f"  Next week static WEM error (Thu holiday): {e}")
+            else:
+                print(f"  Thursday — not a short week (Friday {next_friday_str} is a trading day), skipping WEM lock.")
 
         print("\n── JSON Export ──────────────────────────────────────────────")
         try:
