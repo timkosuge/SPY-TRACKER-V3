@@ -3623,3 +3623,41 @@ function openCityCam(city) {
 
   document.body.appendChild(win);
 }
+
+// ── Ignition / Buildout tab entry point ──────────────────────────────────────
+// Called by switchGroupSub() when user opens the Buildout tab.
+// Wires dashboard market data into the render functions defined in index.html.
+function loadIgnitionData() {
+  try {
+    const md = window._md || {};
+    const quotes = md.quotes || {};
+
+    // Constraint grid (uses STATE from index.html — localStorage-backed)
+    if (typeof renderConstraints === 'function') renderConstraints();
+
+    // Capex/Core Ratio (uses STATE.capex)
+    if (typeof renderCapex === 'function') renderCapex();
+
+    // Sector rotation (needs live quotes)
+    if (typeof renderRotation === 'function') renderRotation(quotes);
+
+    // Stock groups for each sub-tab
+    const GROUPS = typeof DEFAULT_CONSTRAINTS !== 'undefined' ? DEFAULT_CONSTRAINTS : [];
+    const waves = ['ai','robotics','energy','semisov','materials','frontier'];
+    waves.forEach(w => {
+      const containerId = 'groups-' + w;
+      const grpData = GROUPS.filter(g => g.wave === w);
+      if (typeof renderGroupsInto === 'function' && grpData.length) {
+        renderGroupsInto(containerId, grpData, quotes);
+      }
+    });
+
+    // Episodes table and thesis cards
+    if (typeof renderEpisodes === 'function') renderEpisodes();
+    if (typeof renderThesis === 'function') renderThesis();
+
+  } catch(e) {
+    console.warn('loadIgnitionData error:', e);
+  }
+}
+window.loadIgnitionData = loadIgnitionData;
