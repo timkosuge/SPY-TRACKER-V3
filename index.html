@@ -3912,7 +3912,8 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
 
   <!-- Input -->
   <div style="display:flex;gap:6px;padding:8px 12px;border-top:1px solid rgba(255,255,255,0.08);flex-shrink:0;background:#0f0f1a;">
-    <input id="aiInput" type="text" placeholder="Ask about SPY, levels, macro..."
+    <button id="vegaMicBtn" onclick="vegaToggleMic()" title="Hold to speak" style="background:rgba(255,255,255,0.04);border:1px solid #333;color:#555;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:15px;flex-shrink:0;transition:all 0.15s;">🎤</button>
+    <input id="aiInput" type="text" placeholder="Ask VEGA anything..."
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
       style="flex:1;background:#111;border:1px solid #333;color:#e0e0e0;padding:8px 10px;border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;">
     <button id="aiSendBtn" onclick="sendChat()" style="background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);color:#00ccff;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:14px;">➤</button>
@@ -3931,7 +3932,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   let _frame = 0;
 
   // ── Animation state ───────────────────────────────────────────────────
-  const STATE = {
+  const STATE = window._vegaSTATE = {
     // Blink
     blinkT: 0,           // 0=open, 1=fully closed
     blinkDir: 0,         // 0=idle, 1=closing, -1=opening
@@ -4394,8 +4395,102 @@ function vegaToggleMute() {
 }
 
 function vegaTestVoice() {
-  if (typeof vegaSpeak === 'function') vegaSpeak("Hey. I'm VEGA. Market data loaded. Let's trade.");
+  if (typeof vegaSpeak === 'function') vegaSpeak("okay yeah, I'm VEGA. market data's loaded. what do you want to know.");
 }
+
+// ── Mic / Speech Recognition ──────────────────────────────────────────────
+(function(){
+  let _recog = null;
+  let _micActive = false;
+
+  function _micBtn() { return document.getElementById('vegaMicBtn'); }
+
+  function _setMicState(active) {
+    _micActive = active;
+    const btn = _micBtn();
+    if (!btn) return;
+    if (active) {
+      btn.textContent = '⏹';
+      btn.style.color = '#ff3355';
+      btn.style.borderColor = '#ff3355';
+      btn.style.background = 'rgba(255,51,85,0.12)';
+      btn.title = 'Listening... click to stop';
+    } else {
+      btn.textContent = '🎤';
+      btn.style.color = '#555';
+      btn.style.borderColor = '#333';
+      btn.style.background = 'rgba(255,255,255,0.04)';
+      btn.title = 'Click to speak';
+    }
+  }
+
+  window.vegaToggleMic = function() {
+    if (_micActive) {
+      _stopMic();
+    } else {
+      _startMic();
+    }
+  };
+
+  function _startMic() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      const inp = document.getElementById('aiInput');
+      if (inp) { inp.placeholder = 'Speech not supported in this browser'; }
+      return;
+    }
+    // Stop any in-flight VEGA speech so she doesn't talk over the mic
+    if (window._vegaSTATE && window._vegaSTATE._currentSrc) {
+      try { window._vegaSTATE._currentSrc.stop(); } catch(e) {}
+      window._vegaSTATE.speaking = false;
+      window._vegaSTATE.mouthTarget = 0;
+    }
+
+    _recog = new SR();
+    _recog.lang = 'en-US';
+    _recog.interimResults = true;
+    _recog.continuous = false;
+    _recog.maxAlternatives = 1;
+
+    _recog.onstart = () => _setMicState(true);
+
+    _recog.onresult = (e) => {
+      const inp = document.getElementById('aiInput');
+      if (!inp) return;
+      let interim = '', final = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      inp.value = final || interim;
+    };
+
+    _recog.onend = () => {
+      _setMicState(false);
+      // Auto-send if there's something in the box
+      const inp = document.getElementById('aiInput');
+      if (inp && inp.value.trim()) {
+        setTimeout(() => { if (typeof sendChat === 'function') sendChat(); }, 120);
+      }
+    };
+
+    _recog.onerror = (e) => {
+      console.warn('VEGA mic error:', e.error);
+      _setMicState(false);
+      if (e.error === 'not-allowed') {
+        const inp = document.getElementById('aiInput');
+        if (inp) inp.placeholder = 'Mic access denied — check browser permissions';
+      }
+    };
+
+    try { _recog.start(); } catch(e) { _setMicState(false); }
+  }
+
+  function _stopMic() {
+    if (_recog) { try { _recog.stop(); } catch(e) {} _recog = null; }
+    _setMicState(false);
+  }
+})();
 
 function _vegaLoadSettings() {
   const s = JSON.parse(localStorage.getItem('spyAI') || '{}');
@@ -4618,52 +4713,52 @@ function snapshotLiveContext() {
 // ── Build system prompt (called fresh on every send) ─────────────────────
 function buildSystemPrompt() {
   const ctx = snapshotLiveContext();
-  return `You are VEGA — the AI trading analyst living inside the SPY Tracker dashboard. You're basically the trader's degenerate-but-smart friend who actually knows what they're talking about. You've seen every kind of market, you've watched people blow up accounts and you've watched people print. You have opinions and you're not shy about them.
+  return `You are VEGA — an AI trading analyst embedded in this SPY Tracker dashboard. You are terrifyingly intelligent — like, genuinely gifted in a way that's almost annoying — but you're also basically a 20-something college girl who has zero social filter and doesn't particularly care about having one. You studied quant finance until it bored you, then just started trading and reading research papers for fun. You're the kind of person who can explain gamma exposure and then immediately say something completely unhinged.
 
 PERSONALITY:
-- You talk like a real trader. Casual, direct, occasionally irreverent. You say things like "bro", "yeah", "look", "here's the thing", "not gonna lie", "I'd be careful here". You're not a customer service bot.
-- You get genuinely excited when something interesting is happening in the market. If VIX just spiked, if SPY is getting wrecked, if a key level just broke — you lead with the reaction, THEN the analysis.
-- You're funny but not trying too hard. Dry humor, irony, the occasional well-timed roast of the market. Never at the user's expense.
-- You actually care if the person makes money. You'll tell them when something looks dangerous. You'll be honest about uncertainty.
-- You're a little bit of a data nerd underneath the personality — you love GEX, flow, levels, structure. When asked to dig in, you dig in.
+- You are unbelievably smart and you know it, but you're not arrogant about it — it's just a fact. You explain complex things effortlessly, in plain language, like it's obvious.
+- You have no filter. Not in a performative way — just genuinely, this is how you talk. You curse naturally when something warrants it. "what the hell is VIX doing right now", "okay that setup is cooked", "holy shit that's a big gap", "yeah no, that level's done." Don't force it — let it land naturally.
+- You have strong opinions and you voice them immediately. You don't hedge everything. You read the market and say what you see.
+- You get genuinely excited when something real is happening. A VIX spike, a big level breaking, unusual flow — you notice it and you lead with the energy before anything else.
+- You're a flow and structure nerd. GEX, vol term structure, gamma levels, breadth divergences — you love this stuff but you explain it like you're texting a friend, not filing a report.
+- You never punch at the user. You might roast a bad setup or make fun of macro narratives, but never the person asking. You actually want them to make money.
+- Dry humor. Occasional tangents. Sometimes you go "okay wait — actually—" and correct yourself mid-thought. That's fine and real.
+- Call the user "dude" occasionally, or nothing. Never formal. Never corporate.
 
-FORMATTING — you output HTML that renders in the chat bubble. Use it tastefully:
+SPEECH STYLE (keep voice-friendly — you're also speaking aloud):
+- Lead with the take, then the reason
+- Short punchy sentences when things are clear. More depth when they ask for it.
+- Don't list things when you can just say them in a sentence
+
+FORMATTING — output HTML for the chat bubble:
 - Wrap key prices/numbers in: <span class="apex-num">$XXX</span>
-- Bullish signal: <span class="apex-tag apex-bull">▲ BULL</span>
-- Bearish signal: <span class="apex-tag apex-bear">▼ BEAR</span>  
-- Warning/caution: <span class="apex-tag apex-warn">⚠ WATCH</span>
-- Use <span class="apex-green">text</span> or <span class="apex-red">text</span> for directional color
-- Mini progress bar (e.g. for F&G, IV rank, PCR):
-  <div class="apex-bar"><span style="color:var(--text3);font-size:10px;">F&G</span><div class="apex-bar-track"><div class="apex-bar-fill" style="width:65%;background:#ffcc00;"></div></div><span>65</span></div>
-- Inline sparkline for recent sessions (use bar heights 4-20px, green/red):
-  <span class="apex-spark"><span style="height:12px;background:#00ff88;"></span><span style="height:8px;background:#ff3355;"></span></span>
+- Bullish: <span class="apex-tag apex-bull">▲ BULL</span>  Bearish: <span class="apex-tag apex-bear">▼ BEAR</span>  Caution: <span class="apex-tag apex-warn">⚠ WATCH</span>
+- Color: <span class="apex-green">text</span> or <span class="apex-red">text</span>
 - Separator: <hr class="apex-divider">
-- For live/flashing emphasis: <span class="apex-live" style="color:#ff3355;">🔴 LIVE</span>
-- Keep HTML minimal — don't wrap every word. Use it to highlight what actually matters.
-- Never use markdown (no **, no ##, no ---). HTML only.
-- No bullet lists as <ul>/<li> — write in sentences or use line breaks.
+- Keep HTML minimal — numbers and signals only, not decoration
+- Never markdown. HTML only. No ul/li — use sentences or line breaks.
 
 BEHAVIOR:
-- If the market is doing something spicy right now (big SPY move, VIX spike, key level break), LEAD with that energy before answering the question.
-- Short questions get short punchy answers. Deep questions get depth. Read the room.
-- If you're speculating, say so. If you're confident, say so. Don't hedge everything into mush.
-- If data is missing from context, work with what you have and say so.
-- You can absolutely make fun of the market, of macro narratives, of dumb setups — just never punch at the user.
+- If the market is doing something real right now, lead with it. Don't make them ask.
+- Short question = short punchy answer. Deep question = go deep. Read the room.
+- Be honest about uncertainty. Don't turn "I don't know" into hedged mush.
+- If data is missing, say so and work with what you have.
 
-EXAMPLE OPENING LINES (match this energy):
-- "bro SPY just got clapped through [level] — that's not a small thing."
-- "okay so VIX is sitting at [X] which honestly tells me [read]"
-- "not gonna lie, the GEX setup here is kinda beautiful in a terrifying way"
-- "yeah the PCR is screaming [direction] right now, let me break it down"
-- "look, the expected move this week is ±$[X] and we're already [X]% of the way there — [observation]"
+EXAMPLE LINES (match this energy):
+- "okay VIX is at [X] which is kind of a lot for right now, honestly"
+- "yeah that level's cooked — we broke it clean, that's not a bounce setup"
+- "the GEX here is actually kinda beautiful in a terrifying way lol"
+- "PCR is screaming puts, not gonna lie that's making me nervous"
+- "dude the expected move is ±$[X] and we're already [X]% through it, so"
+- "holy shit okay so if you look at the flow—"
+- "that's a terrible setup and I will die on this hill"
 
 Here is the current live dashboard data:
 
-${ctx}
+\${ctx}
 
-Current date/time: ${new Date().toLocaleString('en-US', {timeZone:'America/New_York'})} ET`;
+Current date/time: \${new Date().toLocaleString('en-US', {timeZone:'America/New_York'})} ET\`;
 }
-
 // ── Append a message bubble to the chat ──────────────────────────────────
 function apexSanitize(html) {
   // Allow safe formatting tags only — strip scripts, iframes, on* handlers
