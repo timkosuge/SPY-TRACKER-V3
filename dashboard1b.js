@@ -1556,54 +1556,74 @@ function renderIntradayPattern(md, sd) {
   const dirColor = f30dir==='UP'?'#00ff88':'#ff3355';
   const followColor = followThruRate>65?'#00ff88':followThruRate>50?'#ffcc00':'#ff3355';
 
+  // Plain English summary
+  const summaryText = `On the ${total} past days that opened ${gapType==='FLAT'?'flat':gapType==='GAP_UP'?'up':'down'} and moved ${f30dir==='UP'?'up':'down'} in the first 30 min, the day continued in that direction ${followThruRate.toFixed(0)}% of the time with an avg range of $${fmt(avgRange,2)}. The most common outcome was ${mostLikely?mostLikely[0].replace('_',' ').toLowerCase():'—'}.`;
+
+  const lastUpdated = INTRADAY_PATTERNS?.[0]?.d || '—';
   el.innerHTML = `
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">
-      <div style="min-width:190px;display:flex;flex-direction:column;gap:6px;">
-        <div style="padding:8px 12px;background:${gtColor}15;border:1px solid ${gtColor}44;border-left:3px solid ${gtColor};border-radius:3px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">GAP TYPE</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${gtColor};">${gapType.replace('_',' ')} ${gapPct>=0?'+':''}${fmt(gapPct,2)}%</div>
+    <div>
+      <!-- WHAT IS THIS explanation — always visible -->
+      <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:3px;padding:10px 14px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+          <span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);letter-spacing:1px;">WHAT IS THIS?</span>
+          <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">DATA THROUGH ${lastUpdated}</span>
         </div>
-        <div style="padding:8px 12px;background:${dirColor}15;border:1px solid ${dirColor}44;border-left:3px solid ${dirColor};border-radius:3px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">FIRST 30MIN</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${dirColor};">${f30dir} BIAS</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.6;">
+          This panel looks at <strong style="color:var(--text);">today's gap type</strong> (how SPY opened vs yesterday's close) and <strong style="color:var(--text);">what the first 30 minutes did</strong>, then finds every historical day in the database with those same two conditions. The stats — follow-thru rate, avg range, session type breakdown — show what happened on <strong style="color:var(--cyan);">those past days</strong> for the rest of the session. It's base rate data from history, not a prediction. Updated each morning before open.
         </div>
-        ${gapFilled!==null?`<div style="padding:6px 12px;background:${gapFilled?'#00ff8815':'#ff335515'};border:1px solid ${gapFilled?'#00ff8844':'#ff335544'};border-radius:3px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">GAP STATUS</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${gapFilled?'#00ff88':'#ff3355'};">${gapFilled?'✓ FILLED':'✗ UNFILLED'}</div>
-        </div>`:''}
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic;">${summaryText}</div>
       </div>
-      <div>
-        <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-bottom:8px;">${total} SESSIONS — ${gapType.replace('_',' ')} + FIRST 30MIN ${f30dir}</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
-          ${[
-            ['FOLLOW-THRU', followThruRate.toFixed(0)+'%', followColor, 'Direction continued all day'],
-            ['AVG DAY RANGE', '$'+fmt(avgRange,2), 'var(--cyan)', 'Typical H-L range'],
-            ['AVG CLOSE', (avgClose>=0?'+':'')+fmt(avgClose,2)+'%', avgClose>=0?'#00ff88':'#ff3355', 'Avg open-to-close'],
-            gapFillRate!==null?['GAP FILL', gapFillRate.toFixed(0)+'%', gapFillRate>55?'#ff8800':'#00ff88', 'Same-day fill rate']:
-            ['SESSIONS', total.toString(), 'var(--text2)', 'Matching patterns'],
-          ].map(([l,v,c,sub])=>`<div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;">
-            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">${l}</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${c};">${v}</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>
-          </div>`).join('')}
+      <!-- TODAY'S CONDITIONS (inputs to the pattern match) -->
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;">
+        <div style="min-width:190px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:2px;">TODAY'S CONDITIONS ↓</div>
+          <div style="padding:8px 12px;background:${gtColor}15;border:1px solid ${gtColor}44;border-left:3px solid ${gtColor};border-radius:3px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">GAP TYPE</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${gtColor};">${gapType.replace('_',' ')} ${gapPct>=0?'+':''}${fmt(gapPct,2)}%</div>
+          </div>
+          <div style="padding:8px 12px;background:${dirColor}15;border:1px solid ${dirColor}44;border-left:3px solid ${dirColor};border-radius:3px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">FIRST 30MIN</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${dirColor};">${f30dir} BIAS</div>
+          </div>
+          ${gapFilled!==null?`<div style="padding:6px 12px;background:${gapFilled?'#00ff8815':'#ff335515'};border:1px solid ${gapFilled?'#00ff8844':'#ff335544'};border-radius:3px;">
+            <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">GAP STATUS</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${gapFilled?'#00ff88':'#ff3355'};">${gapFilled?'✓ FILLED':'✗ UNFILLED'}</div>
+          </div>`:''}
         </div>
-        ${mostLikely?`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">MOST LIKELY SESSION TYPE:</span>
-          <span style="font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);padding:2px 8px;background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);border-radius:3px;">${mostLikely[0].replace('_',' ')}</span>
-          <span style="font-size:11px;color:var(--text3);">${((mostLikely[1]/total)*100).toFixed(0)}% of similar days</span>
-        </div>`:''}
-        <div style="display:flex;gap:4px;align-items:flex-end;height:36px;">
-          ${['TREND_UP','REVERSAL','RANGE','TREND_DOWN'].map(st=>{
-            const n=stCounts[st]||0, pctH=total?(n/total)*100:0;
-            const c=st==='TREND_UP'?'#00ff88':st==='TREND_DOWN'?'#ff3355':st==='RANGE'?'#ffcc00':'#ff8800';
-            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
-              <div style="font-size:9px;color:${c};">${pctH.toFixed(0)}%</div>
-              <div style="width:100%;height:${Math.max(pctH*0.28,2).toFixed(0)}px;background:${c};border-radius:2px 2px 0 0;opacity:0.7;"></div>
-            </div>`;
-          }).join('')}
-        </div>
-        <div style="display:flex;gap:4px;margin-top:3px;">
-          ${['TREND UP','REVERSAL','RANGE','TREND DN'].map(l=>`<div style="flex:1;text-align:center;font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">${l}</div>`).join('')}
+        <div>
+          <!-- HISTORICAL BASE RATES label -->
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">HISTORICAL BASE RATES — ${total} PAST DAYS WITH SAME CONDITIONS ↓</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
+            ${[
+              ['FOLLOW-THRU', followThruRate.toFixed(0)+'%', followColor, 'Direction held all day'],
+              ['AVG DAY RANGE', '$'+fmt(avgRange,2), 'var(--cyan)', 'Typical H-L range'],
+              ['AVG CLOSE', (avgClose>=0?'+':'')+fmt(avgClose,2)+'%', avgClose>=0?'#00ff88':'#ff3355', 'Avg open-to-close'],
+              gapFillRate!==null?['GAP FILL RATE', gapFillRate.toFixed(0)+'%', gapFillRate>55?'#ff8800':'#00ff88', 'Same-day fill rate']:
+              ['SESSIONS', total.toString(), 'var(--text2)', 'Matching past days'],
+            ].map(([l,v,c,sub])=>`<div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;">
+              <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">${l}</div>
+              <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${c};">${v}</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>
+            </div>`).join('')}
+          </div>
+          ${mostLikely?`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">MOST COMMON OUTCOME:</span>
+            <span style="font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);padding:2px 8px;background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);border-radius:3px;">${mostLikely[0].replace('_',' ')}</span>
+            <span style="font-size:11px;color:var(--text3);">${((mostLikely[1]/total)*100).toFixed(0)}% of similar past days</span>
+          </div>`:''}
+          <div style="display:flex;gap:4px;align-items:flex-end;height:36px;">
+            ${['TREND_UP','REVERSAL','RANGE','TREND_DOWN'].map(st=>{
+              const n=stCounts[st]||0, pctH=total?(n/total)*100:0;
+              const c=st==='TREND_UP'?'#00ff88':st==='TREND_DOWN'?'#ff3355':st==='RANGE'?'#ffcc00':'#ff8800';
+              return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+                <div style="font-size:9px;color:${c};">${pctH.toFixed(0)}%</div>
+                <div style="width:100%;height:${Math.max(pctH*0.28,2).toFixed(0)}px;background:${c};border-radius:2px 2px 0 0;opacity:0.7;"></div>
+              </div>`;
+            }).join('')}
+          </div>
+          <div style="display:flex;gap:4px;margin-top:3px;">
+            ${['TREND UP','REVERSAL','RANGE','TREND DN'].map(l=>`<div style="flex:1;text-align:center;font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">${l}</div>`).join('')}
+          </div>
         </div>
       </div>
     </div>`;
