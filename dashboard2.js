@@ -3325,6 +3325,7 @@ async function loadAAII() {
     {d:'Mar 18', bull:30.4, neu:17.6, bear:52.0},
     {d:'Mar 25', bull:32.1, neu:18.1, bear:49.8},
     {d:'Apr 1',  bull:33.6, neu:15.0, bear:51.4},
+    {d:'Apr 8',  bull:35.7, neu:21.3, bear:43.0},
   ];
 
   try {
@@ -3391,6 +3392,7 @@ async function loadAAII() {
     renderAAIIChart(AAII_HISTORY);
   }
 }
+window.loadAAII = loadAAII;
 
 function renderAAIIChart(data) {
   const el = $('aaiiChart');
