@@ -1437,9 +1437,13 @@ function renderDesk(md,sd){
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">⬡ WEEKLY EXPECTED MOVE</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
           ${(()=>{
-            const wLo  = wem.wem_low  || wem.static_wem_low  || null;
-            const wHi  = wem.wem_high || wem.static_wem_high || null;
-            const wMid = wem.wem_mid  || wem.friday_close    || null;
+            // On expiry Friday (DTE=1) the dynamic wem_low/high collapse to near-zero.
+            // Prefer static values when DTE<=1 or when static range is larger (more reliable).
+            const _dte = wem.dte || 99;
+            const _useStatic = _dte <= 1 || (!wem.wem_low && wem.static_wem_low);
+            const wLo  = _useStatic ? (wem.static_wem_low  || wem.wem_low)  : (wem.wem_low  || wem.static_wem_low  || null);
+            const wHi  = _useStatic ? (wem.static_wem_high || wem.wem_high) : (wem.wem_high || wem.static_wem_high || null);
+            const wMid = wem.friday_close || wem.wem_mid || null;
             const p    = cur || wMid  || 0;
             const pct2 = wHi>wLo ? Math.min(Math.max((p-wLo)/(wHi-wLo)*100,2),98) : 50;
             const outside = p>wHi || p<wLo;
