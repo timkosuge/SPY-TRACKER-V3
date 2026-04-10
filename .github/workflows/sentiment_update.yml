@@ -3,10 +3,11 @@ name: Sentiment Data Update
 on:
   schedule:
     # AAII releases Thursday after market close (~6 PM ET = 22:00 UTC)
-    # COT releases Friday at 3:30 PM ET (19:30 UTC)
-    # Run Friday at 8 PM ET (00:00 UTC Saturday) to catch both releases
+    # Run Thursday at 11 PM ET (03:00 UTC Friday) to catch the release
+    - cron: '0 3 * * 5'
+    # COT releases Friday at 3:30 PM ET — run Friday at 8 PM ET (00:00 UTC Saturday)
     - cron: '0 0 * * 6'
-    # Also run Monday morning to ensure fresh data for the week
+    # Also run Monday morning as a backstop
     - cron: '0 12 * * 1'
   workflow_dispatch:  # Allow manual trigger from GitHub UI
 
