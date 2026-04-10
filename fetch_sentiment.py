@@ -11,6 +11,22 @@ COT releases every Friday at 3:30 PM ET for the prior Tuesday's positions.
 Output: sentiment_data.json  (committed to repo, read by Cloudflare functions)
 """
 
+# ── MANUAL OVERRIDE ───────────────────────────────────────────────────────────
+# When scraping fails, set these values manually from aaii.com/sentimentsurvey
+# Set MANUAL_AAII to None to disable and use live scrape instead.
+# Update date to the week-ending date shown on AAII's site.
+MANUAL_AAII = {
+    "date":        "2026-04-08",
+    "bullish":     35.7,
+    "neutral":     21.3,
+    "bearish":     43.0,
+    "spread":      -7.3,
+    "avg_bullish": 37.5,
+    "avg_bearish": 31.0,
+    "source":      "manual",
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 import json
 import io
 import zipfile
@@ -346,17 +362,23 @@ def main():
         existing = {}
 
     print("=== Fetching AAII sentiment ===")
-    aaii = fetch_aaii()
 
-    # Extra guard: reject obviously bad round-number scrape results before writing
-    if aaii:
-        bull = aaii.get('bullish', 0)
-        neu  = aaii.get('neutral', 0)
-        bear = aaii.get('bearish', 0)
-        is_round = (bull % 10 == 0 and neu % 10 == 0 and bear % 10 == 0)
-        if is_round or bull > 65 or bear > 80:
-            print(f"  AAII: final validation rejected data ({bull}/{neu}/{bear}) — using existing.")
-            aaii = None
+    # Use manual override if set
+    if MANUAL_AAII:
+        print(f"  AAII: using MANUAL_AAII override ({MANUAL_AAII['date']})")
+        aaii = MANUAL_AAII
+    else:
+        aaii = fetch_aaii()
+
+        # Extra guard: reject obviously bad round-number scrape results before writing
+        if aaii:
+            bull = aaii.get('bullish', 0)
+            neu  = aaii.get('neutral', 0)
+            bear = aaii.get('bearish', 0)
+            is_round = (bull % 10 == 0 and neu % 10 == 0 and bear % 10 == 0)
+            if is_round or bull > 65 or bear > 80:
+                print(f"  AAII: final validation rejected data ({bull}/{neu}/{bear}) — using existing.")
+                aaii = None
 
     print("=== Fetching COT (E-Mini S&P 500) ===")
     cot = fetch_cot()
