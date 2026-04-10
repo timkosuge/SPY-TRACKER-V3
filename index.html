@@ -1278,7 +1278,36 @@
   </div>
   <div class="grid-2" style="margin-bottom:10px;">
     <div class="panel">
-      <div class="panel-label">⬡ AAII INVESTOR SENTIMENT SURVEY</div>
+      <div class="panel-label" style="display:flex;justify-content:space-between;align-items:center;">
+        ⬡ AAII INVESTOR SENTIMENT SURVEY
+        <button onclick="toggleAAIIForm()" style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;padding:3px 10px;background:rgba(0,204,255,0.08);border:1px solid rgba(0,204,255,0.25);color:var(--cyan);border-radius:3px;cursor:pointer;">⬡ UPDATE</button>
+      </div>
+      <div id="aaiiUpdateForm" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:10px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">MANUAL AAII UPDATE</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
+          <div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);margin-bottom:3px;">WEEK ENDING</div>
+            <input id="aaiiDate" type="date" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:12px;box-sizing:border-box;">
+          </div>
+          <div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--green);margin-bottom:3px;">BULLISH %</div>
+            <input id="aaiiBull" type="number" step="0.1" min="0" max="100" placeholder="35.7" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:12px;box-sizing:border-box;">
+          </div>
+          <div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--yellow);margin-bottom:3px;">NEUTRAL %</div>
+            <input id="aaiiNeu" type="number" step="0.1" min="0" max="100" placeholder="21.3" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:12px;box-sizing:border-box;">
+          </div>
+          <div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--red);margin-bottom:3px;">BEARISH %</div>
+            <input id="aaiiBear" type="number" step="0.1" min="0" max="100" placeholder="43.0" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:12px;box-sizing:border-box;">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="aaiiPw" type="password" placeholder="password" style="width:140px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:12px;">
+          <button onclick="submitAAIIUpdate()" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:6px 16px;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);color:var(--green);border-radius:3px;cursor:pointer;">SAVE</button>
+          <span id="aaiiFormStatus" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);"></span>
+        </div>
+      </div>
       <div id="aaiiPanel"><div class="no-data">Loading AAII data...</div></div>
     </div>
     <div class="panel">
@@ -7047,6 +7076,71 @@ setInterval(() => {
 
 
 <script>
+// ── AAII Manual Update Form ───────────────────────────────────────────────────
+function toggleAAIIForm() {
+  const f = document.getElementById('aaiiUpdateForm');
+  if (!f) return;
+  const showing = f.style.display !== 'none';
+  f.style.display = showing ? 'none' : 'block';
+  if (!showing) {
+    // Pre-fill date with today
+    const d = new Date();
+    const iso = d.toISOString().slice(0,10);
+    document.getElementById('aaiiDate').value = iso;
+  }
+}
+
+async function submitAAIIUpdate() {
+  const date    = document.getElementById('aaiiDate').value;
+  const bullish = parseFloat(document.getElementById('aaiiBull').value);
+  const neutral = parseFloat(document.getElementById('aaiiNeu').value);
+  const bearish = parseFloat(document.getElementById('aaiiBear').value);
+  const password = document.getElementById('aaiiPw').value;
+  const status  = document.getElementById('aaiiFormStatus');
+
+  if (!date || isNaN(bullish) || isNaN(neutral) || isNaN(bearish)) {
+    status.textContent = '✗ Fill in all fields';
+    status.style.color = 'var(--red)';
+    return;
+  }
+  const total = bullish + neutral + bearish;
+  if (total < 85 || total > 115) {
+    status.textContent = '✗ Values must sum to ~100%';
+    status.style.color = 'var(--red)';
+    return;
+  }
+
+  status.textContent = 'Saving...';
+  status.style.color = 'var(--text3)';
+
+  try {
+    const r = await fetch('/sentiment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, date, bullish, neutral, bearish }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      status.textContent = '✗ ' + (data.error || 'Error');
+      status.style.color = 'var(--red)';
+      return;
+    }
+    status.textContent = '✓ Saved — refreshing...';
+    status.style.color = 'var(--green)';
+    // Refresh sentiment tab after short delay
+    setTimeout(() => {
+      if (typeof renderSentiment === 'function' && window._md) {
+        renderSentiment(window._md);
+      }
+      document.getElementById('aaiiUpdateForm').style.display = 'none';
+      status.textContent = '';
+    }, 1200);
+  } catch(e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = 'var(--red)';
+  }
+}
+
 // ── HUB EASTER EGGS ──────────────────────────────────────────────────────────
 
 function _hubFloatWin(id, label, contentHTML, bottomOffset) {
