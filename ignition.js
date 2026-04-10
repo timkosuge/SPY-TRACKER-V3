@@ -128,6 +128,8 @@ function switchIgnitionTab(id){
   document.querySelectorAll('#panel-ignition .tab-section').forEach(s=>s.classList.remove('active'));
   document.getElementById('tab-'+id)?.classList.add('active');
 }
+// HTML buttons call igSwitchTab() — alias to the same function
+window.igSwitchTab = switchIgnitionTab;
 
 // ── Render constraints ───────────────────────────────────────────────────────
 function renderConstraints(){
@@ -414,13 +416,13 @@ function _logoLongPressStart() {
 function _logoLongPressCancel() {
   if (_logoLongPressTimer) { clearTimeout(_logoLongPressTimer); _logoLongPressTimer = null; }
 }
-function _logoTap() {
-  if (_logoLongPressTimer) return; // was a long press, ignore tap
-  // Short tap: go to Market Hub
-  if (typeof switchTab === 'function') switchTab('hub');
-}
 window._logoLongPressStart = _logoLongPressStart;
 window._logoLongPressCancel = _logoLongPressCancel;
+// _logoTap: single click → hub
+function _logoTap() {
+  if (_logoLongPressTimer) return;
+  if (typeof switchTab === 'function') switchTab('hub');
+}
 window._logoTap = _logoTap;
 
 // ═══════════════════════════════════════════
