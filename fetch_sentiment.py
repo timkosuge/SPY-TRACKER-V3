@@ -36,49 +36,13 @@ NOW_UTC = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 def fetch_aaii():
     """
     Try three methods in order:
-    1. AAII XLS (actually tab-separated) direct download
-    2. Stooq mirror CSV (reliable, updates weekly)
-    3. AAII HTML page scrape (fragile but worth trying)
+    1. Stooq mirror CSV (most reliable, structured data)
+    2. AAII XLS (tab-separated) direct download
+    3. AAII HTML page scrape (fragile, last resort)
     Returns dict with bullish/neutral/bearish/spread/date/source or None.
     """
 
-    # Method 1 — AAII direct XLS download (tab-separated)
-    try:
-        r = SESSION.get(
-            "https://www.aaii.com/files/surveys/sentiment.xls",
-            timeout=15,
-            headers={"Referer": "https://www.aaii.com/sentimentsurvey"},
-        )
-        if r.status_code == 200 and len(r.content) > 500:
-            text = r.content.decode("utf-8", errors="replace")
-            lines = [l for l in text.split("\n") if l.strip()]
-            # Walk backwards to find the last valid data row
-            for line in reversed(lines):
-                cols = line.split("\t")
-                if len(cols) >= 4:
-                    try:
-                        bull = float(cols[1])
-                        neu  = float(cols[2])
-                        bear = float(cols[3])
-                        if 0 < bull < 100 and 0 < bear < 100:
-                            date_raw = cols[0].strip()
-                            print(f"  AAII (XLS): bull={bull:.1f}% bear={bear:.1f}% date={date_raw}")
-                            return {
-                                "date":     date_raw,
-                                "bullish":  round(bull, 2),
-                                "neutral":  round(neu,  2),
-                                "bearish":  round(bear, 2),
-                                "spread":   round(bull - bear, 2),
-                                "avg_bullish": 37.5,
-                                "avg_bearish": 31.0,
-                                "source":   "aaii_xls",
-                            }
-                    except (ValueError, IndexError):
-                        continue
-    except Exception as e:
-        print(f"  AAII XLS failed: {e}")
-
-    # Method 2 — Stooq (carries AAII data, reliable CSV)
+    # Method 1 — Stooq (most reliable — tried first)
     try:
         r = SESSION.get(
             "https://stooq.com/q/d/l/?s=aaii_bull&i=w",
@@ -117,7 +81,43 @@ def fetch_aaii():
     except Exception as e:
         print(f"  AAII Stooq failed: {e}")
 
-    # Method 3 — AAII HTML scrape (improved: look for survey table context)
+    # Method 2 — AAII XLS download (tab-separated)
+    try:
+        r = SESSION.get(
+            "https://www.aaii.com/files/surveys/sentiment.xls",
+            timeout=15,
+            headers={"Referer": "https://www.aaii.com/sentimentsurvey"},
+        )
+        if r.status_code == 200 and len(r.content) > 500:
+            text = r.content.decode("utf-8", errors="replace")
+            lines = [l for l in text.split("\n") if l.strip()]
+            # Walk backwards to find the last valid data row
+            for line in reversed(lines):
+                cols = line.split("\t")
+                if len(cols) >= 4:
+                    try:
+                        bull = float(cols[1])
+                        neu  = float(cols[2])
+                        bear = float(cols[3])
+                        if 0 < bull < 100 and 0 < bear < 100:
+                            date_raw = cols[0].strip()
+                            print(f"  AAII (XLS): bull={bull:.1f}% bear={bear:.1f}% date={date_raw}")
+                            return {
+                                "date":     date_raw,
+                                "bullish":  round(bull, 2),
+                                "neutral":  round(neu,  2),
+                                "bearish":  round(bear, 2),
+                                "spread":   round(bull - bear, 2),
+                                "avg_bullish": 37.5,
+                                "avg_bearish": 31.0,
+                                "source":   "aaii_xls",
+                            }
+                    except (ValueError, IndexError):
+                        continue
+    except Exception as e:
+        print(f"  AAII XLS failed: {e}")
+
+    # Method 3 — AAII HTML scrape (fragile, last resort)
     try:
         r = SESSION.get(
             "https://www.aaii.com/sentimentsurvey",
