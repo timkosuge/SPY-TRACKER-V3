@@ -7127,11 +7127,8 @@ async function submitAAIIUpdate() {
     }
     status.textContent = '✓ Saved — refreshing...';
     status.style.color = 'var(--green)';
-    // Refresh sentiment tab after short delay
     setTimeout(() => {
-      if (typeof renderSentiment === 'function' && window._md) {
-        renderSentiment(window._md);
-      }
+      if (typeof loadAAII === 'function') loadAAII();
       document.getElementById('aaiiUpdateForm').style.display = 'none';
       status.textContent = '';
     }, 1200);
