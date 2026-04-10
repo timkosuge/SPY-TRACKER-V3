@@ -358,14 +358,14 @@ function renderHub(md,sd){
     <div class="panel" style="border-left:4px solid ${sessionColor};">
       <div style="display:grid;grid-template-columns:auto auto auto 1fr auto auto auto;gap:16px;align-items:center;">
         <div>
-          <div id="hubSessionLabel" style="font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:${sessionColor};letter-spacing:2px;cursor:pointer;" title="Click 3x for local weather">${sessionLabel}</div>
+          <div id="hubSessionLabel" style="font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:${sessionColor};letter-spacing:2px;cursor:pointer;" title="Hold for local weather | Click 3x coming soon" onmousedown="_sessionLongPressStart()" onmouseup="_sessionLongPressCancel()" onmouseleave="_sessionLongPressCancel()" ontouchstart="_sessionLongPressStart()" ontouchend="_sessionLongPressCancel()">${sessionLabel}</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text2);margin-top:4px;cursor:default;">${dateStr}</div>
         </div>
-        <div id="hubClockBlock" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click 3x for live news">
+        <div id="hubClockBlock" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Hold for live news" onmousedown="_clockLongPressStart()" onmouseup="_clockLongPressCancel()" onmouseleave="_clockLongPressCancel()" ontouchstart="_clockLongPressStart()" ontouchend="_clockLongPressCancel()">
           <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);letter-spacing:1px;margin-bottom:2px;">CT TIME</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:var(--text);" id="hubClock">${timeStr}</div>
         </div>
-        <div id="hubCountdownBlock" style="border-left:1px solid var(--border);padding-left:16px;text-align:center;cursor:pointer;" title="Click 3x for quote of the day">
+        <div id="hubCountdownBlock" style="border-left:1px solid var(--border);padding-left:16px;text-align:center;cursor:pointer;" title="3x for max pain" onclick="_countdownTripleClick()">
           <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:${countdownColor};margin-bottom:4px;">${countdownLabel}</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:${countdownColor};letter-spacing:2px;" id="hubCountdown">${fmtCountdown(countdownSecs)}</div>
         </div>
