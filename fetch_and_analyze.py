@@ -792,7 +792,13 @@ def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=Fals
             today.weekday() == 4  # Friday
             or (today.weekday() == 3 and next_day_str in HOLIDAY_FRIDAYS)  # Thu before holiday
         )
-        week_close = (week_rows[-1][3] if week_rows else None) if is_last_trading_day else None
+        # Only write week_close after market has actually closed (3:00 PM CT = 4:00 PM ET).
+        # During Friday market hours the pipeline runs intraday and we must NOT
+        # treat the partial bar as the final week close — that would cause the JS
+        # to think the week is finished and reset the WEM anchor prematurely.
+        now_ct = datetime.now(CT)
+        market_closed_today = (now_ct.hour, now_ct.minute) >= (15, 0)  # 3:00 PM CT
+        week_close = (week_rows[-1][3] if week_rows else None) if (is_last_trading_day and market_closed_today) else None
 
         weekly_gap = round(week_open - prev_close, 2) if week_open else None
         gap_filled = None; gap_fill_day = None
