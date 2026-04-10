@@ -534,7 +534,8 @@ function initHubRadar() {
   const spy = q['SPY'] || {};
   const gex = md.gex || {};
   const wems = md.weekly_em || [];
-  const wem = wems.find(w => !w.week_close) || wems[0];
+  const _wTd1 = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
+  const wem = wems.find(w=>w.week_start<=_wTd1&&w.week_end>=_wTd1) || wems.find(w=>!w.week_close) || wems[0];
   const vix = q['^VIX']?.price || 20;
   const fg = md.fear_greed || {};
   const fgVal = fg.value != null ? fg.value : fg.score || 50;
@@ -950,7 +951,8 @@ function renderDesk(md,sd){
   if(!el)return;
   const q=md.quotes||{},spy=q['SPY']||{};
   const wems=md.weekly_em||[];
-  const wem=wems.find(w=>!w.week_close)||wems[0];
+  const _wTd2=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
+  const wem=wems.find(w=>w.week_start<=_wTd2&&w.week_end>=_wTd2)||wems.find(w=>!w.week_close)||wems[0];
   const gex=md.gex||{};
   const pcr=md.options_summary?.pc_ratio_vol;
   const vix=q['^VIX']?.price||0;
