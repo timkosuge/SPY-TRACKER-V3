@@ -2,10 +2,11 @@
  * functions/sentiment.js
  *
  * Priority order:
- *  1. sentiment_data.json (committed to repo by GitHub Actions weekly)
- *  2. AAII XLS direct download (live attempt)
- *  3. AAII HTML scrape (live attempt)
- *  4. Static hardcoded fallback (last resort, clearly labeled)
+ *  1. D1 database override (set via POST from dashboard UI)
+ *  2. sentiment_data.json (committed to repo by GitHub Actions weekly)
+ *  3. AAII XLS direct download (live attempt)
+ *  4. AAII HTML scrape (live attempt)
+ *  5. Static hardcoded fallback (last resort, clearly labeled)
  */
 
 const CORS = {
@@ -18,10 +19,88 @@ function json(data) {
   return new Response(JSON.stringify(data), { headers: CORS });
 }
 
+export async function onRequestOptions() {
+  return new Response(null, { status: 204, headers: CORS });
+}
+
+// ── POST /sentiment — save manual AAII override to D1 ─────────────────────
+export async function onRequestPost(context) {
+  const { request, env } = context;
+  const db = env.DB;
+  if (!db) return json({ error: 'DB not configured' }, 500);
+
+  try {
+    const body = await request.json();
+    const { password, date, bullish, neutral, bearish } = body;
+
+    // Simple password check — set AAII_PASSWORD in CF Pages env vars
+    const pw = env.AAII_PASSWORD || 'spytracker';
+    if (password !== pw) return json({ error: 'Unauthorized' }, 401);
+
+    if (!date || bullish == null || neutral == null || bearish == null) {
+      return json({ error: 'Missing fields' }, 400);
+    }
+
+    const spread = Math.round((bullish - bearish) * 10) / 10;
+
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS aaii_override (
+        id INTEGER PRIMARY KEY,
+        date TEXT, bullish REAL, neutral REAL, bearish REAL,
+        spread REAL, updated_at TEXT
+      )
+    `).run();
+
+    await db.prepare(`
+      INSERT INTO aaii_override (id, date, bullish, neutral, bearish, spread, updated_at)
+      VALUES (1, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        date=excluded.date, bullish=excluded.bullish, neutral=excluded.neutral,
+        bearish=excluded.bearish, spread=excluded.spread, updated_at=excluded.updated_at
+    `).bind(date, bullish, neutral, bearish, spread, new Date().toISOString()).run();
+
+    return json({ ok: true, date, bullish, neutral, bearish, spread });
+  } catch (e) {
+    return json({ error: e.message }, 500);
+  }
+}
+
 export async function onRequestGet(context) {
   const { request, env } = context;
 
-  // ── 1. sentiment_data.json via KV or same-origin fetch ────────────────────
+  // ── 1. D1 override (set via dashboard UI) ─────────────────────────────────
+  try {
+    const db = env.DB;
+    if (db) {
+      await db.prepare(`
+        CREATE TABLE IF NOT EXISTS aaii_override (
+          id INTEGER PRIMARY KEY,
+          date TEXT, bullish REAL, neutral REAL, bearish REAL,
+          spread REAL, updated_at TEXT
+        )
+      `).run();
+      const row = await db.prepare('SELECT * FROM aaii_override WHERE id=1').first();
+      if (row && row.bullish) {
+        console.log(`sentiment.js: served from D1 override (${row.date})`);
+        return json({
+          date:        row.date,
+          bullish:     row.bullish,
+          neutral:     row.neutral,
+          bearish:     row.bearish,
+          spread:      row.spread,
+          avg_bullish: 37.5,
+          avg_bearish: 31.0,
+          stale:       false,
+          source:      'manual_override',
+          updated:     row.updated_at,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('sentiment.js: D1 check failed:', e.message);
+  }
+
+  // ── 2. sentiment_data.json via same-origin fetch ───────────────────────────
   // Cloudflare Pages serves static assets at the same origin — fetch it directly.
   try {
     const base = new URL(request.url).origin;
