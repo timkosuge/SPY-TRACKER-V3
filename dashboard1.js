@@ -35,6 +35,7 @@ function switchGroupTab(group, firstTab) {
     grp.querySelector('.subtab')?.classList.add('active');
   }
   // Switch to first tab of group
+  window.scrollTo(0, 0);
   _switchPanelOnly(firstTab);
 }
 
@@ -44,6 +45,7 @@ function switchGroupSub(id, el) {
     el.closest('.subtab-group')?.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
     el.classList.add('active');
   }
+  window.scrollTo(0, 0);
   _switchPanelOnly(id);
 }
 
@@ -98,6 +100,7 @@ function switchTab(id){
   const bar = $('subtabBar');
   if(bar) bar.style.display = 'none';
 
+  window.scrollTo(0, 0);
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
