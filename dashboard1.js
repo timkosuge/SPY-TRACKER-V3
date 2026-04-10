@@ -53,6 +53,7 @@ function _switchPanelOnly(id) {
   const p = $('panel-'+id);
   if(p) p.classList.add('active');
   // Tab-specific renders
+  if(id==='hub') { try { if(typeof renderHub==='function' && window._md) renderHub(window._md, window._sd||{}); } catch(e){ console.warn('hub:',e); } }
   if(id==='analog') { if(typeof renderAnalog==='function') renderAnalog(); }
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
