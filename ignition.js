@@ -119,13 +119,13 @@ function scoreColor(s){if(s<30)return'var(--red)';if(s<50)return'var(--yellow)';
 function scoreFill(s){if(s<30)return'#ff3355';if(s<50)return'#ffcc00';if(s<70)return'#ff8800';return'#00ff88';}
 function phase(i){if(i<20)return'PRE-IGNITION';if(i<40)return'EARLY BUILDOUT';if(i<55)return'MID BUILDOUT';if(i<70)return'LATE BUILDOUT';if(i<85)return'VALIDATION';return'EARNED';}
 
-// ── Tab switching (internal to panel-ignition) ────────────────────────────────────────────
-function switchTab(id){
+// ── Tab switching (internal to panel-ignition only — NOT the global switchTab) ──────────────
+function switchIgnitionTab(id){
   document.querySelectorAll('.ig-tab').forEach((t,i)=>{
     const ids=['overview','ai','robotics','energy','semisov','materials','frontier','thesis'];
     t.classList.toggle('active',ids[i]===id);
   });
-  document.querySelectorAll('.tab-section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('#panel-ignition .tab-section').forEach(s=>s.classList.remove('active'));
   document.getElementById('tab-'+id)?.classList.add('active');
 }
 
