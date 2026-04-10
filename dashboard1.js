@@ -35,7 +35,7 @@ function switchGroupTab(group, firstTab) {
     grp.querySelector('.subtab')?.classList.add('active');
   }
   // Switch to first tab of group
-  window.scrollTo(0, 0);
+  try { window.scrollTo(0,0); document.documentElement.scrollTop=0; document.body.scrollTop=0; } catch(e){}
   _switchPanelOnly(firstTab);
 }
 
@@ -45,7 +45,7 @@ function switchGroupSub(id, el) {
     el.closest('.subtab-group')?.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
     el.classList.add('active');
   }
-  window.scrollTo(0, 0);
+  try { window.scrollTo(0,0); document.documentElement.scrollTop=0; document.body.scrollTop=0; } catch(e){}
   _switchPanelOnly(id);
 }
 
@@ -55,7 +55,6 @@ function _switchPanelOnly(id) {
   const p = $('panel-'+id);
   if(p) p.classList.add('active');
   // Tab-specific renders
-  if(id==='hub') { try { if(typeof renderHub==='function' && window._md) renderHub(window._md, window._sd||{}); } catch(e){ console.warn('hub:',e); } }
   if(id==='analog') { if(typeof renderAnalog==='function') renderAnalog(); }
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
@@ -100,7 +99,9 @@ function switchTab(id){
   const bar = $('subtabBar');
   if(bar) bar.style.display = 'none';
 
-  window.scrollTo(0, 0);
+  // Reset scroll position — all three methods for cross-browser coverage
+  try { window.scrollTo(0,0); document.documentElement.scrollTop=0; document.body.scrollTop=0; } catch(e){}
+
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
 
@@ -122,6 +123,7 @@ function switchTab(id){
     if(b){b.style.display='none';b.textContent='';}
   }
   if(id==='analog') { renderAnalog(); }
+  if(id==='hub') { try { if(typeof renderHub==='function'&&window._md) renderHub(window._md,window._sd||{}); } catch(e){ console.warn('hub:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
   if(id==='macro-overview') { try { if(typeof renderMacro==='function') renderMacro(); } catch(e){ console.warn('macro:',e); } }
   if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }
