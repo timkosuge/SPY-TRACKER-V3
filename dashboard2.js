@@ -758,7 +758,8 @@ function renderVolHistory(sd){
 function renderWEM(md){
   const wems=md.weekly_em||[], stats=md.wem_stats||{};
   const q=md.quotes||{}, spy=q['SPY']||{};
-  const cur=wems.find(w=>!w.week_close)||wems[0];
+  const _wTdA=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
+  const cur=wems.find(w=>w.week_start<=_wTdA&&w.week_end>=_wTdA)||wems.find(w=>!w.week_close)||wems[0];
   // Ensure live atm_iv is always on md.gex
   if (!md.gex) md.gex = {};
   if (!md.gex.atm_iv && window._md?.gex?.atm_iv) md.gex.atm_iv = window._md.gex.atm_iv;
@@ -812,11 +813,15 @@ function renderWEM(md){
     const _liveGexIV = md.gex?.atm_iv || window._md?.gex?.atm_iv || null;
     const liveIV = (_liveGexIV && _liveGexIV > 0) ? _liveGexIV : (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
     const dynMid = staticMid;
-    const _dynHalf = dynMid && liveIV ? dynMid * liveIV * Math.sqrt(dte / 365) * 0.70 : staticHalfRange;
-    const lo   = isStatic ? staticLow  : dynMid - _dynHalf;
-    const hi   = isStatic ? staticHigh : dynMid + _dynHalf;
-    const mid  = isStatic ? staticMid  : dynMid;
-    const halfRange = isStatic ? staticHalfRange : _dynHalf;
+    // On expiry Friday (DTE=1) the dynamic range collapses to near-zero which is
+    // misleading. The static range (locked last Friday with DTE=6) is the correct
+    // full-week context. Force static values for dynamic display when DTE <= 1.
+    const _forceStatic = dte <= 1;
+    const _dynHalf = (!_forceStatic && dynMid && liveIV) ? dynMid * liveIV * Math.sqrt(dte / 365) * 0.70 : staticHalfRange;
+    const lo   = (isStatic || _forceStatic) ? staticLow  : dynMid - _dynHalf;
+    const hi   = (isStatic || _forceStatic) ? staticHigh : dynMid + _dynHalf;
+    const mid  = (isStatic || _forceStatic) ? staticMid  : dynMid;
+    const halfRange = (isStatic || _forceStatic) ? staticHalfRange : _dynHalf;
     const price = spy.price || mid || 0;
 
     $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}${isStatic?' · STATIC RANGE':' · DYNAMIC RANGE'}`;
@@ -1366,7 +1371,8 @@ function buildContext(md, sd) {
   const fg = md?.fear_greed || {}, o = md?.options_summary || {};
   const tnx = q['^TNX'] || {}, irx = q['^IRX'] || {}, tyx = q['^TYX'] || {};
   const wems = md?.weekly_em || [], stats = md?.wem_stats || {};
-  const wem = wems.find(w => !w.week_close) || wems[0];
+  const _wTdB=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
+  const wem = wems.find(w=>w.week_start<=_wTdB&&w.week_end>=_wTdB)||wems.find(w=>!w.week_close)||wems[0];
   const day = sd?.[0] || {}, prev = sd?.[1] || {}, m = day.measurements || {}, v = day.volume_analysis || {};
   const gex = md?.gex || {};
   const fgVal = fg.value != null ? fg.value : fg.score;
@@ -2025,7 +2031,8 @@ function runPatternAlerts(md, sd) {
   const tnx = q['^TNX'] || {}, irx = q['^IRX'] || {};
   const fg = md?.fear_greed || {}, fgVal = fg.value != null ? fg.value : fg.score;
   const wems = md?.weekly_em || [];
-  const wem = wems.find(w => !w.week_close) || wems.slice(-1)[0];
+  const _wTdC=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
+  const wem = wems.find(w=>w.week_start<=_wTdC&&w.week_end>=_wTdC)||wems.find(w=>!w.week_close)||wems.slice(-1)[0];
   const spy = q['SPY'] || {}, day = sd?.[0] || {};
   const alerts = [];
 
@@ -2214,7 +2221,8 @@ async function generateLevelAnalysis(md, sd) {
 
     // WEM — objective, IV-derived
     const wems = md.weekly_em||[];
-    const wem = wems.find(w=>!w.week_close)||wems[0];
+    const _wTdD=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
+    const wem = wems.find(w=>w.week_start<=_wTdD&&w.week_end>=_wTdD)||wems.find(w=>!w.week_close)||wems[0];
 
     // HVN last 5 sessions
     const hvns = (sd||[]).slice(0,5)
@@ -3954,7 +3962,8 @@ async function fetchWeekOpen() {
     // ── Source 2: market_data.json weekly_em week_open ───────────────────────
     if (_md) {
       const wems = _md.weekly_em || [];
-      const curWem = wems.find(w => !w.week_close) || wems[0];
+      const _wTdE=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
+      const curWem = wems.find(w=>w.week_start<=_wTdE&&w.week_end>=_wTdE)||wems.find(w=>!w.week_close)||wems[0];
       if (curWem && curWem.week_open) {
         if (applyWeekOpen(curWem.week_open)) return;
       }
@@ -4001,7 +4010,8 @@ function scheduleLiveRefresh() {
 function updateWEMPrice(price) {
   if (!price || !_md) return;
   const wems = _md.weekly_em || [];
-  const cur  = wems.find(w => !w.week_close) || wems[0];
+  const _wTdF=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
+  const cur  = wems.find(w=>w.week_start<=_wTdF&&w.week_end>=_wTdF)||wems.find(w=>!w.week_close)||wems[0];
   if (!cur) return;
   const lo = cur.wem_low, hi = cur.wem_high, mid = cur.wem_mid;
   const halfRange = cur.wem_range / 2;
