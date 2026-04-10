@@ -385,6 +385,21 @@ async function adminAIGenerate() {
   }
 }
 
+// ── Price long-press (on topbar SPY price display) ───────────────────────────
+let _priceLongPressTimer = null;
+function _priceLongPressStart() {
+  _priceLongPressTimer = setTimeout(() => {
+    _priceLongPressTimer = null;
+    // Long-press on price: switch to live chart
+    if (typeof switchGroupTab === 'function') switchGroupTab('desk', 'live-chart');
+  }, 1200);
+}
+function _priceLongPressCancel() {
+  if (_priceLongPressTimer) { clearTimeout(_priceLongPressTimer); _priceLongPressTimer = null; }
+}
+window._priceLongPressStart = _priceLongPressStart;
+window._priceLongPressCancel = _priceLongPressCancel;
+
 // ── Logo long-press (easter egg / dev shortcut) ──────────────────────────────
 let _logoLongPressTimer = null;
 function _logoLongPressStart() {
@@ -401,8 +416,8 @@ function _logoLongPressCancel() {
 }
 function _logoTap() {
   if (_logoLongPressTimer) return; // was a long press, ignore tap
-  // Short tap: switch to hub/main tab
-  if (typeof switchGroupTab === 'function') switchGroupTab('trading', 'live-chart');
+  // Short tap: go to Market Hub
+  if (typeof switchTab === 'function') switchTab('hub');
 }
 window._logoLongPressStart = _logoLongPressStart;
 window._logoLongPressCancel = _logoLongPressCancel;
