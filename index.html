@@ -717,14 +717,14 @@
 </div><!-- /sidebarWrap -->
 
 <div class="topbar">
-  <div class="logo" id="spyLogo" onclick="_logoTap()" onmousedown="_logoLongPressStart()" onmouseup="_logoLongPressCancel()" onmouseleave="_logoLongPressCancel()" ontouchstart="_logoLongPressStart()" ontouchend="_logoLongPressCancel()" style="cursor:pointer;user-select:none;">SPY <span>//</span> TRACKER</div>
+  <div class="logo" id="spyLogo" onclick="_logoTap();_logoEggTap();" onmousedown="_logoLongPressStart()" onmouseup="_logoLongPressCancel()" onmouseleave="_logoLongPressCancel()" ontouchstart="_logoLongPressStart()" ontouchend="_logoLongPressCancel()" style="cursor:pointer;user-select:none;">SPY <span>//</span> TRACKER</div>
   <div class="ticker-tape"><div class="ticker-inner" id="tickerInner"></div></div>
   <div id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">
     <span id="themeLabel">DARK</span>
     <div class="toggle-track"><div class="toggle-thumb"></div></div>
   </div>
   <div class="topbar-right">
-    <div class="spy-price" id="topPrice" style="cursor:default;" onmousedown="_priceLongPressStart()" onmouseup="_priceLongPressCancel()" onmouseleave="_priceLongPressCancel()" ontouchstart="_priceLongPressStart()" ontouchend="_priceLongPressCancel()">—</div>
+    <div class="spy-price" id="topPrice" style="cursor:pointer;" title="3x for options calculator" onclick="_priceTripleClick()" onmousedown="_priceLongPressStart()" onmouseup="_priceLongPressCancel()" onmouseleave="_priceLongPressCancel()" ontouchstart="_priceLongPressStart()" ontouchend="_priceLongPressCancel()">—</div>
     <div class="topbar-date" id="topDate">—</div>
   </div>
 </div>
@@ -7045,6 +7045,114 @@ setInterval(() => {
   <div id="spyPlayerTrigger"></div>
 </div>
 
+
+<script>
+// ── HUB EASTER EGGS ──────────────────────────────────────────────────────────
+
+function _hubFloatWin(id, label, contentHTML, bottomOffset) {
+  const existing = document.getElementById(id);
+  if (existing) { existing.remove(); return; }
+  const win = document.createElement('div');
+  win.id = id;
+  win.style.cssText = [
+    'position:fixed', 'bottom:' + (bottomOffset || 20) + 'px', 'left:50%',
+    'transform:translateX(-50%)',
+    'width:580px', 'max-width:calc(100vw - 32px)',
+    'background:var(--bg2)', 'border:1px solid var(--border2)',
+    'border-radius:6px', 'box-shadow:0 8px 40px rgba(0,0,0,0.9)',
+    'z-index:9998', 'display:flex', 'flex-direction:column', 'overflow:hidden',
+    "font-family:'Orbitron',monospace"
+  ].join(';');
+  win.innerHTML =
+    '<div id="' + id + '_hdr" style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:var(--bg3);border-bottom:1px solid var(--border);cursor:move;flex-shrink:0;">' +
+    '<span style="font-size:9px;letter-spacing:2px;color:var(--cyan);">' + label + '</span>' +
+    '<button onclick="document.getElementById(\'' + id + '\')?.remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'var(--text3)\'">&#xD7;</button>' +
+    '</div>' + contentHTML;
+  const hdr = win.querySelector('#' + id + '_hdr');
+  let drag = false, ox = 0, oy = 0;
+  hdr.addEventListener('mousedown', e => { if (e.target.tagName === 'BUTTON') return; drag = true; const r = win.getBoundingClientRect(); ox = e.clientX - r.left; oy = e.clientY - r.top; });
+  document.addEventListener('mousemove', e => { if (!drag) return; win.style.left = (e.clientX - ox) + 'px'; win.style.top = (e.clientY - oy) + 'px'; win.style.bottom = 'auto'; win.style.transform = 'none'; });
+  document.addEventListener('mouseup', () => { drag = false; });
+  document.body.appendChild(win);
+}
+
+// 1. Clock long-press → Live News
+let _clockLongPressTimer = null;
+function _clockLongPressStart() {
+  _clockLongPressTimer = setTimeout(() => {
+    _clockLongPressTimer = null;
+    _hubFloatWin('hubNewsWin', '📡 LIVE NEWS',
+      '<iframe src="https://www.youtube.com/embed/oQfWkuPBsAw?si=F-zYgl6CCWRDQvAv&autoplay=1&mute=0&controls=1&rel=0&modestbranding=1" ' +
+      'style="width:100%;height:315px;border:none;" ' +
+      'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" ' +
+      'referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>', 20);
+  }, 800);
+}
+function _clockLongPressCancel() {
+  if (_clockLongPressTimer) { clearTimeout(_clockLongPressTimer); _clockLongPressTimer = null; }
+}
+
+// 2. Session label long-press → Local Weather
+let _sessionLongPressTimer = null;
+function _sessionLongPressStart() {
+  _sessionLongPressTimer = setTimeout(() => {
+    _sessionLongPressTimer = null;
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(function(pos) {
+        var lat = pos.coords.latitude.toFixed(4);
+        var lon = pos.coords.longitude.toFixed(4);
+        _hubFloatWin('hubWeatherWin', '☀️ LOCAL WEATHER',
+          '<iframe src="https://forecast.weather.gov/MapClick.php?lat=' + lat + '&lon=' + lon + '&FcstType=graphical" ' +
+          'style="width:100%;height:340px;border:none;background:#fff;" title="Local Weather"></iframe>', 20);
+      }, function() { window.open('https://forecast.weather.gov/', '_blank'); });
+    } else {
+      window.open('https://forecast.weather.gov/', '_blank');
+    }
+  }, 800);
+}
+function _sessionLongPressCancel() {
+  if (_sessionLongPressTimer) { clearTimeout(_sessionLongPressTimer); _sessionLongPressTimer = null; }
+}
+
+// 3. SPY Price — 3 clicks → Options Profit Calculator
+let _priceClickCount = 0, _priceClickTimer = null;
+function _priceTripleClick() {
+  _priceClickCount++;
+  if (_priceClickTimer) clearTimeout(_priceClickTimer);
+  if (_priceClickCount >= 3) {
+    _priceClickCount = 0;
+    window.open('https://www.optionsprofitcalculator.com/', '_blank');
+    return;
+  }
+  _priceClickTimer = setTimeout(function() { _priceClickCount = 0; }, 600);
+}
+
+// 4. Logo — 3 clicks → TOS Thinkscript Collection
+let _logoEggClickCount = 0, _logoEggClickTimer = null;
+function _logoEggTap() {
+  _logoEggClickCount++;
+  if (_logoEggClickTimer) clearTimeout(_logoEggClickTimer);
+  if (_logoEggClickCount >= 3) {
+    _logoEggClickCount = 0;
+    window.open('TOS & Thinkscript Collection.html', '_blank');
+    return;
+  }
+  _logoEggClickTimer = setTimeout(function() { _logoEggClickCount = 0; }, 600);
+}
+
+// 5. Countdown — 3 clicks → Max Pain
+let _countdownClickCount = 0, _countdownClickTimer = null;
+function _countdownTripleClick() {
+  _countdownClickCount++;
+  if (_countdownClickTimer) clearTimeout(_countdownClickTimer);
+  if (_countdownClickCount >= 3) {
+    _countdownClickCount = 0;
+    window.open('https://optioncharts.io/options/SPY/max-pain', '_blank');
+    return;
+  }
+  _countdownClickTimer = setTimeout(function() { _countdownClickCount = 0; }, 600);
+}
+</script>
 
 <script src="ignition.js"></script>
 </body>
