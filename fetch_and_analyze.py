@@ -689,6 +689,20 @@ def _get_vix_iv():
         return None
 
 
+def vix_close_on(date_str):
+    """VIX index close on date_str or the last session before it, as a decimal."""
+    try:
+        import yfinance as yf
+        end = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        start = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=10)).strftime("%Y-%m-%d")
+        hist = yf.Ticker("^VIX").history(start=start, end=end, interval="1d", auto_adjust=False)
+        if hist is None or hist.empty:
+            return None
+        return float(hist["Close"].dropna().iloc[-1]) / 100
+    except Exception:
+        return None
+
+
 def set_next_week_static_wem(conn, friday_date_str, atm_iv):
     try:
         friday   = datetime.strptime(friday_date_str, "%Y-%m-%d").date()
@@ -706,11 +720,16 @@ def set_next_week_static_wem(conn, friday_date_str, atm_iv):
             print(f"  set_next_week_static_wem: no close for {friday_date_str}")
             return
         fri_close = row[0]
+        status = 'ok'
         if not atm_iv:
-            print("  set_next_week_static_wem: no weekly ATM IV — skipping.")
+            atm_iv = vix_close_on(friday_date_str)
+            status = 'vix'
+        if not atm_iv:
+            print("  set_next_week_static_wem: no weekly ATM IV and no VIX close — skipping.")
+            RUN_ERRORS.append("static WEM capture: no IV source")
             return
-        existing = c.execute("SELECT static_wem_iv FROM weekly_em WHERE week_start=?", (week_start,)).fetchone()
-        if existing and existing[0]:
+        existing = c.execute("SELECT static_wem_iv, static_band_status FROM weekly_em WHERE week_start=?", (week_start,)).fetchone()
+        if existing and existing[0] and existing[1] == 'ok':
             return
 
         half    = expected_move(fri_close, atm_iv, 7)
@@ -720,15 +739,15 @@ def set_next_week_static_wem(conn, friday_date_str, atm_iv):
         if existing:
             conn.execute(
                 """UPDATE weekly_em SET friday_close=?, static_wem_high=?, static_wem_low=?,
-                   static_wem_range=?, static_wem_iv=?, static_band_status='ok' WHERE week_start=?""",
-                (fri_close, s_high, s_low, s_range, atm_iv, week_start))
+                   static_wem_range=?, static_wem_iv=?, static_band_status=? WHERE week_start=?""",
+                (fri_close, s_high, s_low, s_range, atm_iv, status, week_start))
         else:
             conn.execute(
                 """INSERT INTO weekly_em (week_start, week_end, friday_close, static_wem_high, static_wem_low,
-                   static_wem_range, static_wem_iv, static_band_status) VALUES (?,?,?,?,?,?,?,'ok')""",
-                (week_start, week_end, fri_close, s_high, s_low, s_range, atm_iv))
+                   static_wem_range, static_wem_iv, static_band_status) VALUES (?,?,?,?,?,?,?,?)""",
+                (week_start, week_end, fri_close, s_high, s_low, s_range, atm_iv, status))
         conn.commit()
-        print(f"  Static WEM next week locked: Mid={fri_close} High={s_high} Low={s_low} (±{round(half,2)}, IV={atm_iv*100:.2f}%)")
+        print(f"  Static WEM next week locked ({status}): Mid={fri_close} High={s_high} Low={s_low} (±{round(half,2)}, IV={atm_iv*100:.2f}%)")
     except Exception as e:
         print(f"  set_next_week_static_wem error: {e}")
         RUN_ERRORS.append(f"static WEM capture: {e}")
@@ -756,7 +775,7 @@ def score_week(conn, week_start, week_end, prev_close, settled):
 
     band = c.execute("SELECT static_wem_low, static_wem_high, static_band_status FROM weekly_em WHERE week_start=?", (week_start,)).fetchone()
     lo, hi, status = band if band else (None, None, None)
-    scored = status == 'ok' and lo is not None and hi is not None
+    scored = status in ('ok', 'vix') and lo is not None and hi is not None
     closed_inside = breach = breach_intraweek = None; breach_side = None; breach_amount = None; breach_day = None
     if scored and week_close is not None:
         closed_inside = 1 if lo <= week_close <= hi else 0
@@ -913,9 +932,10 @@ def export_spy_json(conn):
 
 
 def build_wem_stats(weekly_em_list):
-    completed = [d for d in weekly_em_list if d["week_close"] is not None and d.get("static_band_status") == "ok"]
+    completed = [d for d in weekly_em_list if d["week_close"] is not None and d.get("static_band_status") in ("ok", "vix")]
     if not completed: return {}
     n = len(completed)
+    n_vix = len([d for d in completed if d.get("static_band_status") == "vix"])
     ranges        = [d["static_wem_range"] for d in completed if d.get("static_wem_range")]
     inside        = [d for d in completed if d["closed_inside"] == 1]
     breaches      = [d for d in completed if d["breach"] == 1]
@@ -929,6 +949,8 @@ def build_wem_stats(weekly_em_list):
     pct = lambda k, m: round(k / m * 100, 1) if m else None
     return {
         "total_weeks":       n,
+        "weeks_weekly_atm_iv": n - n_vix,
+        "weeks_vix_implied": n_vix,
         "window":            {"from": min(d["week_start"] for d in completed), "to": max(d["week_end"] for d in completed)},
         "avg_range":         round(sum(ranges)/len(ranges),2) if ranges else None,
         "pct_inside":        pct(len(inside), n),
@@ -2169,7 +2191,8 @@ def main():
         except Exception as e:
             print(f"  WEM error: {e}")
 
-        if ref.weekday() == 4:
+        ref_next = (ref + timedelta(days=1)).strftime("%Y-%m-%d")
+        if ref.weekday() == 4 or (ref.weekday() == 3 and ref_next in HOLIDAY_FRIDAYS):
             # Friday close: lock NEXT week's static range using today's ATM IV
             try:
                 print("  Friday — locking next week static WEM...")

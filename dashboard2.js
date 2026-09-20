@@ -757,8 +757,8 @@ function renderVolHistory(sd){
 
 function wemBand(w){
   if (!w) return null;
-  if (w.static_band_status === 'ok' && w.static_wem_low != null && w.static_wem_high != null)
-    return { lo: w.static_wem_low, hi: w.static_wem_high, mid: (w.static_wem_low + w.static_wem_high) / 2, half: (w.static_wem_high - w.static_wem_low) / 2, iv: w.static_wem_iv, isStatic: true };
+  if ((w.static_band_status === 'ok' || w.static_band_status === 'vix') && w.static_wem_low != null && w.static_wem_high != null)
+    return { lo: w.static_wem_low, hi: w.static_wem_high, mid: (w.static_wem_low + w.static_wem_high) / 2, half: (w.static_wem_high - w.static_wem_low) / 2, iv: w.static_wem_iv, isStatic: true, vix: w.static_band_status === 'vix' };
   if (w.wem_low != null && w.wem_high != null)
     return { lo: w.wem_low, hi: w.wem_high, mid: w.wem_mid, half: (w.wem_high - w.wem_low) / 2, iv: w.atm_iv, isStatic: false };
   return null;
@@ -807,7 +807,8 @@ function renderWEM(md){
   };
 
   if(cur){
-    const staticOk        = cur.static_band_status === 'ok' && cur.static_wem_low != null && cur.static_wem_high != null;
+    const staticOk        = (cur.static_band_status === 'ok' || cur.static_band_status === 'vix') && cur.static_wem_low != null && cur.static_wem_high != null;
+    const staticVix       = cur.static_band_status === 'vix';
     const staticMid       = cur.friday_close      || cur.wem_mid;
     const staticIV        = staticOk ? cur.static_wem_iv : null;
     const staticHigh      = staticOk ? cur.static_wem_high : null;
@@ -827,7 +828,7 @@ function renderWEM(md){
     const mid  = staticMid;
     const halfRange = isStatic ? staticHalfRange : _dynHalf;
     const price = spy.price || mid || 0;
-    const staticNote = staticOk ? '' : ' · STATIC BAND UNAVAILABLE FOR THIS WEEK';
+    const staticNote = staticOk ? (staticVix ? ' · VIX-IMPLIED BAND' : '') : ' · STATIC BAND UNAVAILABLE FOR THIS WEEK';
 
     $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}${isStatic?' · STATIC RANGE':' · LIVE GAUGE'}${staticNote}`;
 
@@ -904,14 +905,14 @@ function renderWEM(md){
     const emRow = $('emBoxRow');
     if(emRow) emRow.innerHTML =
       emBox('DAILY EXPECTED MOVE',   dailyEM,   `1 day · IV ${fmt(iv*100,1)}%`) +
-      emBox('WEEKLY EXPECTED MOVE',  weeklyEM,  staticOk?`Fixed at Fri close · 7 days · IV ${fmt(staticIV*100,1)}%`:`7 days at live IV ${fmt(iv*100,1)}% · static band unavailable`) +
+      emBox('WEEKLY EXPECTED MOVE',  weeklyEM,  staticOk?`Fixed at Fri close · 7 days · ${staticVix?'VIX':'weekly ATM IV'} ${fmt(staticIV*100,1)}%`:`7 days at live IV ${fmt(iv*100,1)}% · static band unavailable`) +
       emBox('MONTHLY EXPECTED MOVE', monthlyEM, `30 days · IV ${fmt(iv*100,1)}%`);
   }
 
   if(stats.total_weeks){
     const win = stats.window ? `${stats.window.from} → ${stats.window.to}` : '';
     $('wemStatsGrid').innerHTML=[
-      {l:'SCORED WEEKS',  v:stats.total_weeks, sub: win},
+      {l:'SCORED WEEKS',  v:stats.total_weeks, sub: (stats.weeks_vix_implied?`${stats.weeks_weekly_atm_iv} weekly ATM IV · ${stats.weeks_vix_implied} VIX-implied · `:'')+win},
       {l:'AVG RANGE ±',   v:'$'+fmt(stats.avg_range/2,2), sub:'static band'},
       {l:'% CLOSED INSIDE', v:fmt(stats.pct_inside,1)+'%', sub:`n=${stats.total_weeks}`},
       {l:'% CLOSED OUTSIDE', v:fmt(stats.pct_outside,1)+'%', sub:`n=${stats.total_weeks}`},
@@ -932,7 +933,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   const zEl   = $('wemZScore');
   if(!dotEl && !zEl) return;
 
-  const _sOk  = !!(cur && cur.static_band_status === 'ok' && cur.static_wem_low != null && cur.static_wem_high != null);
+  const _sOk  = !!(cur && (cur.static_band_status === 'ok' || cur.static_band_status === 'vix') && cur.static_wem_low != null && cur.static_wem_high != null);
   const isStatic2  = window._wemMode === 'static' && _sOk;
   const _sMid = cur ? (cur.friday_close    || cur.wem_mid)  : 0;
   const _sIV  = _sOk ? cur.static_wem_iv : 0;
@@ -954,7 +955,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   // Exclude current week from historical dots — it shows as NOW dot only
   const curWeekStart = cur ? cur.week_start : null;
   const histWeeks = wems
-    .filter(w => w.week_close != null && w.static_band_status === 'ok' && w.static_wem_low != null && w.static_wem_high != null && w.week_start !== curWeekStart)
+    .filter(w => w.week_close != null && (w.static_band_status === 'ok' || w.static_band_status === 'vix') && w.static_wem_low != null && w.static_wem_high != null && w.week_start !== curWeekStart)
     .slice().reverse();
   const total = histWeeks.length;
   const bandMid = w => (w.static_wem_low + w.static_wem_high) / 2;
@@ -1265,8 +1266,8 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
       </div>`;
   }
 
-  $('wemHistBody').innerHTML=[...wems].reverse().map(w=>{ const ok=w.static_band_status==='ok'&&w.static_wem_low!=null; return `<tr${ok?'':' style="opacity:0.55"'}>
-    <td>${w.week_start}${ok?'':' <span title="Static band unavailable — captured from a same-day expiry" style="color:#ff8800">•</span>'}</td>
+  $('wemHistBody').innerHTML=[...wems].reverse().map(w=>{ const ok=(w.static_band_status==='ok'||w.static_band_status==='vix')&&w.static_wem_low!=null; const vix=w.static_band_status==='vix'; return `<tr${ok?'':' style="opacity:0.55"'}>
+    <td>${w.week_start}${ok?(vix?' <span title="VIX-implied band — weekly ATM IV was not captured" style="color:#ffcc00">v</span>':''):' <span title="No static band for this week" style="color:#ff8800">•</span>'}</td>
     <td>$${fmt(w.friday_close||w.wem_mid,2)}</td>
     <td class="up">${ok?'$'+fmt(w.static_wem_high,2):'—'}</td>
     <td class="dn">${ok?'$'+fmt(w.static_wem_low,2):'—'}</td>

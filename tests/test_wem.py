@@ -76,6 +76,37 @@ class StaticCapture(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM weekly_em").fetchone()[0], 0)
 
 
+class VixFallback(unittest.TestCase):
+    def test_capture_uses_the_vix_close_when_no_weekly_iv_and_labels_it(self):
+        conn = db_with_week()
+        original = fa.vix_close_on
+        fa.vix_close_on = lambda d: 0.1481
+        try:
+            fa.set_next_week_static_wem(conn, "2026-09-18", None)
+        finally:
+            fa.vix_close_on = original
+        row = conn.execute("SELECT static_wem_iv, static_band_status FROM weekly_em WHERE week_start='2026-09-21'").fetchone()
+        self.assertEqual(row, (0.1481, "vix"))
+
+    def test_a_weekly_iv_capture_replaces_a_vix_band(self):
+        conn = db_with_week()
+        original = fa.vix_close_on
+        fa.vix_close_on = lambda d: 0.1481
+        try:
+            fa.set_next_week_static_wem(conn, "2026-09-18", None)
+        finally:
+            fa.vix_close_on = original
+        fa.set_next_week_static_wem(conn, "2026-09-18", 0.20)
+        row = conn.execute("SELECT static_wem_iv, static_band_status FROM weekly_em WHERE week_start='2026-09-21'").fetchone()
+        self.assertEqual(row, (0.20, "ok"))
+
+    def test_vix_bands_are_scored(self):
+        conn = db_with_week()
+        conn.execute("UPDATE weekly_em SET static_band_status='vix'")
+        fa.score_week(conn, "2026-09-14", "2026-09-18", 760.0, settled=True)
+        self.assertEqual(conn.execute("SELECT closed_inside FROM weekly_em").fetchone()[0], 1)
+
+
 class WeeklyExpiry(unittest.TestCase):
     def test_same_day_expiry_is_never_the_weekly(self):
         friday = date(2026, 9, 18)

@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 
 import fetch_and_analyze as fa
 
@@ -12,7 +12,7 @@ def main():
     fa.init_db(conn)
     c = conn.cursor()
     rows = c.execute("SELECT week_start, dte, atm_iv, static_wem_iv, static_wem_low, static_wem_high, static_wem_range, wem_low, wem_high, wem_range FROM weekly_em ORDER BY week_start").fetchall()
-    ok = unavailable = 0
+    ok = vix = unavailable = 0
     for ws, dte, atm_iv, s_iv, s_lo, s_hi, s_rng, w_lo, w_hi, w_rng in rows:
         if s_iv is None and dte == IMPORTED_DTE and w_lo and w_hi:
             c.execute("UPDATE weekly_em SET static_wem_low=?, static_wem_high=?, static_wem_range=?, static_wem_iv=?, static_band_status='ok' WHERE week_start=?",
@@ -25,10 +25,19 @@ def main():
                       (round(mid - half, 2), round(mid + half, 2), round(half * 2, 2), ws))
             ok += 1
         else:
-            c.execute("UPDATE weekly_em SET static_band_status='unavailable' WHERE week_start=?", (ws,))
-            unavailable += 1
+            prev_fri = (date.fromisoformat(ws) - timedelta(days=3)).isoformat()
+            fc = c.execute("SELECT close FROM daily_ohlcv WHERE date<=? AND close IS NOT NULL ORDER BY date DESC LIMIT 1", (prev_fri,)).fetchone()
+            iv = fa.vix_close_on(prev_fri)
+            if fc and iv:
+                half = fa.expected_move(fc[0], iv, 7)
+                c.execute("UPDATE weekly_em SET friday_close=?, static_wem_low=?, static_wem_high=?, static_wem_range=?, static_wem_iv=?, static_band_status='vix' WHERE week_start=?",
+                          (fc[0], round(fc[0] - half, 2), round(fc[0] + half, 2), round(half * 2, 2), iv, ws))
+                vix += 1
+            else:
+                c.execute("UPDATE weekly_em SET static_band_status='unavailable' WHERE week_start=?", (ws,))
+                unavailable += 1
     conn.commit()
-    print(f"static band status: ok={ok} unavailable={unavailable}")
+    print(f"static band status: ok={ok} vix={vix} unavailable={unavailable}")
 
     today = date.today()
     for ws, we, fc in c.execute("SELECT week_start, week_end, friday_close FROM weekly_em ORDER BY week_start").fetchall():
@@ -41,7 +50,7 @@ def main():
 
     for label, q in (
         ("settled weeks without a close", "SELECT COUNT(*) FROM weekly_em WHERE week_close IS NULL AND week_end < date('now')"),
-        ("scored weeks (status ok, closed)", "SELECT SUM(closed_inside), COUNT(*) FROM weekly_em WHERE week_close IS NOT NULL AND static_band_status='ok'"),
+        ("scored weeks (weekly ATM or VIX, closed)", "SELECT SUM(closed_inside), COUNT(*) FROM weekly_em WHERE week_close IS NOT NULL AND static_band_status IN ('ok','vix')"),
         ("weeks marked unavailable", "SELECT COUNT(*) FROM weekly_em WHERE static_band_status='unavailable'"),
         ("gap sign disagreements with daily_ohlcv", "SELECT COUNT(*) FROM weekly_em w JOIN daily_ohlcv d ON d.date=(SELECT MIN(date) FROM daily_ohlcv WHERE date>=w.week_start AND date<=w.week_end) WHERE w.weekly_gap IS NOT NULL AND ABS(w.weekly_gap-(d.open-w.friday_close))>0.011"),
     ):
