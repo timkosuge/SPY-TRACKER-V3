@@ -716,34 +716,6 @@ async function _fetchFuturesBars() {
     }
   } catch(e) {}
 
-  // Try 2: /spyintraday Cloudflare function (server-side, no CORS — already used by Trading Desk)
-  // Returns SPY 1m bars which we resample to 5m for the chart
-  try {
-    const r = await fetch('/spyintraday?t=' + Date.now());
-    if (r.ok) {
-      const d = await r.json();
-      if (d.bars && d.bars.length >= 2) {
-        // Resample 1m bars to 5m
-        const bars5 = [];
-        for(let i = 0; i < d.bars.length; i += 5) {
-          const slice = d.bars.slice(i, i + 5).filter(b => b.close);
-          if(!slice.length) continue;
-          bars5.push({
-            t: slice[0].t,
-            o: slice[0].open,
-            h: Math.max(...slice.map(b => b.high || b.close)),
-            l: Math.min(...slice.map(b => b.low  || b.close)),
-            c: slice[slice.length - 1].close,
-            v: slice.reduce((s, b) => s + (b.vol || 0), 0)
-          });
-        }
-        if(bars5.length >= 2) return { bars: bars5, symbol: 'SPY', source: 'spyintraday' };
-        // Fall back to raw 1m bars if resampling fails
-        const raw = d.bars.filter(b => b.close).map(b => ({ t: b.t, o: b.open, h: b.high, l: b.low, c: b.close, v: b.vol }));
-        if(raw.length >= 2) return { bars: raw, symbol: 'SPY', source: 'spyintraday_1m' };
-      }
-    }
-  } catch(e) {}
 
   return null;
 }
@@ -785,7 +757,7 @@ async function loadFuturesChart() {
   if(!bars || bars.length < 2) {
     el.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;">
       <div style="font-size:13px;color:var(--text3);">Chart unavailable</div>
-      <div style="font-size:11px;color:var(--text3);">/futures and /spyintraday both returned no data</div>
+      <div style="font-size:11px;color:var(--text3);">/futures returned no bars</div>
     </div>`;
     return;
   }

@@ -99,6 +99,10 @@ jobs:
         if: steps.clock.outputs.run == 'true'
         run: python generate_edge_stats.py
 
+      - name: Snapshot gamma exposure
+        if: steps.clock.outputs.run == 'true'
+        run: curl -s -o /dev/null -w "gex snapshot HTTP %{http_code}\n" "https://spy-tracker-v3.pages.dev/gex?t=$(date +%s)"
+
       - name: Push database to data branch
         if: steps.clock.outputs.run == 'true'
         run: |
@@ -113,6 +117,7 @@ jobs:
       - name: Commit updated files
         if: steps.clock.outputs.run == 'true'
         run: |
+          git checkout -- spy_data.db
           git add -f spy_data.json market_data.json \
                      analog_data.js tod_stats.js \
                      intraday_library.js expiry_data.js \

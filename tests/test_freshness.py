@@ -7,6 +7,15 @@ import unittest
 import fetch_and_analyze as fa
 
 
+def has_database():
+    try:
+        with open("spy_data.db", "rb") as f:
+            return f.read(16) == b"SQLite format 3\x00"
+    except OSError:
+        return False
+
+
+@unittest.skipUnless(has_database(), "spy_data.db is not present locally")
 class Reproduction(unittest.TestCase):
     def test_large_gap_generator_matches_its_frozen_payload_at_the_cutoff(self):
         import generate_large_gap_stats as g
@@ -19,6 +28,7 @@ class Reproduction(unittest.TestCase):
         self.assertEqual(mine["overall"]["total_sessions"], frozen["overall"]["total_sessions"])
 
 
+@unittest.skipUnless(has_database(), "spy_data.db is not present locally")
 class Stamps(unittest.TestCase):
     OWNED = ["large_gap_stats.js", "release_data.js", "edge_stats_data.js"]
     PIPELINE = ["gap_stats.js", "window_stats.js", "tod_stats.js", "decline_data.js", "relief_data.js", "analog_data.js",

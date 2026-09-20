@@ -46,6 +46,7 @@ jobs:
 
       - name: Commit exports
         run: |
+          git checkout -- spy_data.db
           git add -f spy_data.json market_data.json \
                      analog_data.js tod_stats.js \
                      intraday_library.js expiry_data.js \

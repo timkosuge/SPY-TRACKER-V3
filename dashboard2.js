@@ -765,6 +765,9 @@ function wemBand(w){
 }
 window.wemBand = wemBand;
 
+function fmtGex(v){ if (v==null || isNaN(v)) return '—'; const a=Math.abs(v), sg=v<0?'-':'+'; return a>=1e12?sg+'$'+(a/1e12).toFixed(2)+'T':a>=1e9?sg+'$'+(a/1e9).toFixed(2)+'B':a>=1e6?sg+'$'+(a/1e6).toFixed(0)+'M':sg+'$'+a.toFixed(0); }
+window.fmtGex = fmtGex;
+
 function renderWEM(md){
   const wems=md.weekly_em||[], stats=md.wem_stats||{};
   const q=md.quotes||{}, spy=q['SPY']||{};
@@ -1437,7 +1440,7 @@ VOLATILITY: VIX:${fmt(vixQ.price,2)} (${sign(vixQ.pct_change)}${fmt(vixQ.pct_cha
 OPTIONS — Today is ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dow]}.
   RULE: Mon/Wed = mid-week 0DTE only. Friday = WEEKLY OPEX. NEVER say "todays expiry" unless today is Friday.
 ${mpLines||'  No max pain data'}
-  GEX: ${gex.regime||'N/A'} | Net:${gex.net_gex?(gex.net_gex/1e9).toFixed(2)+'B':'N/A'} | Flip:$${gex.flip_point||'N/A'} | Supp:$${gex.support||'N/A'} | Res:$${gex.resistance||'N/A'}
+  GEX: ${gex.regime||'N/A'} | Net:${fmtGex(gex.net_gex)} | Flip:$${gex.flip_point||'N/A'} | Supp:$${gex.support||'N/A'} | Res:$${gex.resistance||'N/A'}
   PCR OI:${fmt(o.pc_ratio_oi,3)} | Call OI:${fmtK(o.total_call_oi||0)} | Put OI:${fmtK(o.total_put_oi||0)}
 
 RATES: 10YR:${fmt(tnx.price,3)}% 2YR:${fmt(irx.price,3)}% 30YR:${fmt(tyx.price,3)}% Spread:${spread!=null?fmt(spread,3)+'%':'N/A'}
@@ -2793,7 +2796,7 @@ function renderGEX(md) {
   const spy = md.quotes?.['SPY'] || {};
   const spot = spy.price || gex?.spot || 0;
 
-  if (!gex || !gex.flip_point) {
+  if (!gex || !gex.spot) {
     const noDataMsg = `
       <div style="padding:16px;display:flex;align-items:center;gap:16px;">
         <div style="font-size:28px;opacity:0.3;">⬡</div>
@@ -2811,13 +2814,7 @@ function renderGEX(md) {
 
   const isPos = gex.net_gex > 0;
   const regimeColor = gex.net_gex > 1e9 ? '#00ff88' : gex.net_gex > 0 ? '#88cc00' : gex.net_gex > -1e9 ? '#ff8800' : '#ff3355';
-  const fmtB = n => {
-    const abs = Math.abs(n);
-    const sign = n >= 0 ? '+' : '-';
-    if (abs >= 1e9) return sign + '$' + (abs/1e9).toFixed(2) + 'B';
-    if (abs >= 1e6) return sign + '$' + (abs/1e6).toFixed(0) + 'M';
-    return sign + '$' + Math.round(abs).toLocaleString();
-  };
+  const fmtB = fmtGex;
 
   const maxGex = gex.strikes ? Math.max(...gex.strikes.map(s => Math.abs(s.gex)), 1) : 1;
   const barChart = gex.strikes ? gex.strikes.map(s => {
@@ -2875,7 +2872,7 @@ function renderGEX(md) {
     ${barChart ? `
     <div>
       <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;display:flex;justify-content:space-between;">
-        <span>GEX BY STRIKE — green=call GEX (stabilizing) · red=put GEX (destabilizing)</span>
+        <span>GEX BY STRIKE — green = net positive gamma at the strike · red = net negative</span>
         <span style="color:var(--cyan);">SPOT=$${fmt(spot,2)} highlighted</span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
@@ -4489,7 +4486,7 @@ async function renderGEXIntradayMap() {
   let liveGex = null;
   try {
     const md = window._md || {};
-    if (md.gex && md.gex.flip_point) liveGex = md.gex;
+    if (md.gex && md.gex.spot) liveGex = md.gex;
   } catch(e) {}
 
   // Merge live into snapshots if not already represented
@@ -4516,8 +4513,8 @@ async function renderGEXIntradayMap() {
         <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;margin-bottom:8px;">⬡ NO INTRADAY GEX DATA YET</div>
         <div style="font-size:12px;line-height:1.8;">
           ${intradayErr && !intradayErr.includes('KV') ? `Error: ${intradayErr}<br>` : ''}
-          Data builds automatically as /gex is polled during market hours.<br>
-          Snapshots stored every 5 minutes · Today's map appears at ~9:35 AM ET
+          A snapshot is stored each time the pipeline or a visitor loads gamma exposure during the session.<br>
+          Today's map appears after the first snapshot of the session.
         </div>
       </div>`;
     return;
@@ -4532,7 +4529,7 @@ async function renderGEXIntradayMap() {
   const regime = liveGex?.regime || snapshots[snapshots.length-1]?.regime || '';
   const isPos = (liveGex?.net_gex || snapshots[snapshots.length-1]?.net || 0) > 0;
   const regimeColor = isPos ? '#00ff88' : '#ff3355';
-  const fmtB = n => { if (!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
+  const fmtB = fmtGex;
   const lastSnap = snapshots[snapshots.length-1];
 
   el.innerHTML = kvNotice + `
@@ -4756,6 +4753,8 @@ async function renderGEXDailyHistory() {
     if (d.error) err = d.error;
   } catch(e) { err = e.message; }
 
+  const _win = document.getElementById('gexHistWindow');
+  if (_win) _win.textContent = history.length ? `(${history.length} TRADING DAYS STORED)` : '(NO DAYS STORED)';
   if (!history.length) {
     el.innerHTML = `
       <div style="padding:20px;text-align:center;color:var(--text3);">
@@ -4773,7 +4772,7 @@ async function renderGEXDailyHistory() {
   const allPrices = history.flatMap(d => [d.spot, d.flip, d.sup, d.res].filter(Boolean));
   const minP = Math.min(...allPrices) - 3;
   const maxP = Math.max(...allPrices) + 3;
-  const fmtB = n => { if (!n) return '—'; const a=Math.abs(n),s=n>=0?'+':'-'; return a>=1e9?s+'$'+(a/1e9).toFixed(2)+'B':s+'$'+(a/1e6).toFixed(0)+'M'; };
+  const fmtB = fmtGex;
 
   el.innerHTML = `
     <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:10px;">

@@ -101,10 +101,16 @@ ${rows.map((row) => `  <div style="display:flex;align-items:center;gap:8px;paddi
   };
 }
 
+function nyDateStr(d = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(d);
+}
+function dteOf(expStr, todayStr) {
+  return Math.round((Date.parse(expStr + 'T00:00:00Z') - Date.parse(todayStr + 'T00:00:00Z')) / 86400000);
+}
+
 export async function onRequest(context) {
   const headers = {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
     "Cache-Control": "no-store, no-cache, must-revalidate",
   };
 
@@ -129,6 +135,7 @@ export async function onRequest(context) {
     if (!spot || !options.length) throw new Error("No spot or options");
 
     const today = new Date();
+    const todayStr = nyDateStr(today);
     const pattern = /^SPY(\d{6})([CP])(\d+)$/;
     const parsed = [];
 
@@ -136,15 +143,15 @@ export async function onRequest(context) {
       const match = pattern.exec(opt.option || "");
       if (!match) continue;
 
-      const expDate = new Date(`20${match[1].slice(0, 2)}-${match[1].slice(2, 4)}-${match[1].slice(4, 6)}`);
-      const dte = Math.round((expDate - today) / 86400000);
+      const expStr = `20${match[1].slice(0, 2)}-${match[1].slice(2, 4)}-${match[1].slice(4, 6)}`;
+      const dte = dteOf(expStr, todayStr);
       if (dte < 0) continue;
 
       const strike = Number.parseInt(match[3], 10) / 1000;
       if (strike < spot * 0.75 || strike > spot * 1.25) continue;
 
       parsed.push({
-        exp: expDate.toISOString().slice(0, 10),
+        exp: expStr,
         dte,
         cp: match[2],
         strike,
@@ -175,14 +182,7 @@ export async function onRequest(context) {
     // inflated on volatile days and gives a misleading WEM calculation.
     // Find the nearest Friday expiry; fall back to next available expiry if none found.
     let atmIV = null;
-    const fridayExp = (() => {
-      const now = new Date();
-      for (const exp of expiries) {
-        const d = new Date(exp + 'T12:00:00Z');
-        if (d.getDay() === 5 && d >= now) return exp; // Friday on or after today
-      }
-      return null;
-    })();
+    const fridayExp = expiries.find(exp => new Date(exp + 'T12:00:00Z').getUTCDay() === 5 && dteOf(exp, todayStr) >= 1) || null;
     const atmExpiries = fridayExp
       ? [fridayExp, ...expiries.filter(e => e !== fridayExp).slice(0, 2)]
       : expiries.slice(0, 3);
@@ -280,8 +280,7 @@ export async function onRequest(context) {
 
       if (maxPainStrike !== null) {
         const totalOI = Object.values(strikeMap).reduce((sum, value) => sum + value.call + value.put, 0);
-        const expDate = new Date(`${exp}T12:00:00`);
-        const dte = Math.ceil((expDate - today) / 86400000);
+        const dte = dteOf(exp, todayStr);
         maxPainList.push({
           expiry: exp,
           dte,
@@ -330,6 +329,7 @@ export async function onRequest(context) {
     const totalNetGEX = totalCallGEX + totalPutGEX;
     const sortedStrikes = Object.keys(gexByStrike).map(Number).sort((a, b) => a - b);
 
+    // First adjacent-strike sign change in net GEX, scanning up from 0.75 × spot; null when no change.
     let flipPoint = null;
     for (let i = 0; i < sortedStrikes.length - 1; i += 1) {
       const leftStrike = sortedStrikes[i];
@@ -380,7 +380,6 @@ export async function onRequest(context) {
           : "Dealers short gamma - they amplify moves in either direction.";
 
     // ── Walls by expiry: 0DTE + key upcoming expirations ────────────────────
-    const todayStr = today.toISOString().slice(0, 10);
 
     // Helper: build call/put walls for a given expiry
     const buildWalls = (exp) => {
@@ -394,8 +393,7 @@ export async function onRequest(context) {
         .map(o => ({ strike: o.strike, oi: o.oi, vol: o.vol }));
       const callWall = topCalls[0]?.strike || null;
       const putWall  = topPuts[0]?.strike  || null;
-      const expClose = new Date(exp + 'T21:00:00Z');
-      const dte = Math.ceil((expClose - today) / 86400000);
+      const dte = dteOf(exp, todayStr);
       return { exp, dte, callWall, putWall, topCalls, topPuts };
     };
 
@@ -456,7 +454,7 @@ export async function onRequest(context) {
 
     // Pass 1: nearest weekly Friday + all monthlies within 90 days
     for (const exp of upcomingAll) {
-      const dte = Math.ceil((new Date(exp + 'T21:00:00Z') - today) / 86400000);
+      const dte = dteOf(exp, todayStr);
       if (dte > 90) break;
       const d = new Date(exp + 'T12:00:00Z');
       const dow = d.getUTCDay();
@@ -518,7 +516,7 @@ export async function onRequest(context) {
     // ── Persist snapshot to KV for history charts (fire-and-forget) ─────────
     try {
       const kv = context.env?.GEX_HISTORY;
-      if (kv && flipPoint) {
+      if (kv && spot) {
         const now = new Date();
         const toET = d => new Date(d.toLocaleString('en-US', { timeZone: 'America/New_York' }));
         const et = toET(now);
@@ -535,8 +533,7 @@ export async function onRequest(context) {
           try { const raw = await kv.get(intradayKey, 'json'); if (Array.isArray(raw)) existing = raw; } catch(e) {}
           if (!existing.some(e => e.t === timeStr)) {
             existing.push(entry);
-            if (existing.length > 100) existing = existing.slice(-100);
-            await kv.put(intradayKey, JSON.stringify(existing), { expirationTtl: 86400 * 14 });
+            await kv.put(intradayKey, JSON.stringify(existing));
           }
           // Daily
           const dailyKey = 'gex:daily';
@@ -553,6 +550,6 @@ export async function onRequest(context) {
 
     return new Response(JSON.stringify(responsePayload), { headers });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { headers, status: 200 });
+    return new Response(JSON.stringify({ error: error.message }), { headers, status: 502 });
   }
 }
