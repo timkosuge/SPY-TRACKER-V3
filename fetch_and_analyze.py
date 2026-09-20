@@ -15,6 +15,23 @@ DB_PATH  = "spy_data.db"
 CT       = pytz.timezone("America/Chicago")
 ET       = pytz.timezone("America/New_York")
 MARKET_CLOSE_CT = (15, 0)
+SESSION_START_ET = 9*60+30
+SESSION_END_ET   = 16*60
+VOLUME_BUCKETS = [
+    ("vol_930_1000",  "8:30-9:00",   9*60+30,  10*60),
+    ("vol_1000_1030", "9:00-9:30",   10*60,    10*60+30),
+    ("vol_1030_1130", "9:30-10:30",  10*60+30, 11*60+30),
+    ("vol_1130_1300", "10:30-12:00", 11*60+30, 13*60),
+    ("vol_1300_1400", "12:00-1:00",  13*60,    14*60),
+    ("vol_1400_1500", "1:00-2:00",   14*60,    15*60),
+    ("vol_1500_1530", "2:00-2:30",   15*60,    15*60+30),
+    ("vol_1530_1600", "2:30-3:00",   15*60+30, 16*60),
+]
+
+def to_ct(hhmm):
+    if not hhmm: return hhmm
+    h, m = map(int, hhmm.split(":"))
+    return f"{h-1:02d}:{m:02d}"
 RUN_ERRORS = []
 BASE_URL = "https://api.polygon.io"
 
@@ -75,17 +92,16 @@ def init_db(conn):
         prev_close REAL,
         day_range_pct REAL
     )""")
+    va_cols = [r[1] for r in c.execute("PRAGMA table_info(volume_analysis)")]
+    if va_cols and "vol_1530_1600" not in va_cols:
+        c.execute("DROP TABLE volume_analysis")
     c.execute("""CREATE TABLE IF NOT EXISTS volume_analysis (
         date TEXT PRIMARY KEY, total_volume INTEGER,
-        vol_830_900 INTEGER, vol_900_930 INTEGER, vol_930_1030 INTEGER,
-        vol_1030_1200 INTEGER, vol_1200_1300 INTEGER, vol_1300_1400 INTEGER,
-        vol_1400_1430 INTEGER, vol_1430_1500 INTEGER,
+        vol_930_1000 INTEGER, vol_1000_1030 INTEGER, vol_1030_1130 INTEGER,
+        vol_1130_1300 INTEGER, vol_1300_1400 INTEGER, vol_1400_1500 INTEGER,
+        vol_1500_1530 INTEGER, vol_1530_1600 INTEGER,
         peak_volume_time TEXT, peak_volume_price REAL,
         peak_volume_amount INTEGER, hvn_price REAL, hvn_volume INTEGER)""")
-    # Add new 30-min bucket columns if upgrading from old schema
-    for col in ['vol_830_900','vol_900_930','vol_1400_1430','vol_1430_1500']:
-        try: c.execute(f"ALTER TABLE volume_analysis ADD COLUMN {col} INTEGER")
-        except: pass
     c.execute("""CREATE TABLE IF NOT EXISTS weekly_em (
         week_start TEXT PRIMARY KEY, week_end TEXT,
         friday_close REAL, atm_iv REAL, vix_iv REAL, dte INTEGER,
@@ -198,53 +214,39 @@ def compute_measurements(conn, target_date):
 def store_intraday_and_volume(conn, target_date, bars):
     if not bars: print("No intraday bars."); return
     c = conn.cursor()
-    # Buckets in CT (market hours 8:30 CT - 15:00 CT)
-    buckets = {
-        "vol_830_900":  (8*60+30, 9*60),    # Open Auction
-        "vol_900_930":  (9*60,    9*60+30),  # Early AM
-        "vol_930_1030": (9*60+30, 10*60+30), # Late Open
-        "vol_1030_1200":(10*60+30,12*60),    # Mid AM
-        "vol_1200_1300":(12*60,   13*60),    # Lunch
-        "vol_1300_1400":(13*60,   14*60),    # Mid PM
-        "vol_1400_1430":(14*60,   14*60+30), # Pre-Close
-        "vol_1430_1500":(14*60+30,15*60),    # Close Auction
-    }
-    bvols = {k:0 for k in buckets}
-    price_vol = {}; peak_bar = None
     for bar in bars:
-        ts_ct  = datetime.utcfromtimestamp(bar["t"]/1000).replace(tzinfo=pytz.utc).astimezone(CT)
-        ts_str = ts_ct.strftime("%H:%M")
-        mins   = ts_ct.hour*60+ts_ct.minute
-        if not (8*60+30 <= mins < 15*60): continue  # 8:30-15:00 CT
-        vol = bar.get("v",0)
+        ts_et  = datetime.utcfromtimestamp(bar["t"]/1000).replace(tzinfo=pytz.utc).astimezone(ET)
+        mins   = ts_et.hour*60+ts_et.minute
+        if not (SESSION_START_ET <= mins < SESSION_END_ET): continue
         c.execute("INSERT OR REPLACE INTO intraday_bars VALUES (?,?,?,?,?,?,?,?)",
-                  (target_date,ts_str,bar["o"],bar["h"],bar["l"],bar["c"],int(vol or 0),bar.get("vw")))
-        for bn,(bs,be) in buckets.items():
-            if bs <= mins < be: bvols[bn] += vol
-        pk = round(bar["c"]*10)/10
-        price_vol[pk] = price_vol.get(pk,0)+vol
-        if peak_bar is None or vol > peak_bar["v"]:
-            peak_bar = {"t":ts_str,"c":bar["c"],"v":vol}
+                  (target_date, ts_et.strftime("%H:%M"), bar["o"], bar["h"], bar["l"], bar["c"], int(bar.get("v",0) or 0), bar.get("vw")))
     conn.commit()
-    hvn   = max(price_vol, key=price_vol.get) if price_vol else None
-    total = sum(b.get("v",0) for b in bars)
+    compute_volume_analysis(conn, target_date)
+
+def compute_volume_analysis(conn, target_date):
+    rows = conn.execute("SELECT timestamp, close, volume FROM intraday_bars WHERE date=? ORDER BY timestamp", (target_date,)).fetchall()
+    if not rows: return
+    bvols = {k: 0 for k, *_ in VOLUME_BUCKETS}
+    price_vol = {}; peak = None; total = 0
+    for ts, cl, vol in rows:
+        h, m = map(int, ts.split(":")); mins = h*60+m
+        vol = int(vol or 0); total += vol
+        for k, _, bs, be in VOLUME_BUCKETS:
+            if bs <= mins < be: bvols[k] += vol
+        pk = round(cl*10)/10
+        price_vol[pk] = price_vol.get(pk, 0) + vol
+        if peak is None or vol > peak[2]: peak = (ts, cl, vol)
+    hvn = max(price_vol, key=price_vol.get) if price_vol else None
     conn.execute("""INSERT OR REPLACE INTO volume_analysis
         (date, total_volume,
-         vol_830_900, vol_900_930, vol_930_1030,
-         vol_1030_1200, vol_1200_1300, vol_1300_1400,
-         vol_1400_1430, vol_1430_1500,
-         peak_volume_time, peak_volume_price, peak_volume_amount,
-         hvn_price, hvn_volume)
+         vol_930_1000, vol_1000_1030, vol_1030_1130, vol_1130_1300,
+         vol_1300_1400, vol_1400_1500, vol_1500_1530, vol_1530_1600,
+         peak_volume_time, peak_volume_price, peak_volume_amount, hvn_price, hvn_volume)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (target_date, total,
-         bvols["vol_830_900"], bvols["vol_900_930"], bvols["vol_930_1030"],
-         bvols["vol_1030_1200"], bvols["vol_1200_1300"], bvols["vol_1300_1400"],
-         bvols["vol_1400_1430"], bvols["vol_1430_1500"],
-         peak_bar["t"] if peak_bar else None,
-         peak_bar["c"] if peak_bar else None,
-         peak_bar["v"] if peak_bar else None,
+        (target_date, total, *[bvols[k] for k, *_ in VOLUME_BUCKETS],
+         peak[0] if peak else None, peak[1] if peak else None, peak[2] if peak else None,
          hvn, price_vol[hvn] if hvn else None))
-    print(f"Intraday: {len(bars)} bars. Peak={peak_bar['v']:,}@{peak_bar['t']} HVN=${hvn}")
+    conn.commit()
 
 
 # ── Options via yfinance ────────────────────────────────────────────────────────
@@ -922,67 +924,24 @@ def export_spy_json(conn):
                 "pct_low_to_prev_low":      meas[20],
             }
         if vol:
-            # Read by column name — works with both old and new schema
             vol_row = c.execute("SELECT * FROM volume_analysis WHERE date=?", (d,)).fetchone()
             vd = dict(zip([desc[0] for desc in c.description], vol_row))
             def fv(k): return float(vd.get(k) or 0)
             total = fv("total_volume")
-            # Support both old schema (vol_930_1000..vol_1500_1600 ET)
-            # and new schema (vol_830_900..vol_1430_1500 CT)
-            # New schema takes priority if populated
-            has_new = fv("vol_830_900") + fv("vol_900_930") > 0
-            if has_new:
-                b = {
-                    "vol_830_900":  fv("vol_830_900"),
-                    "vol_900_930":  fv("vol_900_930"),
-                    "vol_930_1030": fv("vol_930_1030"),
-                    "vol_1030_1200":fv("vol_1030_1200"),
-                    "vol_1200_1300":fv("vol_1200_1300"),
-                    "vol_1300_1400":fv("vol_1300_1400"),
-                    "vol_1400_1430":fv("vol_1400_1430"),
-                    "vol_1430_1500":fv("vol_1430_1500"),
-                }
-                open_1h  = b["vol_830_900"] + b["vol_900_930"]
-                close_1h = b["vol_1400_1430"] + b["vol_1430_1500"]
-                buckets = [
-                    {"label":"8:30-9:00",   "volume": b["vol_830_900"],  "pct": round(b["vol_830_900"]/total*100,1)  if total else 0},
-                    {"label":"9:00-9:30",   "volume": b["vol_900_930"],  "pct": round(b["vol_900_930"]/total*100,1)  if total else 0},
-                    {"label":"9:30-10:30",  "volume": b["vol_930_1030"], "pct": round(b["vol_930_1030"]/total*100,1) if total else 0},
-                    {"label":"10:30-12:00", "volume": b["vol_1030_1200"],"pct": round(b["vol_1030_1200"]/total*100,1) if total else 0},
-                    {"label":"12:00-1:00",  "volume": b["vol_1200_1300"],"pct": round(b["vol_1200_1300"]/total*100,1) if total else 0},
-                    {"label":"1:00-2:00",   "volume": b["vol_1300_1400"],"pct": round(b["vol_1300_1400"]/total*100,1) if total else 0},
-                    {"label":"2:00-2:30",   "volume": b["vol_1400_1430"],"pct": round(b["vol_1400_1430"]/total*100,1) if total else 0},
-                    {"label":"2:30-3:00",   "volume": b["vol_1430_1500"],"pct": round(b["vol_1430_1500"]/total*100,1) if total else 0},
-                ]
-            else:
-                # Old schema — 1-hour ET buckets (9:30-16:00)
-                b = {
-                    "vol_930_1000": fv("vol_930_1000"),
-                    "vol_1000_1100":fv("vol_1000_1100"),
-                    "vol_1100_1200":fv("vol_1100_1200"),
-                    "vol_1200_1300":fv("vol_1200_1300"),
-                    "vol_1300_1400":fv("vol_1300_1400"),
-                    "vol_1400_1500":fv("vol_1400_1500"),
-                    "vol_1500_1600":fv("vol_1500_1600"),
-                }
-                open_1h  = b["vol_930_1000"]
-                close_1h = b["vol_1500_1600"]
-                buckets = [
-                    {"label":"9:30-10:00",  "volume": b["vol_930_1000"], "pct": round(b["vol_930_1000"]/total*100,1)  if total else 0},
-                    {"label":"10:00-11:00", "volume": b["vol_1000_1100"],"pct": round(b["vol_1000_1100"]/total*100,1) if total else 0},
-                    {"label":"11:00-12:00", "volume": b["vol_1100_1200"],"pct": round(b["vol_1100_1200"]/total*100,1) if total else 0},
-                    {"label":"12:00-1:00",  "volume": b["vol_1200_1300"],"pct": round(b["vol_1200_1300"]/total*100,1) if total else 0},
-                    {"label":"1:00-2:00",   "volume": b["vol_1300_1400"],"pct": round(b["vol_1300_1400"]/total*100,1) if total else 0},
-                    {"label":"2:00-3:00",   "volume": b["vol_1400_1500"],"pct": round(b["vol_1400_1500"]/total*100,1) if total else 0},
-                    {"label":"3:00-4:00",   "volume": b["vol_1500_1600"],"pct": round(b["vol_1500_1600"]/total*100,1) if total else 0},
-                ]
+            b = {k: fv(k) for k, *_ in VOLUME_BUCKETS}
+            open_1h  = b["vol_930_1000"] + b["vol_1000_1030"]
+            close_1h = b["vol_1500_1530"] + b["vol_1530_1600"]
+            buckets = [
+                {"key": k, "label": label, "volume": b[k], "pct": round(b[k]/total*100, 1) if total else 0}
+                for k, label, _, _ in VOLUME_BUCKETS
+            ]
             entry["volume_analysis"] = {
                 "total_volume":  total,
                 "open_1h":       open_1h,
                 "open_1h_pct":   round(open_1h/total*100,1)  if total else None,
                 "close_1h":      close_1h,
                 "close_1h_pct":  round(close_1h/total*100,1) if total else None,
-                "peak_time":     vd.get("peak_volume_time"),
+                "peak_time":     to_ct(vd.get("peak_volume_time")),
                 "peak_volume":   vd.get("peak_volume_amount"),
                 "hvn_price":     vd.get("hvn_price"),
                 "hvn_volume":    vd.get("hvn_volume"),
@@ -1501,7 +1460,7 @@ def export_intraday_json(conn):
     c = conn.cursor()
 
     dates = [r[0] for r in c.execute(
-        'SELECT DISTINCT date FROM intraday_bars ORDER BY date DESC'
+        'SELECT date FROM intraday_bars GROUP BY date HAVING COUNT(*) >= 380 ORDER BY date DESC'
     ).fetchall()]
 
     if not dates:
@@ -1510,8 +1469,11 @@ def export_intraday_json(conn):
 
     # Build prev_close lookup from daily_ohlcv
     daily = {}
-    for r in c.execute('SELECT date, open, high, low, close FROM daily_ohlcv').fetchall():
+    trading_days = []
+    for r in c.execute('SELECT date, open, high, low, close FROM daily_ohlcv WHERE close IS NOT NULL ORDER BY date').fetchall():
         daily[r[0]] = {'open': r[1], 'high': r[2], 'low': r[3], 'close': r[4]}
+        trading_days.append(r[0])
+    prev_trading_day = {trading_days[k]: trading_days[k-1] for k in range(1, len(trading_days))}
 
     records = []
     for i, date in enumerate(dates):
@@ -1531,7 +1493,7 @@ def export_intraday_json(conn):
         day_low     = min(b[3] for b in session)
         day_range_pct = round((day_high - day_low) / open_price * 100, 3) if open_price else None
 
-        prev_date  = dates[i + 1] if i + 1 < len(dates) else None
+        prev_date  = prev_trading_day.get(date)
         prev_close = daily.get(prev_date, {}).get('close') if prev_date else None
         gap_pct    = round((open_price - prev_close) / prev_close * 100, 3) if prev_close else None
         if gap_pct is None:       gap_type = None
@@ -1720,7 +1682,7 @@ def export_gap_stats(conn):
         prev=dates[i-1];curr=dates[i]
         s=sessions.get(curr);sp=sessions.get(prev)
         if not s or not sp: continue
-        ph=wstats(day_bars[prev],'14:00','15:00')
+        ph=wstats(day_bars[prev],'15:00','16:00')
         fh=wstats(day_bars[curr],'09:30','10:30')
         if not ph or not fh: continue
         cb=day_bars[curr]
@@ -2307,6 +2269,14 @@ def main():
                     RUN_ERRORS.append(f"intraday {d_str}: {e}")
         else:
             print("  All volume analysis up to date")
+        missing_va = [r[0] for r in conn.execute(
+            "SELECT b.date FROM (SELECT DISTINCT date FROM intraday_bars) b "
+            "LEFT JOIN volume_analysis v ON v.date = b.date WHERE v.date IS NULL"
+        ).fetchall()]
+        for d_str in missing_va:
+            compute_volume_analysis(conn, d_str)
+        if missing_va:
+            print(f"  Computed volume analysis for {len(missing_va)} days")
 
         # ── Step 4: Options, WEM, JSON exports ───────────────────────────────
         # Use today as the reference date for WEM/options (or most recent weekday)

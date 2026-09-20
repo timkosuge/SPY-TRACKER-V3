@@ -2952,7 +2952,7 @@ function renderWindowStats() {
         The lunch lull — volume dries up, ranges compress. How consistent is the midday drift? Does it mean revert or continue the morning move?
       </div>
       <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ffcc00;">
-        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">POWER HOUR (1:00–2:00 CT)</div>
+        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">POWER HOUR (2:00–3:00 CT)</div>
         The most directional window of the day. High correlation with next-day gap direction. Strong power hours tend to continue; weak ones tend to reverse.
       </div>
       <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ff8800;">
@@ -3438,8 +3438,8 @@ function renderGapStats() {
       ${[
         ['Sessions Analyzed', D.n, 'var(--cyan)', 'Day pairs with full intraday data'],
         ['Avg Gap at Open', sgn(D.avg_gap), D.avg_gap>0.05?'#00ff88':D.avg_gap<-0.05?'#ff3355':'var(--text2)', 'How much SPY gapped up or down on average'],
-        ['Avg Power Hour Move', sgn(D.avg_ph_move), signColor(D.avg_ph_move), 'Net move of prev day 1–2pm CT'],
-        ['Avg Power Hour Range', pct(D.avg_ph_range), '#ffcc00', 'High-to-low swing during 1–2pm CT'],
+        ['Avg Power Hour Move', sgn(D.avg_ph_move), signColor(D.avg_ph_move), 'Net move of prev day 2–3pm CT'],
+        ['Avg Power Hour Range', pct(D.avg_ph_range), '#ffcc00', 'High-to-low swing during 2–3pm CT'],
       ].map(([l,v,c,sub])=>`<div style="background:var(--bg3);border-radius:4px;padding:12px;text-align:center;">
         <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;">${l}</div>
         <div style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${c};margin-bottom:4px;">${v}</div>
@@ -3458,8 +3458,8 @@ function renderGapStats() {
       <div style="font-family:'Orbitron',monospace;font-size:9px;color:${c};margin-bottom:4px;">${label}</div>
       <div style="font-size:10px;color:var(--text3);margin-bottom:12px;">${g.n} sessions · ${shareOf}% of all days</div>
 
-      <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">THE PREVIOUS DAY'S POWER HOUR (1–2pm CT)</div>
-      ${row('Avg power hour move', sgn(g.avg_ph_move), signColor(g.avg_ph_move), 'Net direction of 1–2pm CT session the day before this gap')}
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">THE PREVIOUS DAY'S POWER HOUR (2–3pm CT)</div>
+      ${row('Avg power hour move', sgn(g.avg_ph_move), signColor(g.avg_ph_move), 'Net direction of 2–3pm CT session the day before this gap')}
       ${row('Avg power hour range', pct(g.avg_ph_range), '#ffcc00', 'High-to-low swing of that power hour')}
       ${row('Late power hour move (last 15 min)', sgn(g.avg_ph_last_move), signColor(g.avg_ph_last_move), 'How the final 15 minutes of the power hour moved')}
 
@@ -3502,7 +3502,7 @@ function renderGapStats() {
 
   const phBinHtml = `
     <div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:12px;">
-      How strong was the <strong>previous day's Power Hour (1–2pm CT)</strong>? This table groups all sessions by that move, then shows what gap came the next morning and how the first hour played out.
+      How strong was the <strong>previous day's Power Hour (2–3pm CT)</strong>? This table groups all sessions by that move, then shows what gap came the next morning and how the first hour played out.
       Strong Power Hour moves — up <em>or</em> down — tend to produce larger gaps and wider first hours.
     </div>
     <div style="overflow-x:auto;">
@@ -3695,7 +3695,7 @@ function renderGapStats() {
       ${dataNote}
     </div>
     ${section('⬡ AT A GLANCE — SUMMARY FOR THIS PERIOD','var(--cyan)', summaryHtml)}
-    ${section('⬡ HOW EACH GAP TYPE BEHAVES — WHAT CAME BEFORE & AFTER','#00ccff', `<div style="font-size:11px;color:var(--text2);margin-bottom:14px;line-height:1.7;">Sessions are split into three groups based on how SPY opened vs the prior close. For each group, you can see what the previous day's Power Hour (1–2pm CT) looked like, and how the first hour after the open played out. <strong>Gap fill rate</strong> = how often SPY traded back to touch the prior close price during the session. <strong>First hour predicts day</strong> = how often the first-hour direction matched where SPY closed at end of day.</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">${gapCards}</div>`)}
+    ${section('⬡ HOW EACH GAP TYPE BEHAVES — WHAT CAME BEFORE & AFTER','#00ccff', `<div style="font-size:11px;color:var(--text2);margin-bottom:14px;line-height:1.7;">Sessions are split into three groups based on how SPY opened vs the prior close. For each group, you can see what the previous day's Power Hour (2–3pm CT) looked like, and how the first hour after the open played out. <strong>Gap fill rate</strong> = how often SPY traded back to touch the prior close price during the session. <strong>First hour predicts day</strong> = how often the first-hour direction matched where SPY closed at end of day.</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">${gapCards}</div>`)}
     ${section('⬡ PREVIOUS DAY POWER HOUR STRENGTH → NEXT MORNING GAP','#ffcc00', phBinHtml)}
     ${section('⬡ KEY PATTERNS — LATE MOMENTUM, GAP FILLS, VOLATILITY','#8855ff', signalHtml)}
     ${section('⬡ GAP PATTERNS BY DAY OF WEEK','#ff8800', `${dowNote?`<div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:14px;">${dowNote}</div>`:''}<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">${dowCards}</div>`)}

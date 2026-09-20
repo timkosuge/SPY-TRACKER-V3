@@ -18,15 +18,17 @@ from datetime import datetime
 DB_PATH = "spy_data.db"
 
 BUCKET_DEFS = [
-    ("8:30-9:00",   8*60+30,  9*60),
-    ("9:00-9:30",   9*60,     9*60+30),
-    ("9:30-10:30",  9*60+30,  10*60+30),
-    ("10:30-12:00", 10*60+30, 12*60),
-    ("12:00-1:00",  12*60,    13*60),
-    ("1:00-2:00",   13*60,    14*60),
-    ("2:00-2:30",   14*60,    14*60+30),
-    ("2:30-3:00",   14*60+30, 15*60),
+    ("8:30-9:00",   9*60+30,  10*60),
+    ("9:00-9:30",   10*60,    10*60+30),
+    ("9:30-10:30",  10*60+30, 11*60+30),
+    ("10:30-12:00", 11*60+30, 13*60),
+    ("12:00-1:00",  13*60,    14*60),
+    ("1:00-2:00",   14*60,    15*60),
+    ("2:00-2:30",   15*60,    15*60+30),
+    ("2:30-3:00",   15*60+30, 16*60),
 ]
+SESSION_START = 9*60+30
+SESSION_END   = 16*60
 BUCKET_LABELS = [b[0] for b in BUCKET_DEFS]
 
 def ts_to_mins(ts_str):
@@ -79,8 +81,8 @@ def main():
             "SELECT timestamp, high, low FROM intraday_bars WHERE date=? ORDER BY timestamp",
             (date,)
         ).fetchall()
-        session = [(ts, h, l) for ts, h, l in bars if h and l and ts_to_mins(ts) >= 8*60+30]
-        if len(session) < 10:
+        session = [(ts, h, l) for ts, h, l in bars if h and l and SESSION_START <= ts_to_mins(ts) < SESSION_END]
+        if len(session) < 380:
             continue
 
         max_bar = max(session, key=lambda x: x[1])
@@ -121,7 +123,7 @@ def main():
     def pct(n): return round(n / days_ok * 100, 1) if days_ok else 0
     def avg_mins(lst):
         if not lst: return None
-        m = sum(lst) // len(lst)
+        m = sum(lst) // len(lst) - 60
         return f"{m//60:02d}:{m%60:02d}"
 
     DOW_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri"]

@@ -66,7 +66,7 @@ def main():
     
     # Get all dates with intraday bars
     bar_dates = [r[0] for r in conn.execute(
-        'SELECT DISTINCT date FROM intraday_bars ORDER BY date DESC'
+        'SELECT date FROM intraday_bars GROUP BY date HAVING COUNT(*) >= 380 ORDER BY date DESC'
     ).fetchall()]
     
     records = []

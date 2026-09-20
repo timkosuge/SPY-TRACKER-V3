@@ -11,10 +11,10 @@ from collections import defaultdict
 DB_PATH  = 'spy_data.db'
 OUT_PATH = 'window_stats.js'
 
-W1_START, W1_END   = '09:45', '11:00'
-W2_START, W2_END   = '12:45', '14:00'
-POST_W1_END        = '12:45'
-POST_W2_END        = '15:00'
+W1_START, W1_END   = '10:45', '12:00'
+W2_START, W2_END   = '13:45', '15:00'
+POST_W1_END        = '13:45'
+POST_W2_END        = '16:00'
 GAP_THRESH         = 0.15
 ENTRY_THRESH       = 0.10
 
@@ -62,7 +62,7 @@ def build_sessions(conn):
 
     sessions = []
     for date_str, bars in sorted(day_bars.items()):
-        if date_str == today_str or date_str not in daily: continue
+        if date_str == today_str or date_str not in daily or len(bars) < 380: continue
         d = daily[date_str]
         open_p = d['open']; close_p = d['close']
         w1 = extract_window(bars, W1_START, W1_END)

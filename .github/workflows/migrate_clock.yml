@@ -1,0 +1,69 @@
+name: Migrate Intraday Clock (run once)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch database from data branch
+        run: |
+          git fetch --depth=1 origin data
+          git cat-file blob FETCH_HEAD:spy_data.db > spy_data.db
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Migrate intraday_bars to Eastern and rebuild volume_analysis
+        run: python migrate_clock.py
+
+      - name: Rebuild exports
+        env:
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+        run: |
+          python fetch_and_analyze.py
+          python generate_analog.py
+          python generate_tod_stats.py
+          python generate_expiry_data.py
+          python generate_intraday_patterns.py
+          python generate_decline_data.py
+          python generate_window_stats.py
+          python generate_relief_data.py
+
+      - name: Push database to data branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch --depth=1 origin data
+          BLOB=$(git hash-object -w spy_data.db)
+          TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
+          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "fix: intraday_bars on one clock, volume_analysis rebuilt")
+          git push origin "$COMMIT":refs/heads/data
+
+      - name: Commit exports
+        run: |
+          git add -f spy_data.json market_data.json \
+                     analog_data.js tod_stats.js \
+                     intraday_library.js expiry_data.js \
+                     intraday_patterns.js decline_data.js relief_data.js \
+                     window_stats.js gap_stats.js \
+                     session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js
+          if git diff --staged --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "fix: exports after intraday clock migration"
+          git pull --rebase --autostash origin main
+          git push
