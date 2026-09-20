@@ -38,7 +38,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main
           git add -f sentiment_data.json
-          git diff --staged --quiet && echo "No changes to sentiment data" || git commit -m "Auto: sentiment data update $(TZ=America/Chicago date +'%Y-%m-%d %H:%M %Z')"
-          git push || echo "Nothing to push"
+          if git diff --staged --quiet; then
+            echo "No changes to sentiment data"
+            exit 0
+          fi
+          git commit -m "Auto: sentiment data update $(TZ=America/Chicago date +'%Y-%m-%d %H:%M %Z')"
+          git pull --rebase origin main
+          git push

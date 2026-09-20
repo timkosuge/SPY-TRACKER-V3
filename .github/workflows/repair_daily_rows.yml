@@ -1,10 +1,10 @@
-name: Import WEM Data (One-Time)
+name: Repair Daily Rows (run once)
 
 on:
   workflow_dispatch:
 
 jobs:
-  import-wem:
+  repair:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -21,24 +21,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install pandas requests pytz yfinance market-calendar-tool
+        run: pip install -r requirements.txt
 
-      - name: Run WEM import
-        run: python import_wem.py
+      - name: Repair close and recompute measurements
+        run: python repair_daily_rows.py
 
-      - name: Push database to data branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch --depth=1 origin data
-          BLOB=$(git hash-object -w spy_data.db)
-          TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
-          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "Import WEM data into database")
-          git push origin "$COMMIT":refs/heads/data
-
-      - name: Run main tracker to export JSON
+      - name: Rebuild exports
         env:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
         run: python fetch_and_analyze.py
@@ -50,16 +41,16 @@ jobs:
           git fetch --depth=1 origin data
           BLOB=$(git hash-object -w spy_data.db)
           TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
-          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "Export after WEM import")
+          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "fix: repair NULL close and recompute daily measurements")
           git push origin "$COMMIT":refs/heads/data
 
-      - name: Commit JSON exports
+      - name: Commit exports
         run: |
           git add -f spy_data.json market_data.json
           if git diff --staged --quiet; then
             echo "No changes"
             exit 0
           fi
-          git commit -m "Export JSON after WEM import"
+          git commit -m "fix: exports after daily-row repair"
           git pull --rebase origin main
           git push

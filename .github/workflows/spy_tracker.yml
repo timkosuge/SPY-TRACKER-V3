@@ -2,9 +2,7 @@ name: SPY Daily Tracker
 
 on:
   schedule:
-    - cron: '0,30 13-20 * * 1-5'
-    - cron: '15 22 * * 1-5'
-    - cron: '30 13 * * 1'
+    - cron: '30 13-21 * * 1-5'
   workflow_dispatch:
 
 env:
@@ -14,51 +12,79 @@ jobs:
   fetch-spy-data:
     runs-on: ubuntu-latest
     steps:
+      - name: Session clock
+        id: clock
+        run: |
+          MANUAL="${{ github.event_name == 'workflow_dispatch' }}"
+          NOW=$(TZ=America/New_York date +%H%M)
+          DOW=$(TZ=America/New_York date +%u)
+          RUN=false; CLOSE=false
+          if [ "$MANUAL" = "true" ]; then RUN=true; CLOSE=true; fi
+          if [ "$DOW" -le 5 ] && [ "$NOW" -ge 0925 ] && [ "$NOW" -le 1700 ]; then RUN=true; fi
+          if [ "$NOW" -ge 1605 ]; then CLOSE=true; fi
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+          echo "close=$CLOSE" >> "$GITHUB_OUTPUT"
+          echo "New York $NOW, weekday $DOW, run=$RUN close=$CLOSE"
+
       - name: Checkout repo
+        if: steps.clock.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Fetch database from data branch
+        if: steps.clock.outputs.run == 'true'
         run: |
           git fetch --depth=1 origin data
           git cat-file blob FETCH_HEAD:spy_data.db > spy_data.db
 
       - name: Set up Python
+        if: steps.clock.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install requests pytz yfinance pandas market-calendar-tool
+        if: steps.clock.outputs.run == 'true'
+        run: pip install -r requirements.txt
 
       - name: Run SPY tracker
+        if: steps.clock.outputs.run == 'true'
         env:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
         run: python fetch_and_analyze.py
 
       - name: Generate analog data
+        if: steps.clock.outputs.close == 'true'
         run: python generate_analog.py
 
       - name: Generate time-of-day stats
+        if: steps.clock.outputs.run == 'true'
         run: python generate_tod_stats.py
 
       - name: Generate expiry data (all trading days)
+        if: steps.clock.outputs.run == 'true'
         run: python generate_expiry_data.py
 
       - name: Generate intraday patterns
+        if: steps.clock.outputs.run == 'true'
         run: python generate_intraday_patterns.py
 
       - name: Generate decline/drawdown data
+        if: steps.clock.outputs.run == 'true'
         run: python generate_decline_data.py
 
       - name: Generate window pattern stats
+        if: steps.clock.outputs.run == 'true'
         run: python generate_window_stats.py
 
       - name: Generate relief rally data
+        if: steps.clock.outputs.run == 'true'
         run: python generate_relief_data.py
 
       - name: Push database to data branch
+        if: steps.clock.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -69,13 +95,17 @@ jobs:
           git push origin "$COMMIT":refs/heads/data
 
       - name: Commit updated files
+        if: steps.clock.outputs.run == 'true'
         run: |
-          git fetch origin main
-          git checkout origin/main -- .github/workflows/
           git add -f spy_data.json market_data.json \
                      analog_data.js tod_stats.js \
                      intraday_library.js expiry_data.js \
                      intraday_patterns.js decline_data.js relief_data.js \
                      window_stats.js gap_stats.js
-          git diff --staged --quiet && echo "No changes" || git commit -m "Auto: SPY data update $(TZ=America/Chicago date +'%Y-%m-%d %H:%M %Z')"
-          git push || echo "Nothing to push"
+          if git diff --staged --quiet; then
+            echo "No payload changes"
+            exit 0
+          fi
+          git commit -m "Auto: SPY data update $(TZ=America/Chicago date +'%Y-%m-%d %H:%M %Z')"
+          git pull --rebase origin main
+          git push

@@ -4,7 +4,8 @@ Fetches: SPY OHLCV + intraday, market quotes, options data (via yfinance),
          VIX term structure, breadth, commodities, WEM calculations
 """
 
-import os, sqlite3, requests, json, math
+import os
+import sys, sqlite3, requests, json, math
 from datetime import datetime, date, timedelta
 import pytz
 
@@ -12,6 +13,9 @@ API_KEY  = os.environ.get("POLYGON_API_KEY", "YOUR_API_KEY_HERE")
 SYMBOL   = "SPY"
 DB_PATH  = "spy_data.db"
 CT       = pytz.timezone("America/Chicago")
+ET       = pytz.timezone("America/New_York")
+MARKET_CLOSE_CT = (15, 0)
+RUN_ERRORS = []
 BASE_URL = "https://api.polygon.io"
 
 # ── DB Setup ───────────────────────────────────────────────────────────────────
@@ -19,7 +23,9 @@ def init_db(conn):
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS daily_ohlcv (
         date TEXT PRIMARY KEY, open REAL, high REAL, low REAL,
-        close REAL, volume INTEGER, vwap REAL)""")
+        close REAL, volume INTEGER)""")
+    if any(r[1] == "vwap" for r in c.execute("PRAGMA table_info(daily_ohlcv)")):
+        c.execute("ALTER TABLE daily_ohlcv DROP COLUMN vwap")
     c.execute("""CREATE TABLE IF NOT EXISTS daily_measurements (
         date TEXT PRIMARY KEY,
         open_to_close REAL, open_to_high REAL, open_to_low REAL,
@@ -153,12 +159,20 @@ def get_intraday_bars(target_date):
 
 
 # ── Store / Compute SPY ────────────────────────────────────────────────────────
-def store_daily(conn, target_date, bar):
-    conn.execute("INSERT OR REPLACE INTO daily_ohlcv VALUES (?,?,?,?,?,?,?)",
-                 (target_date, bar["open"], bar["high"], bar["low"], bar["close"],
-                  int(bar.get("volume",0) or 0), bar.get("vwap")))
-    conn.commit()
-    print(f"Daily: O={bar['open']} H={bar['high']} L={bar['low']} C={bar['close']} V={bar.get('volume',0):,}")
+def ohlc_row_is_valid(o, h, l, c):
+    vals = (o, h, l, c)
+    return all(isinstance(v, (int, float)) and math.isfinite(v) for v in vals) and o > 0 and c > 0
+
+def measurement_dates_needing_recompute(conn):
+    return [r[0] for r in conn.execute(
+        "SELECT o.date FROM daily_ohlcv o "
+        "LEFT JOIN daily_measurements m ON o.date = m.date "
+        "WHERE o.close IS NOT NULL AND (m.date IS NULL "
+        "OR ABS(m.open_to_close - (o.close - o.open)) > 1e-4 "
+        "OR ABS(m.day_range - (o.high - o.low)) > 1e-4 "
+        "OR (m.close_to_prev_close IS NULL AND EXISTS (SELECT 1 FROM daily_ohlcv p WHERE p.date < o.date))) "
+        "ORDER BY o.date"
+    ).fetchall()]
 
 def compute_measurements(conn, target_date):
     c = conn.cursor()
@@ -204,7 +218,7 @@ def store_intraday_and_volume(conn, target_date, bars):
         if not (8*60+30 <= mins < 15*60): continue  # 8:30-15:00 CT
         vol = bar.get("v",0)
         c.execute("INSERT OR REPLACE INTO intraday_bars VALUES (?,?,?,?,?,?,?,?)",
-                  (target_date,ts_str,bar["o"],bar["h"],bar["l"],bar["c"],vol,bar.get("vw")))
+                  (target_date,ts_str,bar["o"],bar["h"],bar["l"],bar["c"],int(vol or 0),bar.get("vw")))
         for bn,(bs,be) in buckets.items():
             if bs <= mins < be: bvols[bn] += vol
         pk = round(bar["c"]*10)/10
@@ -797,7 +811,7 @@ def compute_weekly_em(conn, target_date, atm_iv_override=None, is_next_week=Fals
         # treat the partial bar as the final week close — that would cause the JS
         # to think the week is finished and reset the WEM anchor prematurely.
         now_ct = datetime.now(CT)
-        market_closed_today = (now_ct.hour, now_ct.minute) >= (15, 0)  # 3:00 PM CT
+        market_closed_today = (now_ct.hour, now_ct.minute) >= MARKET_CLOSE_CT
         week_close = (week_rows[-1][3] if week_rows else None) if (is_last_trading_day and market_closed_today) else None
 
         weekly_gap = round(week_open - prev_close, 2) if week_open else None
@@ -874,14 +888,14 @@ def export_spy_json(conn):
         "SELECT date FROM daily_ohlcv ORDER BY date DESC").fetchall()]
     output = []
     for d in dates:
-        ohlcv = c.execute("SELECT open,high,low,close,volume,vwap FROM daily_ohlcv WHERE date=?", (d,)).fetchone()
+        ohlcv = c.execute("SELECT open,high,low,close,volume FROM daily_ohlcv WHERE date=?", (d,)).fetchone()
         meas  = c.execute("SELECT * FROM daily_measurements WHERE date=?", (d,)).fetchone()
         vol   = c.execute("SELECT * FROM volume_analysis WHERE date=?", (d,)).fetchone()
         entry = {"date": d}
         if ohlcv:
             entry.update({
                 "open": ohlcv[0], "high": ohlcv[1], "low": ohlcv[2],
-                "close": ohlcv[3], "volume": ohlcv[4], "vwap": ohlcv[5]
+                "close": ohlcv[3], "volume": ohlcv[4]
             })
         if meas:
             # Export with both naming conventions so dashboard always works
@@ -1621,7 +1635,7 @@ def get_trading_days_to_process(conn):
     """
     now_ct  = datetime.now(CT)
     today   = now_ct.date()
-    market_closed_today = now_ct.hour >= 16  # after 4 PM CT market is closed
+    market_closed_today = (now_ct.hour, now_ct.minute) >= MARKET_CLOSE_CT
 
     # Build the set of weekdays in the last 10 days that could be trading days
     candidates = []
@@ -1718,7 +1732,7 @@ def export_gap_stats(conn):
             'curr_day_range':s.get('day_range_pct',0),
             'ph':ph,'fh':fh,'dow':datetime.strptime(curr,'%Y-%m-%d').weekday()})
 
-    today=datetime.utcnow().date()
+    today=datetime.now(ET).date()
     cutoff_12m=(today-timedelta(days=365)).strftime('%Y-%m-%d')
     year_str=str(today.year)
     DOW=['Mon','Tue','Wed','Thu','Fri']
@@ -2071,7 +2085,7 @@ def export_intraday_vol_profile(conn):
     all_dates = [r[0] for r in c.fetchall()]
     date_dow = {d: datetime.strptime(d, '%Y-%m-%d').weekday() for d in all_dates}
 
-    today = datetime.utcnow().date()
+    today = datetime.now(ET).date()
     cutoff_12m = (today - timedelta(days=365)).strftime('%Y-%m-%d')
     year_str = str(today.year)
     dates_12m  = {d for d in all_dates if d >= cutoff_12m}
@@ -2156,7 +2170,7 @@ def export_session_vol_profile(conn):
     all_dates = [r[0] for r in c.fetchall()]
     date_dow = {d: datetime.strptime(d, '%Y-%m-%d').weekday() for d in all_dates}
 
-    today = datetime.utcnow().date()
+    today = datetime.now(ET).date()
     cutoff_12m = (today - timedelta(days=365)).strftime('%Y-%m-%d')
     year_str = str(today.year)
 
@@ -2240,11 +2254,11 @@ def main():
                     continue  # never write future dates
                 o = float(row['Open']);  h = float(row['High'])
                 l = float(row['Low']);   c = float(row['Close'])
-                v = int(row['Volume'])
-                if not o or not c:
+                if not ohlc_row_is_valid(o, h, l, c):
                     continue
-                conn.execute("INSERT OR REPLACE INTO daily_ohlcv VALUES (?,?,?,?,?,?,?)",
-                             (d_str, o, h, l, c, v, None))
+                v = int(row['Volume']) if math.isfinite(float(row['Volume'])) else 0
+                conn.execute("INSERT OR REPLACE INTO daily_ohlcv (date, open, high, low, close, volume) VALUES (?,?,?,?,?,?)",
+                             (d_str, o, h, l, c, v))
                 backfilled += 1
             if backfilled:
                 conn.commit()
@@ -2252,12 +2266,7 @@ def main():
             else:
                 print("  OHLC already up to date")
 
-            # Compute measurements for any day missing them
-            missing_meas = [r[0] for r in conn.execute(
-                "SELECT o.date FROM daily_ohlcv o "
-                "LEFT JOIN daily_measurements m ON o.date = m.date "
-                "WHERE m.date IS NULL ORDER BY o.date"
-            ).fetchall()]
+            missing_meas = measurement_dates_needing_recompute(conn)
             for nd in missing_meas:
                 try:
                     compute_measurements(conn, nd)
@@ -2268,6 +2277,7 @@ def main():
                 print(f"  Computed measurements for {len(missing_meas)} days")
         except Exception as e:
             print(f"  yfinance backfill error: {e}")
+            RUN_ERRORS.append(f"yfinance backfill: {e}")
 
         # Re-check after backfill — dates_to_process may now only need intraday
         dates_to_process = get_trading_days_to_process(conn)
@@ -2275,11 +2285,12 @@ def main():
         # ── Step 3: Polygon intraday for any day still missing volume_analysis ─
         print("\n── Intraday / HVN (Polygon) ─────────────────────────────────")
         # Collect all dates missing volume analysis (not just today)
+        intraday_cutoff = (today - timedelta(days=25)).strftime("%Y-%m-%d")
         need_intraday = [r[0] for r in conn.execute(
             "SELECT d.date FROM daily_ohlcv d "
-            "LEFT JOIN volume_analysis v ON d.date = v.date "
-            "WHERE v.date IS NULL OR v.hvn_price IS NULL "
-            "ORDER BY d.date DESC LIMIT 30"
+            "LEFT JOIN (SELECT date, COUNT(*) AS n FROM intraday_bars GROUP BY date) b ON b.date = d.date "
+            "WHERE d.date >= ? AND COALESCE(b.n, 0) < 380 "
+            "ORDER BY d.date DESC LIMIT 30", (intraday_cutoff,)
         ).fetchall()]
         if need_intraday:
             print(f"  Fetching intraday for: {need_intraday}")
@@ -2293,6 +2304,7 @@ def main():
                         print(f"  – {d_str}: no bars returned (market may still be open or holiday)")
                 except Exception as e:
                     print(f"  ✗ {d_str}: {e}")
+                    RUN_ERRORS.append(f"intraday {d_str}: {e}")
         else:
             print("  All volume analysis up to date")
 
@@ -2428,6 +2440,10 @@ def main():
 
     finally:
         conn.close()
+        if RUN_ERRORS:
+            print("\nRun failed:")
+            for e in RUN_ERRORS: print(f"  - {e}")
+            sys.exit(1)
         print("\nDone.")
 
 

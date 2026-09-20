@@ -28,5 +28,10 @@ jobs:
       - name: Commit results
         run: |
           git add market_data.json
-          git commit -m "Backfill static WEM columns and next week row" || echo "Nothing to commit"
+          if git diff --staged --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "Backfill static WEM columns and next week row"
+          git pull --rebase origin main
           git push
