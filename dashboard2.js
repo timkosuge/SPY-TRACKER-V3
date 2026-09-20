@@ -956,7 +956,7 @@ function renderWEM(md){
   if(stats.breach_by_day){
     const days=['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY'];
     $('breachGrid').innerHTML=days.map(d=>`<div class="breach-day"><div class="bd-name">${d}</div><div class="bd-val ${(stats.breach_by_day[d]||0)>0?'dn':''}">
-${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">breaches</span></div></div>`).join('');
+${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of ${stats.total_weeks} weeks · ${stats.total_weeks?fmt((stats.breach_by_day[d]||0)/stats.total_weeks*100,0):'—'}%</span></div></div>`).join('');
   }
 
   // ── Z-Score + thermometer/bell (uses active mode's lo/hi/mid) ─────────────
@@ -2691,8 +2691,8 @@ function renderVolStats() {
       const ac = b.after_avg >= 0 ? '#00ff88' : '#ff3355';
       return `<div class="es-vol-bucket">
         <div>${b.bucket}</div>
-        <div>$${b.threshold_low.toFixed(2)}</div>
-        <div>$${b.threshold_high.toFixed(2)}</div>
+        <div>${b.threshold_low.toFixed(2)}%</div>
+        <div>${b.threshold_high.toFixed(2)}%</div>
         <div style="color:${sc};">${b.self_avg >= 0 ? '+' : ''}${b.self_avg.toFixed(2)}%</div>
         <div>${b.self_winrate.toFixed(1)}%</div>
         <div style="color:${ac};">${b.after_avg >= 0 ? '+' : ''}${b.after_avg.toFixed(2)}%</div>
@@ -2708,8 +2708,8 @@ function renderVolStats() {
       const ac = b.after_avg >= 0 ? '#00ff88' : '#ff3355';
       return `<div class="es-vol-bucket">
         <div>${b.bucket}</div>
-        <div>$${b.threshold_low.toFixed(2)}</div>
-        <div>$${b.threshold_high.toFixed(2)}</div>
+        <div>${b.threshold_low.toFixed(2)}%</div>
+        <div>${b.threshold_high.toFixed(2)}%</div>
         <div style="color:${sc};">${b.self_avg >= 0 ? '+' : ''}${b.self_avg.toFixed(2)}%</div>
         <div>${b.self_winrate.toFixed(1)}%</div>
         <div style="color:${ac};">${b.after_avg >= 0 ? '+' : ''}${b.after_avg.toFixed(2)}%</div>
@@ -2765,7 +2765,7 @@ function renderVolStats() {
                 ${wr ? `<span style="font-size:9px;color:var(--text3);margin-left:4px;">${wr} WR</span>` : ''}
               </div>
             </div>
-            <div style="font-size:9px;color:var(--text3);width:48px;text-align:right;font-family:'Share Tech Mono',monospace;">$${(b.threshold_low||0).toFixed(1)}–${(b.threshold_high||0).toFixed(1)}</div>
+            <div style="font-size:9px;color:var(--text3);width:48px;text-align:right;font-family:'Share Tech Mono',monospace;">${(b.threshold_low||0).toFixed(2)}–${(b.threshold_high||0).toFixed(2)}%</div>
           </div>`;
         }).join('')}
       </div>

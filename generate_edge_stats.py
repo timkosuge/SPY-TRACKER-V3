@@ -29,7 +29,7 @@ def load_daily(conn, cutoff=None):
     for i, (d, o, h, l, c, v) in enumerate(rows):
         pc = rows[i - 1][4] if i else None
         out.append(dict(date=d, dt=date.fromisoformat(d), open=o, high=h, low=l, close=c, volume=v or 0,
-                        ret=(c - pc) / pc * 100 if pc else None, oc=(c - o) / o * 100, rng=h - l))
+                        ret=(c - pc) / pc * 100 if pc else None, oc=(c - o) / o * 100, rng=h - l, rng_pct=(h - l) / o * 100))
     return out
 
 
@@ -42,21 +42,25 @@ def load_csv(path, cutoff=None):
             continue
         out.append(dict(date=x["DATE"], dt=date.fromisoformat(x["DATE"]), open=float(x["OPEN"]), high=float(x["HIGH"]),
                         low=float(x["LOW"]), close=float(x["CLOSE"]), ret=float(x["Return_%"]), tr=float(x["True_Range"]),
-                        days=int(x["Trading_Days"])))
+                        tr_pct=float(x["True_Range"]) / float(x["OPEN"]) * 100, days=int(x["Trading_Days"])))
     return out
 
 
+def se(vals, n=3):
+    return r(st.stdev(vals) / len(vals) ** 0.5, n) if len(vals) > 1 else None
+
+
 def stats(vals, n=2):
-    return dict(avg=mean(vals, n), median=median(vals, n), win_rate=win(vals), count=len(vals), best=mx(vals, n), worst=mn(vals, n))
+    return dict(avg=mean(vals, n), median=median(vals, n), win_rate=win(vals), count=len(vals), best=mx(vals, n), worst=mn(vals, n), se=se(vals, n + 1))
 
 
 def seasonality(monthly, daily):
     out = []
     for m in range(1, 13):
-        mr = [x for x in monthly if x["dt"].month == m]
+        mr = [x for x in monthly if x["dt"].month == m and x["days"] >= 15]
         dr = [x for x in daily if x["dt"].month == m and x["ret"] is not None]
         rets = [x["ret"] for x in mr]
-        out.append(dict(month=MONTHS[m - 1], avg_return=mean(rets), median_return=median(rets),
+        out.append(dict(month=MONTHS[m - 1], avg_return=mean(rets), median_return=median(rets), se=se(rets),
                         win_rate=win(rets), avg_vol=mean([x["tr"] for x in mr]),
                         count=len(rets), best=mx(rets), worst=mn(rets),
                         daily_avg=mean([x["ret"] for x in dr]), daily_win_rate=win([x["ret"] for x in dr]),
@@ -89,10 +93,10 @@ def yearly_summary(yearly):
 def week_of_month(weekly):
     out = []
     for w in range(1, 6):
-        rets = [x["ret"] for x in weekly if (x["dt"].day - 1) // 7 + 1 == w]
+        rets = [x["ret"] for x in weekly if ((x["dt"] - timedelta(days=4)).day - 1) // 7 + 1 == w]
         if not rets:
             continue
-        out.append(dict(week=f"Week {w}", avg_return=mean(rets), median_return=median(rets), win_rate=win(rets), count=len(rets), best=mx(rets), worst=mn(rets)))
+        out.append(dict(week=f"Week {w}", avg_return=mean(rets), median_return=median(rets), se=se(rets), win_rate=win(rets), count=len(rets), best=mx(rets), worst=mn(rets)))
     return out
 
 
@@ -107,7 +111,7 @@ def day_of_week(daily):
             i = idx[x["date"]]
             if i and daily[i - 1]["ret"] is not None:
                 (after_green if daily[i - 1]["ret"] > 0 else after_red).append(x["ret"])
-        out.append(dict(day=name, avg_return=mean(rets, 4), median_return=median(rets, 4), win_rate=win(rets), avg_range=mean([x["rng"] for x in rows]),
+        out.append(dict(day=name, avg_return=mean(rets, 4), median_return=median(rets, 4), se=se(rets, 4), win_rate=win(rets), avg_range=mean([x["rng"] for x in rows]),
                         count=len(rets), best=mx(rets), worst=mn(rets), after_green_avg=mean(after_green), after_red_avg=mean(after_red)))
     return out
 
@@ -125,8 +129,10 @@ def streak_stats(rets, with_after=True, with_three=False):
     for v in rets:
         if v > 0:
             cur_g += 1; cur_r = 0
-        else:
+        elif v < 0:
             cur_r += 1; cur_g = 0
+        else:
+            cur_g = cur_r = 0
         max_g = max(max_g, cur_g); max_r = max(max_r, cur_r)
     out = dict(max_green=max_g, max_red=max_r)
     if not with_after:
@@ -135,7 +141,7 @@ def streak_stats(rets, with_after=True, with_three=False):
         vals = []
         for i in range(n, len(rets)):
             seg = rets[i - n:i]
-            if all((v > 0) == green for v in seg):
+            if all((v > 0) if green else (v < 0) for v in seg):
                 vals.append(rets[i])
         return vals
     a2g, a2r = after(2, True), after(2, False)
@@ -183,6 +189,7 @@ def build_window(daily, weekly, monthly, yearly, label):
         daily_seasonality=daily_seasonality(daily),
         daily_vol_edge=daily_vol_edge(daily) if len(daily) >= 5 else {},
         releases=releases(weekly, daily) if len(weekly) > 2 else {},
+        baseline=dict(daily=mean([x["ret"] for x in daily if x["ret"] is not None], 4), weekly=mean([x["ret"] for x in weekly], 4), monthly=mean([x["ret"] for x in monthly if x["days"] >= 15], 4)),
         meta=dict(label=label, weekly_count=len(weekly), monthly_count=len(monthly), daily_count=len([x for x in daily if x["ret"] is not None])),
     )
 
@@ -231,10 +238,9 @@ for y in range(2025, 2033): PARTY[y] = "rep"
 def q4_return(daily, year):
     ys = [x for x in daily if x["dt"].year == year]
     q4 = [x for x in ys if x["dt"].month >= 10]
-    pre = [x for x in ys if x["dt"].month < 10]
-    if not q4 or not pre:
+    if len(q4) < 40:
         return None
-    return (q4[-1]["close"] - pre[-1]["close"]) / pre[-1]["close"] * 100
+    return (q4[-1]["close"] - q4[0]["open"]) / q4[0]["open"] * 100
 
 
 def cycle_block(years, daily, q4=False):
@@ -247,24 +253,17 @@ def cycle_block(years, daily, q4=False):
     return out
 
 
-def annual_close_to_close(daily):
-    byy = {}
-    for x in daily:
-        byy.setdefault(x["dt"].year, []).append(x)
-    years = sorted(byy)
-    return [dict(dt=date(y, 12, 31), ret=r((byy[y][-1]["close"] - byy[y - 1][-1]["close"]) / byy[y - 1][-1]["close"] * 100),
-                 days=len(byy[y])) for y in years if y - 1 in byy]
-
-
 def political(yearly, daily):
-    full = [y for y in annual_close_to_close(daily) if y["days"] >= 240]
-    def sel(fn): return [y for y in full if y["dt"].year >= 1994 and fn(y["dt"].year)]
+    last_year = daily[-1]["dt"].year
+    full = [y for y in yearly if y["dt"].year != last_year and y["days"] >= 200]
+    def sel(fn): return [y for y in full if fn(y["dt"].year)]
     election = sel(lambda y: y % 4 == 0)
     midterm = sel(lambda y: y % 4 == 2)
     year1 = sel(lambda y: y % 4 == 1)
     year3 = sel(lambda y: y % 4 == 3)
     out = dict(election=cycle_block(election, daily), midterm=cycle_block(midterm, daily),
-               year1=cycle_block(year1, daily), year3=cycle_block(year3, daily))
+               year1=cycle_block(year1, daily), year3=cycle_block(year3, daily),
+               basis="open-to-close per calendar year, complete years only", years=f"{full[0]['dt'].year}–{full[-1]['dt'].year}" if full else "", count=len(full))
     for party in ("dem", "rep"):
         rets = [y["ret"] for y in full if PARTY.get(y["dt"].year) == party]
         out[party] = stats(rets)
@@ -289,7 +288,7 @@ def recovery(weekly):
                 peak = c
             elif not in_dd and (peak - c) / peak * 100 >= dd:
                 in_dd = True; cross = i
-        out[f"dd{dd}"] = dict(count=len(events), avg_weeks=mean(events, 1), median_weeks=median(events, 1), max_weeks=max(events) if events else 0)
+        out[f"dd{dd}"] = dict(count=len(events), avg_weeks=mean(events, 1), median_weeks=median(events, 1), max_weeks=max(events) if events else 0, se_weeks=se(events, 1))
     return out
 
 
@@ -318,15 +317,15 @@ def quintile_buckets(rows, key, ret_key="ret", rounded=False):
 
 
 def vol_edge(weekly, daily):
-    wb, wcuts = quintile_buckets(weekly, "tr", rounded=True)
+    wb, wcuts = quintile_buckets(weekly, "tr_pct")
     dl = [x for x in daily if x["ret"] is not None]
-    db, dcuts = quintile_buckets(dl, "rng")
+    db, dcuts = quintile_buckets(dl, "rng_pct")
     hi, lo = wcuts[3], wcuts[0]
-    hi_idx = [i for i, x in enumerate(weekly) if x["tr"] >= hi]
-    lo_idx = [i for i, x in enumerate(weekly) if x["tr"] < lo]
+    hi_idx = [i for i, x in enumerate(weekly) if x["tr_pct"] >= hi]
+    lo_idx = [i for i, x in enumerate(weekly) if x["tr_pct"] < lo]
     consec = []; run = 0
     for x in weekly:
-        if x["tr"] >= hi:
+        if x["tr_pct"] >= hi:
             run += 1
         else:
             if run >= 2:
@@ -337,7 +336,7 @@ def vol_edge(weekly, daily):
         weekly_buckets=wb, daily_buckets=db,
         after_consec_hivol_avg=mean(consec), after_consec_hivol_winrate=win(consec),
         weekly_avg_tr=mean([x["tr"] for x in weekly]), daily_avg_tr=mean([x["rng"] for x in dl]),
-        hi_vol_threshold=r(hi), lo_vol_threshold=r(lo),
+        hi_vol_threshold=r(hi), lo_vol_threshold=r(lo), bucket_unit="percent of the period open",
         hi_vol_self_avg=mean([weekly[i]["ret"] for i in hi_idx]), hi_vol_self_winrate=win([weekly[i]["ret"] for i in hi_idx]),
         lo_vol_self_avg=mean([weekly[i]["ret"] for i in lo_idx]),
         risk_adj_all=r(st.mean(rets) / st.mean([x["tr"] for x in weekly]), 4) if weekly else 0,
@@ -346,11 +345,11 @@ def vol_edge(weekly, daily):
 
 def daily_vol_edge(daily):
     dl = [x for x in daily if x["ret"] is not None]
-    vals = sorted(x["rng"] for x in dl); n = len(vals)
+    vals = sorted(x["rng_pct"] for x in dl); n = len(vals)
     hi, lo = vals[int(n * 4 / 5)], vals[int(n / 5)]
-    after_hi = [dl[i + 1]["ret"] for i in range(len(dl) - 1) if dl[i]["rng"] >= hi]
-    after_lo = [dl[i + 1]["ret"] for i in range(len(dl) - 1) if dl[i]["rng"] < lo]
-    self_hi = [x["ret"] for x in dl if x["rng"] >= hi]
+    after_hi = [dl[i + 1]["ret"] for i in range(len(dl) - 1) if dl[i]["rng_pct"] >= hi]
+    after_lo = [dl[i + 1]["ret"] for i in range(len(dl) - 1) if dl[i]["rng_pct"] < lo]
+    self_hi = [x["ret"] for x in dl if x["rng_pct"] >= hi]
     return dict(hi_vol_threshold=r(hi), lo_vol_threshold=r(lo), after_hivol_avg=mean(after_hi), after_hivol_winrate=win(after_hi),
                 after_lovol_avg=mean(after_lo), after_lovol_winrate=win(after_lo), hi_vol_self_avg=mean(self_hi), hi_vol_self_winrate=win(self_hi))
 

@@ -117,6 +117,10 @@ window.esSub=function(id,el){
 };
 
 // ---- DAY OF WEEK ----
+const esPM = (v, se, digits) => se != null ? `±${esN(2*se, digits==null?2:digits)}` : '';
+const esSep = (a, b) => (a && b && a.se != null && b.se != null) ? Math.abs((a.avg_return ?? a.avg) - (b.avg_return ?? b.avg)) / Math.sqrt(a.se**2 + b.se**2) : null;
+const esRankNote = (top, next, what) => { const z = esSep(top, next); return z == null ? '' : z >= 2 ? `${what} leads by more than two standard errors.` : `${what} leads, but the gap to the next is inside two standard errors — the ranking is not established.`; };
+
 function esRenderDOW(){
   mkLB('es-dow-lb'); mkMeta('es-dow-meta');
   const d=ES().day_of_week;
@@ -129,13 +133,13 @@ function esRenderDOW(){
         <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3)">${x.day.slice(0,3).toUpperCase()}</span></div>`;}).join('')}
   </div>`;
   document.getElementById('es-dow-tbody').innerHTML=d.map(x=>`<tr>
-    <td>${x.day}</td><td>${esFmt(x.avg_return)}</td><td>${esFmt(x.median_return)}</td>
+    <td>${x.day}</td><td>${esFmt(x.avg_return)} <span style="color:var(--text3);font-size:10px;">${esPM(x.avg_return, x.se, 3)}</span></td><td>${esFmt(x.median_return)}</td>
     <td>${esWr(x.win_rate)}</td><td style="color:var(--text3)">$${esN(x.avg_range)}</td>
     <td class="up">+${esN(x.best)}%</td><td class="dn">${esN(x.worst)}%</td>
     <td style="color:var(--text3)">${x.count.toLocaleString()}</td></tr>`).join('');
   document.getElementById('es-dow-context-tbl').innerHTML=`<thead><tr><th>Day</th><th>After Up Day (avg)</th><th>After Down Day (avg)</th><th>Interpretation</th></tr></thead><tbody>
     ${d.map(x=>`<tr><td>${x.day}</td><td>${esFmt(x.after_green_avg)}</td><td>${esFmt(x.after_red_avg)}</td>
-      <td style="text-align:left;color:var(--text3);font-size:12px;">${x.after_red_avg>(x.after_green_avg+0.02)?'Mean reversion — red days tend to bounce here':x.after_green_avg>(x.after_red_avg+0.02)?'Momentum — up days tend to follow up days':'No significant bias'}</td></tr>`).join('')}
+      <td style="text-align:left;color:var(--text3);font-size:12px;">${(() => { const diff = (x.after_red_avg||0)-(x.after_green_avg||0); const s2 = x.se != null ? x.se*Math.SQRT2 : null; return s2 != null && Math.abs(diff) > 2*s2 ? (diff > 0 ? 'After a down day the mean is higher — beyond two standard errors' : 'After an up day the mean is higher — beyond two standard errors') : 'Difference inside two standard errors — no established effect'; })()}</td></tr>`).join('')}
     </tbody>`;
   const ds=ES().streaks?.daily||{};
   document.getElementById('es-daily-mom-cards').innerHTML=`
@@ -169,7 +173,8 @@ function esRenderWOM(){
       <td>${e>=0?`<span class="up">+${e.toFixed(2)}%</span>`:`<span class="dn">${e.toFixed(2)}%</span>`}</td></tr>`;}).join('');
   const best=wom.reduce((a,b)=>(b.avg_return||0)>(a.avg_return||0)?b:a);
   const worst=wom.reduce((a,b)=>(b.avg_return||0)<(a.avg_return||0)?b:a);
-  document.getElementById('es-wom-insight').innerHTML=`<strong>Turn-of-month effect:</strong> ${best.week} (avg <span class="up">+${esN(best.avg_return)}%</span>, ${esN(best.win_rate,1)}% WR) is the strongest — consistent with institutional rebalancing and 401k inflows hitting at month-start. ${worst.week} (avg ${esFmt(worst.avg_return)}) is the weakest. Edge = <span class="up">+${esN((best.avg_return||0)-(worst.avg_return||0))}%</span> between best and worst week.`;
+  const _womRanked=[...wom].sort((a,b)=>(b.avg_return||0)-(a.avg_return||0));
+  document.getElementById('es-wom-insight').innerHTML=`<strong>${best.week} has the highest mean</strong> (avg <span class="up">+${esN(best.avg_return)}%</span> ${esPM(best.avg_return,best.se)}, ${esN(best.win_rate,1)}% WR); ${esRankNote(_womRanked[0],_womRanked[1],best.week)} Weeks are assigned to the month their Monday falls in. ${best.week} (avg <span class="up">+${esN(best.avg_return)}%</span>, ${esN(best.win_rate,1)}% WR) is the strongest — consistent with institutional rebalancing and 401k inflows hitting at month-start. ${worst.week} (avg ${esFmt(worst.avg_return)}) is the weakest. Edge = <span class="up">+${esN((best.avg_return||0)-(worst.avg_return||0))}%</span> between best and worst week.`;
 
   // Render the 12-month grid
   renderWOMMonthGrid();
@@ -299,13 +304,14 @@ function renderWOMMonthGrid() {
 
   const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
   const winRate = arr => arr.length ? arr.filter(v=>v>0).length/arr.length*100 : null;
+  const seOf = arr => { if (arr.length < 2) return null; const m = avg(arr); return Math.sqrt(arr.reduce((a,v)=>a+(v-m)**2,0)/(arr.length-1)) / Math.sqrt(arr.length); };
+  const MIN_N = 8;
 
-  // Build SVG bar chart for one month panel
   const buildChart = (mo) => {
     const weeks = [0,1,2,3,4].map(wk => {
       const rets = stats[mo][wk];
-      return { label: WEEKS[wk], avg: avg(rets), wr: winRate(rets), n: rets.length };
-    }).filter(w => w.n >= 2);
+      return { label: WEEKS[wk], avg: avg(rets), wr: winRate(rets), n: rets.length, se: seOf(rets) };
+    }).filter(w => w.n >= MIN_N);
 
     if (!weeks.length) return '<div style="color:var(--text3);font-size:11px;padding:8px;">No data</div>';
 
@@ -384,8 +390,8 @@ function renderWOMMonthGrid() {
   const buildNarrative = (mo) => {
     const wkStats = [0,1,2,3,4].map(wk => {
       const rets = stats[mo][wk];
-      return { wk, avg: avg(rets), wr: winRate(rets), n: rets.length };
-    }).filter(w => w.n >= 2);
+      return { wk, avg: avg(rets), wr: winRate(rets), n: rets.length, se: seOf(rets) };
+    }).filter(w => w.n >= MIN_N);
 
     if (wkStats.length < 2) return '';
 
@@ -398,15 +404,12 @@ function renderWOMMonthGrid() {
     const bestCol  = bestW.avg  >= 0 ? '#00ff88' : '#ff3355';
     const worstCol = worstW.avg >= 0 ? '#00ff88' : '#ff3355';
 
-    // Detect turn-of-month pattern (W1 best or W4/W5 best)
-    let pattern = '';
-    if (bestW.wk === 0) pattern = 'Turn-of-month strength — W1 leads.';
-    else if (bestW.wk >= 3) pattern = 'Late-month strength — institutional rebalancing effect.';
-    else if (bestW.wk === 1) pattern = 'W2 tends to carry momentum from month open.';
-    else pattern = 'Mid-month strength — W3 is the edge week.';
-
-    if (allPos) pattern = 'All weeks positive — broad monthly tailwind.';
-    if (allNeg) pattern = 'All weeks negative — broad monthly headwind.';
+    const ranked = [...wkStats].sort((a,b)=>b.avg-a.avg);
+    const gapSE = (ranked[0].se != null && ranked[1].se != null) ? Math.sqrt(ranked[0].se**2 + ranked[1].se**2) : null;
+    const established = gapSE != null && (ranked[0].avg - ranked[1].avg) > 2 * gapSE;
+    let pattern = established ? `${wkName[bestW.wk]} leads by more than two standard errors.` : `${wkName[bestW.wk]} has the highest mean, but the gap to ${wkName[ranked[1].wk]} is inside two standard errors.`;
+    if (allPos) pattern += ' Every week window is positive on average.';
+    if (allNeg) pattern += ' Every week window is negative on average.';
 
     // Consistency note
     const wrSpread = bestW.wr - worstW.wr;
@@ -441,8 +444,8 @@ function renderWOMMonthGrid() {
     const wkName = ['W1 (days 1–7)','W2 (days 8–14)','W3 (days 15–21)','W4 (days 22–28)','W5 (days 29+)'];
 
     let summary = `Across ${yearSet.length} year${yearSet.length!==1?'s':''} of data, `;
-    summary += `<strong style="color:var(--cyan);">${wkName[topWk]}</strong> is the strongest week in the most calendar months (${wkWins[topWk]}/12). `;
-    if (w1Months.length >= 4) summary += `Turn-of-month effect is prominent — W1 leads in <strong>${w1Months.join(', ')}</strong>. `;
+    summary += `<strong style="color:var(--cyan);">${wkName[topWk]}</strong> has the highest mean in the most calendar months (${wkWins[topWk]}/12); a month's cell needs ${MIN_N} or more observations to count. `;
+    if (w1Months.length >= 4) summary += `W1 has the highest mean in <strong>${w1Months.join(', ')}</strong>; see each month's note for whether the lead clears two standard errors. `;
     if (w4Months.length >= 3) summary += `Late-month strength shows up in <strong>${w4Months.join(', ')}</strong>. `;
     summary += `Edge labels show avg return spread between best and worst week within each month.`;
     return summary;
@@ -483,7 +486,7 @@ function esRenderSeasonality(){
   const ranked=[...s].sort((a,b)=>(b.avg_return||0)-(a.avg_return||0));
   document.getElementById('es-season-tbody').innerHTML=s.map(m=>{
     const r=ranked.findIndex(x=>x.month===m.month)+1;
-    const b=r===1?' <span class="es-badge top">#1</span>':r===12?' <span class="es-badge bot">WORST</span>':'';
+    const b=r===1?' <span class="es-badge top">HIGHEST MEAN</span>':r===12?' <span class="es-badge bot">LOWEST MEAN</span>':'';
     return `<tr>
       <td>${m.month}${b}</td>
       <td>${esFmt(m.avg_return)}</td><td>${esFmt(m.median_return)}</td><td>${esWr(m.win_rate)}</td>
@@ -492,9 +495,10 @@ function esRenderSeasonality(){
       <td class="up">+${esN(m.best)}%</td><td class="dn">${esN(m.worst)}%</td>
       <td style="color:var(--text3)">${m.count}</td></tr>`;}).join('');
   const top3=ranked.slice(0,3),bot3=ranked.slice(-3).reverse();
+  const _rankNote = esRankNote(ranked[0], ranked[1], ranked[0]?.month); const _rankNoteEl=document.getElementById('es-season-ranknote'); if(_rankNoteEl) _rankNoteEl.textContent=_rankNote;
   document.getElementById('es-season-cards').innerHTML=
-    top3.map(m=>`<div class="es-card"><div class="es-card-label">${m.month} · STRONG</div><div class="es-card-val up">+${esN(m.avg_return)}%</div><div class="es-card-sub">${esN(m.win_rate,1)}% monthly WR</div></div>`).join('')+
-    bot3.map(m=>`<div class="es-card"><div class="es-card-label">${m.month} · WEAK</div><div class="es-card-val ${(m.avg_return||0)>=0?'up':'dn'}">${(m.avg_return||0)>=0?'+':''}${esN(m.avg_return)}%</div><div class="es-card-sub">${esN(m.win_rate,1)}% monthly WR</div></div>`).join('');
+    top3.map(m=>`<div class="es-card"><div class="es-card-label">${m.month} · HIGHEST MEANS</div><div class="es-card-val up">+${esN(m.avg_return)}% <span style="font-size:11px;color:var(--text3);">${esPM(m.avg_return,m.se)}</span></div><div class="es-card-sub">${esN(m.win_rate,1)}% monthly WR</div></div>`).join('')+
+    bot3.map(m=>`<div class="es-card"><div class="es-card-label">${m.month} · LOWEST MEANS</div><div class="es-card-val ${(m.avg_return||0)>=0?'up':'dn'}">${(m.avg_return||0)>=0?'+':''}${esN(m.avg_return)}% <span style="font-size:11px;color:var(--text3);">${esPM(m.avg_return,m.se)}</span></div><div class="es-card-sub">${esN(m.win_rate,1)}% monthly WR</div></div>`).join('');
 }
 
 // ---- QUARTERLY ----
@@ -514,7 +518,7 @@ function esRenderQuarterly(){
     <td style="color:var(--text3)">${x.monthly_count}</td></tr>`).join('');
   const best=q.reduce((a,b)=>(b.monthly_avg||0)>(a.monthly_avg||0)?b:a);
   const worst=q.reduce((a,b)=>(b.monthly_avg||0)<(a.monthly_avg||0)?b:a);
-  document.getElementById('es-q-insight').innerHTML=`<strong>${best.quarter.split(' ')[0]} is the strongest quarter</strong> — avg <span class="up">+${esN(best.monthly_avg)}%</span> per month, ${esN(best.monthly_win_rate,1)}% win rate, vs <strong>${worst.quarter.split(' ')[0]}</strong> the weakest at ${esFmt(worst.monthly_avg)}/month. Q4 seasonal strength is driven by end-of-year fund positioning, tax considerations, and the Santa Rally window in November. Daily edge in Q4: <span class="up">+${esN(q.find(x=>x.q_num===4)?.daily_avg||0)}%</span>/day vs <span class="${(q.find(x=>x.q_num===3)?.daily_avg||0)>=0?'up':'dn'}">${(q.find(x=>x.q_num===3)?.daily_avg||0)>=0?'+':''}${esN(q.find(x=>x.q_num===3)?.daily_avg||0)}%</span>/day in Q3 (the weakest).`;
+  document.getElementById('es-q-insight').innerHTML=`<strong>${best.quarter.split(' ')[0]} has the highest mean</strong> — avg <span class="up">+${esN(best.monthly_avg)}%</span> per month, ${esN(best.monthly_win_rate,1)}% win rate, vs <strong>${worst.quarter.split(' ')[0]}</strong> the weakest at ${esFmt(worst.monthly_avg)}/month. Q4 seasonal strength is driven by end-of-year fund positioning, tax considerations, and the Santa Rally window in November. Daily edge in Q4: <span class="up">+${esN(q.find(x=>x.q_num===4)?.daily_avg||0)}%</span>/day vs <span class="${(q.find(x=>x.q_num===3)?.daily_avg||0)>=0?'up':'dn'}">${(q.find(x=>x.q_num===3)?.daily_avg||0)>=0?'+':''}${esN(q.find(x=>x.q_num===3)?.daily_avg||0)}%</span>/day in Q3 (the weakest).`;
 }
 
 // ---- YEARLY ----
@@ -583,8 +587,8 @@ function esRenderVolEdge(){
   document.getElementById('es-wvol-rows').innerHTML=wb.map((b,i)=>`
     <div class="es-vol-bucket" style="background:${i%2?'rgba(255,255,255,0.01)':'transparent'}">
       <div>${b.bucket} <div class="es-vol-bar" style="width:${(i+1)*20}%;background:${bucketColor(i)}"></div></div>
-      <div style="color:var(--text3)">$${esN(b.threshold_low)}</div>
-      <div style="color:var(--text3)">$${esN(b.threshold_high)}</div>
+      <div style="color:var(--text3)">${esN(b.threshold_low)}%</div>
+      <div style="color:var(--text3)">${esN(b.threshold_high)}%</div>
       <div>${esFmt(b.self_avg)}</div>
       <div>${esWr(b.self_winrate)}</div>
       <div style="color:${(b.after_avg||0)>=0?'var(--green)':'var(--red)'};font-weight:bold">${(b.after_avg||0)>=0?'+':''}${esN(b.after_avg)}%</div>
@@ -593,8 +597,8 @@ function esRenderVolEdge(){
   document.getElementById('es-dvol-rows').innerHTML=db.map((b,i)=>`
     <div class="es-vol-bucket" style="background:${i%2?'rgba(255,255,255,0.01)':'transparent'}">
       <div>${b.bucket} <div class="es-vol-bar" style="width:${(i+1)*20}%;background:${bucketColor(i)}"></div></div>
-      <div style="color:var(--text3)">$${esN(b.threshold_low)}</div>
-      <div style="color:var(--text3)">$${esN(b.threshold_high)}</div>
+      <div style="color:var(--text3)">${esN(b.threshold_low)}%</div>
+      <div style="color:var(--text3)">${esN(b.threshold_high)}%</div>
       <div>${esFmt(b.self_avg)}</div>
       <div>${esWr(b.self_winrate)}</div>
       <div style="color:${(b.after_avg||0)>=0?'var(--green)':'var(--red)'};font-weight:bold">${(b.after_avg||0)>=0?'+':''}${esN(b.after_avg)}%</div>
@@ -648,7 +652,7 @@ function esRenderRecovery(){
 // ---- HOLIDAYS ----
 function esRenderHolidays(){
   mkLB('es-hol-lb'); mkMeta('es-hol-meta');
-  const h=ES().holidays, s=ES().santa, avg=0.21;
+  const h=ES().holidays, s=ES().santa, base=ES().baseline||{}, avg=base.weekly||0, avgDaily=base.daily||0;
   const sw=h.short_week||{}, asw=h.after_short_week||{};
   document.getElementById('es-sw-cards').innerHTML=`
     <div class="es-card"><div class="es-card-label">SHORT WEEK AVG RETURN</div><div class="es-card-val ${(sw.avg||0)>=0?'up':'dn'}">${(sw.avg||0)>=0?'+':''}${esN(sw.avg)}%</div><div class="es-card-sub">vs +0.21% full week avg</div></div>
@@ -691,13 +695,13 @@ function esRenderHolidays(){
   document.getElementById('es-hol-grid').innerHTML=holItems.map(({label,w,d,window})=>{
     const wd=w?h[w]:null, dd=d?h[d]:null;
     const primary=wd||dd||{};
-    const e=(primary.avg||0)-avg;
+    const e=primary.avg!=null?primary.avg-(wd?avg:avgDaily):null;
     return `<div class="es-hcard">
       <div class="es-hcard-title">${label}</div>
       <div class="es-hrow"><span class="es-hrow-lbl">${wd?'Weekly':'Daily'} Avg</span><span class="es-hrow-val ${(primary.avg||0)>=0?'up':'dn'}">${(primary.avg||0)>=0?'+':''}${esN(primary.avg)}%</span></div>
       <div class="es-hrow"><span class="es-hrow-lbl">Win Rate</span><span class="es-hrow-val" style="color:${(primary.win_rate||0)>=60?'var(--green)':(primary.win_rate||0)>=50?'var(--yellow)':'var(--red)'}">${esN(primary.win_rate,1)}%</span></div>
       ${dd&&wd?`<div class="es-hrow"><span class="es-hrow-lbl">Daily Avg</span><span class="es-hrow-val ${(dd.avg||0)>=0?'up':'dn'}">${(dd.avg||0)>=0?'+':''}${esN(dd.avg)}%</span></div>`:''}
-      <div class="es-hrow"><span class="es-hrow-lbl">Edge vs Avg</span><span class="es-hrow-val ${e>=0?'up':'dn'}">${e>=0?'+':''}${esN(e)}%</span></div>
+      <div class="es-hrow"><span class="es-hrow-lbl">Edge vs Avg ${wd?'Week':'Day'}</span><span class="es-hrow-val ${(e||0)>=0?'up':'dn'}">${e==null?'—':(e>=0?'+':'')+esN(e,3)+'%'}</span></div>
       <div style="font-size:10px;color:var(--dim);margin-top:8px;font-family:'Share Tech Mono',monospace">${window} · ${primary.count||0} years</div>
     </div>`;}).join('');
 
@@ -711,13 +715,13 @@ function esRenderHolidays(){
   ];
   document.getElementById('es-seasonal-grid').innerHTML=seasonalItems.map(({label,key,window,desc})=>{
     const x=h[key]||{};
-    const e=(x.avg||0)-avg;
+    const e=x.avg!=null?x.avg-avgDaily:null;
     return `<div class="es-hcard">
       <div class="es-hcard-title">${label}</div>
       <div class="es-hrow"><span class="es-hrow-lbl">Avg Return</span><span class="es-hrow-val ${(x.avg||0)>=0?'up':'dn'}">${(x.avg||0)>=0?'+':''}${esN(x.avg)}%</span></div>
       <div class="es-hrow"><span class="es-hrow-lbl">Win Rate</span><span class="es-hrow-val" style="color:${(x.win_rate||0)>=55?'var(--green)':(x.win_rate||0)>=45?'var(--yellow)':'var(--red)'}">${esN(x.win_rate,1)}%</span></div>
-      <div class="es-hrow"><span class="es-hrow-lbl">Edge vs Avg</span><span class="es-hrow-val ${e>=0?'up':'dn'}">${e>=0?'+':''}${esN(e)}%</span></div>
-      <div style="font-size:10px;color:var(--dim);margin-top:8px;font-family:'Share Tech Mono',monospace">${window}</div>
+      <div class="es-hrow"><span class="es-hrow-lbl">Edge vs Avg Day</span><span class="es-hrow-val ${(e||0)>=0?'up':'dn'}">${e==null?'—':(e>=0?'+':'')+esN(e,3)+'%'}</span></div>
+      <div style="font-size:10px;color:var(--dim);margin-top:8px;font-family:'Share Tech Mono',monospace">${window}${key==='triple_witching'?' · SPY goes ex-dividend the same day; the drop includes the dividend':''}</div>
       <div style="font-size:11px;color:var(--text3);margin-top:4px">${desc}</div>
     </div>`;}).join('');
 
@@ -741,7 +745,7 @@ function esRenderHolidays(){
   ];
   document.getElementById('es-hol-tbody').innerHTML=allHolRows.map(({name,w,d,wl})=>{
     const x=(w?h[w]:null)||(d?h[d]:null)||{};
-    const e=(x.avg||0)-avg;
+    const e=x.avg!=null?x.avg-(w?avg:avgDaily):null;
     return `<tr>
       <td>${name}</td><td style="text-align:left;color:var(--text3);font-size:12px">${wl}</td>
       <td>${esFmt(x.avg||0)}</td><td>${esFmt(x.median||0)}</td><td>${esWr(x.win_rate||0)}</td>

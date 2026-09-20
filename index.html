@@ -3354,7 +3354,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
         <strong style="color:var(--text2);">During-Wk</strong> = avg SPY return that same week.
         <strong style="color:var(--text2);">Next-Wk Avg</strong> = what SPY did the <em>following</em> week — key for mean-reversion edge.
       </div>
-      <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low</div><div>Range High</div><div>During-Wk Avg</div><div>During-Wk WR</div><div>Next-Wk Avg</div></div>
+      <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low (% of open)</div><div>Range High (% of open)</div><div>During-Wk Avg</div><div>During-Wk WR</div><div>Next-Wk Avg</div></div>
       <div id="vs-wvol-rows"></div>
       <!-- Weekly next-week return chart -->
       <div id="vs-wvol-chart" style="margin:10px 0 18px;padding:10px;background:var(--bg2);border-radius:4px;"></div>
@@ -3364,7 +3364,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
         Same logic applied at the daily level. Bucket 1 = tightest 20% of days. Bucket 5 = widest.
         Watch <strong style="color:var(--text2);">Next Day Avg</strong> — high-vol days often precede bounces (mean reversion), while low-vol days often precede continuation or the next vol expansion.
       </div>
-      <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low</div><div>Range High</div><div>That Day Avg</div><div>That Day WR</div><div>Next Day Avg</div></div>
+      <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low (% of open)</div><div>Range High (% of open)</div><div>That Day Avg</div><div>That Day WR</div><div>Next Day Avg</div></div>
       <div id="vs-dvol-rows"></div>
       <!-- Daily next-day return chart -->
       <div id="vs-dvol-chart" style="margin:10px 0 18px;padding:10px;background:var(--bg2);border-radius:4px;"></div>
@@ -3381,7 +3381,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
         This quantifies the mean-reversion edge that follows extended high-vol regimes.
       </div>
       <div class="es-cards" id="vs-consec-vol-cards"></div>
-      <p class="es-foot">* True Range = High − Low ($). "Next period" = following week or day. Risk-adj = avg return ÷ avg true range. All data from SPY daily closes 1993–present.</p>
+      <p class="es-foot">* Buckets are quintiles of the period's range as a percent of its open, so every era is compared on the same footing. "Next period" = following week or day. Risk-adj = avg return ÷ avg true range ($). Sample follows the lookback selected above.</p>
     </div>
   </div>
 </div>
@@ -3525,18 +3525,19 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;" id="wom-filter-btns"></div>
   <div id="wom-month-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"></div>
 
-  <p class="es-foot">* Week 1 = days 1–7, Week 2 = 8–14, Week 3 = 15–21, Week 4 = 22–28, Week 5 = 29+. Turn-of-month effect: last days of month + first days of next month historically strongest.</p>
+  <p class="es-foot">* A week belongs to the month its Monday falls in: Week 1 = Monday on days 1–7, Week 2 = 8–14, Week 3 = 15–21, Week 4 = 22–28, Week 5 = 29+. Turn-of-month effect: last days of month + first days of next month historically strongest.</p>
 </div>
 
 <!-- MONTH OF YEAR -->
 <div class="es-panel" id="es-seasonality">
   <div class="es-topbar"><div id="es-sea-lb"></div><div class="es-meta" id="es-sea-meta"></div></div>
-  <div class="es-section">MONTHLY CLOSE-TO-CLOSE RETURN SEASONALITY</div>
+  <div class="es-section">MONTHLY OPEN-TO-CLOSE RETURN SEASONALITY</div>
   <div class="es-bar-wrap" id="es-season-bars"></div>
   <table class="es-tbl"><thead><tr><th>Month</th><th>Monthly Avg</th><th>Median</th><th>Monthly WR</th><th>Daily Avg</th><th>Daily WR</th><th>Avg True Range</th><th>Best Month</th><th>Worst Month</th><th>Yrs</th></tr></thead><tbody id="es-season-tbody"></tbody></table>
   <div class="es-section">RANKING SUMMARY</div>
   <div class="es-cards" id="es-season-cards"></div>
-  <p class="es-foot">* Monthly WR = % of years that month closed positive. Daily Avg/WR computed from individual trading days in that calendar month. True Range = monthly High−Low ($).</p>
+  <p class="es-foot" id="es-season-ranknote"></p>
+  <p class="es-foot">* Monthly return = first open to last close of the calendar month, price only (no dividends); complete months only. ± is two standard errors of the mean. Monthly WR = % of years that month closed positive. Daily Avg/WR computed from individual trading days in that calendar month. True Range = monthly High−Low ($).</p>
 </div>
 
 <!-- QUARTERLY -->
@@ -3557,7 +3558,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   <div class="es-cards" id="es-yr-cards"></div>
   <div class="es-section">ALL YEARS AT A GLANCE</div>
   <div class="es-yr-grid" id="es-yr-grid"></div>
-  <p class="es-foot">* Full calendar year close-to-close returns from SPY_yearly.csv. Green = positive year, Red = negative year.</p>
+  <p class="es-foot">* Full calendar year returns, first open to last close, price only (no dividends); the in-progress year is excluded. The Political Cycle panel uses the same years and basis. Green = positive year, Red = negative year.</p>
 </div>
 
 <!-- STREAKS -->
@@ -3584,29 +3585,28 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   <div class="es-insight" id="es-vol-explainer"></div>
   <div class="es-section">WEEKLY RANGE — 5 BUCKETS (HOW VOLATILE WAS THIS WEEK?)</div>
   <p style="color:var(--text3);font-size:12px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;">Each row = what happened IN that type of week, and what happened the FOLLOWING week</p>
-  <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low</div><div>Range High</div><div>During-Wk Avg</div><div>During-Wk WR</div><div>Next-Wk Avg</div></div>
+  <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low (% of open)</div><div>Range High (% of open)</div><div>During-Wk Avg</div><div>During-Wk WR</div><div>Next-Wk Avg</div></div>
   <div id="es-wvol-rows"></div>
   <div class="es-section">DAILY RANGE — 5 BUCKETS (HOW VOLATILE WAS TODAY?)</div>
   <p style="color:var(--text3);font-size:12px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;">Each row = what happened ON that type of day, and what happened the NEXT day</p>
-  <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low</div><div>Range High</div><div>That Day Avg</div><div>That Day WR</div><div>Next Day Avg</div></div>
+  <div class="es-vol-header"><div>Volatility Bucket</div><div>Range Low (% of open)</div><div>Range High (% of open)</div><div>That Day Avg</div><div>That Day WR</div><div>Next Day Avg</div></div>
   <div id="es-dvol-rows"></div>
   <div class="es-section">RISK-ADJUSTED RETURN — RETURN PER DOLLAR OF RANGE</div>
   <div class="es-cards" id="es-risk-cards"></div>
   <div class="es-section">WHAT HAPPENS AFTER 2+ CONSECUTIVE HIGH-VOL WEEKS?</div>
   <div class="es-cards" id="es-consec-vol-cards"></div>
-  <p class="es-foot">* True Range = High − Low ($) for the period. Higher range = higher volatility. "Next period" = the following week or day respectively. Risk-adj = avg return ÷ avg true range.</p>
+  <p class="es-foot">* Buckets are quintiles of the period's range (high − low) as a percent of its open. "Next period" = the following week or day respectively. Risk-adj = avg return ÷ avg true range ($).</p>
 </div>
 
 <!-- RECOVERY -->
 <!-- DECLINE STATS sub-panel (inside panel-edgestats) -->
 <div class="es-panel" id="es-declines">
-  <div class="es-topbar"><div id="es-decl-lb"></div><div class="es-meta" id="es-decl-meta"></div></div>
   <div class="es-insight">
     <strong>How to read this:</strong> A decline event begins when SPY falls from a prior closing-price peak.
     The <em>depth</em> is the maximum % drop from peak to trough.
     <em>Conditional probability</em> — given a decline already reached level X, what % historically continued to level Y.
     This tells you: "if we're already down 10%, how often does it become a 20% crash?"
-    <em>Duration</em> is in trading days (td). Only declines of 2%+ are counted (1993–present).
+    <em>Duration</em> is in trading sessions. A peak is the highest close of the trailing 20 sessions. Only declines of 2%+ from that peak are counted.
   </div>
   <div class="es-section">HOW OFTEN DOES SPY DECLINE BY THIS MUCH?</div>
   <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:18px;" id="es-decl-freq-cards"></div>
@@ -3638,7 +3638,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
   <div class="es-section">VISUAL — AVG vs MEDIAN RECOVERY TIME</div>
   <div id="es-rec-visual" style="margin:14px 0 22px;"></div>
   <div class="es-insight" id="es-rec-insight"></div>
-  <p class="es-foot">* Recovery = weeks from trough back to new all-time weekly closing high. Measured from rolling peak. Based on SPY weekly CLOSE prices.</p>
+  <p class="es-foot">* Recovery = weeks from trough back to a new running all-time weekly closing high, so a decline here is one from the all-time high; the Declines panel counts declines from a 20-session peak, which is a different and larger set. Based on SPY weekly CLOSE prices.</p>
 </div>
 
 <!-- HOLIDAYS -->

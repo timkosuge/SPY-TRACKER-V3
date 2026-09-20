@@ -279,7 +279,20 @@ export async function onRequestGet(context) {
   const results = {};
   const errors = {};
   const kv = context.env?.GEX_HISTORY;
-  const refresh = new URL(context.request.url).searchParams.get('refresh') === '1';
+  const params = new URL(context.request.url).searchParams;
+  const probe = params.get('probe');
+  if (probe) {
+    const ids = probe.split(',').map(x => x.trim()).filter(x => /^[A-Z0-9]{1,30}$/.test(x)).slice(0, 12);
+    const out = {};
+    for (const id of ids) {
+      const r = await fetch(`https://api.stlouisfed.org/fred/series?series_id=${id}&api_key=${apiKey}&file_type=json`, { headers: { 'User-Agent': 'SPY-Tracker/1.0' } });
+      if (!r.ok) { let msg = `HTTP ${r.status}`; try { msg = (await r.json()).error_message || msg; } catch (e) {} out[id] = { error: msg }; continue; }
+      const ss = (await r.json()).seriess?.[0];
+      out[id] = ss ? { title: ss.title, units: ss.units, frequency: ss.frequency_short, observation_end: ss.observation_end, last_updated: ss.last_updated } : { error: 'no series' };
+    }
+    return json(out);
+  }
+  const refresh = params.get('refresh') === '1';
   if (kv && !refresh) {
     try {
       const cached = await kv.get('fred:response', 'json');

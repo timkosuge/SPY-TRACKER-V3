@@ -2184,8 +2184,10 @@ function renderDeclines() {
             if(val == null) return `<td style="padding:8px 12px;text-align:center;color:var(--border2);">—</td>`;
             const bg = val >= 50 ? '#ff333522' : val >= 25 ? '#ff880022' : val >= 10 ? '#ffcc0022' : 'transparent';
             const tc = val >= 50 ? '#ff3355' : val >= 25 ? '#ff8800' : val >= 10 ? '#ffcc00' : 'var(--text3)';
+            const k = Math.round(val / 100 * a.n), ci = wilson95(k, a.n);
             return `<td style="padding:8px 12px;text-align:center;background:${bg};border-radius:3px;">
-              <span style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${tc};">${val.toFixed(1)}%</span>
+              <span style="font-family:'Share Tech Mono',monospace;font-size:15px;font-weight:bold;color:${tc};">${val.toFixed(0)}%</span>
+              <div style="font-size:9px;color:var(--text3);">${ci?`${ci.lo.toFixed(0)}–${ci.hi.toFixed(0)}`:''} · ${k}/${a.n}</div>
             </td>`;
           }).join('')}
         </tr>`;
