@@ -49,6 +49,10 @@ jobs:
         if: steps.clock.outputs.run == 'true'
         run: pip install -r requirements.txt
 
+      - name: Compute S&P 500 breadth
+        if: steps.clock.outputs.close == 'true'
+        run: python generate_breadth.py
+
       - name: Run SPY tracker
         if: steps.clock.outputs.run == 'true'
         env:
@@ -125,7 +129,8 @@ jobs:
                      window_stats.js gap_stats.js \
                      session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
                      large_gap_stats.js release_data.js edge_stats_data.js \
-                     data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv
+                     data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv \
+                     breadth_data.json
           if git diff --staged --quiet; then
             echo "No payload changes"
             exit 0

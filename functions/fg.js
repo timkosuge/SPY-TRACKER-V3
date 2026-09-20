@@ -24,7 +24,7 @@ export async function onRequestGet(context) {
       if (!r.ok) continue;
       const d = await r.json();
       const fg = d?.fear_and_greed;
-      if (!fg?.score) continue;
+      if (fg == null || typeof fg.score !== 'number') continue;
 
       // Extract history time series
       const history = [];

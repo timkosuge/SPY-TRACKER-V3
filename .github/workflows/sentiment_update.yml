@@ -2,12 +2,11 @@ name: Sentiment Data Update
 
 on:
   schedule:
-    # AAII releases Thursday after market close (~6 PM ET = 22:00 UTC)
-    # Run Thursday at 11 PM ET (03:00 UTC Friday) to catch the release
+    # Friday 3:00 UTC (Thursday 11:00 PM Eastern in winter, 10:00 PM in summer): after AAII's Thursday release
     - cron: '0 3 * * 5'
-    # COT releases Friday at 3:30 PM ET — run Friday at 8 PM ET (00:00 UTC Saturday)
+    # Saturday 0:00 UTC (Friday 8:00 PM Eastern in winter, 7:00 PM in summer): after the CFTC's Friday release
     - cron: '0 0 * * 6'
-    # Also run Monday morning as a backstop
+    # Monday 12:00 UTC backstop
     - cron: '0 12 * * 1'
   workflow_dispatch:  # Allow manual trigger from GitHub UI
 
@@ -38,7 +37,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f sentiment_data.json
+          git add -f sentiment_data.json sentiment_history.json
           if git diff --staged --quiet; then
             echo "No changes to sentiment data"
             exit 0

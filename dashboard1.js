@@ -214,7 +214,8 @@ function renderHub(md,sd){
   // Ticker
   const tSym=['SPY','QQQ','IWM','DIA','^VIX','BTC-USD','GC=F','CL=F','DX-Y.NYB','^TNX'];
   const tLbl={'BTC-USD':'BTC','GC=F':'GOLD','CL=F':'OIL','DX-Y.NYB':'DXY','^VIX':'VIX','^TNX':'10YR'};
-  let th=tSym.map(s=>{const d=q[s]||{};if(!d.price)return '';const l=tLbl[s]||s;const c=d.change>=0?'up':'dn';return `<span class="tick-item"><span class="tick-sym">${l}</span><span class="tick-price">$${fmt(d.price,2)}</span><span class="tick-chg ${c}">${sign(d.change)}${fmt(d.pct_change,2)}%</span></span>`;}).join('');
+  const tNoDollar={'^VIX':'','DX-Y.NYB':'','^TNX':'%'};
+  let th=tSym.map(s=>{const d=q[s]||{};if(!d.price)return '';const l=tLbl[s]||s;const c=d.change>=0?'up':'dn';const px=s in tNoDollar?fmt(d.price,2)+tNoDollar[s]:'$'+fmt(d.price,2);return `<span class="tick-item"><span class="tick-sym">${l}</span><span class="tick-price">${px}</span><span class="tick-chg ${c}">${sign(d.change)}${fmt(d.pct_change,2)}%</span></span>`;}).join('');
   const inner=$('tickerInner');inner.innerHTML=th+th;
 
   // Trading Day Tracker
@@ -2436,7 +2437,7 @@ function renderOverview(md){
 
         ${groupLbl('BONDS & RATES','#00ccff')}
         <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;">
-          ${['^TNX','^IRX','^TYX'].map(sym=>tile(sym,{'^TNX':'10YR','^IRX':'2YR','^TYX':'30YR'}[sym],{isRate:true})).join('')}
+          ${['^TNX','^IRX','^TYX'].map(sym=>tile(sym,{'^TNX':'10YR','^IRX':'3MO','^TYX':'30YR'}[sym],{isRate:true})).join('')}
           ${[['TLT','TLT'],['HYG','HYG'],['JNK','JNK']].map(([sym,l])=>tile(sym,l)).join('')}
         </div>
       </div>
@@ -2558,7 +2559,7 @@ function renderToday(md,sd){
       <div class="cond-row"><span class="cond-key">VIX</span><span class="cond-val ${vixQ.price>30?'dn':vixQ.price<20?'up':'neu'}">${fmt(vixQ.price,2)} <span style="color:var(--text3)">${sign(vixQ.change)}${fmt(vixQ.change,2)}</span></span></div>
       <div class="cond-row"><span class="cond-key">F&G Index</span><span class="cond-val">${fgVal||'—'}</span></div>
       <div class="cond-row"><span class="cond-key">10YR Yield</span><span class="cond-val">${fmt(tnx.price,3)}%</span></div>
-      <div class="cond-row"><span class="cond-key">Yield Spread</span><span class="cond-val">${(()=>{const irx=q['^IRX'];return irx&&tnx?fmt(tnx.price-irx.price,3)+'%':'—';})()}</span></div>
+      <div class="cond-row"><span class="cond-key">Yield Spread (10Y−3M)</span><span class="cond-val">${(()=>{const irx=q['^IRX'];return irx&&tnx?fmt(tnx.price-irx.price,3)+'%':'—';})()}</span></div>
     </div>`;
 }
 
@@ -2745,7 +2746,7 @@ function renderOptions(md){
     const dailyEM = atm_iv && cur ? expectedMove(cur, atm_iv, 1).toFixed(2) : null;
     ivEl.innerHTML=[
       {l:'ATM IV', v:atm_iv?fmt(atm_iv_pct,2)+'%':'—', c:atm_iv_pct>25?'#ff3355':atm_iv_pct>18?'#ff8800':atm_iv_pct>12?'#ffcc00':'#00ff88'},
-      {l:'VIX (30d)',     v:vix?fmt(vix,2)+'%':'—',                              c:vix>25?'#ff3355':vix>18?'#ff8800':'#ffcc00'},
+      {l:'VIX (30d)',     v:vix?fmt(vix,2):'—',                              c:vix>25?'#ff3355':vix>18?'#ff8800':'#ffcc00'},
       {l:'Daily EM (±)',  v:dailyEM?'$'+dailyEM:'—',                             c:'var(--text2)'},
       {l:'WEM High',      v:wem?.wem_high?'$'+fmt(wem.wem_high,2):'—',          c:'#00ff88'},
       {l:'WEM Low',       v:wem?.wem_low?'$'+fmt(wem.wem_low,2):'—',            c:'#ff3355'},
@@ -3357,8 +3358,8 @@ function renderBonds(md){
     if(curveRegime !== '—') lines2.push({c:regimeColor, t:curveRegime+': '+regimeDesc});
     // Spread narrative
     if(s2_10 !== null) {
-      if(s2_10 < 0) lines2.push({c:'#ff3355', t:'2s10s INVERTED at '+fmt(s2_10,3)+'% — historically precedes recession by 12-18 months'});
-      else lines2.push({c:s2_10<0.5?'#ffcc00':'#00ff88', t:'2s10s spread at +'+fmt(s2_10,3)+'% — '+(s2_10<0.25?'very flat, watch for inversion':'curve healthy')});
+      if(s2_10 < 0) lines2.push({c:'#ff3355', t:'10Y−3M curve INVERTED at '+fmt(s2_10,3)+'% — historically precedes recession by 12-18 months'});
+      else lines2.push({c:s2_10<0.5?'#ffcc00':'#00ff88', t:'10Y−3M spread at +'+fmt(s2_10,3)+'% — '+(s2_10<0.25?'very flat, watch for inversion':'curve healthy')});
     }
     // Credit narrative
     if(hygTltChg !== null) {
@@ -3393,7 +3394,7 @@ function renderBonds(md){
   // ── YIELD CURVE ──────────────────────────────────────────────────────────
   const yieldEl = $('bondsYieldCurve');
   if(yieldEl) {
-    const pts = [{l:'2YR',p:t2,c:irx.change},{l:'5YR',p:t5,c:fvx.change},{l:'10YR',p:t10,c:tnx.change},{l:'30YR',p:t30,c:tyx.change}].filter(y=>y.p);
+    const pts = [{l:'3MO',p:t2,c:irx.change},{l:'5YR',p:t5,c:fvx.change},{l:'10YR',p:t10,c:tnx.change},{l:'30YR',p:t30,c:tyx.change}].filter(y=>y.p);
     const mx = pts.length ? Math.max(...pts.map(y=>y.p)) : 5;
     const mn = pts.length ? Math.min(...pts.map(y=>y.p)) : 0;
     const rng = mx - mn || 0.01;
@@ -3408,12 +3409,12 @@ function renderBonds(md){
         +'<span style="font-family:Share Tech Mono,monospace;font-size:11px;color:'+rc(y.c)+';width:48px;text-align:right;">'+(y.c!=null?(y.c>=0?'+':'')+fmt(y.c,3):'')+'</span>'
         +'</div>';
     }).join('');
-    // 2s10s spread bar
+    // 10Y−3M spread bar
     if(s2_10 !== null) {
       const sc = s2_10 < 0 ? '#ff3355' : s2_10 < 0.25 ? '#ff8800' : '#00ff88';
       const sl = s2_10 < 0 ? 'INVERTED' : s2_10 < 0.25 ? 'FLAT' : s2_10 < 0.75 ? 'NORMAL' : 'STEEP';
       html += '<div style="margin-top:12px;padding:10px;background:'+sc+'11;border:1px solid '+sc+'33;border-radius:4px;text-align:center;">'
-        +'<div style="font-family:Orbitron,monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">2s10s SPREAD</div>'
+        +'<div style="font-family:Orbitron,monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">10Y−3M SPREAD</div>'
         +'<div style="font-family:Share Tech Mono,monospace;font-size:22px;font-weight:900;color:'+sc+';">'+(s2_10>=0?'+':'')+fmt(s2_10,3)+'%</div>'
         +'<div style="font-family:Orbitron,monospace;font-size:9px;color:'+sc+';margin-top:2px;">'+sl+'</div></div>';
     }
@@ -3435,7 +3436,7 @@ function renderBonds(md){
       +'<span style="font-family:Share Tech Mono,monospace;font-size:12px;color:'+rc(chg)+';">'+(chg>=0?'+':'')+fmt(chg,3)+'</span>'
       +'<span style="font-size:10px;color:'+rc(chg)+';">'+(chg>0.05?'▲ RISING':chg<-0.05?'▼ FALLING':'— FLAT')+'</span></div>';
     html += '<div style="font-family:Orbitron,monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;margin-top:4px;">INTRADAY RATE MOVES</div>';
-    if(t2)  html += irow('2YR',  t2,  chg2);
+    if(t2)  html += irow('3MO',  t2,  chg2);
     if(t10) html += irow('10YR', t10, chg10);
     if(t30) html += irow('30YR', t30, tyx.change||0);
     // Spread change narrative

@@ -1052,9 +1052,7 @@ def export_market_data(conn, options_data=None):
             "GC=F","SI=F","CL=F","NG=F","HG=F",
             "BTC-USD","ETH-USD","DX-Y.NYB",
             "^VIX","^VIX3M","^VIX6M","^TNX","^IRX","^FVX",
-            "^VVIX","^SKEW","^NYA","^NYHGH","^NYLOW",
-            "^ADVN","^DECN","^UVOL","^DVOL",
-            "^SP500MA50","^SP500MA200",
+            "^VVIX","^SKEW","^NYA",
             "TLT","HYG","LQD","JNK",
             "^GSPC","ES=F",
             # ── BUILDOUT: Power & Grid ────────────────────────────────────────
@@ -1112,7 +1110,7 @@ def export_market_data(conn, options_data=None):
                         q_data["high"] = float(info.day_high) if hasattr(info,'day_high') and info.day_high else None
                         q_data["low"] = float(info.day_low) if hasattr(info,'day_low') and info.day_low else None
                         q_data["prev_close"] = round(prev,2) if prev else None
-                        q_data["volume"] = int(info.shares) if hasattr(info,'shares') and info.shares else None
+                        q_data["volume"] = int(info.last_volume) if hasattr(info,'last_volume') and info.last_volume else None
                         # Pre/post market
                         t = tickers.tickers[sym]
                         ticker_info = t.info
@@ -1120,9 +1118,14 @@ def export_market_data(conn, options_data=None):
                         q_data["post_market_price"] = ticker_info.get("postMarketPrice")
                     except: pass
                 quotes[sym] = q_data
-            except:
-                quotes[sym] = {"price":None,"change":None,"pct_change":None}
+            except Exception as e:
+                quotes[sym] = {"price":None,"change":None,"pct_change":None,"error":str(e)[:80]}
         output["quotes"] = quotes
+        try:
+            with open("breadth_data.json") as f:
+                output["breadth"] = json.load(f)
+        except Exception:
+            output["breadth"] = None
         print(f"  Quotes: {len([q for q in quotes.values() if q['price']])} loaded")
     except Exception as e:
         print(f"  Quotes error: {e}")
@@ -1156,10 +1159,11 @@ def export_market_data(conn, options_data=None):
             timeout=10)
         if r.status_code == 200:
             fg = r.json().get("fear_and_greed", {})
-            if fg.get("score"):
+            if isinstance(fg.get("score"), (int, float)):
                 output["fear_greed"] = {
                     "value": round(fg["score"]),
                     "label": fg.get("rating",""),
+                    "source": "cnn",
                 }
                 print(f"  F&G (CNN): {output['fear_greed']['value']}")
             else:
@@ -1167,17 +1171,18 @@ def export_market_data(conn, options_data=None):
         else:
             raise ValueError(f"Status {r.status_code}")
     except Exception as e:
-        # Fallback to alternative.me
+        print(f"  F&G (CNN) unavailable: {e}")
+        prev = None
         try:
-            r2 = requests.get("https://api.alternative.me/fng/", timeout=10)
-            d = r2.json().get("data", [{}])[0]
-            output["fear_greed"] = {
-                "value": int(d.get("value", 0)),
-                "label": d.get("value_classification", ""),
-            }
-            print(f"  F&G (alt): {output['fear_greed']['value']}")
-        except Exception as e2:
-            print(f"  F&G error: {e2}")
+            with open("market_data.json") as f:
+                prev = json.load(f).get("fear_greed")
+        except Exception:
+            pass
+        if prev and prev.get("source") == "cnn" and prev.get("value") is not None:
+            output["fear_greed"] = {**prev, "carried_from_previous_run": True}
+            print(f"  F&G: carrying previous CNN reading {prev.get('value')}")
+        else:
+            output["fear_greed"] = {}
             output["fear_greed"] = {}
 
     # ── Economic Calendar ─────────────────────────────────────────────────────

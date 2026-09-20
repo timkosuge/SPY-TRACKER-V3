@@ -28,9 +28,11 @@
     const behind = stamped.filter(([, p]) => p.source_max_date < newest).map(([n, p]) => `${n} (${fmt(p.source_max_date)})`);
     const gen = stamped.map(([, p]) => p.generated).filter(Boolean).sort().pop();
     let text = `Data through ${fmt(newest)}`;
+    const md = window._md; if (md && md.updated) text += ` · quotes ${md.updated}`;
     if (gen) text += ` · built ${new Date(gen).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} CT`;
     el.style.color = behind.length ? '#ff8800' : 'var(--text3)';
     el.textContent = behind.length ? `${text} · behind: ${behind.join(', ')}` : text;
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render();
+  setTimeout(render, 4000);
 })();

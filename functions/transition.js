@@ -131,29 +131,16 @@ export async function onRequestGet(context) {
   // Fetch in two batches — avoids overwhelming FRED API with 14 simultaneous requests
   // which causes silent failures. Two batches ~4s total, well within Cloudflare limits.
   const [
-    productivity, productivityInfo, unitLaborCosts,
-    softwareInvest, rdInvest, privNonresInvest, infoEmploy,
+    productivity, unitLaborCosts, softwareInvest, infoEmploy,
+    debtGDP, corpProfits, laborShare,
   ] = await Promise.all([
-    fetchFRED(apiKey, 'PRS85006092', 24),      // Nonfarm productivity
-    fetchFRED(apiKey, 'PRS88006092', 16),       // Nonfinancial corporate productivity
-    fetchFRED(apiKey, 'ULCNFB', 24),           // Unit labor costs nonfarm business
-    fetchFRED(apiKey, 'Y033RC1Q027SBEA', 20),  // Software investment
-    fetchFRED(apiKey, 'Y054RC1Q027SBEA', 20),  // R&D investment
-    fetchFRED(apiKey, 'PNFIQ', 20),            // Private nonresidential fixed investment
-    fetchFRED(apiKey, 'CEU5000000001', 36),     // Information employment (thousands)
-  ]);
-
-  const [
-    profServEmploy, totalEmploy, debtGDP,
-    corpProfits, laborShare, tfpGrowth, outputPerWorker,
-  ] = await Promise.all([
-    fetchFRED(apiKey, 'CEU6000000001', 36),    // Professional services employment
-    fetchFRED(apiKey, 'PAYEMS', 36),            // Total nonfarm employment
-    fetchFRED(apiKey, 'GFDEGDQ188S', 20),       // Federal debt % of GDP
-    fetchFRED(apiKey, 'CP', 24),                // Corporate profits after tax
-    fetchFRED(apiKey, 'PRS85006151', 20),       // Labor share of output - nonfarm business
-    fetchFRED(apiKey, 'PRS85006092', 8),        // Nonfarm productivity (dupe for trend calc)
-    fetchFRED(apiKey, 'PRS85006163', 20),       // Output per worker
+    fetchFRED(apiKey, 'PRS85006092', 24),
+    fetchFRED(apiKey, 'ULCNFB', 24),
+    fetchFRED(apiKey, 'Y033RC1Q027SBEA', 20),
+    fetchFRED(apiKey, 'CEU5000000001', 36),
+    fetchFRED(apiKey, 'GFDEGDQ188S', 20),
+    fetchFRED(apiKey, 'CP', 24),
+    fetchFRED(apiKey, 'PRS85006173', 20),
   ]);
 
   // Batch 3: Automation & robotics adoption signals
@@ -168,40 +155,25 @@ export async function onRequestGet(context) {
 
   // Batch 4: Winners & losers signals
   const [
-    bizFormation, ipInvestment, ecommerceRetail, totalRetail, commercialLoans,
+    bizFormation, ipInvestment, ecommerceRetail, commercialLoans,
   ] = await Promise.all([
-    fetchFRED(apiKey, 'BABATOTALSAUS', 52), // New business applications (Census/weekly) — startup formation
-    fetchFRED(apiKey, 'B735RC1Q027SBEA', 24), // Intellectual property investment (BEA) — winners invest in IP
-    fetchFRED(apiKey, 'ECOMPCTSA', 20), // E-commerce as % of total retail (Census) — new commerce share
-    fetchFRED(apiKey, 'RETAILSMNSA', 24), // Total retail sales — old commerce baseline
-    fetchFRED(apiKey, 'CILACBW027SBOG', 24), // Commercial & industrial loans — old economy stress signal
+    fetchFRED(apiKey, 'BABATOTALSAUS', 60),
+    fetchFRED(apiKey, 'B735RC1Q027SBEA', 24),
+    fetchFRED(apiKey, 'ECOMPCTSA', 20),
+    fetchFRED(apiKey, 'CILACBW027SBOG', 24),
   ]);
 
-  // ── LABOR SUBSTITUTION RATE ────────────────────────────────────────────────
-  // Key signal: output growing faster than hours worked = something else doing the work
-  // Computed as rolling output growth / hours growth in information sector
+  // Productivity growth: mean of the last 8 quarterly annualized rates (PRS85006092 is already a rate)
   let laborSubstitutionRate = null;
   let laborSubstitutionTrend = 'unknown';
   if (productivity && productivity.length >= 8) {
     const recent = productivity.slice(-8);
-    const first  = recent[0].v, last = recent[recent.length-1].v;
-    const prodGrowth = ((last - first) / first) * 100;
-    laborSubstitutionRate = prodGrowth;
-    laborSubstitutionTrend = prodGrowth > 8 ? 'accelerating' : prodGrowth > 3 ? 'emerging' : 'early';
+    const avg = recent.reduce((a, b) => a + b.v, 0) / recent.length;
+    laborSubstitutionRate = Math.round(avg * 10) / 10;
+    laborSubstitutionTrend = avg > 3.3 ? 'accelerating' : avg > 2.2 ? 'emerging' : 'early';
   }
 
-  // ── CAPITAL FORMATION QUALITY ──────────────────────────────────────────────
-  // Software + R&D as share of total private investment = productive vs consumptive
-  let capitalQualityPct = null;
-  if (softwareInvest && rdInvest && privNonresInvest) {
-    const sw = softwareInvest[softwareInvest.length-1]?.v || 0;
-    const rd = rdInvest[rdInvest.length-1]?.v || 0;
-    const tot = privNonresInvest[privNonresInvest.length-1]?.v || 1;
-    capitalQualityPct = Math.round(((sw + rd) / tot) * 100 * 10) / 10;
-  }
-
-  // ── LABOR SHARE DECLINE RATE ───────────────────────────────────────────────
-  // Falling labor share = capital (AI) replacing labor = transition signal
+  // Labor share: index, 2017 = 100
   let laborShareData = null;
   if (laborShare && laborShare.length >= 2) {
     const latest = laborShare[laborShare.length-1];
@@ -312,11 +284,11 @@ export async function onRequestGet(context) {
     // Use unique variable names per block to avoid esbuild minification conflicts
     const bizRecent4 = bizFormation && bizFormation.length >= 4 ? bizFormation.slice(-4) : null;
     const bizAvg4    = bizRecent4 ? bizRecent4.reduce((a,b) => a+b.v, 0) / bizRecent4.length : 0;
-    const bizYrAgo   = bizFormation ? bizFormation.slice(-56, -52) : [];
-    const bizAvgYr   = bizYrAgo.length ? bizYrAgo.reduce((a,b) => a+b.v, 0) / bizYrAgo.length : bizAvg4;
+    const bizYrAgo   = bizFormation && bizFormation.length >= 56 ? bizFormation.slice(-56, -52) : [];
+    const bizAvgYr   = bizYrAgo.length ? bizYrAgo.reduce((a,b) => a+b.v, 0) / bizYrAgo.length : null;
     const bizFormationSignal = bizRecent4 ? {
       current: Math.round(bizAvg4),
-      yoy_change_pct: Math.round(((bizAvg4 - bizAvgYr) / bizAvgYr) * 100 * 10) / 10,
+      yoy_change_pct: bizAvgYr ? Math.round(((bizAvg4 - bizAvgYr) / bizAvgYr) * 100 * 10) / 10 : null,
       history: (bizFormation || []).slice(-52).filter((_,i) => i % 4 === 0).map(p => ({ d: p.d.slice(0,7), v: p.v })),
     } : null;
 
@@ -369,7 +341,8 @@ export async function onRequestGet(context) {
   // 0-30: Early bridge | 30-60: Mid bridge (building) | 60-80: Late bridge
   // 80-95: Pre-pop (infrastructure sufficient, survivors hardening)
   // 95-100: The pop (transformation visible, field narrowing)
-  let bridgeScore = 35; // default: mid bridge
+  let bridgeScore = 0;
+  const BRIDGE_SCORE_MAX = 58;
   const scoreFactors = [];
 
   // Factor 1: Capex trajectory (where are we relative to historical peaks?)
@@ -389,9 +362,9 @@ export async function onRequestGet(context) {
 
   // Factor 3: Labor substitution
   if (laborSubstitutionRate !== null) {
-    if (laborSubstitutionRate > 10) { bridgeScore += 15; scoreFactors.push({ f: 'Labor Substitution Rate', v: laborSubstitutionRate.toFixed(1)+'%', signal: 'ACCELERATING' }); }
-    else if (laborSubstitutionRate > 4) { bridgeScore += 5; scoreFactors.push({ f: 'Labor Substitution Rate', v: laborSubstitutionRate.toFixed(1)+'%', signal: 'EMERGING' }); }
-    else { scoreFactors.push({ f: 'Labor Substitution Rate', v: laborSubstitutionRate.toFixed(1)+'%', signal: 'EARLY' }); }
+    if (laborSubstitutionRate > 3.3) { bridgeScore += 15; scoreFactors.push({ f: 'Productivity Growth (8-quarter avg, annualized)', v: laborSubstitutionRate.toFixed(1)+'%', signal: 'ACCELERATING' }); }
+    else if (laborSubstitutionRate > 2.2) { bridgeScore += 5; scoreFactors.push({ f: 'Productivity Growth (8-quarter avg, annualized)', v: laborSubstitutionRate.toFixed(1)+'%', signal: 'EMERGING' }); }
+    else { scoreFactors.push({ f: 'Productivity Growth (8-quarter avg, annualized)', v: laborSubstitutionRate.toFixed(1)+'%', signal: 'EARLY' }); }
   }
 
   // Factor 4: ULC signal
@@ -404,13 +377,13 @@ export async function onRequestGet(context) {
 
   // ── OUTCOME PROBABILITIES ─────────────────────────────────────────────────
   // Based on bridge score and macro conditions
-  const outcomes = computeOutcomeProbabilities(bridgeScore, productivitySignal, ulcSignal);
 
   return json({
     // Core composites
-    bridge_score: bridgeScore,
+    bridge_score: Math.round(bridgeScore / BRIDGE_SCORE_MAX * 100),
+    bridge_score_points: bridgeScore,
+    bridge_score_max_points: BRIDGE_SCORE_MAX,
     score_factors: scoreFactors,
-    outcomes,
 
     // Labor & productivity
     labor_substitution_rate: laborSubstitutionRate,
@@ -421,7 +394,6 @@ export async function onRequestGet(context) {
     displacement_signal: displacementSignal,
 
     // Capital formation
-    capital_quality_pct: capitalQualityPct,
     software_invest: softwareInvest ? { latest: softwareInvest.slice(-1)[0], history: softwareInvest.slice(-16).map(p=>({d:p.d.slice(0,7),v:p.v})) } : null,
 
     // Debt bridge
@@ -442,25 +414,3 @@ export async function onRequestGet(context) {
   });
 }
 
-function computeOutcomeProbabilities(bridgeScore, prodSignal, ulcSignal) {
-  // Derive outcome probabilities from composite signals
-  // These are model outputs, not forecasts
-  let arrival = 25, bridgeCollapse = 20, falseDawn = 25, darkArrival = 15, infiniteBridge = 15;
-
-  if (bridgeScore > 60) { arrival += 15; infiniteBridge -= 10; }
-  if (bridgeScore < 30) { bridgeCollapse += 10; arrival -= 10; }
-  if (prodSignal?.solow_resolved) { arrival += 20; falseDawn -= 10; infiniteBridge -= 10; }
-  if (ulcSignal?.trend === 'falling') { arrival += 5; darkArrival += 5; }
-
-  // Normalize to 100
-  const total = arrival + bridgeCollapse + falseDawn + darkArrival + infiniteBridge;
-  const scale = 100 / total;
-
-  return {
-    arrival:          Math.round(arrival * scale),
-    bridge_collapse:  Math.round(bridgeCollapse * scale),
-    false_dawn:       Math.round(falseDawn * scale),
-    dark_arrival:     Math.round(darkArrival * scale),
-    infinite_bridge:  Math.round(infiniteBridge * scale),
-  };
-}

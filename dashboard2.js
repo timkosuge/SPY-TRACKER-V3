@@ -768,6 +768,28 @@ window.wemBand = wemBand;
 function fmtGex(v){ if (v==null || isNaN(v)) return '—'; const a=Math.abs(v), sg=v<0?'-':'+'; return a>=1e12?sg+'$'+(a/1e12).toFixed(2)+'T':a>=1e9?sg+'$'+(a/1e9).toFixed(2)+'B':a>=1e6?sg+'$'+(a/1e6).toFixed(0)+'M':sg+'$'+a.toFixed(0); }
 window.fmtGex = fmtGex;
 
+function fredValue(v, units, id) {
+  if (v == null || isNaN(v)) return '—';
+  const u = (units || '').toLowerCase();
+  const money = (dollars) => { const a = Math.abs(dollars), sg = dollars < 0 ? '-' : ''; return a >= 1e12 ? `${sg}$${(a/1e12).toFixed(2)}T` : a >= 1e9 ? `${sg}$${(a/1e9).toFixed(1)}B` : a >= 1e6 ? `${sg}$${(a/1e6).toFixed(1)}M` : `${sg}$${a.toFixed(0)}`; };
+  const count = (n) => { const a = Math.abs(n), sg = n < 0 ? '-' : ''; return a >= 1e9 ? `${sg}${(a/1e9).toFixed(2)}B` : a >= 1e6 ? `${sg}${(a/1e6).toFixed(2)}M` : a >= 1e3 ? `${sg}${(a/1e3).toFixed(0)}K` : `${sg}${a.toFixed(0)}`; };
+  if (u.startsWith('percent')) return `${Number(v).toFixed(2)}%`;
+  if (u.includes('billions of dollars') || u.includes('billions of u.s. dollars')) return money(v * 1e9);
+  if (u.includes('millions of dollars') || u.includes('millions of u.s. dollars')) return money(v * 1e6);
+  if (u.includes('thousands of dollars')) return money(v * 1e3);
+  if (u.includes('thousands')) return count(v * 1e3);
+  if (u.includes('millions')) return count(v * 1e6);
+  if (u.includes('dollars per')) return `$${Number(v).toFixed(2)}`;
+  if (u.startsWith('index')) return Number(v).toFixed(1);
+  if (u.startsWith('number')) return count(v);
+  if (u.includes('ratio')) return Number(v).toFixed(2);
+  if (u.includes('yen')) return `¥${Number(v).toFixed(2)}`;
+  if (u.includes('u.s. dollars to one')) return `$${Number(v).toFixed(4)}`;
+  if (u.includes('to one u.s. dollar')) return Number(v).toFixed(4);
+  return Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+window.fredValue = fredValue;
+
 function renderWEM(md){
   const wems=md.weekly_em||[], stats=md.wem_stats||{};
   const q=md.quotes||{}, spy=q['SPY']||{};
@@ -1444,7 +1466,7 @@ ${mpLines||'  No max pain data'}
   GEX: ${gex.regime||'N/A'} | Net:${fmtGex(gex.net_gex)} | Flip:$${gex.flip_point||'N/A'} | Supp:$${gex.support||'N/A'} | Res:$${gex.resistance||'N/A'}
   PCR OI:${fmt(o.pc_ratio_oi,3)} | Call OI:${fmtK(o.total_call_oi||0)} | Put OI:${fmtK(o.total_put_oi||0)}
 
-RATES: 10YR:${fmt(tnx.price,3)}% 2YR:${fmt(irx.price,3)}% 30YR:${fmt(tyx.price,3)}% Spread:${spread!=null?fmt(spread,3)+'%':'N/A'}
+RATES: 10YR:${fmt(tnx.price,3)}% 3MO:${fmt(irx.price,3)}% 30YR:${fmt(tyx.price,3)}% Spread(10Y−3M):${spread!=null?fmt(spread,3)+'%':'N/A'}
   DXY:${fmt(q['DX-Y.NYB']?.price,2)} Gold:$${fmt(q['GC=F']?.price,0)} Oil:$${fmt(q['CL=F']?.price,2)} BTC:$${fmt(q['BTC-USD']?.price,0)}
 
 SECTORS: ${sectorStr}`;
@@ -2008,7 +2030,7 @@ function runPatternAlerts(md, sd) {
   // Yield curve
   if (tnx.price && irx.price) {
     const spread = tnx.price - irx.price;
-    if (spread < 0) alerts.push({ level: 'med', icon: '🔄', text: `Yield curve INVERTED — 10yr ${fmt(tnx.price,3)}% vs 2yr ${fmt(irx.price,3)}%. Spread: ${fmt(spread,3)}%.`, badge: 'INVERTED CURVE' });
+    if (spread < 0) alerts.push({ level: 'med', icon: '🔄', text: `Yield curve INVERTED — 10yr ${fmt(tnx.price,3)}% vs 3-month bill ${fmt(irx.price,3)}%. Spread: ${fmt(spread,3)}%.`, badge: 'INVERTED CURVE' });
   }
 
   // High volume
@@ -2931,7 +2953,6 @@ async function renderLiquidity() {
     const regimeColor = d.regime === 'EASING' ? '#00ff88' :
                         d.regime === 'SLIGHTLY EASING' ? '#88cc00' :
                         d.regime === 'SLIGHTLY TIGHTENING' ? '#ff8800' : '#ff3355';
-    const isStatic = !d.fed_balance?.value || d.fed_balance?.source === 'static';
 
     const metricCard = (label, value, change, changePct, date, color, desc) => `
       <div class="panel" style="border-top:3px solid ${color};">
@@ -2943,10 +2964,6 @@ async function renderLiquidity() {
       </div>`;
 
     return `
-      ${isStatic ? `<div style="background:rgba(255,51,85,0.1);border:1px solid rgba(255,51,85,0.4);border-radius:4px;padding:12px 14px;margin-bottom:10px;">
-        <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#ff3355;margin-bottom:6px;">⚠ PLACEHOLDER DATA — NOT REAL</div>
-        <div style="font-size:13px;color:var(--text2);line-height:1.6;">The numbers below are <strong style="color:#ff3355;">estimates I hardcoded</strong> — not live FRED data. The live feed from the Federal Reserve is not loading. All dollar figures are approximate and may be significantly wrong. Do not trade on this data.</div>
-      </div>` : ''}
 
       <div class="panel" style="margin-bottom:10px;border-left:4px solid ${regimeColor};">
         <div style="display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center;">
@@ -3017,32 +3034,18 @@ async function renderLiquidity() {
         </div>
       </div>` : ''}`;
   };
-  // Static fallback — always shown immediately, replaced by live data if available
-  const staticFallback = {
-    regime: 'TIGHTENING',
-    regime_desc: 'Fed QT ongoing. Balance sheet declining. RRP near zero — that liquidity buffer is gone. Net liquidity is falling, which historically creates headwinds for equities.',
-    net_liquidity: { value: 5.61e12, change_wow: -23e9 },
-    fed_balance: { value: 6.73e12, change_wow: -15e9, change_pct: -0.22, date: 'Mar 2026', source: 'static' },
-    rrp: { value: 412e9, change_wow: -8e9, change_pct: -1.90, date: 'Mar 2026' },
-    tga: { value: 823e9, change_wow: 16e9, change_pct: 1.98, date: 'Mar 2026' },
-    m2: { value: 21.4e12, change_mom: 180e9, change_pct: 0.85, date: 'Feb 2026' },
-    margin: { date: 'Feb 2026', margin_debt: 892.4e9, free_credit_margin: 178.3e9, free_credit_cash: 243.1e9, net_margin: 471e9, change_mom: 18.2e9, change_pct: 2.08, source: 'static_fallback' }
-  };
-
-  // Show static immediately
-  el.innerHTML = buildHTML(staticFallback);
-
-  // Then try to fetch live data and replace
+  el.innerHTML = '<div class="no-data">Loading liquidity from FRED…</div>';
   try {
     const r = await fetch('/liquidity?t=' + Date.now());
-    if (r.ok) {
-      const d = await r.json();
-      if (d && (d.fed_balance || d.net_liquidity)) {
-        el.innerHTML = buildHTML(d);
-      }
+    const d = r.ok ? await r.json() : null;
+    if (d && d.fed_balance && d.rrp && d.tga) {
+      el.innerHTML = buildHTML(d);
+    } else {
+      const why = (d && d.errors && d.errors.length) ? d.errors.join(' · ') : `HTTP ${r.status}`;
+      el.innerHTML = `<div class="no-data">Liquidity data unavailable — ${why}</div>`;
     }
   } catch(e) {
-    // Static fallback already showing, nothing to do
+    el.innerHTML = `<div class="no-data">Liquidity data unavailable — ${e.message}</div>`;
   }
 }
 
@@ -3174,8 +3177,9 @@ async function loadMarginDebtSentiment() {
   }
   // Use static fallback if still no data
   if (!ld || !ld.margin_debt) {
-    ld = { date: 'Feb 2026', margin_debt: 892.4e9, free_credit_margin: 178.3e9, free_credit_cash: 243.1e9, net_margin: 471e9, change_mom: 18.2e9, prev_margin_debt: 874.2e9, source: 'static_fallback' };
+    ld = null;
   }
+  if (!ld) { const _el = $('marginDebtPanel'); if (_el) _el.innerHTML = '<div class="no-data">Margin debt unavailable — FINRA source not reachable</div>'; return; }
   const debt = ld.margin_debt;
   const prev = ld.prev_margin_debt;
   const momPct = prev ? ((debt - prev) / prev * 100) : null;
@@ -3247,57 +3251,19 @@ async function loadMarginDebtSentiment() {
 async function loadAAII() {
   const el = $('aaiiPanel');
   if (!el) return;
-
-  // Historical AAII data — 26 weeks (oldest first). Update weekly.
-  const AAII_HISTORY = [
-    {d:'Nov 5',  bull:38.0, neu:25.8, bear:36.3},
-    {d:'Nov 12', bull:31.6, neu:19.2, bear:49.1},
-    {d:'Nov 19', bull:32.6, neu:23.9, bear:43.6},
-    {d:'Nov 26', bull:32.0, neu:25.3, bear:42.7},
-    {d:'Dec 3',  bull:44.3, neu:24.9, bear:30.8},
-    {d:'Dec 10', bull:44.6, neu:24.8, bear:30.6},
-    {d:'Dec 17', bull:44.1, neu:22.7, bear:33.2},
-    {d:'Dec 24', bull:37.4, neu:27.8, bear:34.8},
-    {d:'Dec 31', bull:42.0, neu:31.0, bear:27.0},
-    {d:'Jan 7',  bull:42.5, neu:27.5, bear:30.0},
-    {d:'Jan 14', bull:49.5, neu:22.3, bear:28.2},
-    {d:'Jan 21', bull:43.2, neu:24.1, bear:32.7},
-    {d:'Jan 28', bull:44.4, neu:24.8, bear:30.8},
-    {d:'Feb 4',  bull:39.7, neu:31.3, bear:29.0},
-    {d:'Feb 11', bull:38.5, neu:23.3, bear:38.1},
-    {d:'Feb 18', bull:34.5, neu:28.5, bear:36.9},
-    {d:'Feb 25', bull:33.2, neu:27.0, bear:39.8},
-    {d:'Mar 4',  bull:33.1, neu:31.4, bear:35.5},
-    {d:'Mar 11', bull:31.9, neu:21.7, bear:46.4},
-    {d:'Mar 18', bull:30.4, neu:17.6, bear:52.0},
-    {d:'Mar 25', bull:32.1, neu:18.1, bear:49.8},
-    {d:'Apr 1',  bull:33.6, neu:15.0, bear:51.4},
-    {d:'Apr 8',  bull:35.7, neu:21.3, bear:43.0},
-  ];
-
+  const fmtDate = iso => iso ? new Date(iso.slice(0,10)+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : '';
   try {
     const r = await fetch('/sentiment?t='+Date.now());
-    if (!r.ok) throw new Error('AAII fetch failed');
+    if (!r.ok) throw new Error('HTTP '+r.status);
     const d = await r.json();
-
-    // Validate — scraper sometimes grabs wrong numbers; require plausible sum and spread
-    const rawBull = d.bullish, rawBear = d.bearish, rawNeu = d.neutral;
-    const sum = (rawBull||0) + (rawBear||0) + (rawNeu||0);
-    // Reject round numbers (60/20/20 type scrape failures) and historically impossible readings
-    const isRound = rawBull % 10 === 0 && rawNeu % 10 === 0 && rawBear % 10 === 0;
-    // Tighter sum check (95-105) and reject if any two values are identical multiples of 5
-    const twoEqual = (Math.abs(rawBull - rawNeu) < 0.5) || (Math.abs(rawBull - rawBear) < 0.5);
-    const dataValid = rawBull && rawBear && sum > 95 && sum < 105 && rawBull < 57 && rawBear < 75 && !isRound && !twoEqual;
-
-    const lastH = AAII_HISTORY[AAII_HISTORY.length-1];
-    const bull = dataValid ? rawBull : lastH.bull;
-    const bear = dataValid ? rawBear : lastH.bear;
-    const neu  = dataValid ? rawNeu  : lastH.neu;
+    const bull = d.bullish, neu = d.neutral, bear = d.bearish;
+    if (bull == null || bear == null || neu == null) throw new Error('no reading in the response');
     const spread = bull - bear;
     const spreadColor = spread > 0 ? '#00ff88' : spread < 0 ? '#ff3355' : '#ffcc00';
     const avgBull = d.avg_bullish || 37.5, avgBear = d.avg_bearish || 31.0;
-    const dateLabel = d.date ? new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-
+    const age = d.age_days != null ? d.age_days : (d.date ? Math.floor((Date.now() - new Date(d.date.slice(0,10)+'T12:00:00').getTime())/86400000) : null);
+    const staleNote = (d.stale || (age != null && age > 14)) ? ` <span style="color:#ffcc00;">(${age} days old)</span>` : '';
+    const srcNote = d.source ? ` · source ${d.source}` : '';
     el.innerHTML =
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">'
       +'<div style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:12px;text-align:center;">'
@@ -3316,27 +3282,22 @@ async function loadAAII() {
       +'<div><div style="font-family:\'Orbitron\',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">BULL-BEAR SPREAD</div>'
       +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:28px;font-weight:bold;color:'+spreadColor+'">'+(spread>0?'+':'')+fmt(spread,1)+'%</div></div>'
       +'<div style="text-align:right;"><div style="font-family:\'Orbitron\',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">SIGNAL</div>'
-      +'<div style="font-family:\'Orbitron\',monospace;font-size:13px;letter-spacing:2px;color:'+spreadColor+';margin-top:4px;padding:4px 10px;background:'+spreadColor+'22;border:1px solid '+spreadColor+'44;border-radius:3px;">'
+      +'<div style="font-family:\'Orbitron\',monospace;font-size:13px;letter-spacing:2px;color:'+spreadColor+';margin-top:4px;padding:4px 10px;background:'+spreadColor+'22;border-radius:3px;">'
       +(spread < -20 ? 'CONTRARIAN BUY' : spread < -10 ? 'BEARISH EXTREME' : spread < 0 ? 'BEARISH' : spread > 20 ? 'CONTRARIAN SELL' : spread > 10 ? 'BULLISH EXTREME' : 'BULLISH')
       +'</div></div></div>'
       +'<div style="margin-top:8px;font-size:12px;color:var(--text3);text-align:center;">'
-      +(dataValid&&dateLabel?'Week ending '+dateLabel+' · ':'Using cached data · ')
-      +'AAII survey published weekly — extreme readings are contrarian signals'
-      +(dataValid?'':' <span style="color:#ffcc00;">(live fetch invalid — showing last known good)</span>')
-      +'</div>';
-
-    // Append live reading if it is a newer date than last hardcoded entry
-    const hist = AAII_HISTORY.slice();
-    if (dataValid && dateLabel && dateLabel !== lastH.d) {
-      hist.push({d: dateLabel, bull, neu, bear});
-    } else if (dataValid) {
-      hist[hist.length-1] = {d: lastH.d, bull, neu, bear};
-    }
+      +(d.date ? 'Week ending '+fmtDate(d.date) : 'Survey date not reported')+staleNote+srcNote
+      +' · AAII survey published weekly — extreme readings are contrarian signals</div>';
+    let hist = [];
+    try {
+      const hr = await fetch('/sentiment_history.json?t='+Date.now());
+      if (hr.ok) hist = ((await hr.json()).aaii || []).map(h => ({ d: h.date, bull: h.bullish, neu: h.neutral, bear: h.bearish }));
+    } catch(e) {}
+    if (d.date && !hist.some(h => h.d === d.date)) hist.push({ d: d.date, bull, neu, bear });
     renderAAIIChart(hist);
-
   } catch(e) {
     el.innerHTML = '<div class="no-data">AAII unavailable — '+e.message+'</div>';
-    renderAAIIChart(AAII_HISTORY);
+    renderAAIIChart([]);
   }
 }
 window.loadAAII = loadAAII;
@@ -3347,6 +3308,7 @@ function renderAAIIChart(data) {
   const W = 800, H = 200, PAD = {t:10, r:20, b:30, l:36};
   const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
   const n = data.length;
+  if (n < 2) { el.innerHTML = '<div class="no-data" style="padding:20px;">History accumulates one reading per week from the first recorded survey.</div>'; return; }
   const xStep = cW / (n - 1);
   const yScale = v => PAD.t + cH - (v / 60 * cH);
 
@@ -3367,7 +3329,8 @@ function renderAAIIChart(data) {
   const xlbls = data.map((d,i)=>{
     if(i % 3 !== 0 && i !== n-1) return '';
     const x = (PAD.l + i*xStep).toFixed(1);
-    return '<text x="'+x+'" y="'+(H-4)+'" text-anchor="middle" font-size="8" fill="#9090c0">'+d.d+'</text>';
+    const lbl = /^\d{4}-\d{2}-\d{2}$/.test(d.d) ? new Date(d.d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : d.d;
+    return '<text x="'+x+'" y="'+(H-4)+'" text-anchor="middle" font-size="8" fill="#9090c0">'+lbl+'</text>';
   }).join('');
 
   // 37.5% avg bull line
@@ -3398,7 +3361,7 @@ async function loadCOT() {
     const r = await fetch('/cot');
     if (!r.ok) throw new Error('COT fetch failed');
     const d = await r.json();
-    const fmtN = n => { if(n==null)return'—'; const a=Math.abs(n),s=n>=0?'+':'-'; return s+'$'+(a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(0)+'K':Math.round(a)); };
+    const fmtN = n => { if(n==null)return'—'; const a=Math.abs(n),s=n>=0?'+':'-'; return s+(a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(0)+'K':Math.round(a).toLocaleString())+' contracts'; };
     const fmtK = n => { if(n==null)return'—'; const a=Math.abs(n); return (a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(0)+'K':Math.round(a)); };
     const clrN = n => n>0?'#00ff88':n<0?'#ff3355':'#ffcc00';
     const days = d.days_since_report;
@@ -3457,7 +3420,7 @@ async function loadCOTHistory() {
     if (!r.ok) throw new Error('fetch failed');
     const d = await r.json();
     const hist = d.history || [];
-    if (!hist.length) { el.innerHTML = '<div class="no-data" style="padding:12px;">COT history unavailable</div>'; return; }
+    if (hist.length < 2) { el.innerHTML = '<div class="no-data" style="padding:12px;">COT history accumulates one report per week from the first recorded release.</div>'; return; }
     renderCOTChart(el, hist);
   } catch(e) {
     el.innerHTML = `<div class="no-data" style="padding:12px;">COT history: ${e.message}</div>`;
@@ -3823,7 +3786,7 @@ function mergeLiveData(md, liveQuotes, liveFG) {
     Object.assign(merged.quotes, liveQuotes);
   }
   if (liveFG) merged.fear_greed = liveFG;
-  merged.updated = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
+  merged.live_merged_at = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
   // Keep todayOpen in _spyLevels current so CHG/OPEN cell stays accurate
   if (window._spyLevels && merged.quotes?.['SPY']?.open) {
     window._spyLevels.todayOpen = merged.quotes['SPY'].open;
@@ -4957,7 +4920,7 @@ async function generateMacroAI(data) {
   const fmt1 = v => v == null ? 'N/A' : Number(v).toFixed(1);
   const fmt2 = v => v == null ? 'N/A' : Number(v).toFixed(2);
   const trend = id => S[id]?.trend || 'unknown';
-  const val = id => S[id]?.latest;
+  const val = id => S[id] ? fredValue(S[id].latest, S[id].units, id) : 'N/A';
   const yoy = id => S[id]?.change_yoy_pct;
 
   const dataContext = `
@@ -4965,28 +4928,28 @@ MACRO REGIME: ${regime.regime} (score: ${regime.score}/100)
 Signal breakdown: ${(regime.signals||[]).map(s => `${s.label}: ${s.val}`).join(', ')}
 
 INFLATION:
-- Core PCE (Fed target): ${fmt1(val('PCEPILFE'))}% | YoY change: ${fmt1(yoy('PCEPILFE'))}pp | Trend: ${trend('PCEPILFE')}
-- Core CPI: ${fmt1(val('CPILFESL'))}% | YoY: ${fmt1(yoy('CPILFESL'))}pp | Trend: ${trend('CPILFESL')}
-- 10Y Breakeven Inflation (market expectation): ${fmt1(val('T10YIE'))}%
+- Core PCE (Fed target): index ${val('PCEPILFE')} | YoY: ${fmt1(yoy('PCEPILFE'))}% | Trend: ${trend('PCEPILFE')}
+- Core CPI: index ${val('CPILFESL')} | YoY: ${fmt1(yoy('CPILFESL'))}% | Trend: ${trend('CPILFESL')}
+- 10Y Breakeven Inflation (market expectation): ${val('T10YIE')}
 
 EMPLOYMENT:
-- Unemployment Rate: ${fmt1(val('UNRATE'))}% | Trend: ${trend('UNRATE')}
-- Initial Jobless Claims: ${fmt1(val('ICSA'))}K/week | Trend: ${trend('ICSA')}
-- Job Openings (JOLTS): ${fmt1(val('JTSJOL'))}M | Trend: ${trend('JTSJOL')}
-- U-6 Underemployment: ${fmt1(val('U6RATE'))}%
+- Unemployment Rate: ${val('UNRATE')} | Trend: ${trend('UNRATE')}
+- Initial Jobless Claims: ${val('ICSA')} per week | Trend: ${trend('ICSA')}
+- Job Openings (JOLTS): ${val('JTSJOL')} | Trend: ${trend('JTSJOL')}
+- U-6 Underemployment: ${val('U6RATE')}
 
 GROWTH:
-- Real GDP Growth: ${fmt1(val('A191RL1Q225SBEA'))}% annualized | Trend: ${trend('A191RL1Q225SBEA')}
+- Real GDP Growth: ${val('A191RL1Q225SBEA')} annualized | Trend: ${trend('A191RL1Q225SBEA')}
 - Industrial Production trend: ${trend('INDPRO')}
 
 MONETARY POLICY:
-- Fed Funds Rate: ${fmt1(val('FEDFUNDS'))}%
-- Fed Balance Sheet: $${fmt1(val('WALCL'))}B | Trend: ${trend('WALCL')}
+- Fed Funds Rate: ${val('FEDFUNDS')}
+- Fed Balance Sheet: ${val('WALCL')} | Trend: ${trend('WALCL')}
 - M2 Money Supply trend: ${trend('M2SL')}
-- Reverse Repo (RRP): $${fmt1(val('RRPONTSYD'))}B | Trend: ${trend('RRPONTSYD')}
+- Reverse Repo (RRP): ${val('RRPONTSYD')} | Trend: ${trend('RRPONTSYD')}
 
 RATES & CREDIT:
-- Yield Curve (10Y-2Y): ${fmt2(val('T10Y2Y'))}% | Trend: ${trend('T10Y2Y')}
+- Yield Curve (10Y-2Y): ${val('T10Y2Y')} | Trend: ${trend('T10Y2Y')}
 - 10Y Treasury: ${fmt2(val('DGS10'))}%
 - High Yield Credit Spread: ${fmt2(val('BAMLH0A0HYM2'))}% | Trend: ${trend('BAMLH0A0HYM2')}
 
@@ -5100,15 +5063,17 @@ function _renderMacroHTML(data) {
     if (!s) return `<div class="panel" style="opacity:0.4;"><div style="font-size:11px;color:var(--text3);">${desc} — no data</div></div>`;
     const isGood = s.good_direction;
     const tc = trendColor(s.trend, isGood);
-    const yoyStr = s.change_yoy != null ? ` · ${s.change_yoy > 0 ? '+' : ''}${fmt1(s.change_yoy)}${s.unit === '%' ? 'pp' : ''} YoY` : '';
-    const chgStr = s.change != null ? ` ${s.change > 0 ? '+' : ''}${fmt2(s.change)} vs prior` : '';
+    const isPct = (s.units || '').toLowerCase().startsWith('percent');
+    const yoyStr = s.change_yoy != null ? ` · ${s.change_yoy > 0 ? '+' : ''}${isPct ? fmt2(s.change_yoy) + 'pp' : fredValue(s.change_yoy, s.units, id)} YoY (vs ${s.year_ago_date})` : '';
+    const chgStr = s.change != null ? ` ${s.change > 0 ? '+' : ''}${isPct ? fmt2(s.change) + 'pp' : fredValue(s.change, s.units, id)} vs prior` : '';
+    const headline = s.display === 'change' && s.change != null ? `${s.change > 0 ? '+' : ''}${fredValue(s.change, s.units, id)}` : fredValue(s.latest, s.units, id);
     const color = tc;
     const fredUrl = `https://fred.stlouisfed.org/series/${id}`;
     return `<div class="panel" style="border-top:3px solid ${color};">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
         <div>
           <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${color};margin-bottom:3px;">${desc}</div>
-          <div style="font-size:10px;color:var(--text3);">FRED: <a href="${fredUrl}" target="_blank" style="color:var(--text3);text-decoration:none;">${id}</a> · ${s.freq} · ${s.latest_date}</div>
+          <div style="font-size:10px;color:var(--text3);">FRED: <a href="${fredUrl}" target="_blank" style="color:var(--text3);text-decoration:none;">${id}</a> · ${s.freq} · ${s.latest_date}${s.units ? ' · ' + s.units : ''}</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:20px;color:${color};">${trendIcon(s.trend)}</div>
@@ -5119,10 +5084,10 @@ function _renderMacroHTML(data) {
         ${s.show_yoy && s.change_yoy_pct != null ? `
           <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${fmt1(s.change_yoy_pct)}%</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">YoY</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text3);">index: ${fmt1(s.latest)}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text3);">index ${fmt1(s.latest)} · vs ${s.year_ago_date}</div>
         ` : `
-          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${fmt1(s.latest)}${s.unit === '%' ? '%' : ''}</div>
-          ${s.change != null ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">${chgStr}</div>` : ''}
+          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${headline}</div>
+          ${s.display === 'change' ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text3);">level ${fredValue(s.latest, s.units, id)}</div>` : (s.change != null ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">${chgStr}</div>` : '')}
         `}
       </div>
       ${!s.show_yoy && yoyStr ? `<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">${yoyStr}</div>` : ''}
@@ -5505,7 +5470,7 @@ function _renderMacroHTML(data) {
     </div>
 
     <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;">
-      Data: Federal Reserve Economic Database (FRED) · St. Louis Fed · Updated ${data.updated ? new Date(data.updated).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}) : 'recently'}
+      Data: Federal Reserve Economic Database (FRED) · St. Louis Fed · Latest observation ${data.as_of ? new Date(data.as_of+'T12:00:00').toLocaleDateString('en-US', {month:'long',day:'numeric',year:'numeric'}) : '—'}
     </div>
   </div>`;
 }
@@ -5545,8 +5510,7 @@ function _renderTransitionHTML(data) {
   const el = document.getElementById('transitionContent');
   if (!el || !data) return;
 
-  const score = data.bridge_score || 35;
-  const outcomes = data.outcomes || {};
+  const score = data.bridge_score ?? null;
   const prod = data.productivity_signal || {};
   const ulc = data.ulc_signal || {};
   const disp = data.displacement_signal || {};
@@ -5559,20 +5523,13 @@ function _renderTransitionHTML(data) {
   const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
 
   // Bridge phase label and colors
-  const phaseInfo = score >= 95 ? { label: 'THE POP', sub: 'Transformation becoming visible. Field narrowing.', color: '#ff3355', glow: 'rgba(255,51,85,0.3)' }
+  const phaseInfo = score == null ? { label: 'NO SCORE', sub: 'Transition data unavailable.', color: 'var(--text3)', glow: 'none' }
+    : score >= 95 ? { label: 'THE POP', sub: 'Transformation becoming visible. Field narrowing.', color: '#ff3355', glow: 'rgba(255,51,85,0.3)' }
     : score >= 80 ? { label: 'PRE-POP', sub: 'Infrastructure sufficient. Survivors hardening.', color: '#ff8800', glow: 'rgba(255,136,0,0.3)' }
     : score >= 60 ? { label: 'LATE BRIDGE', sub: 'Productivity beginning to show. Concentration narrowing.', color: '#ffcc00', glow: 'rgba(255,204,0,0.3)' }
     : score >= 30 ? { label: 'MID BRIDGE', sub: 'Building at scale. Transformation not yet visible in data.', color: '#00ccff', glow: 'rgba(0,204,255,0.3)' }
     : { label: 'EARLY BRIDGE', sub: 'Infrastructure deployment underway. Long runway ahead.', color: '#8855ff', glow: 'rgba(136,85,255,0.3)' };
 
-  // Outcome colors
-  const outColors = {
-    arrival:         { label: 'ARRIVAL',          color: '#00ff88', desc: 'Transformation completes. Bridge holds. Pop is clean.' },
-    bridge_collapse: { label: 'BRIDGE COLLAPSE',  color: '#ff3355', desc: 'Funding breaks before transformation completes. 1929 scenario.' },
-    false_dawn:      { label: 'FALSE DAWN',        color: '#ff8800', desc: 'Partial transformation. Not enough to justify debt carried.' },
-    dark_arrival:    { label: 'DARK ARRIVAL',      color: '#ffcc00', desc: 'Transformation succeeds. Distributional failure fractures society.' },
-    infinite_bridge: { label: 'INFINITE BRIDGE',  color: '#8855ff', desc: 'Bubble self-sustains indefinitely. Transformation always almost here.' },
-  };
 
   // SVG line chart helper
   const miniChart = (history, color, h=60) => {
@@ -5726,23 +5683,6 @@ function _renderTransitionHTML(data) {
       </div>
     </div>
 
-    <!-- OUTCOME PROBABILITIES -->
-    <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#8855ff;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(136,85,255,0.3);">⬡ OUTCOME SCENARIOS — NOT FORECASTS, MODEL OUTPUTS</div>
-    <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.7;">
-      The old vocabulary does not apply here. "Soft landing" and "hard landing" describe oscillations around a stable mean. We are not oscillating — we are transitioning between two fundamentally different economic regimes. These are the five actual scenarios.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:20px;">
-      ${Object.entries(outColors).map(([k, o]) => {
-        const pct = outcomes[k] || 0;
-        return `<div class="panel" style="border-top:3px solid ${o.color};">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:${o.color};letter-spacing:1px;margin-bottom:6px;">${o.label}</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);margin-bottom:4px;">${pct}%</div>
-          <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:8px;"><div style="width:${pct}%;height:100%;background:${o.color};border-radius:2px;transition:width 1s;"></div></div>
-          <div style="font-size:11px;color:var(--text2);line-height:1.5;">${o.desc}</div>
-        </div>`;
-      }).join('')}
-    </div>
-
     <!-- AI CAPEX TRAJECTORY -->
     <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:#00ccff;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(0,204,255,0.3);">⬡ AI INFRASTRUCTURE CAPEX — THE FUEL</div>
     <div class="panel" style="margin-bottom:16px;">
@@ -5802,9 +5742,9 @@ function _renderTransitionHTML(data) {
       </div>
       <div class="panel" style="border-top:3px solid ${ls.change_5yr < -1 ? '#00ff88' : '#ffcc00'};">
         <div style="font-family:'Orbitron',monospace;font-size:9px;color:${ls.change_5yr < -1 ? '#00ff88' : '#ffcc00'};margin-bottom:4px;">LABOR SHARE OF OUTPUT</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: PRS85006151 · Falling = capital replacing labor</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${fmt1(ls.current)}%</div>
-        <div style="font-size:11px;color:${ls.change_5yr < 0 ? '#00ff88' : 'var(--text3)'};">${ls.change_5yr > 0 ? '+' : ''}${fmt1(ls.change_5yr)}pp over 5 years</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:8px;">FRED: PRS85006173 · Index 2017 = 100 · Falling = capital replacing labor</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--text);">${fmt1(ls.current)}</div>
+        <div style="font-size:11px;color:${ls.change_5yr < 0 ? '#00ff88' : 'var(--text3)'};">${ls.change_5yr > 0 ? '+' : ''}${fmt1(ls.change_5yr)} index points over 5 years</div>
         ${miniChart(ls.history, ls.change_5yr < -1 ? '#00ff88' : '#ffcc00')}
         <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6;border-top:1px solid var(--border);padding-top:8px;">The share of total economic output that goes to workers as wages. A structural decline means capital — increasingly, AI — is capturing a larger share of value creation. This is the distributional signal. It measures who benefits from the transition.</div>
       </div>
@@ -5874,22 +5814,14 @@ async function generateTransitionAI(data) {
   const el = document.getElementById('transitionAIText');
   if (!el) return;
 
-  const score = data.bridge_score || 35;
-  const outcomes = data.outcomes || {};
+  const score = data.bridge_score ?? null;
   const prod = data.productivity_signal || {};
   const ulc = data.ulc_signal || {};
   const disp = data.displacement_signal || {};
 
   const context = `
 BRIDGE PHASE: Score ${score}/100
-Current phase: ${score >= 80 ? 'Pre-Pop' : score >= 60 ? 'Late Bridge' : score >= 30 ? 'Mid Bridge' : 'Early Bridge'}
-
-OUTCOME PROBABILITIES:
-- Arrival (clean transition): ${outcomes.arrival}%
-- Bridge Collapse (1929 scenario): ${outcomes.bridge_collapse}%
-- False Dawn (partial transformation): ${outcomes.false_dawn}%
-- Dark Arrival (transformation succeeds, distribution fails): ${outcomes.dark_arrival}%
-- Infinite Bridge (perpetual anticipation): ${outcomes.infinite_bridge}%
+Current phase: ${score == null ? 'unknown' : score >= 80 ? 'Pre-Pop' : score >= 60 ? 'Late Bridge' : score >= 30 ? 'Mid Bridge' : 'Early Bridge'}
 
 AI INFRASTRUCTURE CAPEX:
 - 2024 actual: $285B (1.05% of GDP)
@@ -6339,7 +6271,7 @@ function _renderSovereignHTML(data) {
     </div>
 
     <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);text-align:right;padding:8px 0;">
-      Data: FRED (US Treasury TIC, BOJ, OECD) · Updated: ${data.updated ? new Date(data.updated).toLocaleString() : '—'} · ${data.seriesCount || Object.keys(S).length} of 64 series loaded <button onclick="renderSovereign(true)" style="margin-left:12px;background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.25);color:#ffcc00;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:Orbitron,monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH DATA</button>
+      Data: FRED (US Treasury TIC, BOJ, OECD) · Latest observation ${data.as_of ? new Date(data.as_of+'T12:00:00').toLocaleDateString('en-US', {month:'long',day:'numeric',year:'numeric'}) : '—'} · ${data.seriesCount || Object.keys(S).length} of 64 series loaded <button onclick="renderSovereign(true)" style="margin-left:12px;background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.25);color:#ffcc00;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:Orbitron,monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH DATA</button>
     </div>
   </div>`;
   } catch(sovereignErr) {

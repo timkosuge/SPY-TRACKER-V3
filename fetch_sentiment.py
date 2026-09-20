@@ -11,22 +11,6 @@ COT releases every Friday at 3:30 PM ET for the prior Tuesday's positions.
 Output: sentiment_data.json  (committed to repo, read by Cloudflare functions)
 """
 
-# ── MANUAL OVERRIDE ───────────────────────────────────────────────────────────
-# When scraping fails, set these values manually from aaii.com/sentimentsurvey
-# Set MANUAL_AAII to None to disable and use live scrape instead.
-# Update date to the week-ending date shown on AAII's site.
-MANUAL_AAII = {
-    "date":        "2026-04-08",
-    "bullish":     35.7,
-    "neutral":     21.3,
-    "bearish":     43.0,
-    "spread":      -7.3,
-    "avg_bullish": 37.5,
-    "avg_bearish": 31.0,
-    "source":      "manual",
-}
-# ─────────────────────────────────────────────────────────────────────────────
-
 import json
 import io
 import zipfile
@@ -353,6 +337,7 @@ def fetch_cot():
 
 def main():
     OUTPUT_FILE = "sentiment_data.json"
+    HISTORY_FILE = "sentiment_history.json"
 
     # Load existing data so we can preserve last-known-good values if a source fails
     try:
@@ -363,22 +348,13 @@ def main():
 
     print("=== Fetching AAII sentiment ===")
 
-    # Use manual override if set
-    if MANUAL_AAII:
-        print(f"  AAII: using MANUAL_AAII override ({MANUAL_AAII['date']})")
-        aaii = MANUAL_AAII
-    else:
-        aaii = fetch_aaii()
-
-        # Extra guard: reject obviously bad round-number scrape results before writing
-        if aaii:
-            bull = aaii.get('bullish', 0)
-            neu  = aaii.get('neutral', 0)
-            bear = aaii.get('bearish', 0)
-            is_round = (bull % 10 == 0 and neu % 10 == 0 and bear % 10 == 0)
-            if is_round or bull > 65 or bear > 80:
-                print(f"  AAII: final validation rejected data ({bull}/{neu}/{bear}) — using existing.")
-                aaii = None
+    aaii = fetch_aaii()
+    if aaii:
+        vals = [aaii.get(k) for k in ('bullish', 'neutral', 'bearish')]
+        total = sum(v for v in vals if v is not None) if all(v is not None for v in vals) else None
+        if total is None or not (99 <= total <= 101) or any(v < 0 or v > 100 for v in vals):
+            print(f"  AAII: rejected reading that does not sum to 100 ({vals}) — keeping existing.")
+            aaii = None
 
     print("=== Fetching COT (E-Mini S&P 500) ===")
     cot = fetch_cot()
@@ -389,16 +365,39 @@ def main():
         "cot":     cot  or existing.get("cot"),
     }
 
-    # Flag if we're serving stale data
-    if not aaii and existing.get("aaii"):
-        output["aaii"]["stale"] = True
-        print("  AAII: using cached data from previous run.")
-    if not cot and existing.get("cot"):
-        output["cot"]["stale"] = True
-        print("  COT: using cached data from previous run.")
+    def age_days(date_str):
+        try:
+            return (datetime.now(timezone.utc).date() - datetime.strptime(date_str[:10], "%Y-%m-%d").date()).days
+        except Exception:
+            return None
+    for key, date_field in (("aaii", "date"), ("cot", "report_date")):
+        block = output.get(key)
+        if not block:
+            continue
+        age = age_days(block.get(date_field) or "")
+        block["age_days"] = age
+        block["stale"] = age is None or age > 14
+        if not (aaii if key == "aaii" else cot):
+            block["carried_from_previous_run"] = True
+            print(f"  {key.upper()}: fetch failed — carrying previous data ({block.get(date_field)}).")
 
     with open(OUTPUT_FILE, "w") as f:
         json.dump(output, f, indent=2)
+
+    try:
+        with open(HISTORY_FILE) as f:
+            history = json.load(f)
+    except Exception:
+        history = {"aaii": [], "cot": []}
+    if aaii and aaii.get("date") and not any(h.get("date") == aaii["date"] for h in history["aaii"]):
+        history["aaii"].append({k: aaii.get(k) for k in ("date", "bullish", "neutral", "bearish", "spread", "source")})
+        history["aaii"].sort(key=lambda h: h["date"])
+    if cot and cot.get("report_date") and not any(h.get("report_date") == cot["report_date"] for h in history["cot"]):
+        history["cot"].append({k: cot.get(k) for k in cot if k in ("report_date", "open_interest", "dealer_net", "asset_net", "lev_net", "other_net", "nonrept_net", "chg_dealer_net", "chg_asset_net", "chg_lev_net", "source")})
+        history["cot"].sort(key=lambda h: h["report_date"])
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=1)
+    print(f"  history: aaii {len(history['aaii'])} weeks, cot {len(history['cot'])} reports")
 
     print(f"\n✓ sentiment_data.json written ({NOW_UTC})")
     if output["aaii"]:
@@ -406,7 +405,8 @@ def main():
         print(f"  AAII  → bull={a.get('bullish')}%  bear={a.get('bearish')}%  spread={a.get('spread')}  [{a.get('source')}]")
     if output["cot"]:
         c = output["cot"]
-        print(f"  COT   → nc_net={c.get('nc_net'):+,}  Δ={c.get('nc_net_change')}  [{c.get('source')}]")
+        net = c.get("lev_net", c.get("nc_net"))
+        print(f"  COT   → report {c.get('report_date')}  leveraged/non-commercial net={net}  [{c.get('source')}]")
 
 
 if __name__ == "__main__":

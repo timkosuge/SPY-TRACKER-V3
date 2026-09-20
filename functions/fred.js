@@ -20,7 +20,7 @@ const SERIES = {
 
   // EMPLOYMENT
   UNRATE:    { name: 'Unemployment Rate',      cat: 'employment', unit: '%',       freq: 'monthly', good_direction: 'down' },
-  PAYEMS:    { name: 'Nonfarm Payrolls',        cat: 'employment', unit: 'K jobs',  freq: 'monthly', good_direction: 'up' },
+  PAYEMS:    { name: 'Nonfarm Payrolls',        cat: 'employment', unit: 'K jobs',  freq: 'monthly', good_direction: 'up', display: 'change' },
   ICSA:      { name: 'Initial Jobless Claims',  cat: 'employment', unit: 'K',       freq: 'weekly',  good_direction: 'down' },
   JTSJOL:    { name: 'Job Openings (JOLTS)',    cat: 'employment', unit: 'M',       freq: 'monthly', good_direction: 'stable' },
   U6RATE:    { name: 'U-6 Underemployment',    cat: 'employment', unit: '%',       freq: 'monthly', good_direction: 'down' },
@@ -106,45 +106,76 @@ const SERIES = {
   PSAVERT:   { name: 'Personal Savings Rate',  cat: 'consumer', unit: '%',         freq: 'monthly', good_direction: 'stable' },
 };
 
-async function fetchSeries(apiKey, seriesId, limit = 48) {
+async function fetchSeries(apiKey, seriesId) {
   try {
-    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=${limit}&observation_start=2020-01-01`;
+    const start = new Date(); start.setMonth(start.getMonth() - 16);
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=420&observation_start=${start.toISOString().slice(0, 10)}`;
     const r = await fetch(url, { headers: { 'User-Agent': 'SPY-Tracker/1.0' } });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      let msg = `HTTP ${r.status}`;
+      try { msg = (await r.json()).error_message || msg; } catch (e) {}
+      return { obs: null, error: msg };
+    }
     const data = await r.json();
     const obs = (data.observations || [])
       .filter(o => o.value !== '.' && o.value !== 'NA')
       .map(o => ({ date: o.date, value: parseFloat(o.value) }))
-      .reverse(); // oldest first for charting
-    return obs.length > 0 ? obs : null;
-  } catch(e) {
+      .reverse();
+    return obs.length > 0 ? { obs, error: null } : { obs: null, error: 'no observations' };
+  } catch (e) {
+    return { obs: null, error: e.message };
+  }
+}
+
+async function fetchMeta(apiKey, seriesId, kv) {
+  const key = `fred:meta:${seriesId}`;
+  if (kv) {
+    try { const cached = await kv.get(key, 'json'); if (cached) return cached; } catch (e) {}
+  }
+  try {
+    const r = await fetch(`https://api.stlouisfed.org/fred/series?series_id=${seriesId}&api_key=${apiKey}&file_type=json`, { headers: { 'User-Agent': 'SPY-Tracker/1.0' } });
+    if (!r.ok) return null;
+    const ss = (await r.json()).seriess?.[0];
+    if (!ss) return null;
+    const meta = { title: ss.title, units: ss.units, units_short: ss.units_short, frequency: ss.frequency_short, seasonal_adjustment: ss.seasonal_adjustment_short, last_updated: ss.last_updated };
+    if (kv) { try { await kv.put(key, JSON.stringify(meta), { expirationTtl: 86400 * 30 }); } catch (e) {} }
+    return meta;
+  } catch (e) {
     return null;
   }
 }
 
-function calcStats(obs) {
+function yearAgoObservation(obs, latest, frequency) {
+  const target = new Date(latest.date + 'T12:00:00Z'); target.setUTCFullYear(target.getUTCFullYear() - 1);
+  const tolDays = { D: 4, W: 4, BW: 8, M: 16, Q: 46, SA: 92, A: 183 }[frequency] ?? 16;
+  let best = null, bestGap = Infinity;
+  for (const o of obs) {
+    const gap = Math.abs(new Date(o.date + 'T12:00:00Z') - target) / 86400000;
+    if (gap < bestGap) { best = o; bestGap = gap; }
+  }
+  return bestGap <= tolDays ? best : null;
+}
+
+function calcStats(obs, frequency) {
   if (!obs || obs.length < 2) return null;
   const latest = obs[obs.length - 1];
   const prev   = obs[obs.length - 2];
-  const yearAgo = obs.find(o => {
-    const d = new Date(o.date);
-    const ld = new Date(latest.date);
-    return Math.abs(d.getFullYear() - ld.getFullYear()) === 1 &&
-           Math.abs(d.getMonth() - ld.getMonth()) <= 1;
-  }) || obs[0];
+  const yearAgo = yearAgoObservation(obs, latest, frequency);
 
   const change     = latest.value - prev.value;
   const changePct  = prev.value !== 0 ? (change / Math.abs(prev.value)) * 100 : null;
   const changeYoy  = yearAgo ? latest.value - yearAgo.value : null;
   const changeYoyPct = yearAgo && yearAgo.value !== 0 ? ((latest.value - yearAgo.value) / Math.abs(yearAgo.value)) * 100 : null;
 
-  // Trend: compare last 3 readings
+  // Trend: the last three readings against the series' own typical step size
   const last3 = obs.slice(-3).map(o => o.value);
   let trend = 'flat';
   if (last3.length === 3) {
+    const steps = obs.slice(1).map((o, i) => Math.abs(o.value - obs[i].value)).sort((a, b) => a - b);
+    const typical = steps.length ? steps[Math.floor(steps.length / 2)] : 0;
     const slope = (last3[2] - last3[0]) / 2;
-    if (slope > 0.1) trend = 'rising';
-    else if (slope < -0.1) trend = 'falling';
+    if (typical > 0 && slope > 0.5 * typical) trend = 'rising';
+    else if (typical > 0 && slope < -0.5 * typical) trend = 'falling';
   }
 
   return {
@@ -155,6 +186,7 @@ function calcStats(obs) {
     change_pct: changePct,
     change_yoy: changeYoy,
     change_yoy_pct: changeYoyPct,
+    year_ago_date: yearAgo ? yearAgo.date : null,
     trend,
     history: obs.slice(-36).map(o => ({ d: o.date.slice(0,7), v: o.value })),
   };
@@ -241,28 +273,28 @@ export async function onRequestGet(context) {
   const apiKey = context.env?.FRED_API_KEY;
   if (!apiKey) return json({ error: 'FRED_API_KEY not configured' }, 500);
 
-  const sovereignIds = new Set(['FDHBJA','FDHBCHI','FDHBFIN','DEXJPUS','IRLTLT01JPM156N','JPNURQPDS','JPNCPIALLMINMEI','JPNRGDPEXP','DTWEXBGS','DEXCHUS','DEXUSEU','GOLDAMGBD228NLBM','GFDEBTN','GFDEGDQ188S','FYFSD','INTGSTUSESM193N']);
   const seriesIds = Object.keys(SERIES);
 
-  // Cloudflare Workers limit: 50 concurrent subrequests max.
-  // Batch into groups of 40 to stay safely under the limit.
-  // Two batches covers all 64 series without hitting the ceiling.
   const BATCH = 40;
   const results = {};
+  const errors = {};
+  const kv = context.env?.GEX_HISTORY;
 
   for (let i = 0; i < seriesIds.length; i += BATCH) {
     const batch = seriesIds.slice(i, i + BATCH);
-    const fetched = await Promise.all(
-      batch.map(id => fetchSeries(apiKey, id, sovereignIds.has(id) ? 60 : 36))
-    );
+    const fetched = await Promise.all(batch.map(id => fetchSeries(apiKey, id)));
+    const metas = await Promise.all(batch.map(id => fetchMeta(apiKey, id, kv)));
     batch.forEach((id, j) => {
-      const obs = fetched[j];
-      if (obs) results[id] = { ...calcStats(obs), ...SERIES[id] };
+      const { obs, error } = fetched[j];
+      const meta = metas[j] || {};
+      if (obs) results[id] = { ...calcStats(obs, meta.frequency || SERIES[id].freq?.[0]?.toUpperCase()), ...SERIES[id], units: meta.units || null, fred_title: meta.title || null, frequency: meta.frequency || null, last_updated: meta.last_updated || null };
+      else errors[id] = error;
     });
   }
 
   const regime = computeRegime(results);
   const seriesCount = Object.keys(results).length;
+  const asOf = Object.values(results).map(s => s.latest_date).filter(Boolean).sort().pop() || null;
 
-  return json({ series: results, regime, seriesCount, updated: new Date().toISOString() });
+  return json({ series: results, regime, seriesCount, errors, as_of: asOf, updated: new Date().toISOString() });
 }

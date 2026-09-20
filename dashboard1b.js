@@ -515,7 +515,6 @@ function renderBondsAdditions(md) {
   // ── REAL YIELD GAUGE ──────────────────────────────────────────────────────
   const ryEl = $('bondsRealYield');
   if(ryEl) {
-    // Approximate real yield = nominal 10Y - implied inflation (rough proxy: 10Y - 2Y as risk free, or use fixed 2.5% inflation estimate)
     const nomYield = t10;
     const estInflation = 2.8; // approximate current CPI expectation
     const realYield = nomYield ? nomYield - estInflation : null;
@@ -576,7 +575,7 @@ function renderBondsAdditions(md) {
   // ── RATE OF CHANGE ────────────────────────────────────────────────────────
   const rocEl = $('bondsROC');
   if(rocEl) {
-    const rates = [{l:'2YR',p:t2,c:irx.change},{l:'5YR',p:t5,c:fvx.change},{l:'10YR',p:t10,c:tnx.change},{l:'30YR',p:t30,c:tyx.change}].filter(r=>r.p);
+    const rates = [{l:'3MO',p:t2,c:irx.change},{l:'5YR',p:t5,c:fvx.change},{l:'10YR',p:t10,c:tnx.change},{l:'30YR',p:t30,c:tyx.change}].filter(r=>r.p);
     const rising = rates.filter(r=>(r.c||0)>0.02).length;
     const falling = rates.filter(r=>(r.c||0)<-0.02).length;
     const trend = rising > falling+1?'RATES RISING — duration pressure, borrowing costs up':falling > rising+1?'RATES FALLING — easing financial conditions, duration rallying':'RATES MIXED/FLAT — no clear directional move today';
@@ -608,17 +607,20 @@ function renderBreadth(md, sd){
   const tnx=q['^TNX'], irx=q['^IRX'];
   const spread=tnx&&irx?tnx.price-irx.price:null;
   const spy=q['SPY'], rsp=q['RSP'];
-  const nya=q['^NYA'], nyhgh=q['^NYHGH'], nylow=q['^NYLOW'];
-  const advD=q['^ADVN'], decD=q['^DECN'];
-  const uvol=q['^UVOL'], dvol=q['^DVOL'];
-  const ma50d=q['^SP500MA50'], ma200d=q['^SP500MA200'];
+  const b=md.breadth||{};
+  const asQuote=v=>v!=null?{price:v}:undefined;
+  const nya=q['^NYA'], nyhgh=asQuote(b.new_highs), nylow=asQuote(b.new_lows);
+  const advD=asQuote(b.advancing), decD=asQuote(b.declining);
+  const uvol=asQuote(b.up_volume), dvol=asQuote(b.down_volume);
+  const ma50d=asQuote(b.pct_above_50d), ma200d=asQuote(b.pct_above_200d);
+  const breadthAsOf=b.date?new Date(b.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):null;
   const spyRspEl=$('breadthSpyRsp');
   const mag7El=$('breadthMag7');
 
   // ── ADVANCE / DECLINE ──────────────────────────────────────────────────────
   const adEl = $('adPanel');
   if(adEl){
-    if(advD?.price && decD?.price && advD.price > 100){
+    if(advD?.price && decD?.price){
       const adv=Math.round(advD.price), dec=Math.round(decD.price);
       const total=adv+dec, advPct=adv/total*100, ratio=adv/dec;
       const rc=ratio>2?'#00ff88':ratio>1?'#88cc00':ratio>0.5?'#ff8800':'#ff3355';
@@ -635,11 +637,12 @@ function renderBreadth(md, sd){
           <div class="stat-card"><div class="sc-lbl">ADV</div><div class="sc-val up">${fmtK(adv)}</div></div>
           <div class="stat-card"><div class="sc-lbl">DEC</div><div class="sc-val dn">${fmtK(dec)}</div></div>
           <div class="stat-card"><div class="sc-lbl">RATIO</div><div class="sc-val" style="color:${rc}">${fmt(ratio,2)}</div></div>
-        </div>`;
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;">S&amp;P 500 constituents · ${b.issues||''} issues · session of ${breadthAsOf||'—'}</div>`;
     } else {
       const secs=['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLB','XLRE','XLU','XLC'];
       const up=secs.filter(s=>(q[s]?.pct_change||0)>0).length;
-      adEl.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Sector proxy (live A/D unavailable)</div>
+      adEl.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Sector proxy — constituent breadth not yet computed for today</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
           <div class="stat-card"><div class="sc-lbl">SECTORS UP</div><div class="sc-val up">${up}/11</div></div>
           <div class="stat-card"><div class="sc-lbl">SECTORS DN</div><div class="sc-val dn">${11-up}/11</div></div>
@@ -875,13 +878,13 @@ function renderSentiment(md){
       <span class="sent-signal" style="color:${color};background:${color}22;border:1px solid ${color}44">${signal}</span>
     </div>`).join('');
   // Score — max 9 points
-  let score=0;
-  if(fgVal!=null){if(fgVal>55)score+=2;else if(fgVal>45)score+=1;else if(fgVal<30)score-=2;else score-=1;}
-  if(vixQ.price){if(vixQ.price<20)score+=2;else if(vixQ.price<25)score+=1;else if(vixQ.price>30)score-=2;else score-=1;}
-  if(pcr){if(pcr<0.7)score+=1;else if(pcr>1.1)score-=1;}
-  if(vvixVal){if(vvixVal<90)score+=1;else if(vvixVal>130)score-=1;}
-  if(skewVal){if(skewVal>145)score-=1;else if(skewVal<115)score+=1;}
-  const maxScore=9,pct=((score+maxScore)/(maxScore*2))*100;
+  let score=0,maxScore=0;
+  if(fgVal!=null){maxScore+=2;if(fgVal>55)score+=2;else if(fgVal>45)score+=1;else if(fgVal<30)score-=2;else score-=1;}
+  if(vixQ.price){maxScore+=2;if(vixQ.price<20)score+=2;else if(vixQ.price<25)score+=1;else if(vixQ.price>30)score-=2;else score-=1;}
+  if(pcr){maxScore+=1;if(pcr<0.7)score+=1;else if(pcr>1.1)score-=1;}
+  if(vvixVal){maxScore+=1;if(vvixVal<90)score+=1;else if(vvixVal>130)score-=1;}
+  if(skewVal){maxScore+=1;if(skewVal>145)score-=1;else if(skewVal<115)score+=1;}
+  const pct=maxScore?((score+maxScore)/(maxScore*2))*100:50;
   const sc=score>=2?'#00ff88':score>=0?'#ffcc00':score>=-2?'#ff8800':'#ff3355';
   const sl=score>=2?'RISK ON':score>=0?'NEUTRAL':score>=-2?'CAUTIOUS':'RISK OFF';
   $('sentScore').innerHTML=`
@@ -918,43 +921,7 @@ async function loadFGHistory() {
   const el = $('fgHistoryChart');
   if (!el) return;
 
-  // Hardcoded weekly baseline digitized from CNN F&G chart (Apr 2024 → Apr 2026)
-  // Format: [YYYY-MM-DD, score]
-  const BASELINE = [
-    ['2024-04-05',43],['2024-04-12',51],['2024-04-19',48],['2024-04-26',55],
-    ['2024-05-03',56],['2024-05-10',62],['2024-05-17',68],['2024-05-24',71],
-    ['2024-05-31',72],['2024-06-07',73],['2024-06-14',69],['2024-06-21',65],
-    ['2024-06-28',67],['2024-07-05',64],['2024-07-12',60],['2024-07-19',52],
-    ['2024-07-26',48],['2024-08-02',38],['2024-08-09',32],['2024-08-16',44],
-    ['2024-08-23',54],['2024-08-30',58],['2024-09-06',52],['2024-09-13',56],
-    ['2024-09-20',62],['2024-09-27',63],['2024-10-04',65],['2024-10-11',66],
-    ['2024-10-18',64],['2024-10-25',66],['2024-11-01',68],['2024-11-08',76],
-    ['2024-11-15',74],['2024-11-22',73],['2024-11-29',72],['2024-12-06',68],
-    ['2024-12-13',64],['2024-12-20',46],['2024-12-27',50],['2025-01-03',48],
-    ['2025-01-10',44],['2025-01-17',47],['2025-01-24',52],['2025-01-31',51],
-    ['2025-02-07',55],['2025-02-14',53],['2025-02-21',48],['2025-02-28',42],
-    ['2025-03-07',38],['2025-03-14',30],['2025-03-21',26],['2025-03-28',24],
-    ['2025-04-04',22],['2025-04-11',28],['2025-04-18',32],['2025-04-25',36],
-    ['2025-05-02',40],['2025-05-09',44],['2025-05-16',50],['2025-05-23',54],
-    ['2025-06-06',60],['2025-06-13',64],['2025-06-20',66],['2025-06-27',65],
-    ['2025-07-04',68],['2025-07-11',70],['2025-07-18',67],['2025-07-25',65],
-    ['2025-08-01',62],['2025-08-08',55],['2025-08-15',50],['2025-08-22',48],
-    ['2025-09-05',44],['2025-09-12',42],['2025-09-19',46],['2025-09-26',50],
-    ['2025-10-03',52],['2025-10-10',56],['2025-10-17',60],['2025-10-24',62],
-    ['2025-11-07',65],['2025-11-14',63],['2025-11-21',60],['2025-11-28',58],
-    ['2025-12-05',55],['2025-12-12',52],['2025-12-19',48],['2025-12-26',45],
-    ['2026-01-02',46],['2026-01-09',50],['2026-01-16',54],['2026-01-23',56],
-    ['2026-01-30',52],['2026-02-06',50],['2026-02-13',46],['2026-02-20',42],
-    ['2026-02-27',38],['2026-03-06',32],['2026-03-13',26],['2026-03-20',22],
-    ['2026-03-27',20],['2026-04-03',19],
-  ];
-
-  // Start with baseline as points
-  let points = BASELINE.map(([date, v]) => ({
-    t: new Date(date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}),
-    ts: new Date(date+'T12:00:00').getTime(),
-    v,
-  }));
+  let points = [];
 
   // Try to get live data and overlay/extend
   try {
@@ -966,26 +933,18 @@ async function loadFGHistory() {
       // If CNN returns a real time series, use it (it's more accurate)
       if (d.history && d.history.length > 10) {
         const livePoints = d.history.map(h => ({
-          t: new Date(h.t).toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+          t: new Date(h.t).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}),
           ts: h.t,
           v: h.v,
         }));
         // Sample to ~120 points
         const step = Math.max(1, Math.ceil(livePoints.length / 120));
         points = livePoints.filter((_,i) => i%step===0||i===livePoints.length-1);
-      } else {
-        // Patch in the live current value at the end
-        const liveV = d.value;
-        if (liveV != null) {
-          const today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'});
-          const last = points[points.length-1];
-          if (last.t === today) last.v = liveV;
-          else points.push({t:today, ts:Date.now(), v:liveV});
-        }
       }
     }
-  } catch(e) { /* baseline still shows */ }
+  } catch(e) {}
 
+  if (points.length < 2) { el.innerHTML = '<div class="no-data" style="padding:12px;">CNN did not return its history series.</div>'; return; }
   renderFGChart(el, points, points[points.length-1]?.v);
 }
 

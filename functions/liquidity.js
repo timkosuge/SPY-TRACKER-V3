@@ -4,28 +4,26 @@ export async function onRequestGet(context) {
     'Cache-Control': 'no-store'
   };
 
-  const fredBase = 'https://api.stlouisfed.org/fred/series/observations';
-  const fredKey = 'api_key=abcdefghijklmnop'; // FRED allows anonymous for some series
-
-  // Fetch a FRED series - no API key needed for public data via this endpoint
+  const apiKey = context.env?.FRED_API_KEY;
+  const errors = [];
   const fetchFRED = async (series, limit = 4) => {
+    if (!apiKey) { errors.push(`${series}: FRED_API_KEY not set`); return null; }
     try {
-      const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${series}&vintage_date=9999-12-31`;
-      const r = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/csv' }
-      });
-      if (!r.ok) return null;
-      const text = await r.text();
-      const lines = text.trim().split('\n').filter(l => !l.startsWith('DATE') && l.includes(','));
-      const recent = lines.slice(-limit);
-      return recent.map(l => {
-        const [date, val] = l.split(',');
-        return { date: date.trim(), value: val.trim() === '.' ? null : parseFloat(val.trim()) };
-      }).filter(d => d.value !== null);
-    } catch(e) {
+      const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${series}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=${limit * 3}`;
+      const r = await fetch(url, { headers: { 'User-Agent': 'SPY-Tracker/1.0' } });
+      if (!r.ok) { errors.push(`${series}: FRED HTTP ${r.status}`); return null; }
+      const data = await r.json();
+      const obs = (data.observations || [])
+        .map(o => ({ date: o.date, value: o.value === '.' ? null : parseFloat(o.value) }))
+        .filter(o => o.value !== null)
+        .reverse();
+      return obs.slice(-limit);
+    } catch (e) {
+      errors.push(`${series}: ${e.message}`);
       return null;
     }
   };
+  const SCALE = { WALCL: 1e6, WTREGEN: 1e6, RRPONTSYD: 1e9, M2SL: 1e9 };
 
   // Fetch FINRA margin data from their website
   const fetchFINRA = async () => {
@@ -102,9 +100,9 @@ export async function onRequestGet(context) {
     const latest = fedAssets[fedAssets.length - 1];
     const prev = fedAssets[fedAssets.length - 2];
     results.fed_balance = {
-      value: latest.value * 1e9,
+      value: latest.value * SCALE.WALCL,
       date: latest.date,
-      change_wow: (latest.value - prev.value) * 1e9,
+      change_wow: (latest.value - prev.value) * SCALE.WALCL,
       change_pct: ((latest.value - prev.value) / prev.value * 100)
     };
   }
@@ -114,9 +112,9 @@ export async function onRequestGet(context) {
     const latest = rrp[rrp.length - 1];
     const prev = rrp[rrp.length - 2];
     results.rrp = {
-      value: latest.value * 1e9,
+      value: latest.value * SCALE.RRPONTSYD,
       date: latest.date,
-      change_wow: (latest.value - prev.value) * 1e9,
+      change_wow: (latest.value - prev.value) * SCALE.RRPONTSYD,
       change_pct: ((latest.value - prev.value) / prev.value * 100)
     };
   }
@@ -126,9 +124,9 @@ export async function onRequestGet(context) {
     const latest = tga[tga.length - 1];
     const prev = tga[tga.length - 2];
     results.tga = {
-      value: latest.value * 1e9,
+      value: latest.value * SCALE.WTREGEN,
       date: latest.date,
-      change_wow: (latest.value - prev.value) * 1e9,
+      change_wow: (latest.value - prev.value) * SCALE.WTREGEN,
       change_pct: ((latest.value - prev.value) / prev.value * 100)
     };
   }
@@ -138,9 +136,9 @@ export async function onRequestGet(context) {
     const latest = m2[m2.length - 1];
     const prev = m2[m2.length - 2];
     results.m2 = {
-      value: latest.value * 1e9,
+      value: latest.value * SCALE.M2SL,
       date: latest.date,
-      change_mom: (latest.value - prev.value) * 1e9,
+      change_mom: (latest.value - prev.value) * SCALE.M2SL,
       change_pct: ((latest.value - prev.value) / prev.value * 100)
     };
   }
@@ -216,6 +214,7 @@ export async function onRequestGet(context) {
   results.regime = regime;
   results.regime_desc = regime_desc;
 
+  if (errors.length) results.errors = errors;
   return new Response(JSON.stringify(results), { headers: corsHeaders });
 }
 
