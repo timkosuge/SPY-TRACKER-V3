@@ -1633,90 +1633,6 @@
 
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     MAG 7 EARNINGS
-════════════════════════════════════════════════════════ -->
-<div class="tab-panel" id="panel-mag7">
-
-  <!-- Lookback toggles -->
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
-    <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;">LOOKBACK:</span>
-    <button class="mag7-lb-btn active" id="mag7lb-all"  onclick="mag7SetLookback('all',this)">2020–2024</button>
-    <button class="mag7-lb-btn" id="mag7lb-r2023" onclick="mag7SetLookback('r2023',this)">2023–2024</button>
-    <button class="mag7-lb-btn" id="mag7lb-r2026" onclick="mag7SetLookback('r2026',this)">2026</button>
-  </div>
-
-  <!-- Aggregate stat cards -->
-  <div id="mag7Cards" style="margin-bottom:14px;"></div>
-
-  <!-- Two charts: window bar chart + pre-earnings drift histogram -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-    <div class="panel">
-      <div class="panel-label">⬡ SPY RETURN BY WINDOW — AVG % ACROSS ALL QUARTERS</div>
-      <div style="font-size:11px;color:var(--text3);padding:6px 8px 2px;line-height:1.5;">
-        Average SPY % return across 6 windows surrounding MAG 7 earnings clusters.
-        <strong style="color:#ffcc00;">Pre</strong> = drift before earnings begin.
-        <strong style="color:var(--cyan);">During</strong> = while companies report.
-        <strong style="color:#8855ff;">Post</strong> = aftermath.
-        <strong style="color:#00ff88;">Full</strong> = entire window combined.
-      </div>
-      <div id="mag7WindowChart"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-label">⬡ 3-DAY PRE-EARNINGS DRIFT — ALL QUARTERS</div>
-      <div style="font-size:11px;color:var(--text3);padding:6px 8px 2px;line-height:1.5;">
-        Distribution of SPY's 3-day return immediately before each MAG 7 earnings cluster starts.
-        Shows whether there is a consistent pre-earnings drift pattern (risk-on positioning).
-      </div>
-      <div id="mag7PreChart"></div>
-    </div>
-  </div>
-
-  <!-- Quarter-by-quarter table -->
-  <div class="panel" style="margin-bottom:14px;">
-    <div class="panel-label">⬡ QUARTER-BY-QUARTER — SPY BEHAVIOR AROUND MAG 7 EARNINGS</div>
-    <div style="max-height:400px;overflow-y:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead style="position:sticky;top:0;background:var(--bg2);">
-          <tr>
-            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">QUARTER</th>
-            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">WINDOW</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">5D PRE</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#ffcc00;border-bottom:1px solid var(--border);">3D PRE</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">DURING</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#8855ff;border-bottom:1px solid var(--border);">3D POST</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#8855ff;border-bottom:1px solid var(--border);">5D POST</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:#00ff88;border-bottom:1px solid var(--border);">FULL WINDOW</th>
-          </tr>
-        </thead>
-        <tbody id="mag7TableBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Per-company day-of table -->
-  <div class="panel">
-    <div class="panel-label">⬡ SPY ON EACH EARNINGS DAY — COMPANY BY COMPANY</div>
-    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;" id="mag7CompanyFilters"></div>
-    <div style="max-height:360px;overflow-y:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead style="position:sticky;top:0;background:var(--bg2);">
-          <tr>
-            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DATE</th>
-            <th style="padding:6px 8px;text-align:left;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">COMPANY</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">SPY OPEN</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">SPY CLOSE</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">GAP %</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--cyan);border-bottom:1px solid var(--border);">DAY RETURN</th>
-            <th style="padding:6px 8px;text-align:right;font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);border-bottom:1px solid var(--border);">DAY RANGE</th>
-          </tr>
-        </thead>
-        <tbody id="mag7CompanyBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-</div>
 
 <!-- ═══════════════════════════════════════════════════════
      EVENTS TAB
@@ -1724,7 +1640,6 @@
 <div class="tab-panel" id="panel-events">
   <div class="es-subtabs">
     <div class="es-subtab active" onclick="evSub('releases',this)">DATA RELEASES</div>
-    <div class="es-subtab" onclick="evSub('mag7earnings',this)">MAG 7 EARNINGS</div>
     <div class="es-subtab" onclick="evSub('holidays',this)">HOLIDAYS</div>
   </div>
 
@@ -1772,16 +1687,6 @@
     </div>
   </div>
 
-  <!-- MAG 7 EARNINGS -->
-  <div class="es-panel" id="ev-mag7earnings" style="padding:20px;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-      <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);letter-spacing:1px;">LOOKBACK:</span>
-      <button class="rel-lb-btn active" id="ev-mag7lb-all"   onclick="evMag7Lookback('all',this)">2020–2024</button>
-      <button class="rel-lb-btn" id="ev-mag7lb-r2023"        onclick="evMag7Lookback('r2023',this)">2023–2024</button>
-      <button class="rel-lb-btn" id="ev-mag7lb-r2026"        onclick="evMag7Lookback('r2026',this)">2026</button>
-    </div>
-    <div id="evMag7Content"><div class="no-data">Loading...</div></div>
-  </div>
 
   <!-- HOLIDAYS -->
   <div class="es-panel" id="ev-holidays" style="padding:20px;">
@@ -2991,7 +2896,7 @@
 <!-- FLOATING CHAT -->
 
 
-<script src="session_vol_profile.js"></script><script src="intraday_vol_profile.js"></script><script src="intraday_vol_stats.js"></script><script src="window_stats.js"></script><script src="gap_stats.js"></script><script src="large_gap_stats.js"></script><script src="analog_data.js"></script><script src="mag7_earnings.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script>
+<script src="session_vol_profile.js"></script><script src="intraday_vol_profile.js"></script><script src="intraday_vol_stats.js"></script><script src="window_stats.js"></script><script src="gap_stats.js"></script><script src="large_gap_stats.js"></script><script src="analog_data.js"></script><script src="relief_data.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script>
 <script>
 // ── Theme toggle ──────────────────────────────────────────────────────────────
 function toggleTheme() {
@@ -3847,7 +3752,7 @@ document.addEventListener('DOMContentLoaded', spyPlayerInit);
 </div>
 </div><!-- #panel-edgestats -->
 
-<script src="edge_stats_data.js"></script>
+<script src="edge_stats_data.js"></script><script src="edge_stats.js"></script><script src="freshness.js"></script>
 
 <!-- ═══════════════ AI CHAT PANEL ═══════════════ -->
 <!-- aiTrigger moved to sidebar — kept as hidden anchor for JS compatibility -->
@@ -5597,5 +5502,6 @@ function _countdownTripleClick() {
 </script>
 
 <script src="ignition.js"></script>
+<div id="freshnessBar" style="position:fixed;left:0;right:0;bottom:0;padding:3px 10px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);background:var(--bg2);border-top:1px solid var(--border);z-index:900;"></div>
 </body>
 </html>

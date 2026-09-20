@@ -5,6 +5,7 @@ Full pattern breakdown: gap context, day direction at entry, reversal/continuati
 move bins, cross table. Lookback x DOW filters.
 """
 import sqlite3, json, statistics
+from payload_meta import stamp
 from datetime import date, datetime, timedelta
 from collections import defaultdict
 
@@ -207,6 +208,7 @@ def main():
                 relationship=_relationship(sub))
 
     with open(OUT_PATH,'w') as f:
+        output.update(stamp(conn))
         f.write('const WINDOW_STATS = ')
         json.dump(output, f, separators=(',',':'))
         f.write(';\n')

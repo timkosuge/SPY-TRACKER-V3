@@ -2042,201 +2042,9 @@ function renderExpiryBehavior(md) {
 
 
 
-// ─── MAG 7 EARNINGS SPY ANALYSIS ─────────────────────────────────────────────
-let _mag7Lookback = 'all';
-
-window.mag7SetLookback = function(lb, btn) {
-  _mag7Lookback = lb;
-  document.querySelectorAll('.mag7-lb-btn').forEach(b => b.classList.remove('active'));
-  if(btn) btn.classList.add('active');
-  renderMag7();
-};
-
-window._mag7ActiveCompany = null;
-window.mag7FilterCompany = function(co, btn) {
-  _mag7ActiveCompany = _mag7ActiveCompany === co ? null : co;
-  document.querySelectorAll('#mag7CompanyFilters button').forEach(b => b.classList.remove('active'));
-  if(_mag7ActiveCompany && btn) btn.classList.add('active');
-  _mag7RenderCompanyTable();
-};
-
-function renderMag7() {
-  if(typeof MAG7_EARNINGS_DATA === 'undefined') return;
-  const D = MAG7_EARNINGS_DATA;
-  const allResults = D.results;
-
-  // Sync button active states to current lookback value
-  document.querySelectorAll('.mag7-lb-btn').forEach(b => b.classList.remove('active'));
-  const activeBtn = document.getElementById(
-    _mag7Lookback === 'r2023' ? 'mag7lb-r2023' :
-    _mag7Lookback === 'r2026' ? 'mag7lb-r2026' : 'mag7lb-all'
-  );
-  if(activeBtn) activeBtn.classList.add('active');
-
-  // Filter by lookback
-  let results;
-  if(_mag7Lookback === 'r2023') results = allResults.filter(r => r.year >= 2023);
-  else if(_mag7Lookback === 'r2026') results = allResults.filter(r => r.year >= 2026);
-  else results = allResults;
-
-  const n = results.length;
-  const avg = key => { const v=results.map(r=>r[key]).filter(x=>x!=null); return v.length?v.reduce((a,b)=>a+b,0)/v.length:0; };
-  const pctUp = key => { const v=results.map(r=>r[key]).filter(x=>x!=null); return v.length?v.filter(x=>x>0).length/v.length*100:0; };
-  const clr = v => v > 0 ? '#00ff88' : v < 0 ? '#ff3355' : 'var(--text2)';
-  const fmt2 = v => v != null ? (v>=0?'+':'')+v.toFixed(2)+'%' : '—';
-
-  // ── Stat cards ──────────────────────────────────────────────────────────────
-  const cardsEl = $('mag7Cards');
-  if(cardsEl) {
-    const windows = [
-      {l:'5D PRE-EARNINGS', k:'pre5_ret', c:'#ffcc00', note:'5td before first earnings'},
-      {l:'3D PRE-EARNINGS', k:'pre3_ret', c:'#ffcc00', note:'Strongest signal window'},
-      {l:'DURING CLUSTER',  k:'during_ret', c:'var(--cyan)', note:'First → last earnings day'},
-      {l:'3D POST-EARNINGS',k:'post3_ret', c:'#8855ff', note:'3td after last earnings'},
-      {l:'5D POST-EARNINGS',k:'post5_ret', c:'#8855ff', note:'5td after last earnings'},
-      {l:'FULL WINDOW',     k:'full_ret',  c:'#00ff88', note:'Pre5 through Post5'},
-    ];
-    cardsEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;">
-      ${windows.map(w => {
-        const a = avg(w.k), u = pctUp(w.k);
-        const uc = u >= 65 ? '#00ff88' : u >= 50 ? '#ffcc00' : '#ff3355';
-        return `<div class="panel" style="text-align:center;border-top:3px solid ${w.c};padding:10px;">
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:5px;">${w.l}</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${clr(a)};">${a>=0?'+':''}${a.toFixed(2)}%</div>
-          <div style="font-size:10px;color:${uc};margin-top:3px;">${u.toFixed(0)}% up · n=${n}</div>
-          <div style="font-size:9px;color:var(--text3);margin-top:2px;">${w.note}</div>
-        </div>`;
-      }).join('')}
-    </div>`;
-  }
-
-  // ── Window bar chart ────────────────────────────────────────────────────────
-  const wcEl = $('mag7WindowChart');
-  if(wcEl) {
-    const bars = [
-      {l:'5d Pre',  v:avg('pre5_ret'),   c:'#ffcc00'},
-      {l:'3d Pre',  v:avg('pre3_ret'),   c:'#ffcc00'},
-      {l:'During',  v:avg('during_ret'), c:'#00ccff'},
-      {l:'3d Post', v:avg('post3_ret'),  c:'#8855ff'},
-      {l:'5d Post', v:avg('post5_ret'),  c:'#8855ff'},
-      {l:'Full',    v:avg('full_ret'),   c:'#00ff88'},
-    ];
-    const maxAbs = Math.max(...bars.map(b=>Math.abs(b.v)), 0.5);
-    const M7_BAR_H = 90;
-    wcEl.innerHTML = `<div style="display:flex;gap:8px;align-items:flex-end;justify-content:space-around;height:${M7_BAR_H+40}px;padding:8px 4px 4px;">
-      ${bars.map(b => {
-        const h = Math.max(Math.abs(b.v)/maxAbs*M7_BAR_H, 4);
-        const col = clr(b.v);
-        return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;height:100%;justify-content:flex-end;">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${col};font-weight:bold;">${b.v>=0?'+':''}${b.v.toFixed(2)}%</div>
-          <div style="width:70%;height:${h.toFixed(0)}px;background:${b.c}99;border-radius:${b.v>=0?'4px 4px 0 0':'0 0 4px 4px'};"></div>
-          <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${b.l}</div>
-        </div>`;
-      }).join('')}
-    </div>
-    <div style="font-size:10px;color:var(--text3);text-align:center;margin-top:4px;">avg SPY return per window · ${n} quarters</div>`;
-  }
-
-  // ── Pre-earnings drift scatter ───────────────────────────────────────────────
-  const pcEl = $('mag7PreChart');
-  if(pcEl) {
-    const vals = results.map(r => r.pre3_ret).filter(x=>x!=null);
-    const buckets = [{l:'<-2%',min:-99,max:-2},{l:'-2 to -1',min:-2,max:-1},{l:'-1 to 0',min:-1,max:0},{l:'0 to +1',min:0,max:1},{l:'+1 to +2',min:1,max:2},{l:'>+2%',min:2,max:99}];
-    const counts = buckets.map(b=>vals.filter(v=>v>=b.min&&v<b.max).length);
-    const maxC = Math.max(...counts,1);
-    const M7_PRE_BAR_H = 90;
-    pcEl.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:flex-end;height:${M7_PRE_BAR_H+28}px;padding:4px 4px 0;">
-        ${buckets.map((b,i)=>{
-          const c=counts[i], h=c?Math.max(Math.round(c/maxC*M7_PRE_BAR_H),4):0;
-          const bc = b.min>=0?'#00ff8899':'#ff335599';
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:100%;">
-            <div style="font-size:9px;color:rgba(255,255,255,0.6);">${c||''}</div>
-            <div style="width:100%;height:${h}px;background:${bc};border-radius:2px 2px 0 0;"></div>
-          </div>`;
-        }).join('')}
-      </div>
-      <div style="display:flex;gap:8px;padding:2px 4px;">
-        ${buckets.map(b=>`<div style="flex:1;text-align:center;font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text3);">${b.l}</div>`).join('')}
-      </div>
-      <div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">3-day pre-earnings SPY return distribution · ${pctUp('pre3_ret').toFixed(0)}% positive · avg ${avg('pre3_ret')>=0?'+':''}${avg('pre3_ret').toFixed(2)}%</div>`;
-  }
-
-  // ── Quarter table ───────────────────────────────────────────────────────────
-  const tbody = $('mag7TableBody');
-  if(tbody) {
-    tbody.innerHTML = [...results].reverse().map(r => {
-      const c = v => v==null?'var(--text3)':v>0?'#00ff88':v<0?'#ff3355':'var(--text2)';
-      return `<tr style="border-bottom:1px solid var(--border)22;">
-        <td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);font-weight:bold;">${r.label}</td>
-        <td style="padding:5px 8px;font-size:10px;color:var(--text3);">${r.first_date} → ${r.last_date} (${r.span_td}td)</td>
-        <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:${c(r.pre5_ret)};">${fmt2(r.pre5_ret)}</td>
-        <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;color:${c(r.pre3_ret)};">${fmt2(r.pre3_ret)}</td>
-        <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:${c(r.during_ret)};">${fmt2(r.during_ret)}</td>
-        <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:${c(r.post3_ret)};">${fmt2(r.post3_ret)}</td>
-        <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:${c(r.post5_ret)};">${fmt2(r.post5_ret)}</td>
-        <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:bold;color:${c(r.full_ret)};">${fmt2(r.full_ret)}</td>
-      </tr>`;
-    }).join('');
-  }
-
-  // ── Company filter buttons ──────────────────────────────────────────────────
-  const filterEl = $('mag7CompanyFilters');
-  if(filterEl) {
-    const companies = ['AAPL','MSFT','AMZN','GOOGL','META','TSLA','NVDA'];
-    const colors    = {'AAPL':'#aaaaaa','MSFT':'#00a4ef','AMZN':'#ff9900','GOOGL':'#4285f4','META':'#0668e1','TSLA':'#e31937','NVDA':'#76b900'};
-    filterEl.innerHTML = '<span style="font-family:\'Orbitron\',monospace;font-size:9px;color:var(--text3);">FILTER BY:</span>' +
-      companies.map(t => `<button onclick="mag7FilterCompany('${t}',this)"
-        style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 10px;
-               background:${colors[t]}22;border:1px solid ${colors[t]}88;
-               color:${colors[t]};border-radius:3px;cursor:pointer;">
-        ${t}
-      </button>`).join('') +
-      '<button onclick="mag7FilterCompany(null,null)" style="font-family:\'Orbitron\',monospace;font-size:9px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:3px;cursor:pointer;">ALL</button>';
-  }
-
-  window._mag7Results = results;
-  _mag7RenderCompanyTable();
-}
-
-function _mag7RenderCompanyTable() {
-  const results = window._mag7Results || [];
-  const tbody = $('mag7CompanyBody');
-  if(!tbody) return;
-  const clr = v => v==null?'var(--text3)':v>0?'#00ff88':v<0?'#ff3355':'var(--text2)';
-  const fmt2 = v => v!=null?(v>=0?'+':'')+v.toFixed(3)+'%':'—';
-  const colors = {'AAPL':'#aaaaaa','MSFT':'#00a4ef','AMZN':'#ff9900','GOOGL':'#4285f4','META':'#0668e1','TSLA':'#e31937','NVDA':'#76b900'};
-  const co = window._mag7ActiveCompany;
-
-  // Flatten all company_stats
-  const rows = [];
-  results.forEach(r => {
-    r.company_stats.forEach(cs => {
-      if(!co || cs.ticker === co) rows.push({...cs, quarter: r.label});
-    });
-  });
-  rows.sort((a,b) => b.date.localeCompare(a.date));
-
-  tbody.innerHTML = rows.map(s => {
-    const tc = colors[s.ticker] || 'var(--text2)';
-    return `<tr style="border-bottom:1px solid var(--border)22;">
-      <td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">${s.date}</td>
-      <td style="padding:5px 8px;">
-        <span style="font-family:'Orbitron',monospace;font-size:9px;color:${tc};padding:2px 6px;background:${tc}22;border-radius:2px;">${s.ticker}</span>
-        <span style="font-size:10px;color:var(--text3);margin-left:4px;">${s.quarter}</span>
-      </td>
-      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">$${(s.open||0).toFixed(2)}</td>
-      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${clr(s.day_ret)};">$${(s.close||0).toFixed(2)}</td>
-      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:${clr(s.gap)};">${fmt2(s.gap)}</td>
-      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:bold;color:${clr(s.day_ret)};">${fmt2(s.day_ret)}</td>
-      <td style="padding:5px 8px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--cyan);">$${(s.range||0).toFixed(2)}</td>
-    </tr>`;
-  }).join('');
-}
-
 // ─── HUB EVENT INSIGHT ───────────────────────────────────────────────────────
 // Picks the most relevant upcoming event and renders a data-driven paragraph.
-// Uses RELEASE_DATA + MAG7_EARNINGS_DATA already loaded on the page.
+// Uses RELEASE_DATA already loaded on the page.
 // Rotates through events automatically — stays accurate without manual updates.
 
 function renderHubEventInsight() {
@@ -2255,12 +2063,6 @@ function renderHubEventInsight() {
     (upcoming.fomc ||[]).forEach(d => events.push({type:'fomc', date:d}));
   }
 
-  const mag7Windows = [
-    {type:'mag7', date:'2026-04-23', label:'Q1 2026 MAG7 Earnings'},
-    {type:'mag7', date:'2026-07-22', label:'Q2 2026 MAG7 Earnings'},
-    {type:'mag7', date:'2026-10-21', label:'Q3 2026 MAG7 Earnings'},
-  ];
-  mag7Windows.filter(e => e.date >= today).forEach(e => events.push(e));
 
   // Sort by date, filter to future only (strictly future - not today or past)
   const future = events.filter(e => e.date > today).sort((a,b) => a.date.localeCompare(b.date));
@@ -2274,8 +2076,8 @@ function renderHubEventInsight() {
   const daysAway = Math.ceil((new Date(next.date+'T12:00:00') - new Date()) / (1000*60*60*24));
 
   // Show loading state while AI generates
-  const typeColors = {cpi:'#ff8800', nfp:'#00ccff', fomc:'#8855ff', mag7:'#00ff88'};
-  const typeLabels = {cpi:'CPI', nfp:'NFP', fomc:'FOMC', mag7:'MAG7'};
+  const typeColors = {cpi:'#ff8800', nfp:'#00ccff', fomc:'#8855ff'};
+  const typeLabels = {cpi:'CPI', nfp:'NFP', fomc:'FOMC'};
   const color = typeColors[next.type] || 'var(--cyan)';
   const label = typeLabels[next.type] || next.type.toUpperCase();
 

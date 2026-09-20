@@ -5,6 +5,7 @@ Counts decline events from any 20-day rolling peak (matches original 156-event c
 """
 
 import sqlite3, json
+from payload_meta import stamp
 from datetime import date
 
 DB_PATH = 'spy_data.db'
@@ -114,6 +115,7 @@ def main():
     }
     
     with open(OUT_PATH, 'w') as f:
+        output.update(stamp(conn))
         f.write('const DECLINE_DATA = ')
         json.dump(output, f, separators=(',', ':'))
         f.write(';\n')

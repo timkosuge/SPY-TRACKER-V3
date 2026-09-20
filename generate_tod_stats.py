@@ -13,6 +13,7 @@ Stats computed:
   - % of days where first 30min contains HOD or LOD
 """
 import sqlite3, json, os
+from payload_meta import stamp
 from datetime import datetime
 
 DB_PATH = "spy_data.db"
@@ -165,6 +166,7 @@ def main():
         },
     }
 
+    output.update(stamp(conn))
     js = f"const TOD_STATS = {json.dumps(output, separators=(',', ':'))};"
     with open("tod_stats.js", "w") as f:
         f.write(js)

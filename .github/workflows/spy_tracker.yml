@@ -83,6 +83,22 @@ jobs:
         if: steps.clock.outputs.run == 'true'
         run: python generate_relief_data.py
 
+      - name: Generate period aggregates
+        if: steps.clock.outputs.run == 'true'
+        run: python generate_aggregate_csv.py
+
+      - name: Generate large gap stats
+        if: steps.clock.outputs.run == 'true'
+        run: python generate_large_gap_stats.py
+
+      - name: Generate release data
+        if: steps.clock.outputs.run == 'true'
+        run: python generate_release_data.py
+
+      - name: Generate edge stats
+        if: steps.clock.outputs.run == 'true'
+        run: python generate_edge_stats.py
+
       - name: Push database to data branch
         if: steps.clock.outputs.run == 'true'
         run: |
@@ -102,7 +118,9 @@ jobs:
                      intraday_library.js expiry_data.js \
                      intraday_patterns.js decline_data.js relief_data.js \
                      window_stats.js gap_stats.js \
-                     session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js
+                     session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
+                     large_gap_stats.js release_data.js edge_stats_data.js \
+                     data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv
           if git diff --staged --quiet; then
             echo "No payload changes"
             exit 0

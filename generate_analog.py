@@ -3,6 +3,7 @@ generate_analog.py — Auto-runs daily in GitHub Actions after fetch_and_analyze
 Finds optimal anchor date + top 5 historical analogs, writes analog_data.js
 """
 import sqlite3, math, json
+from payload_meta import stamp
 from datetime import date, timedelta
 
 DB_PATH  = 'spy_data.db'
@@ -165,6 +166,7 @@ def main():
     }
 
     with open(OUT_PATH,'w') as f:
+        out.update(stamp(conn))
         f.write('const ANALOG_DATA = ')
         json.dump(out, f, separators=(',',':'))
         f.write(';\n')

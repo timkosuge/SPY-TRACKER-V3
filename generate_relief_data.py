@@ -31,6 +31,7 @@ Output schema per threshold:
 """
 
 import sqlite3, json, statistics
+from payload_meta import stamp
 from datetime import date, timedelta
 
 DB_PATH      = 'spy_data.db'
@@ -281,6 +282,7 @@ def main():
     output = {'meta': meta, **all_results}
 
     with open(OUT_PATH, 'w') as f:
+        output.update(stamp(conn))
         f.write('const RELIEF_DATA = ')
         json.dump(output, f, separators=(',', ':'))
         f.write(';\n')

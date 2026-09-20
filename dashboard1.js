@@ -59,7 +59,6 @@ function _switchPanelOnly(id) {
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
   if(id==='overview' && typeof _md!=='undefined' && _md) { try { renderOverview(_md); } catch(e){ console.warn('overview:',e); } }
-  if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
   if(id==='macro-overview') { try { if(typeof renderMacro==='function') renderMacro(); } catch(e){ console.warn('macro:',e); } }
   if(id==='transition') { try { if(typeof renderTransition==='function') renderTransition(); } catch(e){ console.warn('transition:',e); } }

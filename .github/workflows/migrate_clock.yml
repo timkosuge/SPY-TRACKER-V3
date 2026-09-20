@@ -59,7 +59,9 @@ jobs:
                      intraday_library.js expiry_data.js \
                      intraday_patterns.js decline_data.js relief_data.js \
                      window_stats.js gap_stats.js \
-                     session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js
+                     session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
+                     large_gap_stats.js release_data.js edge_stats_data.js \
+                     data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv
           if git diff --staged --quiet; then
             echo "No changes"
             exit 0
