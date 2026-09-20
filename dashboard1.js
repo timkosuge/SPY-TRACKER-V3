@@ -58,12 +58,6 @@ function _switchPanelOnly(id) {
   if(id==='analog') { if(typeof renderAnalog==='function') renderAnalog(); }
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
-  if(id==='floor') {
-    if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50);
-    if(typeof FLOOR!=='undefined') FLOOR.tabUnread=0;
-    const b=document.getElementById('floor-tab-badge');
-    if(b){b.style.display='none';b.textContent='';}
-  }
   if(id==='overview' && typeof _md!=='undefined' && _md) { try { renderOverview(_md); } catch(e){ console.warn('overview:',e); } }
   if(id==='mag7') { try { renderMag7(); } catch(e){ console.warn('mag7:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
@@ -116,12 +110,6 @@ function switchTab(id){
   const p=$('panel-'+id); if(p)p.classList.add('active');
   if(id==='media') initMediaTab();
   if(id==='journal') renderJournalEntries();
-  if(id==='floor') {
-    if(typeof renderFloorTab==='function') setTimeout(renderFloorTab,50);
-    if(typeof FLOOR!=='undefined') FLOOR.tabUnread=0;
-    const b=document.getElementById('floor-tab-badge');
-    if(b){b.style.display='none';b.textContent='';}
-  }
   if(id==='analog') { renderAnalog(); }
   if(id==='hub') { try { if(typeof renderHub==='function'&&window._md) renderHub(window._md,window._sd||{}); } catch(e){ console.warn('hub:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }

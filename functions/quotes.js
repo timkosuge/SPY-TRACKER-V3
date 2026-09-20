@@ -7,7 +7,6 @@
 export async function onRequestGet(context) {
   const headers = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
     'Cache-Control': 'no-store',
   };
 

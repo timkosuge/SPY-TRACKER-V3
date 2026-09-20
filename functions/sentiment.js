@@ -10,13 +10,12 @@
  */
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Cache-Control': 'no-store, no-cache, must-revalidate',
   'Content-Type': 'application/json',
 };
 
-function json(data) {
-  return new Response(JSON.stringify(data), { headers: CORS });
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: CORS });
 }
 
 export async function onRequestOptions() {
@@ -34,12 +33,16 @@ export async function onRequestPost(context) {
     const { password, date, bullish, neutral, bearish } = body;
 
     // Simple password check — set AAII_PASSWORD in CF Pages env vars
-    const pw = env.AAII_PASSWORD || 'spytracker';
+    const pw = env.AAII_PASSWORD;
+    if (!pw) return json({ error: 'Not configured' }, 503);
     if (password !== pw) return json({ error: 'Unauthorized' }, 401);
 
-    if (!date || bullish == null || neutral == null || bearish == null) {
-      return json({ error: 'Missing fields' }, 400);
+    const nums = [bullish, neutral, bearish].map(Number);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || nums.some(v => !Number.isFinite(v) || v < 0 || v > 100)) {
+      return json({ error: 'Invalid fields' }, 400);
     }
+    const total = nums[0] + nums[1] + nums[2];
+    if (total < 99 || total > 101) return json({ error: 'Bullish, neutral and bearish must sum to 100' }, 400);
 
     const spread = Math.round((bullish - bearish) * 10) / 10;
 
@@ -61,7 +64,8 @@ export async function onRequestPost(context) {
 
     return json({ ok: true, date, bullish, neutral, bearish, spread });
   } catch (e) {
-    return json({ error: e.message }, 500);
+    console.warn('sentiment.js: override write failed:', e.message);
+    return json({ error: 'Write failed' }, 500);
   }
 }
 
@@ -72,15 +76,9 @@ export async function onRequestGet(context) {
   try {
     const db = env.DB;
     if (db) {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS aaii_override (
-          id INTEGER PRIMARY KEY,
-          date TEXT, bullish REAL, neutral REAL, bearish REAL,
-          spread REAL, updated_at TEXT
-        )
-      `).run();
       const row = await db.prepare('SELECT * FROM aaii_override WHERE id=1').first();
       if (row && row.bullish) {
+        const ageDays = (Date.now() - Date.parse(row.updated_at)) / 86400000;
         console.log(`sentiment.js: served from D1 override (${row.date})`);
         return json({
           date:        row.date,
@@ -90,7 +88,7 @@ export async function onRequestGet(context) {
           spread:      row.spread,
           avg_bullish: 37.5,
           avg_bearish: 31.0,
-          stale:       false,
+          stale:       !(ageDays < 8),
           source:      'manual_override',
           updated:     row.updated_at,
         });

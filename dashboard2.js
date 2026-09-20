@@ -1360,10 +1360,6 @@ function loadIntradayCache() {
 }
 const chatHistory = [];
 
-function toggleChat() {
-  const p = document.getElementById('aiPanel');
-  p.classList.toggle('open');
-}
 
 // Build compact data context for AI
 function buildContext(md, sd) {
@@ -1697,7 +1693,8 @@ function videoLibRender() {
     el.innerHTML = '<div style="color:var(--text3);font-size:11px;text-align:center;padding:20px;">No videos yet' + (VL.activeTopic !== 'ALL' ? ' in this topic' : '') + '.</div>';
     return;
   }
-  el.innerHTML = list.map(v => {
+  VL.rendered = list;
+  el.innerHTML = list.map((v, i) => {
     const thumb = v.video_id
       ? `<img src="https://img.youtube.com/vi/${v.video_id}/mqdefault.jpg" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;border-radius:3px 3px 0 0;" loading="lazy" onerror="this.style.display='none'">`
       : `<div style="width:100%;aspect-ratio:16/9;background:var(--bg3);display:flex;align-items:center;justify-content:center;border-radius:3px 3px 0 0;"><span style="font-size:28px;opacity:0.25;">▶</span></div>`;
@@ -1705,7 +1702,7 @@ function videoLibRender() {
     return `
       <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;margin-bottom:8px;overflow:hidden;cursor:pointer;transition:border-color 0.15s;"
         onmouseover="this.style.borderColor='rgba(0,204,255,0.35)'" onmouseout="this.style.borderColor='var(--border)'"
-        onclick="videoLibPlay(${JSON.stringify(v).replace(/"/g,'&quot;')})">
+        onclick="videoLibPlay(${i})">
         ${thumb}
         <div style="padding:8px 10px;">
           <div style="font-size:12px;color:var(--text1);line-height:1.4;margin-bottom:4px;">${videoLibEsc(v.title)}</div>
@@ -1728,7 +1725,9 @@ function videoLibEsc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function videoLibPlay(v) {
+function videoLibPlay(i) {
+  const v = (VL.rendered || [])[i];
+  if (!v) return;
   if (v.video_id) {
     playVideoId(v.video_id, v.title);
   } else {
@@ -1987,41 +1986,6 @@ function clearJournal() {
 
 // ─── TAB INIT HOOKS ────────────────────────────────────────────────────────────
 // Chat
-async function sendChat() {
-  const input = document.getElementById('aiInput');
-  const btn = document.getElementById('aiSendBtn');
-  const msgs = document.getElementById('aiMessages');
-  const text = input.value.trim();
-  if (!text) return;
-
-  input.value = '';
-  btn.disabled = true;
-
-  // Add user message
-  chatHistory.push({ role: 'user', content: text });
-  msgs.innerHTML += `<div class="ai-msg user">${text}</div>`;
-  msgs.innerHTML += `<div class="ai-msg thinking" id="thinkingMsg">⟳ Thinking...</div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-
-  try {
-    const context = buildContext(_md, _sd);
-    const system = `You are a trading assistant with access to real-time SPY dashboard data. Be concise, specific, and use actual numbers.
-
-Data available: price/OHLC (daily/weekly/monthly), WEM range, HVNs, unfilled gaps (above AND below current price), volume vs 30d avg, VIX/VVIX/SKEW, PCR (vol+OI), GEX (flip/support/resistance from CBOE), max pain by expiry (labeled: Mon/Wed/Fri=0DTE, Fri=also weekly OPEX, 3rd-Fri=monthly OPEX — Wednesday is NOT the weekly expiry), breadth (A/D ratio, up/down volume ratio, % stocks above 50/200-day MA, sector performance), macro (rates, DXY, gold, oil, BTC), and ATH distance.
-
-CURRENT DATA:\n${context}`;
-    const reply = await callAI(chatHistory, system, 600);
-    chatHistory.push({ role: 'assistant', content: reply });
-    document.getElementById('thinkingMsg')?.remove();
-    msgs.innerHTML += `<div class="ai-msg assistant">${reply.replace(/\n/g,'<br>')}</div>`;
-  } catch(e) {
-    document.getElementById('thinkingMsg')?.remove();
-    msgs.innerHTML += `<div class="ai-msg thinking">Error: ${e.message}</div>`;
-  }
-
-  btn.disabled = false;
-  msgs.scrollTop = msgs.scrollHeight;
-}
 
 // Pattern alerts
 function runPatternAlerts(md, sd) {

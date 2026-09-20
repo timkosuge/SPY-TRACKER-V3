@@ -7,7 +7,6 @@
  */
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Content-Type': 'application/json',
   'Cache-Control': 'no-store',
 };

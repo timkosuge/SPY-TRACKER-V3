@@ -6,7 +6,6 @@
 // POST /blog { action:'delete', password, postId }              → delete post
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
@@ -100,7 +99,8 @@ export async function onRequestPost(context) {
   let body;
   try { body = await request.json(); } catch { return err('Invalid JSON'); }
 
-  const BLOG_PASSWORD = env.BLOG_PASSWORD || env.CFP_PASSWORD || 'Tetsuo314!';
+  const BLOG_PASSWORD = env.BLOG_PASSWORD;
+  if (!BLOG_PASSWORD) return err('Not configured', 503);
 
   if (body.action === 'publish') {
     if (body.password !== BLOG_PASSWORD) return err('Wrong password', 403);

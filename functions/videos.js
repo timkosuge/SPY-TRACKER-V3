@@ -5,7 +5,6 @@
 // POST /videos { action:'delete', password, id }                       → delete video
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
@@ -93,7 +92,8 @@ export async function onRequestPost(context) {
   let body;
   try { body = await request.json(); } catch { return err('Invalid JSON'); }
 
-  const PASSWORD = env.BLOG_PASSWORD || env.CFP_PASSWORD || 'Tetsuo314!';
+  const PASSWORD = env.BLOG_PASSWORD;
+  if (!PASSWORD) return err('Not configured', 503);
 
   if (body.action === 'add') {
     if (body.password !== PASSWORD) return err('Wrong password', 403);

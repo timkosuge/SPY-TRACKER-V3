@@ -1,6 +1,5 @@
 export async function onRequestGet(context) {
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
     'Content-Type': 'application/json',
     'Cache-Control': 'max-age=300' // cache 5 mins
   };
@@ -27,7 +26,7 @@ export async function onRequestGet(context) {
                       ?.replace(/<[^>]+>/g,'')?.trim()?.substring(0,150);
         if (title && title.length > 10) {
           items.push({
-            title: title.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,"'").replace(/&quot;/g,'"'),
+            title,
             link: link || '',
             pubDate: pubDate || '',
             desc: desc || '',

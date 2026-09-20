@@ -5,10 +5,25 @@
 
 const CORS = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
 };
+
+async function limit(env, name, ip, perIpHour, globalDay) {
+  const kv = env.MUSIC_KV;
+  if (!kv) return { ok: false, status: 503, error: 'Not configured' };
+  const now = new Date();
+  const hour = now.toISOString().slice(0, 13);
+  const day = now.toISOString().slice(0, 10);
+  const ipKey = `rl:${name}:ip:${ip}:${hour}`;
+  const dayKey = `rl:${name}:day:${day}`;
+  const [ipCount, dayCount] = await Promise.all([kv.get(ipKey), kv.get(dayKey)]);
+  if ((Number(dayCount) || 0) >= globalDay) return { ok: false, status: 429, error: 'Daily limit reached' };
+  if ((Number(ipCount) || 0) >= perIpHour) return { ok: false, status: 429, error: 'Rate limit reached' };
+  await Promise.all([
+    kv.put(ipKey, String((Number(ipCount) || 0) + 1), { expirationTtl: 3600 }),
+    kv.put(dayKey, String((Number(dayCount) || 0) + 1), { expirationTtl: 86400 }),
+  ]);
+  return { ok: true };
+}
 
 export async function onRequestOptions() {
   return new Response(null, { headers: CORS });
@@ -18,6 +33,8 @@ export async function onRequestPost(context) {
   const { request, env } = context;
 
   try {
+    const gate = await limit(env, 'ai', request.headers.get('CF-Connecting-IP') || 'unknown', 30, 400);
+    if (!gate.ok) return new Response(JSON.stringify({ error: gate.error }), { status: gate.status, headers: CORS });
     const body = await request.json();
     const { messages, system, max_tokens } = body;
 
@@ -43,7 +60,7 @@ export async function onRequestPost(context) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: max_tokens || 600,
+        max_tokens: Math.min(Number(max_tokens) || 600, 600),
         messages: fullMessages,
       }),
     });

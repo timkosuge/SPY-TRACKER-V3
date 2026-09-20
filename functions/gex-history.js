@@ -6,7 +6,6 @@
 export async function onRequest(context) {
   const headers = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
     'Cache-Control': 'no-cache',
   };
 

@@ -3,7 +3,6 @@
 // FRED_API_KEY must be set in Cloudflare Pages environment variables
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Content-Type': 'application/json',
   'Cache-Control': 'max-age=3600', // cache 1hr - FRED data updates daily/weekly
 };

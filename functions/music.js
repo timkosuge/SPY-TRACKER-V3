@@ -10,7 +10,6 @@
 // The KV just stores the playlist order and admin state.
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
@@ -64,7 +63,8 @@ export async function onRequestGet(context) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const MUSIC_PASSWORD = env.MUSIC_PASSWORD || env.BLOG_PASSWORD || 'Tetsuo314!';
+  const MUSIC_PASSWORD = env.MUSIC_PASSWORD;
+  if (!MUSIC_PASSWORD) return json({ error: 'Not configured' }, 503);
 
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }

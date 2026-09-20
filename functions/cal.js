@@ -1,6 +1,5 @@
 export async function onRequestGet(context) {
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
     'Content-Type': 'application/json'
   };
 

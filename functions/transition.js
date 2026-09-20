@@ -3,7 +3,6 @@
 // All indicators are FORWARD-LOOKING composites, not backward-looking measures
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Content-Type': 'application/json',
   'Cache-Control': 'max-age=7200',
 };

@@ -5,7 +5,6 @@
 
 const CORS = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
@@ -19,7 +18,8 @@ export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const action = url.searchParams.get('action');
-  const ollamaUrl = env.OLLAMA_URL || url.searchParams.get('base') || 'http://localhost:11434';
+  const ollamaUrl = env.OLLAMA_URL;
+  if (!ollamaUrl) return new Response(JSON.stringify({ ok: false, error: 'Not configured' }), { status: 503, headers: CORS });
 
   if (action === 'tags') {
     try {
@@ -42,8 +42,9 @@ export async function onRequestPost(context) {
   const { request, env } = context;
   try {
     const body = await request.json();
-    const { messages, model, system, stream, base_url } = body;
-    const ollamaUrl = env.OLLAMA_URL || base_url || 'http://localhost:11434';
+    const { messages, model, system, stream } = body;
+    const ollamaUrl = env.OLLAMA_URL;
+    if (!ollamaUrl) return new Response(JSON.stringify({ ok: false, error: 'Not configured' }), { status: 503, headers: CORS });
 
     const ollamaBody = {
       model: model || 'llama3.2:latest',

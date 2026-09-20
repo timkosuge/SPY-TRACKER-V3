@@ -2,21 +2,31 @@
 // Proxies text to xAI TTS API, returns MP3 audio
 // Keeps XAI_API_KEY server-side
 
-export async function onRequestOptions() {
-  return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    }
-  });
+async function limit(env, name, ip, perIpHour, globalDay) {
+  const kv = env.MUSIC_KV;
+  if (!kv) return { ok: false, status: 503, error: 'Not configured' };
+  const now = new Date();
+  const hour = now.toISOString().slice(0, 13);
+  const day = now.toISOString().slice(0, 10);
+  const ipKey = `rl:${name}:ip:${ip}:${hour}`;
+  const dayKey = `rl:${name}:day:${day}`;
+  const [ipCount, dayCount] = await Promise.all([kv.get(ipKey), kv.get(dayKey)]);
+  if ((Number(dayCount) || 0) >= globalDay) return { ok: false, status: 429, error: 'Daily limit reached' };
+  if ((Number(ipCount) || 0) >= perIpHour) return { ok: false, status: 429, error: 'Rate limit reached' };
+  await Promise.all([
+    kv.put(ipKey, String((Number(ipCount) || 0) + 1), { expirationTtl: 3600 }),
+    kv.put(dayKey, String((Number(dayCount) || 0) + 1), { expirationTtl: 86400 }),
+  ]);
+  return { ok: true };
 }
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const CORS = { 'Access-Control-Allow-Origin': '*' };
+  const CORS = {};
 
   try {
+    const gate = await limit(env, 'tts', request.headers.get('CF-Connecting-IP') || 'unknown', 10, 100);
+    if (!gate.ok) return new Response(JSON.stringify({ error: gate.error }), { status: gate.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
     const apiKey = env.XAI_API_KEY;
     if (!apiKey) {
       return new Response(JSON.stringify({ error: 'XAI_API_KEY not set' }), {
