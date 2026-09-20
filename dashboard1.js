@@ -4,6 +4,8 @@ const clr=n=>n>0?'up':n<0?'dn':'neu';
 const sign=n=>n>0?'+':'';
 const fmt12=t=>{if(!t||!t.includes(':'))return t||'—';const[h,m]=t.split(':').map(Number);const ampm=h>=12?'PM':'AM';const h12=h%12||12;return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;};
 const $=id=>document.getElementById(id);
+const expectedMove=(spot,iv,calendarDays)=>spot*iv*Math.sqrt(calendarDays/365);
+window.expectedMove=expectedMove;
 
 // Group tab mapping
 const GROUP_TABS = {
@@ -1345,7 +1347,7 @@ function renderDesk(md,sd){
         const iv    = (md.gex?.atm_iv&&md.gex.atm_iv>0) ? md.gex.atm_iv
                     : (wem.atm_iv&&wem.atm_iv>0) ? wem.atm_iv
                     : (wem.static_wem_iv&&wem.static_wem_iv>0) ? wem.static_wem_iv : null;
-        const em    = midP>0 && iv>0 ? midP*iv/Math.sqrt(252) : 0;
+        const em    = midP>0 && iv>0 ? expectedMove(midP, iv, 1) : 0;
         // Detect if market is currently open using ET time
         const _etNow = new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}));
         const _etDow = _etNow.getDay(); // 0=Sun,6=Sat
@@ -2768,7 +2770,7 @@ function renderOptions(md){
   if(ivEl){
     const vix=q['^VIX']?.price||0;
     const wem=md.weekly_em?.[0];
-    const dailyEM = atm_iv && cur ? (cur * atm_iv * Math.sqrt(1/365) * 0.7).toFixed(2) : null;
+    const dailyEM = atm_iv && cur ? expectedMove(cur, atm_iv, 1).toFixed(2) : null;
     ivEl.innerHTML=[
       {l:'ATM IV', v:atm_iv?fmt(atm_iv_pct,2)+'%':'—', c:atm_iv_pct>25?'#ff3355':atm_iv_pct>18?'#ff8800':atm_iv_pct>12?'#ffcc00':'#00ff88'},
       {l:'VIX (30d)',     v:vix?fmt(vix,2)+'%':'—',                              c:vix>25?'#ff3355':vix>18?'#ff8800':'#ffcc00'},
@@ -3080,10 +3082,9 @@ function renderVolatility(md){
   if(emEl&&spyIv){
     const spot=spy.price||wem.wem_mid||640;
     const iv=spyIv/100;
-    const sqrt252=Math.sqrt(252), sqrt52=Math.sqrt(52), sqrt12=Math.sqrt(12);
-    const dailyEM  = spot*iv/sqrt252;
-    const weeklyEM = spot*iv/sqrt52;
-    const monthlyEM= spot*iv/sqrt12;
+    const dailyEM  = expectedMove(spot, iv, 1);
+    const weeklyEM = expectedMove(spot, iv, 7);
+    const monthlyEM= expectedMove(spot, iv, 30);
     const dailyH=spot+dailyEM, dailyL=spot-dailyEM;
     const wemH=wem.wem_high||spot+weeklyEM, wemL=wem.wem_low||spot-weeklyEM;
     const spyPct=spy.pct_change||0;

@@ -755,6 +755,16 @@ function renderVolHistory(sd){
   </tr>`;}).join('');
 }
 
+function wemBand(w){
+  if (!w) return null;
+  if (w.static_band_status === 'ok' && w.static_wem_low != null && w.static_wem_high != null)
+    return { lo: w.static_wem_low, hi: w.static_wem_high, mid: (w.static_wem_low + w.static_wem_high) / 2, half: (w.static_wem_high - w.static_wem_low) / 2, iv: w.static_wem_iv, isStatic: true };
+  if (w.wem_low != null && w.wem_high != null)
+    return { lo: w.wem_low, hi: w.wem_high, mid: w.wem_mid, half: (w.wem_high - w.wem_low) / 2, iv: w.atm_iv, isStatic: false };
+  return null;
+}
+window.wemBand = wemBand;
+
 function renderWEM(md){
   const wems=md.weekly_em||[], stats=md.wem_stats||{};
   const q=md.quotes||{}, spy=q['SPY']||{};
@@ -775,7 +785,7 @@ function renderWEM(md){
   }
 
   // ── Mode toggle ──────────────────────────────────────────────────────────
-  if (!window._wemMode) window._wemMode = 'dynamic';
+  if (!window._wemMode) window._wemMode = 'static';
   window._wemSetMode = function(m) {
     window._wemMode = m;
     const dynBtn    = $('wemModeDyn');
@@ -784,8 +794,8 @@ function renderWEM(md){
     if (dynBtn)    { dynBtn.style.background    = m==='dynamic'?'var(--cyan)':'transparent'; dynBtn.style.color    = m==='dynamic'?'#000':'var(--text2)'; dynBtn.style.borderColor    = m==='dynamic'?'var(--cyan)':'var(--border)'; }
     if (staticBtn) { staticBtn.style.background = m==='static' ?'var(--cyan)':'transparent'; staticBtn.style.color = m==='static' ?'#000':'var(--text2)'; staticBtn.style.borderColor = m==='static' ?'var(--cyan)':'var(--border)'; }
     if (desc) desc.textContent = m==='static'
-      ? 'Fixed range set at Friday close · doesn\'t change during week'
-      : 'Range shrinks as DTE decays · updates daily';
+      ? 'One-sigma implied move set at Friday close from the next Friday expiry · fixed for the week · every statistic on this page is scored against it'
+      : 'Live gauge only · remaining days at the current IV · not used for scoring';
     const lbl = $('wemZScoreLabel');
     if (lbl) lbl.textContent = m==='static'
       ? '⬡ STATIC WEM POSITION — Z-SCORE'
@@ -794,37 +804,29 @@ function renderWEM(md){
   };
 
   if(cur){
-    // ── STATIC WEM — TheoTrade formula recalculated live from friday_close + IV ─────
+    const staticOk        = cur.static_band_status === 'ok' && cur.static_wem_low != null && cur.static_wem_high != null;
     const staticMid       = cur.friday_close      || cur.wem_mid;
-    const staticIV        = cur.static_wem_iv     || cur.atm_iv || md.gex?.atm_iv || 0;
-    const _staticHalf     = staticMid && staticIV ? staticMid * staticIV * Math.sqrt(6/365) * 0.70 : null;
-    const staticHigh      = _staticHalf ? staticMid + _staticHalf : (cur.static_wem_high || cur.wem_high);
-    const staticLow       = _staticHalf ? staticMid - _staticHalf : (cur.static_wem_low  || cur.wem_low);
-    const staticHalfRange = _staticHalf || (cur.static_wem_range ? cur.static_wem_range / 2 : cur.wem_range / 2);
-    const staticRange     = staticHalfRange * 2;
+    const staticIV        = staticOk ? cur.static_wem_iv : null;
+    const staticHigh      = staticOk ? cur.static_wem_high : null;
+    const staticLow       = staticOk ? cur.static_wem_low  : null;
+    const staticHalfRange = staticOk ? (staticHigh - staticLow) / 2 : null;
 
     // ── Select active mode values ──────────────────────────────────────────
     // Dynamic falls back to static when workflow has not run yet for the new week
-    const isStatic = window._wemMode === 'static';
-    // Dynamic: recalculate from live IV + remaining DTE.
-    // Uses Friday weekly expiry IV (not 0DTE) so it decays naturally as DTE shrinks.
+    const isStatic = window._wemMode === 'static' && staticOk;
     const dte = cur.dte || 1;
-    // Use window._md.gex.atm_iv as extra fallback in case md reference is stale
     const _liveGexIV = md.gex?.atm_iv || window._md?.gex?.atm_iv || null;
-    const liveIV = (_liveGexIV && _liveGexIV > 0) ? _liveGexIV : (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : staticIV;
+    const liveIV = (_liveGexIV && _liveGexIV > 0) ? _liveGexIV : (cur.atm_iv && cur.atm_iv > 0) ? cur.atm_iv : (staticIV || 0);
     const dynMid = staticMid;
-    // On expiry Friday (DTE=1) the dynamic range collapses to near-zero which is
-    // misleading. The static range (locked last Friday with DTE=6) is the correct
-    // full-week context. Force static values for dynamic display when DTE <= 1.
-    const _forceStatic = dte <= 1;
-    const _dynHalf = (!_forceStatic && dynMid && liveIV) ? dynMid * liveIV * Math.sqrt(dte / 365) * 0.70 : staticHalfRange;
-    const lo   = (isStatic || _forceStatic) ? staticLow  : dynMid - _dynHalf;
-    const hi   = (isStatic || _forceStatic) ? staticHigh : dynMid + _dynHalf;
-    const mid  = (isStatic || _forceStatic) ? staticMid  : dynMid;
-    const halfRange = (isStatic || _forceStatic) ? staticHalfRange : _dynHalf;
+    const _dynHalf = (dynMid && liveIV) ? expectedMove(dynMid, liveIV, dte) : (staticHalfRange || 0);
+    const lo   = isStatic ? staticLow  : dynMid - _dynHalf;
+    const hi   = isStatic ? staticHigh : dynMid + _dynHalf;
+    const mid  = staticMid;
+    const halfRange = isStatic ? staticHalfRange : _dynHalf;
     const price = spy.price || mid || 0;
+    const staticNote = staticOk ? '' : ' · STATIC BAND UNAVAILABLE FOR THIS WEEK';
 
-    $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}${isStatic?' · STATIC RANGE':' · DYNAMIC RANGE'}`;
+    $('wemWeekLabel').textContent=`⬡ CURRENT WEEK — ${cur.week_start} TO ${cur.week_end}${isStatic?' · STATIC RANGE':' · LIVE GAUGE'}${staticNote}`;
 
     $('wemCurrentHeader').innerHTML=`
       <div class="wem-big-card">
@@ -848,7 +850,7 @@ function renderWEM(md){
     let comparisonHtml = '';
     if (isStatic) {
       const dynHalf = _dynHalf;
-      const decay = dynHalf < staticHalfRange ? (1 - dynHalf/staticHalfRange)*100 : 0;
+      const decay = staticHalfRange && dynHalf < staticHalfRange ? (1 - dynHalf/staticHalfRange)*100 : 0;
       comparisonHtml = `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--bg3);border-radius:3px;margin-top:8px;font-size:11px;font-family:'Share Tech Mono',monospace;">
         <span style="color:var(--text3);">STATIC ±$${fmt(staticHalfRange,2)}</span>
         <span style="color:var(--text3);">→</span>
@@ -872,11 +874,10 @@ function renderWEM(md){
     const compEl = $('wemCompareRow');
     if (compEl) compEl.innerHTML = comparisonHtml;
 
-    // Use halfRange (already mode-aware: static or dynamic) as the basis for all EM boxes
-    const iv = halfRange / (mid * Math.sqrt(6/365) * 0.70);
-    const dailyEM   = mid * iv * Math.sqrt(1/365)  * 0.70;
-    const weeklyEM  = halfRange;
-    const monthlyEM = mid * iv * Math.sqrt(21/365) * 0.70;
+    const iv = staticIV || liveIV || 0;
+    const dailyEM   = expectedMove(mid, iv, 1);
+    const weeklyEM  = staticOk ? staticHalfRange : expectedMove(mid, iv, 7);
+    const monthlyEM = expectedMove(mid, iv, 30);
 
     const emBox = (label, em, subLabel) => {
       const hiP = mid+em, loP = mid-em;
@@ -899,17 +900,19 @@ function renderWEM(md){
 
     const emRow = $('emBoxRow');
     if(emRow) emRow.innerHTML =
-      emBox('DAILY EXPECTED MOVE',   dailyEM,   '1 trading day') +
-      emBox(`${isStatic?'STATIC ':''}WEEKLY EXPECTED MOVE`,  weeklyEM,  isStatic?`Fixed from Fri close · IV ${fmt(atmIV*100,1)}%`:`${cur.dte||'—'} DTE · IV ${fmt(iv*100,1)}%`) +
-      emBox('MONTHLY EXPECTED MOVE', monthlyEM, '21 trading days');
+      emBox('DAILY EXPECTED MOVE',   dailyEM,   `1 day · IV ${fmt(iv*100,1)}%`) +
+      emBox('WEEKLY EXPECTED MOVE',  weeklyEM,  staticOk?`Fixed at Fri close · 7 days · IV ${fmt(staticIV*100,1)}%`:`7 days at live IV ${fmt(iv*100,1)}% · static band unavailable`) +
+      emBox('MONTHLY EXPECTED MOVE', monthlyEM, `30 days · IV ${fmt(iv*100,1)}%`);
   }
 
   if(stats.total_weeks){
+    const win = stats.window ? `${stats.window.from} → ${stats.window.to}` : '';
     $('wemStatsGrid').innerHTML=[
-      {l:'TOTAL WEEKS',    v:stats.total_weeks},
-      {l:'AVG RANGE ±',   v:'$'+fmt(stats.avg_range/2,2)},
-      {l:'% INSIDE',      v:fmt(stats.pct_inside,1)+'%'},
-      {l:'% OUTSIDE',     v:fmt(stats.pct_outside,1)+'%'},
+      {l:'SCORED WEEKS',  v:stats.total_weeks, sub: win},
+      {l:'AVG RANGE ±',   v:'$'+fmt(stats.avg_range/2,2), sub:'static band'},
+      {l:'% CLOSED INSIDE', v:fmt(stats.pct_inside,1)+'%', sub:`n=${stats.total_weeks}`},
+      {l:'% CLOSED OUTSIDE', v:fmt(stats.pct_outside,1)+'%', sub:`n=${stats.total_weeks}`},
+      {l:'BREACH (CLOSE)', v:fmt(stats.pct_breach_close,1)+'%', sub: stats.pct_breach_intraweek!=null?'intraweek '+fmt(stats.pct_breach_intraweek,1)+'%':null},
       {l:'HIGH BREACH',   v:fmt(stats.pct_high_breach,1)+'%', sub: stats.avg_high_breach_amt!=null?'avg +$'+fmt(stats.avg_high_breach_amt,2):null, c:'#00ff88'},
       {l:'LOW BREACH',    v:fmt(stats.pct_low_breach,1)+'%',  sub: stats.avg_low_breach_amt !=null?'avg $'+fmt(stats.avg_low_breach_amt,2):null,  c:'#ff3355'},
     ].map(({l,v,sub,c})=>`<div class="wem-stat"><div class="ws-lbl">${l}</div><div class="ws-val"${c?` style="color:${c}"`:''}}>${v}</div>${sub?`<div style="font-size:11px;color:${c||'var(--text3)'};margin-top:3px;">${sub}</div>`:''}</div>`).join('');
@@ -926,18 +929,16 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   const zEl   = $('wemZScore');
   if(!dotEl && !zEl) return;
 
-  const isStatic2  = window._wemMode === 'static';
-  // Static — uses locked values from set_next_week_static_wem() (Friday close + TheoTrade formula)
-  // Dynamic falls back to static when workflow has not run yet for the new week
+  const _sOk  = !!(cur && cur.static_band_status === 'ok' && cur.static_wem_low != null && cur.static_wem_high != null);
+  const isStatic2  = window._wemMode === 'static' && _sOk;
   const _sMid = cur ? (cur.friday_close    || cur.wem_mid)  : 0;
-  const _sIV  = cur ? (cur.static_wem_iv  || cur.atm_iv || md.gex?.atm_iv || 0) : 0;
-  const _sHalf2 = _sMid && _sIV ? _sMid * _sIV * Math.sqrt(6/365) * 0.70 : null;
-  const sHalf = _sHalf2 || (cur ? ((cur.static_wem_range || cur.wem_range) / 2) : 1);
-  const _sLo  = _sMid && _sHalf2 ? _sMid - _sHalf2 : (cur ? (cur.static_wem_low  || cur.wem_low)  : 0);
-  const _sHi  = _sMid && _sHalf2 ? _sMid + _sHalf2 : (cur ? (cur.static_wem_high || cur.wem_high) : 0);
+  const _sIV  = _sOk ? cur.static_wem_iv : 0;
+  const sHalf = _sOk ? (cur.static_wem_high - cur.static_wem_low) / 2 : 0;
+  const _sLo  = _sOk ? cur.static_wem_low  : 0;
+  const _sHi  = _sOk ? cur.static_wem_high : 0;
   const _dte2 = cur ? (cur.dte || 1) : 1;
   const _liveIV2 = cur ? (md.gex?.atm_iv && md.gex.atm_iv > 0 ? md.gex.atm_iv : (cur.atm_iv && cur.atm_iv > 0 ? cur.atm_iv : _sIV)) : _sIV;
-  const _dynHalf2 = _sMid && _liveIV2 ? _sMid * _liveIV2 * Math.sqrt(_dte2 / 365) * 0.70 : sHalf;
+  const _dynHalf2 = _sMid && _liveIV2 ? expectedMove(_sMid, _liveIV2, _dte2) : sHalf;
   const lo2   = cur ? (isStatic2 ? _sLo  : _sMid - _dynHalf2) : 0;
   const hi2   = cur ? (isStatic2 ? _sHi  : _sMid + _dynHalf2) : 0;
   const mid2  = cur ? _sMid : 0;
@@ -950,31 +951,14 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
   // Exclude current week from historical dots — it shows as NOW dot only
   const curWeekStart = cur ? cur.week_start : null;
   const histWeeks = wems
-    .filter(w => w.week_close != null && w.wem_low && w.wem_high && w.wem_mid && w.week_start !== curWeekStart)
+    .filter(w => w.week_close != null && w.static_band_status === 'ok' && w.static_wem_low != null && w.static_wem_high != null && w.week_start !== curWeekStart)
     .slice().reverse();
   const total = histWeeks.length;
-
-  let histZ;
-  if (isStatic2) {
-    // Recompute Z-scores using static ranges for historical weeks
-    histZ = histWeeks.map(w => {
-      const fC   = w.friday_close || w.wem_mid;
-      const aIV  = w.atm_iv || w.vix_iv || 0;
-      const sH   = fC * aIV * Math.sqrt(6/365) * 0.70;
-      const sLo  = fC - sH, sHi = fC + sH;
-      const sRng = sH;
-      return sRng > 0 ? (w.week_close - fC) / sRng : 0;
-    });
-  } else {
-    histZ = histWeeks.map(w => (w.week_close - w.wem_mid) / (w.wem_range / 2));
-  }
-
-  const aboveCount  = isStatic2
-    ? histWeeks.filter((w,i) => w.week_close > (w.friday_close||w.wem_mid) + histWeeks.map((_,j)=>{ const f=histWeeks[j].friday_close||histWeeks[j].wem_mid, a=histWeeks[j].atm_iv||0; return f*a*Math.sqrt(6/365)*0.70; })[i]).length
-    : histWeeks.filter(w => w.week_close > w.wem_high).length;
-  const belowCount  = isStatic2
-    ? histWeeks.filter((w,i) => w.week_close < (w.friday_close||w.wem_mid) - histWeeks.map((_,j)=>{ const f=histWeeks[j].friday_close||histWeeks[j].wem_mid, a=histWeeks[j].atm_iv||0; return f*a*Math.sqrt(6/365)*0.70; })[i]).length
-    : histWeeks.filter(w => w.week_close < w.wem_low).length;
+  const bandMid = w => (w.static_wem_low + w.static_wem_high) / 2;
+  const bandHalf = w => (w.static_wem_high - w.static_wem_low) / 2;
+  const histZ = histWeeks.map(w => bandHalf(w) > 0 ? (w.week_close - bandMid(w)) / bandHalf(w) : 0);
+  const aboveCount  = histWeeks.filter(w => w.week_close > w.static_wem_high).length;
+  const belowCount  = histWeeks.filter(w => w.week_close < w.static_wem_low).length;
   const insideCount = total - aboveCount - belowCount;
 
   const avgZ  = histZ.length ? histZ.reduce((a,b)=>a+b,0)/histZ.length : 0;
@@ -1001,15 +985,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
     const dotsSVG = histWeeks.map((w,i) => {
       const cx = padX + (i + 0.5) * slotW;
       // Use static or dynamic range for dot positioning
-      let wLo, wHi;
-      if (isStatic2) {
-        const fC  = w.friday_close || w.wem_mid;
-        const aIV = w.atm_iv || w.vix_iv || 0;
-        const sH  = fC * aIV * Math.sqrt(6/365) * 0.70;
-        wLo = fC - sH; wHi = fC + sH;
-      } else {
-        wLo = w.wem_low; wHi = w.wem_high;
-      }
+      const wLo = w.static_wem_low, wHi = w.static_wem_high;
       const wRange = wHi - wLo;
       let cy, color;
       if(w.week_close > wHi) {
@@ -1140,7 +1116,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
 
     const modeNote = isStatic2
       ? `Static ±$${fmt(halfRange2,2)} · fixed from Fri close`
-      : `Dynamic ±$${fmt(halfRange2,2)} · ${cur?.dte||'?'} DTE`;
+      : `Live gauge ±$${fmt(halfRange2,2)} · ${cur?.dte||'?'} DTE${_sOk?'':' · static band unavailable'}`;
 
     zEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
@@ -1286,13 +1262,13 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">bre
       </div>`;
   }
 
-  $('wemHistBody').innerHTML=[...wems].reverse().map(w=>`<tr>
-    <td>${w.week_start}</td>
-    <td>$${fmt(w.wem_mid,2)}</td>
-    <td class="up">$${fmt(w.wem_high,2)}</td>
-    <td class="dn">$${fmt(w.wem_low,2)}</td>
-    <td>±$${fmt(w.wem_range/2,2)}</td>
-    <td>${w.atm_iv?fmt(w.atm_iv*100,2)+'%':'—'}</td>
+  $('wemHistBody').innerHTML=[...wems].reverse().map(w=>{ const ok=w.static_band_status==='ok'&&w.static_wem_low!=null; return `<tr${ok?'':' style="opacity:0.55"'}>
+    <td>${w.week_start}${ok?'':' <span title="Static band unavailable — captured from a same-day expiry" style="color:#ff8800">•</span>'}</td>
+    <td>$${fmt(w.friday_close||w.wem_mid,2)}</td>
+    <td class="up">${ok?'$'+fmt(w.static_wem_high,2):'—'}</td>
+    <td class="dn">${ok?'$'+fmt(w.static_wem_low,2):'—'}</td>
+    <td>${ok?'±$'+fmt((w.static_wem_high-w.static_wem_low)/2,2):'—'}</td>
+    <td>${ok&&w.static_wem_iv?fmt(w.static_wem_iv*100,2)+'%':'—'}</td>
     <td>${w.week_open?'$'+fmt(w.week_open,2):'—'}</td>
     <td class="up">${w.week_high?'$'+fmt(w.week_high,2):'—'}</td>
     <td class="dn">${w.week_low?'$'+fmt(w.week_low,2):'—'}</td>
@@ -1305,7 +1281,7 @@ ${w.week_close?'$'+fmt(w.week_close,2):'—'}</td>
     <td class="${w.breach_side==='HIGH'?'dn':w.breach_side==='LOW'?'dn':''}">
 ${w.breach_side||'—'}</td>
     <td class="dn">${w.breach_amount?'$'+fmt(Math.abs(w.breach_amount),2):'—'}</td>
-  </tr>`).join('');
+  </tr>`;}).join('');
 }
 
 
@@ -1446,7 +1422,7 @@ OHLC:
   This Week: O:$${fmt(wOpen,2)} H:$${fmt(wHigh,2)} L:$${fmt(wLow,2)}
   This Month: O:$${fmt(mOpen,2)} H:$${fmt(mHigh,2)} L:$${fmt(mLow,2)}
 
-WEM (Friday expiry): Low:$${fmt(wem?.wem_low,2)} Mid:$${fmt(wem?.wem_mid,2)} High:$${fmt(wem?.wem_high,2)} ±$${fmt((wem?.wem_range||0)/2,2)} IV:${fmt((wem?.atm_iv||0)*100,2)}%
+WEM (static, one-sigma): Low:$${fmt(wemBand(wem)?.lo,2)} Mid:$${fmt(wemBand(wem)?.mid,2)} High:$${fmt(wemBand(wem)?.hi,2)} ±$${fmt(wemBand(wem)?.half,2)} IV:${fmt((wem?.atm_iv||0)*100,2)}%
   History: ${stats.total_weeks||0} weeks, ${fmt(stats.pct_inside,1)}% closed inside WEM
 
 HVNs (recent): ${hvns||'none'}
@@ -2018,10 +1994,11 @@ function runPatternAlerts(md, sd) {
 
   // WEM breach
   if (wem && spy.price) {
-    if (spy.price < wem.wem_low) alerts.push({ level: 'high', icon: '📉', text: `SPY at $${fmt(spy.price,2)} is BELOW WEM Low $${fmt(wem.wem_low,2)} — WEM breached to downside by $${fmt(wem.wem_low-spy.price,2)}.`, badge: 'WEM BREACH' });
-    else if (spy.price > wem.wem_high) alerts.push({ level: 'high', icon: '📈', text: `SPY at $${fmt(spy.price,2)} is ABOVE WEM High $${fmt(wem.wem_high,2)} — WEM breached to upside by $${fmt(spy.price-wem.wem_high,2)}.`, badge: 'WEM BREACH' });
-    else if (spy.price < wem.wem_low * 1.005) alerts.push({ level: 'med', icon: '⚠️', text: `SPY approaching WEM Low $${fmt(wem.wem_low,2)} — currently $${fmt(spy.price-wem.wem_low,2)} away.`, badge: 'NEAR WEM LOW' });
-    else if (spy.price > wem.wem_high * 0.995) alerts.push({ level: 'med', icon: '⚠️', text: `SPY approaching WEM High $${fmt(wem.wem_high,2)} — currently $${fmt(wem.wem_high-spy.price,2)} away.`, badge: 'NEAR WEM HIGH' });
+    const _b = wemBand(wem) || wem; const _lo = _b.lo ?? wem.wem_low, _hi = _b.hi ?? wem.wem_high;
+    if (spy.price < _lo) alerts.push({ level: 'high', icon: '📉', text: `SPY at $${fmt(spy.price,2)} is BELOW WEM Low $${fmt(_lo,2)} — WEM breached to downside by $${fmt(wem.wem_low-spy.price,2)}.`, badge: 'WEM BREACH' });
+    else if (spy.price > _hi) alerts.push({ level: 'high', icon: '📈', text: `SPY at $${fmt(spy.price,2)} is ABOVE WEM High $${fmt(_hi,2)} — WEM breached to upside by $${fmt(spy.price-wem.wem_high,2)}.`, badge: 'WEM BREACH' });
+    else if (spy.price < _lo * 1.005) alerts.push({ level: 'med', icon: '⚠️', text: `SPY approaching WEM Low $${fmt(_lo,2)} — currently $${fmt(spy.price-wem.wem_low,2)} away.`, badge: 'NEAR WEM LOW' });
+    else if (spy.price > _hi * 0.995) alerts.push({ level: 'med', icon: '⚠️', text: `SPY approaching WEM High $${fmt(_hi,2)} — currently $${fmt(wem.wem_high-spy.price,2)} away.`, badge: 'NEAR WEM HIGH' });
   }
 
   // Yield curve
@@ -2218,7 +2195,7 @@ PREV DAY: O $${fmt(prevOpen,2)} | H $${fmt(prevHigh,2)} | L $${fmt(prevLow,2)} |
 THIS WEEK: O $${fmt(wOpen,2)} | H $${fmt(wHigh,2)} | L $${fmt(wLow,2)}
 THIS MONTH: O $${fmt(mOpen,2)} | H $${fmt(mHigh,2)} | L $${fmt(mLow,2)}
 PRE-MARKET: ${pmPrice?'$'+fmt(pmPrice,2):'not available'}
-WEM RANGE (IV-derived): Low $${fmt(wem?.wem_low,2)} / Mid $${fmt(wem?.wem_mid,2)} / High $${fmt(wem?.wem_high,2)} (±$${fmt((wem?.wem_range||0)/2,2)})
+WEM RANGE (static, one-sigma): Low $${fmt(wemBand(wem)?.lo,2)} / Mid $${fmt(wemBand(wem)?.mid,2)} / High $${fmt(wemBand(wem)?.hi,2)} (±$${fmt(wemBand(wem)?.half,2)})
 HIGH VOLUME NODES (last 5 days): ${hvns.length?hvns.join(', '):'none found'}
 UNFILLED GAPS within $20: ${gaps.length?gaps.join(', '):'none found'}`;
 
@@ -2437,7 +2414,7 @@ async function generateEventImpact(md, sd) {
     const pcr = md.options_summary?.pc_ratio_vol||0;
     const gex = md.gex||{};
     const reply = await callAI(
-      [{ role: 'user', content: `Upcoming events: ${eventStr}. WEM: $${wem?.wem_low?.toFixed(2)||'?'}-$${wem?.wem_high?.toFixed(2)||'?'} (±$${((wem?.wem_range||0)/2).toFixed(2)}). VIX: ${vix.toFixed(1)}. PCR: ${fmt(pcr,3)}. ATM IV: ${fmt((wem?.atm_iv||0)*100,2)}%. GEX: ${gex.regime||'N/A'} (flip $${gex.flip_point||'N/A'}). In 2-3 sentences: which event poses the most structural risk, what the current positioning data suggests about market expectations, and whether IV is pricing the risk adequately.` }],
+      [{ role: 'user', content: `Upcoming events: ${eventStr}. WEM: $${wemBand(wem)?.lo?.toFixed(2)||'?'}-$${wemBand(wem)?.hi?.toFixed(2)||'?'} (±$${(wemBand(wem)?.half||0).toFixed(2)}). VIX: ${vix.toFixed(1)}. PCR: ${fmt(pcr,3)}. ATM IV: ${fmt((wem?.atm_iv||0)*100,2)}%. GEX: ${gex.regime||'N/A'} (flip $${gex.flip_point||'N/A'}). In 2-3 sentences: which event poses the most structural risk, what the current positioning data suggests about market expectations, and whether IV is pricing the risk adequately.` }],
       'You are a volatility trader. Assess event risk using WEM range, VIX term structure, PCR, GEX regime, and IV vs historical realized vol. Be specific with numbers.',
       300
     );
@@ -3977,8 +3954,14 @@ function updateWEMPrice(price) {
   const _wTdF=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date());
   const cur  = wems.find(w=>w.week_start<=_wTdF&&w.week_end>=_wTdF)||wems.find(w=>!w.week_close)||wems[0];
   if (!cur) return;
-  const lo = cur.wem_low, hi = cur.wem_high, mid = cur.wem_mid;
-  const halfRange = cur.wem_range / 2;
+  const _band = wemBand(cur);
+  if (!_band) return;
+  const _useStatic = window._wemMode !== 'dynamic' && _band.isStatic;
+  const _liveIV = _md.gex?.atm_iv || cur.atm_iv || _band.iv || 0;
+  const _dyn = expectedMove(cur.friday_close || cur.wem_mid || _band.mid, _liveIV, cur.dte || 1);
+  const mid = cur.friday_close || cur.wem_mid || _band.mid;
+  const lo = _useStatic ? _band.lo : mid - _dyn, hi = _useStatic ? _band.hi : mid + _dyn;
+  const halfRange = _useStatic ? _band.half : _dyn;
   if (!lo || !hi || !mid) return;
 
   // Needle position

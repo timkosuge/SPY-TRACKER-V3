@@ -1,10 +1,10 @@
-name: Import WEM Data (One-Time)
+name: Repair Weekly Expected Move (run once)
 
 on:
   workflow_dispatch:
 
 jobs:
-  import-wem:
+  repair:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -21,24 +21,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install pandas requests pytz yfinance market-calendar-tool
+        run: pip install -r requirements.txt
 
-      - name: Run WEM import
-        run: python import_wem.py
+      - name: Repair weekly_em and rescore against static bands
+        run: python repair_wem.py
 
-      - name: Push database to data branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch --depth=1 origin data
-          BLOB=$(git hash-object -w spy_data.db)
-          TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
-          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "Import WEM data into database")
-          git push origin "$COMMIT":refs/heads/data
-
-      - name: Run main tracker to export JSON
+      - name: Rebuild exports
         env:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
         run: python fetch_and_analyze.py
@@ -50,16 +41,23 @@ jobs:
           git fetch --depth=1 origin data
           BLOB=$(git hash-object -w spy_data.db)
           TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
-          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "Export after WEM import")
+          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "fix: weekly_em scored against static bands")
           git push origin "$COMMIT":refs/heads/data
 
-      - name: Commit JSON exports
+      - name: Commit exports
         run: |
-          git add -f spy_data.json market_data.json
+          git add -f spy_data.json market_data.json \
+                     analog_data.js tod_stats.js \
+                     intraday_library.js expiry_data.js \
+                     intraday_patterns.js decline_data.js relief_data.js \
+                     window_stats.js gap_stats.js \
+                     session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
+                     large_gap_stats.js release_data.js edge_stats_data.js \
+                     data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv
           if git diff --staged --quiet; then
             echo "No changes"
             exit 0
           fi
-          git commit -m "Export JSON after WEM import"
+          git commit -m "fix: exports after weekly expected move repair"
           git pull --rebase --autostash origin main
           git push
