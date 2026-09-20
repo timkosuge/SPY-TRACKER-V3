@@ -602,6 +602,14 @@ function renderBondsAdditions(md) {
   }
 }
 
+function wilson95(k, n) {
+  if (!n) return null;
+  const z = 1.96, p = k / n, d = 1 + z*z/n, c = p + z*z/(2*n), r = z * Math.sqrt(p*(1-p)/n + z*z/(4*n*n));
+  return { lo: Math.max(0, (c - r) / d) * 100, hi: Math.min(1, (c + r) / d) * 100 };
+}
+const rateWithCI = (k, n, digits) => { const ci = wilson95(k, n); return ci ? `${(k/n*100).toFixed(digits==null?1:digits)}% <span style="font-size:9px;color:var(--text3);">(${ci.lo.toFixed(0)}–${ci.hi.toFixed(0)}, n=${n})</span>` : '—'; };
+window.wilson95 = wilson95; window.rateWithCI = rateWithCI;
+
 function renderBreadth(md, sd){
   const q=md.quotes||{};
   const tnx=q['^TNX'], irx=q['^IRX'];
@@ -2138,12 +2146,13 @@ function renderDeclines() {
     freqEl.innerHTML = LEVELS.map(l => {
       const a = agg[String(l)];
       if(!a) return '';
-      const yearsOfData = 33;
-      const perYear = (a.n / yearsOfData).toFixed(1);
+      const span = (typeof DECLINE_DATA !== 'undefined' && DECLINE_DATA.meta && DECLINE_DATA.meta.date_range) ? DECLINE_DATA.meta.date_range : null;
+      const yearsOfData = span ? Math.max(1, (new Date(span.end+'T12:00:00') - new Date(span.start+'T12:00:00')) / (365.25*86400000)) : null;
+      const perYear = yearsOfData ? (a.n / yearsOfData).toFixed(1) : '—';
       return `<div class="panel" style="text-align:center;border-top:3px solid ${clr(l)};padding:10px 6px;">
         <div style="font-family:'Orbitron',monospace;font-size:22px;font-weight:bold;color:${clr(l)};margin-bottom:2px;">${l}%+</div>
         <div style="font-family:'Share Tech Mono',monospace;font-size:28px;font-weight:bold;color:var(--text);">${a.n}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">times since 1993</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">times since ${span?span.start.slice(0,4):'1993'}${yearsOfData?` · ${yearsOfData.toFixed(1)} years`:''}</div>
         <div style="font-size:11px;color:${clr(l)};margin-top:4px;font-weight:bold;">${perYear}× per year</div>
       </div>`;
     }).join('');
@@ -2200,16 +2209,16 @@ function renderDeclines() {
         const a = agg[String(l)];
         if(!a) return '';
         const f = v => v != null ? v.toLocaleString() : '—';
-        const calDays = td => td != null ? `${td}td <span style="color:var(--text3);font-size:10px;">(~${Math.round(td*365/252)}cd)</span>` : '—';
+        const tdays = td => td != null ? `${td} sessions` : '—';
         return `<tr style="border-bottom:1px solid var(--border)22;">
           <td style="padding:7px 12px;font-family:'Orbitron',monospace;font-size:11px;color:${clr(l)};font-weight:bold;">${l}%+</td>
           <td style="padding:7px 12px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text2);">${a.n}</td>
-          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;">${a.avg_days_to_trough}td</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;">${tdays(a.avg_days_to_trough)}</td>
           <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${f(a.max_days_to_trough)}td</td>
-          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:#00ff88;">${a.avg_recovery_td != null ? a.avg_recovery_td+'td' : '—'}</td>
-          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${a.max_recovery_td != null ? a.max_recovery_td+'td' : '—'}</td>
-          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);">${a.avg_total_td != null ? a.avg_total_td+'td' : '—'}</td>
-          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${a.max_total_td != null ? a.max_total_td+'td' : '—'}</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:#00ff88;">${a.avg_recovery_td != null ? tdays(a.avg_recovery_td)+(a.n_recovered!=null?` (n=${a.n_recovered})`:'') : '—'}</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${tdays(a.max_recovery_td)}</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--cyan);">${a.avg_total_td != null ? tdays(a.avg_total_td)+(a.n_recovered!=null?` (n=${a.n_recovered})`:'') : '—'}</td>
+          <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${tdays(a.max_total_td)}</td>
           <td style="padding:7px 12px;text-align:right;font-family:'Share Tech Mono',monospace;font-size:12px;color:${a.pct_recovered===100?'#00ff88':'#ffcc00'};">${a.pct_recovered}%</td>
         </tr>`;
       }).join('')
@@ -2266,6 +2275,7 @@ function renderDeclines() {
         ${stages.map(s => {
           const w = s.n/maxN*100;
           const pct = (s.n/n5*100).toFixed(0);
+          const ci = wilson95(s.n, n5);
           return `<div style="display:flex;align-items:center;gap:8px;">
             <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${s.c};width:140px;flex-shrink:0;">${s.l}</div>
             <div style="flex:1;height:22px;background:var(--bg3);border-radius:2px;overflow:hidden;">
@@ -2273,7 +2283,7 @@ function renderDeclines() {
                 ${s.n ? `<span style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:bold;color:${s.c};">${s.n}</span>` : ''}
               </div>
             </div>
-            <div style="font-size:11px;font-weight:bold;color:${s.c};width:36px;text-align:right;">${pct}%</div>
+            <div style="font-size:11px;font-weight:bold;color:${s.c};width:36px;text-align:right;">${pct}% <span style="font-size:9px;color:var(--text3);">(${ci?ci.lo.toFixed(0)+'–'+ci.hi.toFixed(0):'—'})</span></div>
           </div>`;
         }).join('')}
       </div>`;
@@ -3058,28 +3068,27 @@ function gapOhlcDowNone() {
 function renderGapOHLCSections() {
   if (typeof _phAllData === 'undefined' || !_phAllData || _phAllData.length <= 1) return;
 
-  const curYear = new Date().getFullYear();
+  const curYear = Number((_phAllData.reduce((m,d)=>d.date>m?d.date:m,'') || '').slice(0,4)) || new Date().getFullYear();
   let sd = _phAllData;
 
-  // Period filter
   if (_gapOhlcPeriod === '2020')     sd = sd.filter(d => d.date && d.date >= '2020-01-01');
   else if (_gapOhlcPeriod === 'ytd') sd = sd.filter(d => d.date && d.date.startsWith(String(curYear)));
 
-  // DOW filter
+  let gapDays = null;
   if (_gapOhlcDows.size > 0 && _gapOhlcDows.size < 5) {
-    sd = sd.filter(d => d.date && _gapOhlcDows.has(new Date(d.date + 'T12:00:00').getDay()));
+    gapDays = new Set(sd.filter(d => d.date && _gapOhlcDows.has(new Date(d.date + 'T12:00:00').getDay())).map(d => d.date));
   } else if (_gapOhlcDows.size === 0) {
-    sd = [];
+    gapDays = new Set();
   }
 
   // Update meta count
   const meta = document.getElementById('gapOhlcMeta');
   if (meta) {
     const dowNote = _gapOhlcDows.size < 5 ? ` · ${_gapOhlcDows.size} day${_gapOhlcDows.size !== 1 ? 's' : ''} selected` : '';
-    meta.textContent = sd.length.toLocaleString() + ' sessions' + dowNote;
+    meta.textContent = (gapDays ? gapDays.size : sd.length).toLocaleString() + ' sessions' + dowNote;
   }
 
-  _renderGapOHLCBlocks(sd);
+  _renderGapOHLCBlocks(sd, gapDays);
 }
 
 window._gsSetLookback = function(v){ _gsLookback=v; renderGapStats(); };
@@ -5078,8 +5087,8 @@ function renderLargeGapStats() {
       <!-- Key stats grid -->
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;">
         ${[
-          ['FILL RATE', s.fill_rate + '%', fillColor(s.fill_rate)],
-          ['FADE RATE', s.fade_rate + '%', retColor(-s.fade_rate * 0.3)],
+          ['FILL RATE', rateWithCI(Math.round(s.fill_rate/100*s.n), s.n), fillColor(s.fill_rate)],
+          ['FADE RATE', rateWithCI(Math.round(s.fade_rate/100*s.n), s.n), retColor(-s.fade_rate * 0.3)],
           ['AVG OPEN→CLOSE', fmt2(s.avg_oc_pct), retColor(s.avg_oc_pct)],
           ['AVG DAY RANGE', s.avg_range_pct.toFixed(2) + '%', '#ffcc00'],
         ].map(([l,v,c]) => `
@@ -5095,7 +5104,7 @@ function renderLargeGapStats() {
           <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">BEHAVIOR</div>
           ${[
             ['Avg gap size',  fmt2(s.avg_gap_pct), retColor(s.avg_gap_pct)],
-            ['Continuation rate', s.cont_rate + '%', s.cont_rate > 50 ? '#00ff88' : '#ff8800'],
+            ['Continuation rate', rateWithCI(Math.round(s.cont_rate/100*s.n), s.n), s.cont_rate > 50 ? '#00ff88' : '#ff8800'],
             ['Max gap seen', (s.max_gap_pct >= 0 ? '+' : '') + s.max_gap_pct + '%', '#ffcc00'],
             ['Avg volume',   fmtVol(s.avg_volume), 'var(--text2)'],
           ].map(([l,v,c]) => `

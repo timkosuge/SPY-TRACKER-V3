@@ -16,7 +16,8 @@ W1_START, W1_END   = '10:45', '12:00'
 W2_START, W2_END   = '13:45', '15:00'
 POST_W1_END        = '13:45'
 POST_W2_END        = '16:00'
-GAP_THRESH         = 0.15
+from fetch_and_analyze import GAP_THRESHOLD_PCT
+GAP_THRESH         = GAP_THRESHOLD_PCT
 ENTRY_THRESH       = 0.10
 
 def _avg(lst):  return round(statistics.mean(lst), 3) if lst else None

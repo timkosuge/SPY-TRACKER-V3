@@ -819,6 +819,7 @@ function esRenderReleases(){
   const pctUp = (arr, fn) => arr.filter(fn).length/arr.length*100;
 
   const dayRets   = data.map(d=>d.day_ret);
+  const ocRets    = data.filter(d=>d.oc_ret!=null).map(d=>d.oc_ret);
   const dayRanges = data.map(d=>d.range);
   const beforeRets = data.filter(d=>d.before_ret!==null).map(d=>d.before_ret);
   const afterRets  = data.filter(d=>d.after_ret!==null).map(d=>d.after_ret);
@@ -828,7 +829,7 @@ function esRenderReleases(){
   if(statCards) {
     const stats = [
       { l:'EVENTS',        v: n,                                          sub: `${_relLookback==='all'?'2020–2026':_relLookback==='1yr'?'Last 12 mo':'2026 YTD'}`, c:'var(--text2)' },
-      { l:'DAY-OF % UP',   v: pctUp(dayRets,r=>r>0).toFixed(0)+'%',     sub: `avg ${avg(dayRets)>=0?'+':''}${avg(dayRets).toFixed(3)}%`, c: pctUp(dayRets,r=>r>0)>55?'#00ff88':pctUp(dayRets,r=>r>0)>45?'#ffcc00':'#ff3355' },
+      { l:'DAY-OF % UP (OPEN→CLOSE)',   v: pctUp(ocRets,r=>r>0).toFixed(0)+'%',     sub: `avg ${avg(ocRets)>=0?'+':''}${avg(ocRets).toFixed(3)}% · n=${ocRets.length}`, c: pctUp(ocRets,r=>r>0)>55?'#00ff88':pctUp(ocRets,r=>r>0)>45?'#ffcc00':'#ff3355' },
       { l:'AVG DAY RANGE', v: '$'+avg(dayRanges).toFixed(2),             sub: `high–low on event day`, c:'var(--cyan)' },
       { l:'BEFORE 5 DAYS', v: pctUp(beforeRets,r=>r>0).toFixed(0)+'%',  sub: `avg ${avg(beforeRets)>=0?'+':''}${avg(beforeRets).toFixed(3)}%`, c: pctUp(beforeRets,r=>r>0)>55?'#00ff88':'#ff8800' },
       { l:'AFTER 5 DAYS',  v: pctUp(afterRets,r=>r>0).toFixed(0)+'%',   sub: `avg ${avg(afterRets)>=0?'+':''}${avg(afterRets).toFixed(3)}%`, c: pctUp(afterRets,r=>r>0)>55?'#00ff88':'#ff3355' },

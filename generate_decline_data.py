@@ -101,6 +101,7 @@ def main():
             'avg_total_td':       round(sum(e['total_td'] for e in recovered) / len(recovered)) if recovered else None,
             'max_total_td':       max(e['total_td'] for e in recovered) if recovered else None,
             'pct_recovered':      round(len(recovered) / nv * 100, 1),
+            'n_recovered':        len(recovered),
         }
         for t2 in THRESHOLDS:
             if t2 > thresh:

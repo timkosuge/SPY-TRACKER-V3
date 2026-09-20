@@ -279,6 +279,13 @@ export async function onRequestGet(context) {
   const results = {};
   const errors = {};
   const kv = context.env?.GEX_HISTORY;
+  const refresh = new URL(context.request.url).searchParams.get('refresh') === '1';
+  if (kv && !refresh) {
+    try {
+      const cached = await kv.get('fred:response', 'json');
+      if (cached && cached.fetched_at && Date.now() - cached.fetched_at < 15 * 60 * 1000) return json(cached);
+    } catch (e) {}
+  }
 
   for (let i = 0; i < seriesIds.length; i += BATCH) {
     const batch = seriesIds.slice(i, i + BATCH);
@@ -296,5 +303,8 @@ export async function onRequestGet(context) {
   const seriesCount = Object.keys(results).length;
   const asOf = Object.values(results).map(s => s.latest_date).filter(Boolean).sort().pop() || null;
 
-  return json({ series: results, regime, seriesCount, errors, as_of: asOf, updated: new Date().toISOString() });
+  const throttled = Object.values(errors).some(e => /429/.test(String(e)));
+  const payload = { series: results, regime, seriesCount, errors, throttled, as_of: asOf, fetched_at: Date.now(), updated: new Date().toISOString() };
+  if (kv && !throttled && seriesCount > 0) { try { await kv.put('fred:response', JSON.stringify(payload), { expirationTtl: 3600 }); } catch (e) {} }
+  return json(payload);
 }

@@ -16,6 +16,7 @@ DB_PATH  = "spy_data.db"
 CT       = pytz.timezone("America/Chicago")
 ET       = pytz.timezone("America/New_York")
 MARKET_CLOSE_CT = (15, 0)
+GAP_THRESHOLD_PCT = 0.25
 SESSION_START_ET = 9*60+30
 SESSION_END_ET   = 16*60
 VOLUME_BUCKETS = [
@@ -188,6 +189,7 @@ def measurement_dates_needing_recompute(conn):
         "WHERE o.close IS NOT NULL AND (m.date IS NULL "
         "OR ABS(m.open_to_close - (o.close - o.open)) > 1e-4 "
         "OR ABS(m.day_range - (o.high - o.low)) > 1e-4 "
+        "OR ABS(m.pct_day_range - (o.high - o.low) / o.open * 100) > 1e-3 "
         "OR (m.close_to_prev_close IS NULL AND EXISTS (SELECT 1 FROM daily_ohlcv p WHERE p.date < o.date))) "
         "ORDER BY o.date"
     ).fetchall()]
@@ -207,7 +209,7 @@ def compute_measurements(conn, target_date):
     ltpl=round(l-prev[2],4) if prev else None
     conn.execute("INSERT OR REPLACE INTO daily_measurements VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (target_date,otc,oth,otl,htc,ltc,rng,otpo,ctpc,htph,ltpl,
-         pct(otc,o),pct(oth,o),pct(otl,o),pct(htc,h),pct(ltc,l),pct(rng,l),
+         pct(otc,o),pct(oth,o),pct(otl,o),pct(htc,o),pct(ltc,o),pct(rng,o),
          pct(otpo,prev[0]) if prev else None, pct(ctpc,prev[3]) if prev else None,
          pct(htph,prev[1]) if prev else None, pct(ltpl,prev[2]) if prev else None))
     conn.commit()
@@ -1351,12 +1353,12 @@ def compute_session_stats(conn, target_date):
 
         # ── Gap ─────────────────────────────────────────────────────────────
         gap_pct = round((day_open - prev_close) / prev_close * 100, 4)
-        if gap_pct > 0.25:   gap_type = "GAP_UP"
-        elif gap_pct < -0.25: gap_type = "GAP_DOWN"
+        if gap_pct > GAP_THRESHOLD_PCT:   gap_type = "GAP_UP"
+        elif gap_pct < -GAP_THRESHOLD_PCT: gap_type = "GAP_DOWN"
         else:                  gap_type = "FLAT"
 
         # ── Opening Range: first 30 bars (30 minutes) ────────────────────────
-        or_bars = bars[:30]
+        or_bars = [b for b in bars if b[0] <= '09:59']
         or_high = max(b[2] for b in or_bars)
         or_low  = min(b[3] for b in or_bars)
         or_range = round((or_high - or_low) / day_open * 100, 4)
@@ -1486,14 +1488,14 @@ def export_intraday_json(conn):
         prev_close = daily.get(prev_date, {}).get('close') if prev_date else None
         gap_pct    = round((open_price - prev_close) / prev_close * 100, 3) if prev_close else None
         if gap_pct is None:       gap_type = None
-        elif gap_pct > 0.25:      gap_type = 'GAP_UP'
-        elif gap_pct < -0.25:     gap_type = 'GAP_DOWN'
+        elif gap_pct > GAP_THRESHOLD_PCT:      gap_type = 'GAP_UP'
+        elif gap_pct < -GAP_THRESHOLD_PCT:     gap_type = 'GAP_DOWN'
         else:                     gap_type = 'FLAT'
 
         or_bars  = [(t, o, h, l, cl, v) for t, o, h, l, cl, v in session if t <= '09:59']
         or_high  = max(b[2] for b in or_bars) if or_bars else None
         or_low   = min(b[3] for b in or_bars) if or_bars else None
-        or_range = round((or_high - or_low) / or_low * 100, 3) if or_high and or_low else None
+        or_range = round((or_high - or_low) / open_price * 100, 3) if or_high and or_low and open_price else None
 
         post_or = [(t, o, h, l, cl, v) for t, o, h, l, cl, v in session if t >= '10:00']
         or_break_dir = None; or_break_time = None

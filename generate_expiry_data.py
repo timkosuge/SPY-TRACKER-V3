@@ -18,6 +18,7 @@ Fields per record:
 """
 
 import sqlite3, json, math
+from fetch_and_analyze import GAP_THRESHOLD_PCT
 from datetime import date, timedelta
 
 DB_PATH = 'spy_data.db'
@@ -59,7 +60,6 @@ def main():
     for row in rows:
         d_str, o, h, l, c, vol = row
         if not o or not c or not h or not l:
-            prev_close = c
             continue
         
         d = date.fromisoformat(d_str)
@@ -73,9 +73,9 @@ def main():
         if prev_close and o:
             gap_pct = round((o - prev_close) / prev_close * 100, 3)
             # Gap fill: did price trade back to prev_close during the day?
-            if gap_pct > 0.25 and prev_close:
+            if gap_pct > GAP_THRESHOLD_PCT and prev_close:
                 gf = bool(l <= prev_close)
-            elif gap_pct < -0.25 and prev_close:
+            elif gap_pct < -GAP_THRESHOLD_PCT and prev_close:
                 gf = bool(h >= prev_close)
             # else flat gap, gf stays None
         

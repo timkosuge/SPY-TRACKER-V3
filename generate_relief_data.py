@@ -38,7 +38,7 @@ DB_PATH      = 'spy_data.db'
 OUT_PATH     = 'relief_data.js'
 THRESHOLDS   = [2, 5, 7, 10]
 PEAK_WINDOW  = 20     # rolling high lookback
-MAX_INTERLUDE = 0.015 # max single-day bounce allowed during the drop (1.5%)
+MAX_INTERLUDE_PCT = 1.5
 BOUNCE_END_DD = 0.01  # bounce ends when price drops >1% from its intraday high
 
 FWD_WINDOWS = {'1mo': 21, '2mo': 42, '3mo': 63}
@@ -97,7 +97,7 @@ def main():
     all_results = {}
 
     for thresh in THRESHOLDS:
-        clean_interlude = thresh * MAX_INTERLUDE  # max 1-day bounce % during drop
+        clean_interlude = MAX_INTERLUDE_PCT
 
         events = []
         i = PEAK_WINDOW

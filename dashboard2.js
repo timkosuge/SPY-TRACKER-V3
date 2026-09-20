@@ -1,5 +1,9 @@
+const GAP_THRESHOLD_PCT = 0.25;
+window.GAP_THRESHOLD_PCT = GAP_THRESHOLD_PCT;
+const DOW_SHORT = {1:'MON',2:'TUE',3:'WED',4:'THU',5:'FRI'};
+
 function renderPriceHistory(sd){
-  _phAllData = sd; // cache for filter/sort
+  _phAllData = sd;
   const meta = document.getElementById('phFilterMeta');
   if(meta) meta.textContent = (sd.length).toLocaleString() + ' sessions shown';
   if(!sd||!sd.length){$('priceHistBody').innerHTML='<tr><td colspan="14" class="no-data">No data</td></tr>';return;}
@@ -31,8 +35,7 @@ function renderPriceHistory(sd){
 
   // ── DAILY GAP ANALYSIS ──────────────────────────────────────────────────
 
-  // Render all filterable sections with full data on initial load
-  phRenderFiltered(sd);
+  phRenderFiltered(sd, { tableRows: sd, label: `ALL HISTORY (${sd.length}d)`, series: sd });
 }
 
 // Build shared helper functions for price history rendering
@@ -46,18 +49,29 @@ function _buildPhHelpers() {
     const ohVals=getVals(subset,'oh_pts'),olVals=getVals(subset,'ol_pts');
     const hcVals=getVals(subset,'hc_pts'),lcVals=getVals(subset,'lc_pts');
     const upVals=ocVals.filter(v=>v>0),dnVals=ocVals.filter(v=>v<0);
+    const withOpen=subset.filter(d=>d.open>0&&d.measurements);
+    const pctOf=(k)=>withOpen.map(d=>{const m=d.measurements;const v=m[k]!=null?m[k]:m[keyMap[k]];return v!=null?v/d.open*100:null;}).filter(v=>v!=null);
+    const ocP=pctOf('oc_pts'),rngP=pctOf('range_pts'),ohP=pctOf('oh_pts'),olP=pctOf('ol_pts'),hcP=pctOf('hc_pts'),lcP=pctOf('lc_pts');
+    const argmax=(arr,fn)=>arr.length?arr.reduce((b,d)=>fn(d)>fn(b)?d:b):null;
+    const ocPctOf=d=>{const m=d.measurements;const v=m.oc_pts!=null?m.oc_pts:m.open_to_close;return v/d.open*100;};
+    const rngPctOf=d=>{const m=d.measurements;const v=m.range_pts!=null?m.range_pts:m.day_range;return v/d.open*100;};
     return{n:subset.length,avgRng:avg(rngVals),avgOC:avg(ocVals),
-      pctUp:pct2(ocVals,v=>v>0),avgUp:avg(upVals),avgDn:avg(dnVals),
+      pctUp:pct2(ocVals,v=>v>0),pctDown:pct2(ocVals,v=>v<0),pctFlat:pct2(ocVals,v=>v===0),avgUp:avg(upVals),avgDn:avg(dnVals),
       avgOH:avg(ohVals),avgOL:avg(olVals),avgHC:avg(hcVals),avgLC:avg(lcVals),
       maxUp:ocVals.length?Math.max(...ocVals):0,maxDn:ocVals.length?Math.min(...ocVals):0,
+      pct:{avgRng:avg(rngP),avgOC:avg(ocP),avgUp:avg(ocP.filter(v=>v>0)),avgDn:avg(ocP.filter(v=>v<0)),avgOH:avg(ohP),avgOL:avg(olP),avgHC:avg(hcP),avgLC:avg(lcP),
+        maxUp:argmax(withOpen,ocPctOf),maxDn:argmax(withOpen,d=>-ocPctOf(d)),maxRng:argmax(withOpen,rngPctOf)},
       rngVals,ocVals,ohVals,olVals};
   }
   return { keyMap, avg, pct:pct2, getVals, calcStats };
 }
 
 // Render all filterable price history sections with a given dataset
-function phRenderFiltered(sd) {
-  if(!sd||!sd.length) return;
+function phRenderFiltered(sd, opts) {
+  opts = opts || {};
+  const tableRows = opts.tableRows || sd;
+  const series = (opts.series || sd).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(!sd||!sd.length) { const tb=$('priceHistBody'); if(tb) tb.innerHTML='<tr><td colspan="14" class="no-data">No sessions match the selection</td></tr>'; return; }
   const { keyMap, avg, pct, getVals, calcStats } = _buildPhHelpers();
   const days = sd.filter(d=>d.measurements);
   const all = calcStats(days);
@@ -68,9 +82,9 @@ function phRenderFiltered(sd) {
   // ── Analytics header cards ──
   const aRow = $('priceAnalyticsRow');
   if(aRow) aRow.innerHTML = [
-    {l:'AVG DAY RANGE',  v:'$'+fmt(all.avgRng,2),  sub:`${all.n} sessions`,          c:'var(--cyan)'},
-    {l:'% DAYS UP',      v:fmt(all.pctUp,1)+'%',   sub:`avg +$${fmt(all.avgUp,2)} up days`,   c:'#00ff88'},
-    {l:'% DAYS DOWN',    v:fmt(100-all.pctUp,1)+'%',sub:`avg -$${fmt(Math.abs(all.avgDn),2)} dn days`, c:'#ff3355'},
+    {l:'AVG DAY RANGE',  v:fmt(all.pct.avgRng,2)+'%',  sub:`$${fmt(all.avgRng,2)} · ${all.n} sessions`,          c:'var(--cyan)'},
+    {l:'% DAYS UP',      v:fmt(all.pctUp,1)+'%',   sub:`avg +${fmt(all.pct.avgUp,2)}% up days`,   c:'#00ff88'},
+    {l:'% DAYS DOWN',    v:fmt(all.pctDown,1)+'%',sub:`avg ${fmt(all.pct.avgDn,2)}% dn days · ${fmt(all.pctFlat,1)}% flat`, c:'#ff3355'},
     {l:'AVG O\u2192C',   v:(all.avgOC>=0?'+':'')+'$'+fmt(all.avgOC,2),sub:'open to close avg',c:all.avgOC>=0?'#00ff88':'#ff3355'},
   ].map(({l,v,sub,c})=>`<div class="panel" style="text-align:center;border-top:3px solid ${c};">
     <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">${l}</div>
@@ -83,33 +97,11 @@ function phRenderFiltered(sd) {
   if(ytdEl2 && _phAllData) {
     const allDays2 = _phAllData.filter(d=>d.measurements);
     const allStats = calcStats(allDays2);
-    const curYear2 = new Date().getFullYear();
-    // Label the comparison columns based on what data is active
-    const isFiltered = days.length < allDays2.length * 0.95;
-    const filterLabel = days.length === allDays2.length ? `ALL HISTORY (${all.n}d)` :
-      days.length < 70 ? `${curYear2} YTD (${all.n}d)` :
-      days.length < 1600 ? `SINCE 2020 (${all.n}d)` : `FILTERED (${all.n}d)`;
-    const $d2 = v=>'$'+fmt(Math.abs(v),2);
-    const $p2 = v=>fmt(v,1)+'%';
-    const row2=(label,av,fv,fmtFn,hib)=>{
-      if(!isFiltered){
-        // When showing all data, compare all-time vs current year
-        const ytdDays2=allDays2.filter(d=>d.date&&d.date.startsWith(String(curYear2)));
-        const ytdStats=calcStats(ytdDays2);
-        av=fv=null; // handled separately below
-      }
-      const diff=av!=null&&fv!=null?fv-av:null;
-      const dc=diff===null?'var(--text2)':(diff===0?'var(--text2)':(diff>0)===hib?'#00ff88':'#ff3355');
-      return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:13px;color:var(--text2);">${label}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;text-align:right;">${fmtFn(av)}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--cyan);text-align:right;">${fmtFn(fv)}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${dc};text-align:right;">${diff!=null?(diff>=0?'+':'')+fmtFn(diff):'—'}</span>
-      </div>`;
-    };
-    // Simpler: always compare all-time baseline against the currently filtered data
-    const base = allStats; // all-time is always left column
-    const cur3 = all;      // currently filtered data is right column
+    const filterLabel = opts.label || `SELECTION (${all.n}d)`;
+    const $p2 = v=>fmt(v,2)+'%';
+    const $p1 = v=>fmt(v,1)+'%';
+    const base = allStats;
+    const cur3 = all;
     ytdEl2.innerHTML=`
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;padding:5px 0;margin-bottom:2px;">
         <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">METRIC</span>
@@ -118,20 +110,18 @@ function phRenderFiltered(sd) {
         <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);text-align:right;">DIFF</span>
       </div>
       ${[
-        ['Avg Day Range',    base.avgRng,              cur3.avgRng,              $d2, false],
-        ['% Days Up',        base.pctUp,               cur3.pctUp,               $p2, true],
-        ['Avg Up Day',       base.avgUp,               cur3.avgUp,               $d2, true],
-        ['Avg Down Day',     Math.abs(base.avgDn),     Math.abs(cur3.avgDn),     $d2, false],
-        ['Avg O→C',     base.avgOC,               cur3.avgOC,               $d2, true],
-        ['Avg O→H',     base.avgOH,               cur3.avgOH,               $d2, true],
-        ['Avg O→L',     Math.abs(base.avgOL),     Math.abs(cur3.avgOL),     $d2, false],
-        ['Avg H→C',     base.avgHC,               cur3.avgHC,               $d2, true],
-        ['Avg L→C',     base.avgLC,               cur3.avgLC,               $d2, true],
-        ['Largest Up Day',   base.maxUp,               cur3.maxUp,               $d2, true],
-        ['Largest Down Day', Math.abs(base.maxDn),     Math.abs(cur3.maxDn),     $d2, false],
+        ['Avg Day Range (% of open)',    base.pct.avgRng,           cur3.pct.avgRng,           $p2, false],
+        ['% Days Up',                    base.pctUp,                cur3.pctUp,                $p1, true],
+        ['Avg Up Day (% of open)',       base.pct.avgUp,            cur3.pct.avgUp,            $p2, true],
+        ['Avg Down Day (% of open)',     Math.abs(base.pct.avgDn),  Math.abs(cur3.pct.avgDn),  $p2, false],
+        ['Avg O→C (% of open)',          base.pct.avgOC,            cur3.pct.avgOC,            $p2, true],
+        ['Avg O→H (% of open)',          base.pct.avgOH,            cur3.pct.avgOH,            $p2, true],
+        ['Avg O→L (% of open)',          Math.abs(base.pct.avgOL),  Math.abs(cur3.pct.avgOL),  $p2, false],
+        ['Avg H→C (% of open)',          base.pct.avgHC,            cur3.pct.avgHC,            $p2, true],
+        ['Avg L→C (% of open)',          base.pct.avgLC,            cur3.pct.avgLC,            $p2, true],
       ].map(([label,av,fv,fmtFn,hib])=>{
         const diff=fv-av;
-        const dc=diff===0?'var(--text2)':(diff>0)===hib?'#00ff88':'#ff3355';
+        const dc=Math.abs(diff)<1e-9?'var(--text2)':(diff>0)===hib?'#00ff88':'#ff3355';
         return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">
           <span style="font-size:13px;color:var(--text2);">${label}</span>
           <span style="font-family:'Share Tech Mono',monospace;font-size:13px;text-align:right;">${fmtFn(av)}</span>
@@ -139,6 +129,16 @@ function phRenderFiltered(sd) {
           <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${dc};text-align:right;">${(diff>=0?'+':'')+fmtFn(diff)}</span>
         </div>`;
       }).join('')}
+      ${[['Largest Up Day', base.pct.maxUp, cur3.pct.maxUp, d=>d?`+${fmt((d.measurements.oc_pts??d.measurements.open_to_close)/d.open*100,2)}% · ${d.date}`:'—'],
+         ['Largest Down Day', base.pct.maxDn, cur3.pct.maxDn, d=>d?`${fmt((d.measurements.oc_pts??d.measurements.open_to_close)/d.open*100,2)}% · ${d.date}`:'—'],
+         ['Widest Range Day', base.pct.maxRng, cur3.pct.maxRng, d=>d?`${fmt((d.measurements.range_pts??d.measurements.day_range)/d.open*100,2)}% · ${d.date}`:'—']]
+        .map(([label,ad,fd,fmtD])=>`<div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:13px;color:var(--text2);">${label}</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:11px;text-align:right;">${fmtD(ad)}</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--cyan);text-align:right;">${fmtD(fd)}</span>
+          <span></span>
+        </div>`).join('')}
+      <div style="font-size:10px;color:var(--text3);margin-top:8px;">Every return on this site is a price return on a dividend-unadjusted series; open-to-close and range figures are percentages of that day's open.</div>
     `;
   }
 
@@ -167,15 +167,17 @@ function phRenderFiltered(sd) {
   const gapHistEl = $('priceHistGaps');
   if(gapHistEl) {
     const cur2 = _md?.quotes?.['SPY']?.price || 0;
+    const selected = new Set(sd.map(d=>d.date));
     const gaps = [];
-    for(let i=0;i<sd.length-1;i++){
-      const t=sd[i], p=sd[i+1];
+    for(let i=0;i<series.length-1;i++){
+      const t=series[i], p=series[i+1];
       if(!t.open||!p.close) continue;
       const gs=t.open-p.close;
-      if(Math.abs(gs)<0.20) continue;
+      if(Math.abs(gs)/p.close*100<GAP_THRESHOLD_PCT) continue;
+      if(!selected.has(t.date)) continue;
       let filled=false;
       for(let j=i-1;j>=0;j--){
-        const c=sd[j];
+        const c=series[j];
         if(!c.low||!c.high) continue;
         if(gs>0&&c.low<=p.close){filled=true;break;}
         if(gs<0&&c.high>=p.close){filled=true;break;}
@@ -225,20 +227,24 @@ function phRenderFiltered(sd) {
   // DoD historical
   const dodEl = $('dodHistPanel');
   if(dodEl && sd.length>1) {
-    const gaps2 = [], gapUps = [], gapDns = [];
-    for(let i=0;i<sd.length-1;i++){
-      const t=sd[i],p=sd[i+1];
-      if(t.open&&p.close){const g=t.open-p.close;if(Math.abs(g)>0.1){gaps2.push(g);g>0?gapUps.push(g):gapDns.push(g);}}
+    const selected2 = new Set(sd.map(d=>d.date));
+    const gapP = [], ccP = [];
+    for(let i=0;i<series.length-1;i++){
+      const t=series[i],p=series[i+1];
+      if(!selected2.has(t.date)||!t.open||!p.close) continue;
+      gapP.push((t.open-p.close)/p.close*100);
+      if(t.close) ccP.push((t.close-p.close)/p.close*100);
     }
-    const ocPairs = sd.slice(0,-1).map((t,i)=>({cc:t.close-sd[i+1].close})).filter(x=>x.cc);
+    const sized = gapP.filter(g=>Math.abs(g)>=GAP_THRESHOLD_PCT), gapUps=sized.filter(g=>g>0), gapDns=sized.filter(g=>g<0);
     dodEl.innerHTML=`<div style="display:flex;flex-direction:column;gap:4px;">`+[
-      {l:'% Days Gapped Up',    v:fmt(pct(gaps2,v=>v>0),1)+'%', c:'#00ff88'},
-      {l:'% Days Gapped Down',  v:fmt(pct(gaps2,v=>v<0),1)+'%', c:'#ff3355'},
-      {l:'Avg Gap Up Size',     v:'+$'+fmt(avg(gapUps),2), c:'#00ff88'},
-      {l:'Avg Gap Dn Size',     v:'-$'+fmt(Math.abs(avg(gapDns)),2), c:'#ff3355'},
-      {l:'% C-to-C Positive',   v:fmt(pct(ocPairs.map(x=>x.cc),v=>v>0),1)+'%', c:'#00ff88'},
-      {l:'% C-to-C Negative',   v:fmt(pct(ocPairs.map(x=>x.cc), v=>v<0),1)+'%', c:'#ff4444'},
-      {l:'Avg C-to-C Move',     v:(avg(ocPairs.map(x=>x.cc))>=0?'+':'')+'$'+fmt(avg(ocPairs.map(x=>x.cc)),2), c:'var(--text)'},
+      {l:`% Days Gapped Up (≥${GAP_THRESHOLD_PCT}%)`,    v:fmt(gapP.length?gapUps.length/gapP.length*100:0,1)+'%', c:'#00ff88'},
+      {l:`% Days Gapped Down (≥${GAP_THRESHOLD_PCT}%)`,  v:fmt(gapP.length?gapDns.length/gapP.length*100:0,1)+'%', c:'#ff3355'},
+      {l:'Avg Gap Up Size',     v:'+'+fmt(avg(gapUps),2)+'%', c:'#00ff88'},
+      {l:'Avg Gap Dn Size',     v:fmt(avg(gapDns),2)+'%', c:'#ff3355'},
+      {l:'% C-to-C Positive',   v:fmt(pct(ccP,v=>v>0),1)+'%', c:'#00ff88'},
+      {l:'% C-to-C Negative',   v:fmt(pct(ccP, v=>v<0),1)+'%', c:'#ff4444'},
+      {l:'Avg C-to-C Move',     v:(avg(ccP)>=0?'+':'')+fmt(avg(ccP),2)+'%', c:'var(--text)'},
+      {l:'Sessions',            v:`${gapP.length} · vs prior session`, c:'var(--text3)'},
     ].map(i=>`<div style="display:flex;justify-content:space-between;padding:6px 8px;background:var(--bg3);border-radius:3px;">
       <span style="font-size:12px;color:var(--text2);">${i.l}</span>
       <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${i.c};">${i.v}</span>
@@ -251,7 +257,7 @@ function phRenderFiltered(sd) {
   _renderGapOHLCBlocks(sd);
   // ── Raw table ──
   // Raw table — price history
-  $('priceHistBody').innerHTML=sd.map(day=>{
+  $('priceHistBody').innerHTML=tableRows.map(day=>{
     const m=day.measurements||{};
     const oc=m.oc_pts??m.open_to_close, ocp=m.oc_pct??m.pct_open_to_close;
     const rng=m.range_pts??m.day_range, rngp=m.range_pct??m.pct_day_range;
@@ -321,7 +327,7 @@ function _getDow(dateStr) {
 function phApplyFilter(mode) {
   if(!_phAllData) return;
   const sd = _phAllData;
-  const curYear = new Date().getFullYear();
+  const curYear = Number((sd.reduce((m,d)=>d.date>m?d.date:m,'') || '').slice(0,4)) || new Date().getFullYear();
 
   if(!mode || typeof mode !== 'string') {
     const active = document.querySelector('#phFilterBtns .ph-fb.active');
@@ -362,8 +368,10 @@ function phApplyFilter(mode) {
   const meta = document.getElementById('phFilterMeta');
   if(meta) meta.textContent = sorted.length.toLocaleString() + ' sessions shown';
 
-  // Re-render ALL filterable sections with the sorted/filtered data
-  phRenderFiltered(sorted);
+  const periodLabel = mode === '2020' ? 'SINCE 2020' : mode === 'ytd' ? `${curYear} YTD` : 'ALL HISTORY';
+  const dowLabel = (_phActiveDows.size > 0 && _phActiveDows.size < 5) ? ' · ' + [1,2,3,4,5].filter(d=>_phActiveDows.has(d)).map(d=>DOW_SHORT[d]).join('+') : '';
+  const periodSeries = mode === '2020' ? sd.filter(d => d.date && d.date >= '2020-01-01') : mode === 'ytd' ? sd.filter(d => d.date && d.date.startsWith(String(curYear))) : sd;
+  phRenderFiltered(filtered, { tableRows: sorted, label: `${periodLabel}${dowLabel} (${filtered.length}d)`, series: periodSeries });
 }
 
 
@@ -540,7 +548,7 @@ function vhDowNone() {
 function vhApplyFilter(mode) {
   if (!_vhAllData) return;
   const sd = _vhAllData;
-  const curYear = new Date().getFullYear();
+  const curYear = Number((sd.reduce((m,d)=>d.date>m?d.date:m,'') || '').slice(0,4)) || new Date().getFullYear();
 
   if (!mode || typeof mode !== 'string') {
     const active = document.querySelector('#vhFilterBtns .ph-fb.active');
@@ -585,8 +593,9 @@ function renderVolHistory(sd){
   }
 
   const vdays = sd.filter(d=>d.volume_analysis&&d.volume>100000);
-  const avgVol = vdays.reduce((a,d)=>a+d.volume,0)/(vdays.length||1);
-  const vols = vdays.map(d=>d.volume);
+  const allVolDays = sd.filter(d=>d.volume>100000);
+  const avgVol = allVolDays.reduce((a,d)=>a+d.volume,0)/(allVolDays.length||1);
+  const vols = allVolDays.map(d=>d.volume);
   const maxVol = vols.length ? Math.max(...vols) : 0;
   const minVol = vols.length ? Math.min(...vols) : 0;
 
@@ -603,11 +612,11 @@ function renderVolHistory(sd){
       : avgVol;
 
     vaRow.innerHTML = [
-      {l:'FULL HISTORY AVG', v:fmtK(avgVol), sub:`${vdays.length} sessions`, c:'var(--cyan)'},
+      {l:'FULL HISTORY AVG', v:fmtK(avgVol), sub:`${allVolDays.length} sessions`, c:'var(--cyan)'},
       {l:'30 DAY AVG', v:fmtK(avg30), sub:`${last30.length} sessions`, c:'var(--cyan)'},
       {l:'PREVIOUS DAY VOLUME', v:fmtK(prevVol), sub:prevDay.date || '—', c:'#00ccff'},
-      {l:'HIGHEST VOLUME DAY', v:fmtK(maxVol), sub:vdays.find(d=>d.volume===maxVol)?.date||'', c:'#ff8800'},
-      {l:'LOWEST VOLUME DAY', v:fmtK(minVol), sub:vdays.find(d=>d.volume===minVol)?.date||'', c:'var(--text2)'},
+      {l:'HIGHEST VOLUME DAY', v:fmtK(maxVol), sub:allVolDays.find(d=>d.volume===maxVol)?.date||'', c:'#ff8800'},
+      {l:'LOWEST VOLUME DAY', v:fmtK(minVol), sub:allVolDays.find(d=>d.volume===minVol)?.date||'', c:'var(--text2)'},
     ].map(({l,v,sub,c}) => `
       <div class="panel" style="text-align:center;border-top:3px solid ${c}; flex: 1 1 160px; min-width: 145px; padding: 10px 8px;">
         <div style="font-family:'Orbitron',monospace;font-size:8.5px;letter-spacing:1px;color:var(--text3);margin-bottom:5px;">${l}</div>
@@ -1399,7 +1408,7 @@ function buildContext(md, sd) {
     const t2=sd[i], p2=sd[i+1];
     if(!t2?.open||!p2?.close) continue;
     const gs=parseFloat(t2.open)-parseFloat(p2.close);
-    if(Math.abs(gs)<0.05) continue;
+    if(Math.abs(gs)/parseFloat(p2.close)*100<GAP_THRESHOLD_PCT) continue;
     let filled=false;
     for(let j=i-1;j>=0;j--){
       if(!sd[j]?.low||!sd[j]?.high) continue;
@@ -2202,7 +2211,7 @@ async function generateLevelAnalysis(md, sd) {
       const t2=sd[i], p2=sd[i+1];
       if(!t2.open||!p2.close) continue;
       const gs=t2.open-p2.close;
-      if(Math.abs(gs)<0.20) continue;
+      if(Math.abs(gs)/p2.close*100<GAP_THRESHOLD_PCT) continue;
       let filled=false;
       for(let j=i-1;j>=0;j--){
         const c=sd[j];
@@ -4225,8 +4234,9 @@ async function loadData(){
 }
 loadData();
 
-function _renderGapOHLCBlocks(sd) {
+function _renderGapOHLCBlocks(sd, gapDays) {
   if(!sd || sd.length <= 1) return;
+  sd = sd.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const $ = id => document.getElementById(id);
   const fmt = (v,d) => { d = d==null?1:d; return v==null?'--':Number(v).toFixed(d); };
   const gapStatCardsEl = $('gapStatCards');
@@ -4242,8 +4252,9 @@ function _renderGapOHLCBlocks(sd) {
       const today2=sd[i], prev2=sd[i+1];
       if(!today2.open||!prev2.close||!today2.high||!today2.low||!today2.close) continue;
       const gapAmt = today2.open - prev2.close;
-      if(Math.abs(gapAmt) < 0.05) continue; // filter micro gaps
       const gapPct = (gapAmt/prev2.close)*100;
+      if(Math.abs(gapPct) < GAP_THRESHOLD_PCT) continue;
+      if(gapDays && !gapDays.has(today2.date)) continue;
       const dir = gapAmt > 0 ? 'UP' : 'DOWN';
       // Gap filled same day?
       // Gap up filled if price traded back down to prev close (low <= prevClose)
@@ -4278,7 +4289,7 @@ function _renderGapOHLCBlocks(sd) {
 
     // Stat cards
     gapStatCardsEl.innerHTML = [
-      {l:'TOTAL GAPS',       v:gaps.length,                  sub:`${sd.length} days analyzed`,    c:'var(--cyan)'},
+      {l:'TOTAL GAPS',       v:gaps.length,                  sub:`≥${GAP_THRESHOLD_PCT}% of prior close · ${gapDays?gapDays.size:sd.length} sessions`,    c:'var(--cyan)'},
       {l:'GAP UPS',          v:gapsUp.length,                sub:fmt(gapsUp.length/gaps.length*100,1)+'% of gaps',  c:'#00ff88'},
       {l:'GAP DOWNS',        v:gapsDn.length,                sub:fmt(gapsDn.length/gaps.length*100,1)+'% of gaps',  c:'#ff3355'},
       {l:'UP FILL RATE',     v:fmt(fillUp.length/Math.max(gapsUp.length,1)*100,1)+'%', sub:`${fillUp.length} of ${gapsUp.length} filled same day`, c:'#00ff88'},
@@ -5470,7 +5481,7 @@ function _renderMacroHTML(data) {
     </div>
 
     <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;">
-      Data: Federal Reserve Economic Database (FRED) · St. Louis Fed · Latest observation ${data.as_of ? new Date(data.as_of+'T12:00:00').toLocaleDateString('en-US', {month:'long',day:'numeric',year:'numeric'}) : '—'}
+      Data: Federal Reserve Economic Database (FRED) · St. Louis Fed · Latest observation ${data.as_of ? new Date(data.as_of+'T12:00:00').toLocaleDateString('en-US', {month:'long',day:'numeric',year:'numeric'}) : '—'}${data.throttled ? ' · <span style="color:#ff8800;">FRED rate-limited this request — some series missing, retry in a minute</span>' : ''}${data.errors && Object.keys(data.errors).length ? ` · ${Object.keys(data.errors).length} series unavailable: ${Object.keys(data.errors).join(', ')}` : ''}
     </div>
   </div>`;
 }
