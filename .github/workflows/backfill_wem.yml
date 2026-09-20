@@ -6,15 +6,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch database from data branch
+        run: |
+          git fetch --depth=1 origin data
+          git cat-file blob FETCH_HEAD:spy_data.db > spy_data.db
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Run backfill script
         run: python backfill_static_wem.py
+      - name: Push database to data branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch --depth=1 origin data
+          BLOB=$(git hash-object -w spy_data.db)
+          TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
+          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "Backfill static WEM columns and next week row")
+          git push origin "$COMMIT":refs/heads/data
+
       - name: Commit results
         run: |
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
-          git add spy_data.db market_data.json
+          git add market_data.json
           git commit -m "Backfill static WEM columns and next week row" || echo "Nothing to commit"
           git push

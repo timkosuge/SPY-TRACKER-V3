@@ -19,6 +19,11 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Fetch database from data branch
+        run: |
+          git fetch --depth=1 origin data
+          git cat-file blob FETCH_HEAD:spy_data.db > spy_data.db
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -53,16 +58,24 @@ jobs:
       - name: Generate relief rally data
         run: python generate_relief_data.py
 
-      - name: Commit updated files
+      - name: Push database to data branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch --depth=1 origin data
+          BLOB=$(git hash-object -w spy_data.db)
+          TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
+          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "Auto: spy_data.db $(TZ=America/Chicago date +'%Y-%m-%d %H:%M %Z')")
+          git push origin "$COMMIT":refs/heads/data
+
+      - name: Commit updated files
+        run: |
           git fetch origin main
           git checkout origin/main -- .github/workflows/
-          git add -f spy_data.db spy_data.json market_data.json \
+          git add -f spy_data.json market_data.json \
                      analog_data.js tod_stats.js \
                      intraday_library.js expiry_data.js \
                      intraday_patterns.js decline_data.js relief_data.js \
                      window_stats.js gap_stats.js
-          git diff --staged --quiet && echo "No changes" || git commit -m "Auto: SPY data update $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git diff --staged --quiet && echo "No changes" || git commit -m "Auto: SPY data update $(TZ=America/Chicago date +'%Y-%m-%d %H:%M %Z')"
           git push || echo "Nothing to push"

@@ -10,6 +10,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Fetch database from data branch
+        run: |
+          git fetch --depth=1 origin data
+          git cat-file blob FETCH_HEAD:spy_data.db > spy_data.db
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -45,11 +50,12 @@ jobs:
       - name: Show git status
         run: git status && git diff --stat
 
-      - name: Commit fixed DB
+      - name: Push database to data branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add spy_data.db
-          git diff --cached --stat
-          git commit -m "fix: correct bad WEM rows from Thursday short-week bug" || echo "Nothing to commit"
-          git push || echo "Nothing to push"
+          git fetch --depth=1 origin data
+          BLOB=$(git hash-object -w spy_data.db)
+          TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
+          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "fix: correct bad WEM rows from Thursday short-week bug")
+          git push origin "$COMMIT":refs/heads/data

@@ -23,7 +23,9 @@ export async function onRequest(context) {
     const type = url.searchParams.get('type') || 'intraday';
 
     if (type === 'intraday') {
-      const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+      // Support ?date=YYYY-MM-DD to fetch a specific day (for fallback to last trading day)
+      const reqDate = url.searchParams.get('date');
+      const etDate = reqDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
       const key = `gex:intraday:${etDate}`;
       const data = await kv.get(key, 'json');
       return new Response(JSON.stringify({
@@ -37,6 +39,13 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({
         snapshots: Array.isArray(data) ? data : []
       }), { headers });
+    }
+
+    if (type === 'list') {
+      // List all available intraday keys so client can find the most recent
+      const list = await kv.list({ prefix: 'gex:intraday:' });
+      const dates = (list.keys || []).map(k => k.name.replace('gex:intraday:', '')).sort().reverse();
+      return new Response(JSON.stringify({ dates }), { headers });
     }
 
     return new Response(JSON.stringify({ error: 'Unknown type', snapshots: [] }), { headers });

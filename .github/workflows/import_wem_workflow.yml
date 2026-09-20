@@ -12,6 +12,11 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Fetch database from data branch
+        run: |
+          git fetch --depth=1 origin data
+          git cat-file blob FETCH_HEAD:spy_data.db > spy_data.db
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -23,25 +28,34 @@ jobs:
       - name: Run WEM import
         run: python import_wem.py
 
-      - name: Commit database with WEM data
+      - name: Push database to data branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main
-          git add -f spy_data.db
-          git diff --staged --quiet && echo "No changes" || git commit -m "Import WEM data into database"
-          git push || echo "Nothing to push"
+          git fetch --depth=1 origin data
+          BLOB=$(git hash-object -w spy_data.db)
+          TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
+          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "Import WEM data into database")
+          git push origin "$COMMIT":refs/heads/data
 
       - name: Run main tracker to export JSON
         env:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
         run: python fetch_and_analyze.py
 
-      - name: Commit JSON exports
+      - name: Push database to data branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch --depth=1 origin data
+          BLOB=$(git hash-object -w spy_data.db)
+          TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
+          COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "Export after WEM import")
+          git push origin "$COMMIT":refs/heads/data
+
+      - name: Commit JSON exports
+        run: |
           git pull origin main
-          git add -f spy_data.db spy_data.json market_data.json
+          git add -f spy_data.json market_data.json
           git diff --staged --quiet && echo "No changes" || git commit -m "Export JSON after WEM import"
           git push || echo "Nothing to push"
