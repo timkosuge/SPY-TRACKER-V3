@@ -5,7 +5,7 @@ import unittest
 
 
 def run(expr):
-    with open("dashboard1.js", encoding="utf-8") as f:
+    with open("shared.js", encoding="utf-8") as f:
         src = f.read()
     head = src[:src.index("const $=id=>")]
     js = head + "\nprocess.stdout.write(JSON.stringify(" + expr + "));"

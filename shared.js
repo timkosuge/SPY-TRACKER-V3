@@ -1,0 +1,10 @@
+const fmt=(n,d=2)=>n==null||isNaN(n)?'—':Number(n).toFixed(d);
+const fmtK=n=>n==null||isNaN(n)?'—':(n<0?'-':'')+(Math.abs(n)>=1e9?(Math.abs(n)/1e9).toFixed(1)+'B':Math.abs(n)>=1e6?(Math.abs(n)/1e6).toFixed(1)+'M':Math.abs(n)>=1e3?(Math.abs(n)/1e3).toFixed(0)+'K':String(Math.round(Math.abs(n))));
+const fmtPct=(n,d=2)=>n==null||isNaN(n)?'—':(n>0?'+':'')+Number(n).toFixed(d)+'%';
+const fmtDate=(iso,style)=>{ if(!iso||!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso||'—'; const d=new Date(iso.slice(0,10)+'T12:00:00Z'); return d.toLocaleDateString('en-US', style==='short'?{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}:{month:'long',day:'numeric',year:'numeric',timeZone:'UTC'}); };
+const labelEnum=v=>v==null||v===''?'—':String(v).split('_').map(w=>w?w[0].toUpperCase()+w.slice(1).toLowerCase():w).join(' ');
+const etToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());
+const clr=n=>n>0?'up':n<0?'dn':'neu';
+const sign=n=>n>0?'+':'';
+const fmt12=t=>{if(!t||!t.includes(':'))return t||'—';const[h,m]=t.split(':').map(Number);const ampm=h>=12?'PM':'AM';const h12=h%12||12;return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;};
+const $=id=>document.getElementById(id);

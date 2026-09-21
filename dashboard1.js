@@ -1,13 +1,3 @@
-const fmt=(n,d=2)=>n==null||isNaN(n)?'—':Number(n).toFixed(d);
-const fmtK=n=>n==null||isNaN(n)?'—':(n<0?'-':'')+(Math.abs(n)>=1e9?(Math.abs(n)/1e9).toFixed(1)+'B':Math.abs(n)>=1e6?(Math.abs(n)/1e6).toFixed(1)+'M':Math.abs(n)>=1e3?(Math.abs(n)/1e3).toFixed(0)+'K':String(Math.round(Math.abs(n))));
-const fmtPct=(n,d=2)=>n==null||isNaN(n)?'—':(n>0?'+':'')+Number(n).toFixed(d)+'%';
-const fmtDate=(iso,style)=>{ if(!iso||!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso||'—'; const d=new Date(iso.slice(0,10)+'T12:00:00Z'); return d.toLocaleDateString('en-US', style==='short'?{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}:{month:'long',day:'numeric',year:'numeric',timeZone:'UTC'}); };
-const labelEnum=v=>v==null||v===''?'—':String(v).split('_').map(w=>w?w[0].toUpperCase()+w.slice(1).toLowerCase():w).join(' ');
-const etToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());
-const clr=n=>n>0?'up':n<0?'dn':'neu';
-const sign=n=>n>0?'+':'';
-const fmt12=t=>{if(!t||!t.includes(':'))return t||'—';const[h,m]=t.split(':').map(Number);const ampm=h>=12?'PM':'AM';const h12=h%12||12;return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;};
-const $=id=>document.getElementById(id);
 const expectedMove=(spot,iv,calendarDays)=>spot*iv*Math.sqrt(calendarDays/365);
 window.expectedMove=expectedMove;
 
@@ -235,12 +225,12 @@ function renderHub(md,sd){
   const ctH = Math.floor(ctZ.mins / 60), ctM = ctZ.mins % 60, ctS = S.etSecs;
 
   let sessionLabel, sessionColor;
-  if(isWeekend)      {sessionLabel='WEEKEND';     sessionColor='#606080';}
-  else if(isHoliday) {sessionLabel='CLOSED · '+S.holiday.toUpperCase(); sessionColor='#ff3355';}
-  else if(isPremarket)   {sessionLabel='PRE-MARKET';  sessionColor='#ffcc00';}
-  else if(isMarketHours) {sessionLabel='MARKET OPEN'; sessionColor='#00ff88';}
-  else if(isAfterHours)  {sessionLabel='AFTER HOURS'; sessionColor='#ff8800';}
-  else                   {sessionLabel='OVERNIGHT';   sessionColor='#606080';}
+  if(isWeekend)      {sessionLabel='WEEKEND';     sessionColor='var(--dim)';}
+  else if(isHoliday) {sessionLabel='CLOSED · '+S.holiday.toUpperCase(); sessionColor='var(--red)';}
+  else if(isPremarket)   {sessionLabel='PRE-MARKET';  sessionColor='var(--yellow)';}
+  else if(isMarketHours) {sessionLabel='MARKET OPEN'; sessionColor='var(--green)';}
+  else if(isAfterHours)  {sessionLabel='AFTER HOURS'; sessionColor='var(--orange)';}
+  else                   {sessionLabel='OVERNIGHT';   sessionColor='var(--dim)';}
 
   // Global sessions (all times local to each city)
   const lonMins = lonZ.mins;
@@ -250,7 +240,7 @@ function renderHub(md,sd){
   const lonIsOpen = !lonWeekend && lonMins>=lonOpen && lonMins<lonClose;
   const lonIsPremarket = !lonWeekend && lonMins>=7*60 && lonMins<lonOpen;
   const lonStatus = lonWeekend?'CLOSED':lonIsOpen?'OPEN':lonIsPremarket?'PRE':'CLOSED';
-  const lonColor = lonIsOpen?'#00ff88':lonIsPremarket?'#ffcc00':'#606080';
+  const lonColor = lonIsOpen?'var(--green)':lonIsPremarket?'var(--yellow)':'var(--dim)';
   const lonTimeStr = zoneClock(now, 'Europe/London');
 
   const tokyoMins = tokZ.mins;
@@ -261,7 +251,7 @@ function renderHub(md,sd){
   const tokyoIsOpen = !tokyoWeekend && tokyoMins>=tokyoOpen && tokyoMins<tokyoClose && !tokyoLunch;
   const tokyoIsPremarket = !tokyoWeekend && tokyoMins>=8*60 && tokyoMins<tokyoOpen;
   const tokyoStatus = tokyoWeekend?'CLOSED':tokyoIsOpen?'OPEN':tokyoIsPremarket?'PRE':tokyoLunch?'LUNCH':'CLOSED';
-  const tokyoColor = tokyoIsOpen?'#00ff88':tokyoIsPremarket?'#ffcc00':tokyoLunch?'#ff8800':'#606080';
+  const tokyoColor = tokyoIsOpen?'var(--green)':tokyoIsPremarket?'var(--yellow)':tokyoLunch?'var(--orange)':'var(--dim)';
   const tokyoTimeStr = zoneClock(now, 'Asia/Tokyo');
 
   // Countdown helper
@@ -272,22 +262,22 @@ function renderHub(md,sd){
 
   let countdownSecs = 0;
   let countdownLabel = '';
-  let countdownColor = '#606080';
+  let countdownColor = 'var(--dim)';
   if(isMarketHours){
     countdownSecs = Math.max(0, S.secsToClose);
     countdownLabel = S.earlyClose ? 'CLOSES IN (1:00 PM ET)' : 'CLOSES IN';
-    countdownColor = '#00ff88';
+    countdownColor = 'var(--green)';
   } else if(isPremarket){
     countdownSecs = Math.max(0, S.secsToOpen);
     countdownLabel = 'OPENS IN';
-    countdownColor = '#ffcc00';
+    countdownColor = 'var(--yellow)';
   } else {
     const nextOpen = new Date(S.nextOpenDate + 'T12:00:00Z');
     const offsetMins = (() => { const p = zoneMinutes(nextOpen, 'America/New_York'); return p.mins - 12*60; })();
     const openUtc = new Date(nextOpen.getTime() + ((9*60+30) - 12*60 - offsetMins) * 60000);
     countdownSecs = Math.max(0, Math.floor((openUtc - now)/1000));
     countdownLabel = 'OPENS IN';
-    countdownColor = '#ffcc00';
+    countdownColor = 'var(--yellow)';
   }
 
   const dateStr = new Date(S.etDate+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric',timeZone:'UTC'});
@@ -319,29 +309,29 @@ function renderHub(md,sd){
         <!-- LONDON SESSION -->
         <div style="border-left:1px solid var(--border);padding-left:16px;">
         <div id="hubLonBlock" onclick="openCityCam('london')" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for London live cam">
-            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${lonIsOpen?'#00ff88':lonStatus==='CLOSED'?'#ff3355':'var(--text3)'};">LONDON</span>
-            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${lonColor};background:${lonColor}22;">${lonStatus}</span>
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${lonIsOpen?'var(--green)':lonStatus==='CLOSED'?'var(--red)':'var(--text3)'};">LONDON</span>
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${lonColor};background:transparent;border:1px solid ${lonColor};">${lonStatus}</span>
           </div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${lonIsOpen?'#00ff88':lonStatus==='CLOSED'?'#ff3355':lonColor};" id="hubLonClock">${lonTimeStr}</div>
-          <div style="font-size:11px;color:${lonIsOpen?'#00ff88':lonIsPremarket?'#ffcc00':'#ff3355'};margin-top:2px;">${lonIsOpen?`Closes in ${Math.floor((lonClose-lonMins)/60)}h ${(lonClose-lonMins)%60}m`:lonIsPremarket?`Opens in ${Math.floor((lonOpen-lonMins)/60)}h ${(lonOpen-lonMins)%60}m`:'Closed'}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${lonIsOpen?'var(--green)':lonStatus==='CLOSED'?'var(--red)':lonColor};" id="hubLonClock">${lonTimeStr}</div>
+          <div style="font-size:11px;color:${lonIsOpen?'var(--green)':lonIsPremarket?'var(--yellow)':'var(--red)'};margin-top:2px;">${lonIsOpen?`Closes in ${Math.floor((lonClose-lonMins)/60)}h ${(lonClose-lonMins)%60}m`:lonIsPremarket?`Opens in ${Math.floor((lonOpen-lonMins)/60)}h ${(lonOpen-lonMins)%60}m`:'Closed'}</div>
         </div>
         <!-- TOKYO SESSION -->
         <div style="border-left:1px solid var(--border);padding-left:16px;">
         <div id="hubTokyoBlock" onclick="openCityCam('tokyo')" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for Tokyo live cam">
-            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${tokyoIsOpen?'#00ff88':tokyoStatus==='CLOSED'?'#ff3355':'var(--text3)'};">TOKYO</span>
-            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${tokyoColor};background:${tokyoColor}22;">${tokyoStatus}</span>
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${tokyoIsOpen?'var(--green)':tokyoStatus==='CLOSED'?'var(--red)':'var(--text3)'};">TOKYO</span>
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${tokyoColor};background:transparent;border:1px solid ${tokyoColor};">${tokyoStatus}</span>
           </div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${tokyoIsOpen?'#00ff88':tokyoStatus==='CLOSED'?'#ff3355':tokyoColor};" id="hubTokyoClock">${tokyoTimeStr}</div>
-          <div style="font-size:11px;color:${tokyoIsOpen?'#00ff88':tokyoIsPremarket?'#ffcc00':tokyoLunch?'#ff8800':'#ff3355'};margin-top:2px;">${tokyoIsOpen?`Closes in ${Math.floor((tokyoClose-tokyoMins)/60)}h ${(tokyoClose-tokyoMins)%60}m`:tokyoIsPremarket?`Opens in ${Math.floor((tokyoOpen-tokyoMins)/60)}h ${(tokyoOpen-tokyoMins)%60}m`:tokyoLunch?'Lunch break':'Closed'}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${tokyoIsOpen?'var(--green)':tokyoStatus==='CLOSED'?'var(--red)':tokyoColor};" id="hubTokyoClock">${tokyoTimeStr}</div>
+          <div style="font-size:11px;color:${tokyoIsOpen?'var(--green)':tokyoIsPremarket?'var(--yellow)':tokyoLunch?'var(--orange)':'var(--red)'};margin-top:2px;">${tokyoIsOpen?`Closes in ${Math.floor((tokyoClose-tokyoMins)/60)}h ${(tokyoClose-tokyoMins)%60}m`:tokyoIsPremarket?`Opens in ${Math.floor((tokyoOpen-tokyoMins)/60)}h ${(tokyoOpen-tokyoMins)%60}m`:tokyoLunch?'Lunch break':'Closed'}</div>
         </div>
         <!-- NEW YORK SESSION STATUS -->
         <div style="border-left:1px solid var(--border);padding-left:16px;">
         <div id="hubNYBlock" onclick="openCityCam('newyork')" onmousedown="_nyLongPressStart()" onmouseup="_nyLongPressCancel()" onmouseleave="_nyLongPressCancel()" ontouchstart="_nyLongPressStart()" ontouchend="_nyLongPressCancel()" style="border-left:1px solid var(--border);padding-left:16px;cursor:pointer;" title="Click for New York live cam | Hold for music">
-            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${isMarketHours?'#00ff88':(!isMarketHours&&!isPremarket&&!isAfterHours)?'#ff3355':'var(--text3)'};">NEW YORK</span>
-            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${sessionColor};background:${sessionColor}22;">${isMarketHours?'OPEN':isPremarket?'PRE':'CLOSED'}</span>
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${isMarketHours?'var(--green)':(!isMarketHours&&!isPremarket&&!isAfterHours)?'var(--red)':'var(--text3)'};">NEW YORK</span>
+            <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${sessionColor};background:transparent;border:1px solid ${sessionColor};">${isMarketHours?'OPEN':isPremarket?'PRE':'CLOSED'}</span>
           </div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${isMarketHours?'#00ff88':(!isMarketHours&&!isPremarket&&!isAfterHours)?'#ff3355':sessionColor};" id="hubEtClock">${zoneClock(now, 'America/New_York')}</div>
-          <div style="font-size:11px;color:${isMarketHours?'#00ff88':isPremarket?'#ffcc00':'#ff3355'};margin-top:2px;">${S.earlyClose?'9:30–13:00 ET · 8:30–12:00 CT · early close':'9:30–16:00 ET · 8:30–15:00 CT'}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${isMarketHours?'var(--green)':(!isMarketHours&&!isPremarket&&!isAfterHours)?'var(--red)':sessionColor};" id="hubEtClock">${zoneClock(now, 'America/New_York')}</div>
+          <div style="font-size:11px;color:${isMarketHours?'var(--green)':isPremarket?'var(--yellow)':'var(--red)'};margin-top:2px;">${S.earlyClose?'9:30–13:00 ET · 8:30–12:00 CT · early close':'9:30–16:00 ET · 8:30–15:00 CT'}</div>
         </div>
       </div>
       ${upcomingHolidays.length ? `
@@ -352,7 +342,7 @@ function renderHub(md,sd){
           const dstr=d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
           const days=Math.round((d-new Date(S.etDate+'T12:00:00Z'))/86400000);
           const halfDay=!h.full;
-          const c=days<=7?'#ff8800':days<=14?'#ffcc00':'#ffcc00';
+          const c=days<=7?'var(--orange)':days<=14?'var(--yellow)':'var(--yellow)';
           return `<div style="background:var(--bg3);border:1px solid ${days<=7?'rgba(255,136,0,0.3)':'rgba(255,204,0,0.2)'};border-radius:3px;padding:4px 10px;display:flex;gap:8px;align-items:center;">
             <span style="font-family:'Orbitron',monospace;font-size:9px;color:${c};">${dstr}</span>
             <span style="font-size:12px;color:#ffcc00;">${h.name}</span>
@@ -383,7 +373,7 @@ function renderHub(md,sd){
       if(cd && window._hubCountdownSecs>0){
         window._hubCountdownSecs--;
         cd.textContent=fmtCountdown(window._hubCountdownSecs);
-        if(window._hubCountdownSecs<=300) cd.style.color='#ff3355';
+        if(window._hubCountdownSecs<=300) cd.style.color='var(--red)';
       }
     },1000);
   }
@@ -2415,116 +2405,6 @@ function renderOverview(md){
   `;
 }
 
-function renderToday(md,sd){
-  const q=md.quotes||{},spy=q['SPY']||{};
-  // Build a live intraday entry if today isn't in the database yet
-  const todayStr=new Date().toISOString().split('T')[0];
-  let liveDay=null;
-  if(spy.price&&(!sd||!sd.length||sd[0].date!==todayStr)){
-    const o=spy.open||spy.prev_close||spy.price;
-    const h=spy.high||spy.price;
-    const l=spy.low||spy.price;
-    const c=spy.price;
-    liveDay={date:todayStr,open:o,high:h,low:l,close:c,volume:spy.volume||0,
-      measurements:{
-        oc_pts:c-o,oc_pct:(c-o)/o*100,
-        oh_pts:h-o,oh_pct:(h-o)/o*100,
-        ol_pts:l-o,ol_pct:(l-o)/o*100,
-        hc_pts:c-h,hc_pct:(c-h)/h*100,
-        lc_pts:c-l,lc_pct:(c-l)/l*100,
-        range_pts:h-l,range_pct:(h-l)/o*100
-      },volume_analysis:{}};
-  }
-  const sdFull=liveDay?[liveDay,...(sd||[])]:(sd||[]);
-  if(!sdFull.length){$('panel-today').innerHTML='<div class="no-data">No SPY data available yet.</div>';return;}
-  const day=sdFull[0],vixQ=q['^VIX']||{},tnx=q['^TNX']||{},fg=md.fear_greed||{};
-  $('todayDate').innerHTML=`<span class="live-dot"></span>${liveDay?'LIVE INTRADAY':'TODAY\'S RESULTS'} — ${day.date}`;
-  // OHLCV
-  $('ohlcvRow').innerHTML=[
-    {l:'OPEN',v:'$'+fmt(day.open,2),c:''},
-    {l:'HIGH',v:'$'+fmt(day.high,2),c:'up'},
-    {l:'LOW',v:'$'+fmt(day.low,2),c:'dn'},
-    {l:'CLOSE',v:'$'+fmt(day.close,2),c:day.close>=day.open?'up':'dn'},
-    {l:'VOLUME',v:fmtK(day.volume),c:''},
-    {l:'VWAP',v:day.vwap?'$'+fmt(day.vwap,2):'—',c:''}
-  ].map(({l,v,c})=>`<div class="ohlcv-card"><div class="oc-lbl">${l}</div><div class="oc-val ${c}">${v}</div></div>`).join('');
-  // Measurements
-  const m=day.measurements||{};
-  // Support both field name formats (live intraday uses oc_pts, DB uses open_to_close)
-  const meas = {
-    oc_pts: m.oc_pts ?? m.open_to_close,
-    oc_pct: m.oc_pct ?? m.pct_open_to_close,
-    oh_pts: m.oh_pts ?? m.open_to_high,
-    oh_pct: m.oh_pct ?? m.pct_open_to_high,
-    ol_pts: m.ol_pts ?? m.open_to_low,
-    ol_pct: m.ol_pct ?? m.pct_open_to_low,
-    hc_pts: m.hc_pts ?? m.high_to_close,
-    hc_pct: m.hc_pct ?? m.pct_high_to_close,
-    lc_pts: m.lc_pts ?? m.low_to_close,
-    lc_pct: m.lc_pct ?? m.pct_low_to_close,
-    range_pts: m.range_pts ?? m.day_range,
-    range_pct: m.range_pct ?? m.pct_day_range
-  };
-  const measItems=[
-    {n:'Open → Close',pts:meas.oc_pts,pct:meas.oc_pct},
-    {n:'Open → High',pts:meas.oh_pts,pct:meas.oh_pct},
-    {n:'Open → Low',pts:meas.ol_pts,pct:meas.ol_pct},
-    {n:'High → Close',pts:meas.hc_pts,pct:meas.hc_pct},
-    {n:'Low → Close',pts:meas.lc_pts,pct:meas.lc_pct},
-    {n:'Day Range',pts:meas.range_pts,pct:meas.range_pct}
-  ];
-  const maxPts=Math.max(...measItems.map(x=>Math.abs(x.pts||0)),1);
-  $('measList').innerHTML=measItems.map(({n,pts,pct})=>{
-    if(pts==null)return '';
-    const w=Math.abs(pts)/maxPts*100;const c=pts>=0?'#00ff88':'#ff3355';
-    return `<div class="meas-row"><span class="meas-name">${n}</span><div class="meas-bar-wrap"><div class="meas-bar" style="width:${w}%;background:${c}66"></div></div><span class="meas-pts ${clr(pts)}">${sign(pts)}${fmt(pts,2)}</span><span class="meas-pct ${clr(pts)}">${sign(pct)}${fmt(pct,2)}%</span></div>`;
-  }).join('');
-  // DoD
-  const prev=sdFull[1];
-  if(prev){
-    const pm=prev.measurements||{};
-    $('dodList').innerHTML=[
-      {l:'Open-to-Open',cur:day.open,prev:prev.open},
-      {l:'Close-to-Close',cur:day.close,prev:prev.close},
-      {l:'High-to-High',cur:day.high,prev:prev.high},
-      {l:'Low-to-Low',cur:day.low,prev:prev.low}
-    ].map(({l,cur,prev:p})=>{const diff=cur-p;return `<div class="dod-row"><span class="dod-lbl">${l}</span><span class="dod-val ${clr(diff)}">${sign(diff)}${fmt(diff,2)} (${sign(diff/p*100)}${fmt(diff/p*100,2)}%)</span></div>`;}).join('');
-  }else{$('dodList').innerHTML='<div class="no-data">No previous day yet.</div>';}
-  // Conditions
-  const fgVal=fg.value!=null?fg.value:fg.score;
-  const vol=day.volume_analysis||{};
-  // Normalize volume field names (DB uses different names than live)
-  const v930=vol.open_1h??vol.vol_930_1000;
-  const v930pct=vol.open_1h_pct??(v930&&day.volume?v930/day.volume*100:null);
-  const v1500=vol.close_1h??vol.vol_1500_1600;
-  const v1500pct=vol.close_1h_pct??(v1500&&day.volume?v1500/day.volume*100:null);
-  const peakTime=vol.peak_time??vol.peak_volume_time;
-  const hvnPrice=vol.hvn_price??vol.hvn_price;
-  $('todayCondGrid').innerHTML=`
-    <div class="cond-card">
-      <div class="cc-title">⬡ VOLUME SUMMARY</div>
-      <div class="cond-row"><span class="cond-key">Total</span><span class="cond-val">${fmtK(day.volume??vol.total_volume??0)}</span></div>
-      <div class="cond-row"><span class="cond-key">Open 1H</span><span class="cond-val">${v930?fmtK(v930):'—'} <span style="color:var(--text3)">${v930pct?fmt(v930pct,1)+'%':''}</span></span></div>
-      <div class="cond-row"><span class="cond-key">Close 1H</span><span class="cond-val">${v1500?fmtK(v1500):'—'} <span style="color:var(--text3)">${v1500pct?fmt(v1500pct,1)+'%':''}</span></span></div>
-      <div class="cond-row"><span class="cond-key">Peak Time</span><span class="cond-val">${peakTime?fmt12(peakTime):'—'}</span></div>
-      <div class="cond-row"><span class="cond-key">HVN Price</span><span class="cond-val">${hvnPrice?'$'+fmt(hvnPrice,2):'—'}</span></div>
-    </div>
-    <div class="cond-card">
-      <div class="cc-title">⬡ OPTIONS SNAPSHOT</div>
-      ${(()=>{const o=md.options_summary||{};return `
-      <div class="cond-row"><span class="cond-key">P/C (Vol)</span><span class="cond-val ${o.pc_ratio_vol>1?'dn':o.pc_ratio_vol<0.7?'up':'neu'}">${fmt(o.pc_ratio_vol,3)}</span></div>
-      <div class="cond-row"><span class="cond-key">Call Vol</span><span class="cond-val up">${o.call_volume?fmtK(o.call_volume):'—'}</span></div>
-      <div class="cond-row"><span class="cond-key">Put Vol</span><span class="cond-val dn">${o.put_volume?fmtK(o.put_volume):'—'}</span></div>
-      <div class="cond-row"><span class="cond-key">Expiry</span><span class="cond-val">${o.expiry||'—'}</span></div>`;})()}
-    </div>
-    <div class="cond-card">
-      <div class="cc-title">⬡ MARKET CONDITIONS</div>
-      <div class="cond-row"><span class="cond-key">VIX</span><span class="cond-val ${vixQ.price>30?'dn':vixQ.price<20?'up':'neu'}">${fmt(vixQ.price,2)} <span style="color:var(--text3)">${sign(vixQ.change)}${fmt(vixQ.change,2)}</span></span></div>
-      <div class="cond-row"><span class="cond-key">F&G Index</span><span class="cond-val">${fgVal||'—'}</span></div>
-      <div class="cond-row"><span class="cond-key">10YR Yield</span><span class="cond-val">${fmt(tnx.price,3)}%</span></div>
-      <div class="cond-row"><span class="cond-key">Yield Spread (10Y−3M)</span><span class="cond-val">${(()=>{const irx=q['^IRX'];return irx&&tnx?fmt(tnx.price-irx.price,3)+'%':'—';})()}</span></div>
-    </div>`;
-}
 
 function renderOptions(md){
   const o   = md.options_summary||{};

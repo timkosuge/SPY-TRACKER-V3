@@ -29,13 +29,10 @@ def main():
     n = len(closes)
     
     # ── Find drawdown events ────────────────────────────────────────────────
-    # An event: close drops >= 2% from the rolling 20-day high (or ATH, whichever higher)
-    # We track: peak -> trough -> recovery (close back above peak)
     events = []
     i = PEAK_WINDOW
     
     while i < n:
-        # Rolling peak over last PEAK_WINDOW days
         window_high = max(closes[max(0, i-PEAK_WINDOW):i+1])
         c = closes[i]
         

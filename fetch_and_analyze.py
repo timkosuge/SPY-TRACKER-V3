@@ -59,16 +59,11 @@ def init_db(conn):
     c.execute("""CREATE TABLE IF NOT EXISTS intraday_bars (
         date TEXT, timestamp TEXT, open REAL, high REAL, low REAL,
         close REAL, volume INTEGER, vwap REAL, PRIMARY KEY (date, timestamp))""")
-    # ── New: persistent 1m and 5m intraday bars (grow daily, never purge) ──
     c.execute("""CREATE TABLE IF NOT EXISTS intraday_1m (
         date TEXT, time TEXT, open REAL, high REAL, low REAL,
         close REAL, volume INTEGER,
         PRIMARY KEY (date, time))""")
-    c.execute("""CREATE TABLE IF NOT EXISTS intraday_5m (
-        date TEXT, time TEXT, open REAL, high REAL, low REAL,
-        close REAL, volume INTEGER,
-        PRIMARY KEY (date, time))""")
-    # ── New: one row per session — derived stats for fast querying ──────────
+    c.execute("DROP TABLE IF EXISTS intraday_5m")
     c.execute("""CREATE TABLE IF NOT EXISTS intraday_session_stats (
         date TEXT PRIMARY KEY,
         gap_pct REAL,
@@ -1281,41 +1276,6 @@ def fetch_and_store_intraday_1m(conn, target_date):
         return 0
 
 
-def fetch_and_store_intraday_5m(conn, target_date):
-    """Fetch 5-min bars from yfinance and upsert into intraday_5m. Max lookback ~60 days."""
-    try:
-        import yfinance as yf
-        from datetime import datetime as _dt, timedelta as _td
-        next_day = (_dt.strptime(target_date, "%Y-%m-%d") + _td(days=1)).strftime("%Y-%m-%d")
-        hist = yf.Ticker("SPY").history(start=target_date, end=next_day, interval="5m", prepost=False)
-        if hist.empty:
-            print(f"  5m: no bars for {target_date}")
-            return 0
-        c = conn.cursor()
-        inserted = 0
-        for ts, row in hist.iterrows():
-            import pytz as _tz
-            et = ts.astimezone(_tz.timezone("America/New_York"))
-            t_str = et.strftime("%H:%M")
-            mins = et.hour * 60 + et.minute
-            if not (9 * 60 + 30 <= mins < 16 * 60):
-                continue
-            c.execute(
-                "INSERT OR IGNORE INTO intraday_5m VALUES (?,?,?,?,?,?,?)",
-                (target_date, t_str,
-                 round(float(row["Open"]), 4), round(float(row["High"]), 4),
-                 round(float(row["Low"]), 4),  round(float(row["Close"]), 4),
-                 int(row["Volume"]))
-            )
-            inserted += c.rowcount
-        conn.commit()
-        print(f"  5m {target_date}: {inserted} new bars")
-        return inserted
-    except Exception as e:
-        print(f"  5m error {target_date}: {e}")
-        return 0
-
-
 def compute_session_stats(conn, target_date):
     """
     Derive per-session trading stats from intraday_1m and store in intraday_session_stats.
@@ -2241,35 +2201,16 @@ def main():
                 if is_trading_day(d):
                     candidate_1m.append(d.strftime("%Y-%m-%d"))
 
-            # Dates to try for 5m (last 60 calendar days of trading days)
-            candidate_5m = []
-            for i in range(65):
-                d = today - _td2(days=i)
-                if is_trading_day(d):
-                    candidate_5m.append(d.strftime("%Y-%m-%d"))
-
-            # Only fetch if bars not already in DB for that date
             existing_1m = set(r[0] for r in conn.execute(
                 "SELECT DISTINCT date FROM intraday_1m WHERE date >= ?",
                 ((today - _td2(days=8)).strftime("%Y-%m-%d"),)
             ).fetchall())
 
-            existing_5m = set(r[0] for r in conn.execute(
-                "SELECT DISTINCT date FROM intraday_5m WHERE date >= ?",
-                ((today - _td2(days=65)).strftime("%Y-%m-%d"),)
-            ).fetchall())
-
-            # Always re-fetch today to get latest bars
             to_fetch_1m = [d for d in candidate_1m if d not in existing_1m or d == today_str]
-            to_fetch_5m = [d for d in candidate_5m if d not in existing_5m or d == today_str]
 
             print(f"  1m: fetching {len(to_fetch_1m)} dates: {to_fetch_1m[:3]}{'...' if len(to_fetch_1m)>3 else ''}")
             for d_str in to_fetch_1m:
                 fetch_and_store_intraday_1m(conn, d_str)
-
-            print(f"  5m: fetching {len(to_fetch_5m)} dates")
-            for d_str in to_fetch_5m:
-                fetch_and_store_intraday_5m(conn, d_str)
 
             # Compute session stats for any date with 1m bars but missing stats
             missing_stats = [r[0] for r in conn.execute("""
