@@ -775,6 +775,7 @@
     <div class="subtab" onclick="switchGroupSub('events',this)">EVENTS</div>
     <div class="subtab" onclick="switchGroupSub('volstats',this)">VOLATILITY STATS</div>
     <div class="subtab" onclick="switchGroupSub('analog',this)">⬡ ANALOG FINDER</div>
+    <div class="subtab" onclick="switchGroupSub('setup',this)">⬡ SETUP ENGINE</div>
   </div>
 </div>
 
@@ -2926,6 +2927,10 @@
   </div>
 </div>
 
+<div class="tab-panel" id="panel-setup">
+  <div class="panel"><div class="panel-label">⬡ SETUP ENGINE — ENDPOINT AND PATH FOR A CHAIN OF CONDITIONS</div><div id="setupEngineContent"><div class="no-data">Loading...</div></div></div>
+</div>
+
 <div class="tab-panel" id="panel-edgestats">
 <style>
   .es-subtabs{display:flex;padding:0;background:var(--bg2);border-bottom:2px solid var(--border);overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg2);}
@@ -3299,7 +3304,7 @@
 <!-- FLOATING CHAT -->
 
 
-<script src="session_vol_profile.js"></script><script src="intraday_vol_profile.js"></script><script src="intraday_vol_stats.js"></script><script src="window_stats.js"></script><script src="gap_stats.js"></script><script src="large_gap_stats.js"></script><script src="analog_data.js"></script><script src="relief_data.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script><script src="tic_holdings.js"></script>
+<script src="session_vol_profile.js"></script><script src="intraday_vol_profile.js"></script><script src="intraday_vol_stats.js"></script><script src="window_stats.js"></script><script src="gap_stats.js"></script><script src="large_gap_stats.js"></script><script src="analog_data.js"></script><script src="relief_data.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script><script src="tic_holdings.js"></script><script src="chains_data.js"></script><script src="setup_engine.js"></script>
 <script>
 // ── Theme toggle ──────────────────────────────────────────────────────────────
 function toggleTheme() {

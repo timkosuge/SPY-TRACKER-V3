@@ -6,7 +6,7 @@ const GROUP_TABS = {
   desk:        ['desk','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol'],
   derivatives: ['options','gex','gex-intraday','wem','volatility'],
   macro:       ['macro-overview','transition','ignition','sovereign-chess'],
-  history:     ['pricehistory','volhistory','edgestats','events','volstats','analog'],
+  history:     ['pricehistory','volhistory','edgestats','events','volstats','analog','setup'],
   overview:    ['overview','bonds','breadth','sentiment']
 };
 const TAB_TO_GROUP = {};
@@ -66,6 +66,7 @@ function _switchPanelOnly(id) {
   if(id==='gex' && _md) { try { renderGEX(_md); renderGEXAdditions(_md); renderGEXDailyHistory(); } catch(e){ console.warn('gex:',e); } }
   if(id==='options') { try { renderExpiryBehavior(window._md||{}); } catch(e){} }
   if(id==='edgestats') { if(typeof renderEdgeStats==='function') renderEdgeStats(); }
+  if(id==='setup') { if(typeof renderSetupEngine==='function') renderSetupEngine(); }
   if(id==='breadth' && _md && _sd) { try { renderBreadth(_md,_sd); } catch(e){} }
   if(id==='volatility' && _md) { try { renderVolatility(_md); } catch(e){} }
   if(id==='bonds' && _md) { try { renderBonds(_md); } catch(e){} }
