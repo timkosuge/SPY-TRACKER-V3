@@ -1015,6 +1015,12 @@ def export_spy_json(conn):
     print(f"spy_data.json: {len(output)} days")
 
 
+def weekly_em_rows(c, limit=52):
+    cur = c.execute("SELECT * FROM weekly_em ORDER BY week_start DESC LIMIT ?", (limit,))
+    cols = [desc[0] for desc in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
 def build_wem_stats(weekly_em_list):
     completed = [d for d in weekly_em_list if d["week_close"] is not None and d.get("static_band_status") in ("ok", "vix")]
     if not completed: return {}
@@ -1267,15 +1273,7 @@ def export_market_data(conn, options_data=None):
     # ── Weekly EM from DB ─────────────────────────────────────────────────────
     try:
         c = conn.cursor()
-        rows = c.execute("SELECT * FROM weekly_em ORDER BY week_start DESC LIMIT 52").fetchall()
-        cols = ["week_start","week_end","friday_close","atm_iv","vix_iv","dte",
-                "wem_high","wem_mid","wem_low","wem_range",
-                "atm_straddle_high","atm_straddle_low",
-                "week_open","week_high","week_low","week_close",
-                "weekly_gap","gap_filled","gap_fill_day",
-                "closed_inside","breach","breach_side","breach_amount","breach_day","max_pain",
-                "static_wem_high","static_wem_low","static_wem_range","static_wem_iv"]
-        weekly_em = [dict(zip(cols,r)) for r in rows]
+        weekly_em = weekly_em_rows(c)
         output["weekly_em"]  = weekly_em
         output["wem_stats"]  = build_wem_stats(weekly_em)
         print(f"  WEM history: {len(weekly_em)} weeks")

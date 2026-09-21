@@ -71,6 +71,7 @@ function _switchPanelOnly(id) {
   if(id==='volatility' && _md) { try { renderVolatility(_md); } catch(e){} }
   if(id==='bonds' && _md) { try { renderBonds(_md); } catch(e){} }
   if(id==='sentiment' && _md) { try { renderSentiment(_md); } catch(e){} }
+  if(id==='wem' && _md) { try { renderWEM(_md); } catch(e){ console.warn('wem:', e); } }
   if(id==='live-chart') { setTimeout(renderLiveChart, 50); }
   if(id==='range-filter') { if(typeof renderRangeFilter==='function') renderRangeFilter(); }
   if(id==='strategy-lab') { if(typeof renderStrategyLab==='function') renderStrategyLab(); }

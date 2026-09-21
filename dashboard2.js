@@ -980,8 +980,8 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
   const _dynHalf2 = _sMid && _liveIV2 ? expectedMove(_sMid, _liveIV2, _dte2) : sHalf;
   const lo2   = cur ? (isStatic2 ? _sLo  : _sMid - _dynHalf2) : 0;
   const hi2   = cur ? (isStatic2 ? _sHi  : _sMid + _dynHalf2) : 0;
-  const mid2  = cur ? _sMid : 0;
-  const price2 = (spy.price || mid2 || 0);
+  const mid2  = cur ? Math.round(_sMid * 100) / 100 : 0;
+  const price2 = Math.round((spy.price || mid2 || 0) * 100) / 100;
   const halfRange2 = isStatic2 ? sHalf : _dynHalf2;
   const z = halfRange2 > 0 ? (price2 - mid2) / halfRange2 : 0;
   const zColor = Math.abs(z)>0.8?'#ff3355':Math.abs(z)>0.5?'#ff8800':Math.abs(z)>0.25?'#ffcc00':'#00ff88';
@@ -1103,12 +1103,11 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
   // ── THERMOMETER + BELL ────────────────────────────────────────────────────
   if(zEl) {
     const W = Math.max(zEl.offsetWidth||500, 380);
-    const H = 380;
-    const col = Math.floor(W / 3);
+    const H = 420;
     const tX  = 32;
-    const eX  = col + 16;
-    const bX  = col * 2 + 8;
-    const bW  = W - bX - 12;
+    const eX  = Math.round(W * 0.22);
+    const bX  = Math.round(W * 0.52);
+    const bW  = W - bX - 16;
     const tW  = 44;
     const tCx = tX + tW/2;
     const tH  = H - 100;
@@ -1185,7 +1184,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
           return `<line x1="${tX-(maj?14:6)}" y1="${ty}" x2="${tX}" y2="${ty}"
               stroke="${c}" stroke-width="${maj?1.5:1}"/>
             ${maj?`<text x="${tX-17}" y="${ty+4}" text-anchor="end"
-              fill="${c}" font-size="10" font-family="Orbitron,monospace">${v>0?'+':''}${v}</text>`:''}`;
+              fill="${c}" font-size="13" font-family="Orbitron,monospace">${v>0?'+':''}${v}</text>`:''}`;
         }).join('')}
 
         <!-- Center line at z=0 always visible -->
@@ -1195,21 +1194,21 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
         <polygon points="${tX+tW+3},${toY(zCl)} ${tX+tW+14},${toY(zCl)-7} ${tX+tW+14},${toY(zCl)+7}"
           fill="${zColor}"/>
         <text x="${tX+tW+18}" y="${toY(zCl)-10}"
-          fill="${zColor}" font-size="10" font-family="Share Tech Mono,monospace" font-weight="bold">
+          fill="${zColor}" font-size="12" font-family="Share Tech Mono,monospace" font-weight="bold">
           $${fmt(price2,2)}</text>
         <text x="${tX+tW+18}" y="${toY(zCl)+4}"
-          fill="${zColor}" font-size="8" font-family="Orbitron,monospace">NOW</text>
+          fill="${zColor}" font-size="10" font-family="Orbitron,monospace">NOW</text>
 
         <text x="${tX+tW+18}" y="${toY(1)+4}"
-          fill="#00ff8855" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(hi2,2)} hi</text>
-        <text x="${tX+tW+18}" y="${toY(0)+4}"
-          fill="rgba(255,255,255,0.2)" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(mid2,2)} mid</text>
+          fill="#00ff8855" font-size="11" font-family="Share Tech Mono,monospace">$${fmt(hi2,2)} hi</text>
+        ${Math.abs(zCl) < 0.2 ? '' : `<text x="${tX+tW+18}" y="${toY(0)+4}"
+          fill="rgba(255,255,255,0.2)" font-size="11" font-family="Share Tech Mono,monospace">$${fmt(mid2,2)} mid</text>`}
         <text x="${tX+tW+18}" y="${toY(-1)+4}"
-          fill="#ff335544" font-size="9" font-family="Share Tech Mono,monospace">$${fmt(lo2,2)} lo</text>
+          fill="#ff335544" font-size="11" font-family="Share Tech Mono,monospace">$${fmt(lo2,2)} lo</text>
 
         <!-- EXPLANATION -->
         <text x="${eX}" y="${tY+2}" fill="rgba(255,255,255,0.5)"
-          font-size="9" font-family="Orbitron,monospace" letter-spacing="1">HOW TO READ</text>
+          font-size="11" font-family="Orbitron,monospace" letter-spacing="1">HOW TO READ</text>
         ${[
           {c:'#00ff88', t:'Z = 0  ·  at midpoint ($'+fmt(mid2,2)+')'},
           {c:'#ffcc00', t:'Z ±0.25  ·  elevated'},
@@ -1217,30 +1216,30 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
           {c:'#ff3355', t:'Z ±1.0  ·  at WEM edge ($'+fmt(hi2,2)+' / $'+fmt(lo2,2)+')'},
           {c:'#ff3355', t:'Z > ±1.0  ·  outside WEM'},
         ].map(({c,t},i)=>`
-          <rect x="${eX}" y="${tY+18+i*20}" width="8" height="8" rx="1"
+          <rect x="${eX}" y="${tY+18+i*22}" width="8" height="8" rx="1"
             fill="${c}" opacity="0.8"/>
-          <text x="${eX+12}" y="${tY+26+i*20}"
-            fill="rgba(255,255,255,0.5)" font-size="9" font-family="Share Tech Mono,monospace">${t}</text>
+          <text x="${eX+12}" y="${tY+26+i*22}"
+            fill="rgba(255,255,255,0.5)" font-size="11" font-family="Share Tech Mono,monospace">${t}</text>
         `).join('')}
 
-        <line x1="${eX}" y1="${tY+128}" x2="${eX+col-24}" y2="${tY+128}"
+        <line x1="${eX}" y1="${tY+128}" x2="${bX-24}" y2="${tY+128}"
           stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
         <text x="${eX}" y="${tY+146}" fill="rgba(255,255,255,0.5)"
-          font-size="9" font-family="Orbitron,monospace" letter-spacing="1">THIS WEEK</text>
+          font-size="11" font-family="Orbitron,monospace" letter-spacing="1">THIS WEEK</text>
         ${[
           {t:`Z = ${z>=0?'+':''}${fmt(z,3)}  ·  ${zLabel}`, c:zColor},
           {t:`$${fmt(price2,2)} is ${fmt(Math.abs(z)*100,1)}% into range`, c:'rgba(255,255,255,0.5)'},
-          {t:`${z>=0?'Above':'Below'} mid by $${fmt(Math.abs(price2-mid2),2)}`, c:'rgba(255,255,255,0.4)'},
+          {t:price2===mid2?'At the midpoint':`${z>0?'Above':'Below'} mid by $${fmt(Math.abs(price2-mid2),2)}`, c:'rgba(255,255,255,0.4)'},
           {t:isStatic2?'Using static (fixed) range':'Using dynamic (DTE-adjusted) range', c:'rgba(255,255,255,0.3)'},
         ].map(({t,c},i)=>`
-          <text x="${eX}" y="${tY+164+i*16}"
-            fill="${c}" font-size="9" font-family="Share Tech Mono,monospace">${t}</text>
+          <text x="${eX}" y="${tY+164+i*18}"
+            fill="${c}" font-size="11" font-family="Share Tech Mono,monospace">${t}</text>
         `).join('')}
 
-        <line x1="${eX}" y1="${tY+230}" x2="${eX+col-24}" y2="${tY+230}"
+        <line x1="${eX}" y1="${tY+230}" x2="${bX-24}" y2="${tY+230}"
           stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
         <text x="${eX}" y="${tY+248}" fill="rgba(255,255,255,0.5)"
-          font-size="9" font-family="Orbitron,monospace" letter-spacing="1">BELL CURVE</text>
+          font-size="11" font-family="Orbitron,monospace" letter-spacing="1">BELL CURVE</text>
         ${[
           {t:'Distribution of where',      c:'rgba(255,255,255,0.4)'},
           {t:'each week closed within',    c:'rgba(255,255,255,0.4)'},
@@ -1249,13 +1248,13 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
           {t:`NOW: top ${pctBeyond!=null?fmt(100-pctBeyond,0):'-'}% historically`, c:zColor},
           {t:`${pctBeyond!=null?fmt(pctBeyond,0):'-'}% of weeks more extreme`, c:'rgba(255,255,255,0.35)'},
         ].map(({t,c},i)=>`
-          <text x="${eX}" y="${tY+266+i*15}"
-            fill="${c}" font-size="9" font-family="Share Tech Mono,monospace">${t}</text>
+          <text x="${eX}" y="${tY+266+i*17}"
+            fill="${c}" font-size="11" font-family="Share Tech Mono,monospace">${t}</text>
         `).join('')}
 
         <!-- BELL CURVE -->
-        <text x="${bX}" y="${bY-8}" fill="rgba(255,255,255,0.25)"
-          font-size="9" font-family="Orbitron,monospace">HALF-RANGE POSITION DISTRIBUTION${isStatic2?' (STATIC)':''}</text>
+        <text x="${bX}" y="${bY-24}" fill="rgba(255,255,255,0.25)"
+          font-size="11" font-family="Orbitron,monospace">HALF-RANGE POSITION DISTRIBUTION${isStatic2?' (STATIC)':''}</text>
         ${shade?`<path d="${shade}" fill="${zColor}" opacity="0.25"/>`:''}
         <path d="${bLine}" fill="none" stroke="${zColor}" stroke-width="1.5" opacity="0.6"/>
         <line x1="${bX}" y1="${bY+bH}" x2="${bX+bW}" y2="${bY+bH}"
@@ -1265,25 +1264,25 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
           return `<line x1="${bx}" y1="${bY+bH}" x2="${bx}" y2="${bY+bH+4}"
               stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
             <text x="${bx}" y="${bY+bH+13}" text-anchor="middle"
-              fill="rgba(255,255,255,0.2)" font-size="8" font-family="Orbitron,monospace">
+              fill="rgba(255,255,255,0.2)" font-size="10" font-family="Orbitron,monospace">
               ${v>0?'+':''}${v}</text>`;
         }).join('')}
         <line x1="${zBX}" y1="${bY}" x2="${zBX}" y2="${bY+bH}"
           stroke="${zColor}" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.8"/>
         <text x="${zBX}" y="${bY-4}" text-anchor="middle"
-          fill="${zColor}" font-size="10" font-family="Share Tech Mono,monospace" font-weight="bold">NOW</text>
+          fill="${zColor}" font-size="12" font-family="Share Tech Mono,monospace" font-weight="bold">NOW</text>
         <!-- z=0 center tick always at midpoint of bell -->
         <line x1="${z0BX}" y1="${bY+bH}" x2="${z0BX}" y2="${bY+bH+5}"
           stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
         <text x="${z0BX}" y="${bY+bH+14}" text-anchor="middle"
-          fill="rgba(255,255,255,0.3)" font-size="8" font-family="Orbitron,monospace">0</text>
+          fill="rgba(255,255,255,0.3)" font-size="10" font-family="Orbitron,monospace">0</text>
         <!-- avgZ indicator if meaningfully off center -->
         ${Math.abs(avgZ) > 0.05 ? (()=>{
           const ax=bX+((Math.max(-1.8,Math.min(1.8,avgZ))+1.8)/3.6)*bW;
           return `<line x1="${ax}" y1="${bY+bH-5}" x2="${ax}" y2="${bY+bH+4}"
               stroke="#556688" stroke-width="1.5" stroke-dasharray="2,2"/>
             <text x="${ax}" y="${bY+bH+22}" text-anchor="middle"
-              fill="#556688" font-size="8" font-family="Share Tech Mono,monospace">
+              fill="#556688" font-size="10" font-family="Share Tech Mono,monospace">
               μ${avgZ>=0?'+':''}${fmt(avgZ,2)}</text>`;
         })() : ''}
       </svg>
@@ -3150,6 +3149,8 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
     sentimentResize = setTimeout(() => {
       const m = document.getElementById('michiganPanel');
       if (m && m.clientWidth) { loadMichiganSentiment(true); loadMarginDebtSentiment(); }
+      const w = document.getElementById('wemZScore');
+      if (w && w.offsetWidth && typeof _md !== 'undefined' && _md) renderWEM(_md);
     }, 200);
   });
 }
