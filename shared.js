@@ -33,21 +33,3 @@ if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mountLiveEmbeds());
   else mountLiveEmbeds();
 }
-function setHologram(on) {
-  const stage = document.getElementById('hubBloombergStage');
-  const btn = document.getElementById('holoToggle');
-  if (!stage || !btn) return;
-  stage.classList.toggle('on', on);
-  btn.classList.toggle('on', on);
-  btn.textContent = 'HOLOGRAM: ' + (on ? 'ON' : 'OFF');
-  try { localStorage.setItem('spy_hologram', on ? '1' : '0'); } catch (e) {}
-}
-function toggleHologram() {
-  const stage = document.getElementById('hubBloombergStage');
-  setHologram(!(stage && stage.classList.contains('on')));
-}
-if (typeof document !== 'undefined') {
-  const restoreHologram = () => { let on = false; try { on = localStorage.getItem('spy_hologram') === '1'; } catch (e) {} setHologram(on); };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', restoreHologram);
-  else restoreHologram();
-}

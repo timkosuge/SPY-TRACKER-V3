@@ -18,15 +18,13 @@ const fs = require('fs');
 global.document = { readyState: 'complete', querySelectorAll: () => [] };
 const src = fs.readFileSync('shared.js', 'utf8').replace(/\r\n/g, '\n');
 const i = src.indexOf('const _liveIds');
-const end = src.indexOf('function setHologram');
-const section = end > i ? src.slice(i, end) : src.slice(i);
 const out = {};
 (async () => {
   global.fetch = async () => ({ ok: true, json: async () => ({ videoId: 'QB5BNdBFujE' }) });
-  eval(section.replace('const _liveIds', 'var _liveIds').replace('function liveEmbedSrc', 'global.liveEmbedSrc = function'));
+  eval(src.slice(i).replace('const _liveIds', 'var _liveIds').replace('function liveEmbedSrc', 'global.liveEmbedSrc = function'));
   out.resolved = await liveEmbedSrc('UCIALMKvObZNtJ6AmdCLP7Lg', 'autoplay=1&mute=1&controls=1');
   global.fetch = async () => { throw new Error('offline'); };
-  eval(section.replace('const _liveIds', 'var _liveIds').replace('function liveEmbedSrc', 'global.liveEmbedSrc = function'));
+  eval(src.slice(i).replace('const _liveIds', 'var _liveIds').replace('function liveEmbedSrc', 'global.liveEmbedSrc = function'));
   out.fallback = await liveEmbedSrc('UC4-aIBtpNAPqEcMhAyFN6iQ', 'autoplay=1&mute=1');
   process.stdout.write(JSON.stringify(out));
 })();

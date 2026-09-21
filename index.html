@@ -314,13 +314,6 @@
   #nyse-bg.active {
     display: block;
   }
-  .holo-stage{position:relative;flex:1;display:flex;isolation:isolate;background:#000;border-radius:0 0 4px 4px;overflow:hidden;}
-  .holo-stage::before{content:'';position:absolute;inset:0;z-index:0;background:url('27960.jpg') center 40%/cover no-repeat;filter:grayscale(100%) contrast(1.15) brightness(0.75);opacity:0;transition:opacity .4s;}
-  .holo-stage iframe{position:relative;z-index:1;}
-  .holo-stage.on::before{opacity:0.6;}
-  .holo-stage.on iframe{mix-blend-mode:screen;}
-  .holo-toggle{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;padding:3px 8px;cursor:pointer;background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:2px;}
-  .holo-toggle.on{background:var(--cyan);color:var(--bg);border-color:var(--cyan);}
   .gauge-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}
   .gauge-svg{width:100%;max-width:180px;}
   .gauge-value{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;text-align:center;line-height:1;}
@@ -846,11 +839,7 @@
       <div id="hubFuturesChart" style="flex:1;min-height:0;"></div>
     </div>
     <div class="panel" style="display:flex;flex-direction:column;overflow:hidden;height:420px;padding:0;">
-      <div class="panel-label" style="flex-shrink:0;padding:14px 14px 0;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <span>⬡ BLOOMBERG TV — LIVE (YOUTUBE) · STARTS MUTED, UNMUTE IN THE PLAYER</span>
-        <button id="holoToggle" class="holo-toggle" onclick="toggleHologram()" title="Blend the stream so the dark studio drops out and the presenters show over the exchange">HOLOGRAM: OFF</button>
-      </div>
-      <div class="holo-stage" id="hubBloombergStage">
+      <div class="panel-label" style="flex-shrink:0;padding:14px 14px 0;">⬡ BLOOMBERG TV — LIVE (YOUTUBE) · STARTS MUTED, UNMUTE IN THE PLAYER</div>
       <iframe
         id="hubBloombergFrame"
         src="about:blank"
@@ -860,7 +849,6 @@
         allow="autoplay; encrypted-media; picture-in-picture"
         allowfullscreen
       ></iframe>
-      </div>
     </div>
   </div>
   <div id="hubNarrative" style="display:none;"></div>
