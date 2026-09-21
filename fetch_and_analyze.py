@@ -65,6 +65,7 @@ def init_db(conn):
         PRIMARY KEY (date, time))""")
     c.execute("DROP TABLE IF EXISTS intraday_5m")
     c.execute("CREATE TABLE IF NOT EXISTS vix_daily (date TEXT PRIMARY KEY, open REAL, high REAL, low REAL, close REAL)")
+    c.execute("CREATE TABLE IF NOT EXISTS vol_term_daily (date TEXT PRIMARY KEY, vix9d REAL, vix REAL, vix3m REAL, vvix REAL)")
     c.execute("CREATE TABLE IF NOT EXISTS futures_bars (ts TEXT PRIMARY KEY, open REAL, high REAL, low REAL, close REAL, volume INTEGER)")
     c.execute("""CREATE TABLE IF NOT EXISTS option_chain (
         captured_at TEXT, session_date TEXT, spot REAL, expiry TEXT, cp TEXT, strike REAL,
@@ -734,6 +735,33 @@ def store_vix_history(conn):
         return len(rows)
     except Exception as e:
         print(f"  vix_daily error: {e}")
+        return 0
+
+
+def store_vol_term(conn):
+    """Upsert the VIX term structure: 9-day, 30-day, 3-month, and the volatility of volatility."""
+    try:
+        import yfinance as yf
+        have = conn.execute("SELECT COUNT(*), MAX(date) FROM vol_term_daily").fetchone()
+        start = "2011-01-01" if not have[0] else (datetime.strptime(have[1], "%Y-%m-%d") - timedelta(days=15)).strftime("%Y-%m-%d")
+        series = {}
+        for col, sym in (("vix9d", "^VIX9D"), ("vix", "^VIX"), ("vix3m", "^VIX3M"), ("vvix", "^VVIX")):
+            h = yf.Ticker(sym).history(start=start, interval="1d", auto_adjust=False)
+            if h is None or h.empty:
+                continue
+            for idx, r in h.iterrows():
+                if r["Close"] == r["Close"]:
+                    series.setdefault(idx.strftime("%Y-%m-%d"), {})[col] = float(r["Close"])
+        rows = [(d, v.get("vix9d"), v.get("vix"), v.get("vix3m"), v.get("vvix")) for d, v in sorted(series.items())]
+        if not rows:
+            print("  vol_term_daily: no data returned")
+            return 0
+        conn.executemany("INSERT OR REPLACE INTO vol_term_daily VALUES (?,?,?,?,?)", rows)
+        conn.commit()
+        print(f"  vol_term_daily: {len(rows)} rows upserted, through {rows[-1][0]}")
+        return len(rows)
+    except Exception as e:
+        print(f"  vol_term_daily error: {e}")
         return 0
 
 
@@ -2208,6 +2236,7 @@ def main():
             print(f"  option_chain store error: {e}")
         store_vix_history(conn)
         store_futures_bars(conn)
+        store_vol_term(conn)
         if not options_data or not options_data.get("max_pain"):
             print("  CBOE unavailable, falling back to yfinance options...")
             options_data = fetch_spy_options_yf_fallback()

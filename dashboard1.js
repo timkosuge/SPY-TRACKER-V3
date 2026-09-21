@@ -4,7 +4,7 @@ window.expectedMove=expectedMove;
 // Group tab mapping
 const GROUP_TABS = {
   desk:        ['desk','range-filter','strategy-lab','clock','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol'],
-  derivatives: ['options','gex','gex-intraday','wem','volatility'],
+  derivatives: ['options','gex','gex-intraday','options-env','wem','volatility'],
   macro:       ['macro-overview','transition','ignition','sovereign-chess'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog','setup'],
   overview:    ['overview','bonds','breadth','sentiment']
@@ -75,6 +75,7 @@ function _switchPanelOnly(id) {
   if(id==='range-filter') { if(typeof renderRangeFilter==='function') renderRangeFilter(); }
   if(id==='strategy-lab') { if(typeof renderStrategyLab==='function') renderStrategyLab(); }
   if(id==='clock') { if(typeof renderClockSessions==='function') renderClockSessions(); }
+  if(id==='options-env') { if(typeof renderOptionsEnv==='function') renderOptionsEnv(); }
   if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
   if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); }, 50); }
   if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }
