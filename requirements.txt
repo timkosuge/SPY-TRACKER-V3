@@ -6,3 +6,4 @@ market-calendar-tool
 numpy
 xlrd
 openpyxl
+curl_cffi
