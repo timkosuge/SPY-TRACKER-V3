@@ -3433,7 +3433,7 @@ function openCityCam(city) {
       <span style="font-size:9px;letter-spacing:2px;color:var(--cyan);">${cfg.label}</span>
       <button onclick="document.getElementById('${winId}')?.remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text3)'">&#xD7;</button>
     </div>
-    <iframe src="${cfg.channelId ? `https://www.youtube-nocookie.com/embed/live_stream?channel=${cfg.channelId}` : `https://www.youtube.com/embed/${cfg.ytId}`}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1" style="width:100%;height:180px;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+    <iframe ${cfg.channelId ? `src="about:blank" data-live-channel="${cfg.channelId}" data-embed-params="autoplay=1&mute=1&controls=1&rel=0&modestbranding=1&playsinline=1"` : `src="https://www.youtube.com/embed/${cfg.ytId}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1&playsinline=1"`} style="width:100%;height:180px;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
   `;
 
   // Draggable
@@ -3444,6 +3444,7 @@ function openCityCam(city) {
   document.addEventListener('mouseup', () => { dragging = false; });
 
   document.body.appendChild(win);
+  if (cfg.channelId && typeof mountLiveEmbeds === 'function') mountLiveEmbeds(win);
 }
 
 // ── Ignition / Buildout tab entry point ──────────────────────────────────────

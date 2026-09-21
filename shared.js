@@ -14,3 +14,22 @@ function wilson95(k, n) {
 }
 const payloadRows=v=>v==null?[]:(Array.isArray(v)?v:(v.records||[]));
 const $=id=>document.getElementById(id);
+const _liveIds = {};
+function liveEmbedSrc(channel, params) {
+  const q = params ? '?' + params : '';
+  const fallback = 'https://www.youtube.com/embed/live_stream?channel=' + channel + (params ? '&' + params : '');
+  if (!_liveIds[channel]) {
+    _liveIds[channel] = fetch('/ytlive?channel=' + encodeURIComponent(channel))
+      .then(r => r.ok ? r.json() : null).then(d => (d && d.videoId) || null).catch(() => null);
+  }
+  return _liveIds[channel].then(id => id ? 'https://www.youtube.com/embed/' + id + q : fallback);
+}
+function mountLiveEmbeds(root) {
+  (root || document).querySelectorAll('iframe[data-live-channel]').forEach(f => {
+    liveEmbedSrc(f.dataset.liveChannel, f.dataset.embedParams || '').then(src => { if (f.getAttribute('src') !== src) f.setAttribute('src', src); });
+  });
+}
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mountLiveEmbeds());
+  else mountLiveEmbeds();
+}

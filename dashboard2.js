@@ -1507,12 +1507,11 @@ async function callAI(messages, system, maxTokens = 800) {
 
 // ─── MEDIA PLAYER ─────────────────────────────────────────────────────────────
 // Two embed strategies:
-// 1. Live channels: youtube.com/embed/live_stream?channel=CHANNEL_ID (tries to show their live stream)
+// 1. Live channels: the channel's current live video, resolved by /ytlive
 // 2. Direct video: youtube.com/embed/VIDEO_ID
 // Channels without a UC ID open in a new tab
 
 const MEDIA_SOURCES = [
-  // Live streaming channels — embed via channel ID live_stream trick
   {
     group: 'LIVE STREAMS',
     items: [
@@ -1562,11 +1561,9 @@ function setPlayer(src, label) {
 }
 
 function playLiveChannel(channelId, name) {
-  // YouTube's live_stream embed — plays the channel's current live stream if one exists
-  setPlayer(
-    `https://www.youtube-nocookie.com/embed/live_stream?channel=${channelId}&autoplay=1&rel=0&modestbranding=1`,
-    name
-  );
+  const params = 'autoplay=1&rel=0&modestbranding=1&playsinline=1';
+  if (typeof liveEmbedSrc === 'function') { liveEmbedSrc(channelId, params).then(src => setPlayer(src, name)); return; }
+  setPlayer('https://www.youtube.com/embed/live_stream?channel=' + channelId + '&' + params, name);
 }
 
 function playVideoId(videoId, name) {
@@ -3373,53 +3370,71 @@ async function loadAAII() {
 }
 window.loadAAII = loadAAII;
 
+const AAII_RANGES = [['26w', '26 WEEKS', 26], ['1y', '1 YEAR', 52], ['5y', '5 YEARS', 260], ['all', 'ALL SINCE 1987', Infinity]];
 function renderAAIIChart(data) {
   const el = $('aaiiChart');
   if (!el) return;
-  const W = 800, H = 200, PAD = {t:10, r:20, b:30, l:36};
-  const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
-  const n = data.length;
-  if (n < 2) { el.innerHTML = '<div class="no-data" style="padding:20px;">History accumulates one reading per week from the first recorded survey.</div>'; return; }
-  const xStep = cW / (n - 1);
-  const yScale = v => PAD.t + cH - (v / 60 * cH);
-
-  const line = (key, color) => {
-    const pts = data.map((d,i) => (PAD.l + i*xStep).toFixed(1)+','+yScale(d[key]).toFixed(1));
-    return '<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round"/>'
-      +'<circle cx="'+(PAD.l+(n-1)*xStep).toFixed(1)+'" cy="'+yScale(data[n-1][key]).toFixed(1)+'" r="3" fill="'+color+'"/>';
-  };
-
-  // Grid lines at 20, 40, 60%
-  const grid = [20,30,40,50,60].map(v=>{
-    const y = yScale(v).toFixed(1);
-    return '<line x1="'+PAD.l+'" x2="'+(PAD.l+cW)+'" y1="'+y+'" y2="'+y+'" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>'
-      +'<text x="'+(PAD.l-4)+'" y="'+(parseFloat(y)+4)+'" text-anchor="end" font-size="9" fill="#9090c0">'+v+'%</text>';
-  }).join('');
-
-  // X labels — every 3rd
-  const xlbls = data.map((d,i)=>{
-    if(i % 3 !== 0 && i !== n-1) return '';
-    const x = (PAD.l + i*xStep).toFixed(1);
-    const lbl = /^\d{4}-\d{2}-\d{2}$/.test(d.d) ? new Date(d.d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : d.d;
-    return '<text x="'+x+'" y="'+(H-4)+'" text-anchor="middle" font-size="8" fill="#9090c0">'+lbl+'</text>';
-  }).join('');
-
-  // 37.5% avg bull line
-  const avgY = yScale(37.5).toFixed(1);
-  const avgLine = '<line x1="'+PAD.l+'" x2="'+(PAD.l+cW)+'" y1="'+avgY+'" y2="'+avgY+'" stroke="rgba(0,255,136,0.2)" stroke-width="1" stroke-dasharray="4,3"/>';
-
-  el.innerHTML = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;">'
-    + grid + avgLine
-    + line('bull','#00ff88')
-    + line('neu','#ffcc00')
-    + line('bear','#ff3355')
-    + xlbls
-    + '<text x="'+(PAD.l+cW-2)+'" y="'+(yScale(data[n-1].bull)-6)+'" font-size="8" fill="#00ff88" text-anchor="end">BULL '+fmt(data[n-1].bull,1)+'%</text>'
-    + '<text x="'+(PAD.l+cW-2)+'" y="'+(yScale(data[n-1].bear)+12)+'" font-size="8" fill="#ff3355" text-anchor="end">BEAR '+fmt(data[n-1].bear,1)+'%</text>'
-    + '</svg>'
-    + '<div style="display:flex;gap:16px;justify-content:center;margin-top:6px;font-size:11px;font-family:\'Share Tech Mono\',monospace;">'
-    + '<span style="color:#00ff88;">⬤ Bullish</span><span style="color:#ffcc00;">⬤ Neutral</span><span style="color:#ff3355;">⬤ Bearish</span>'
-    + '<span style="color:rgba(0,255,136,0.5);font-size:10px;">- - Bull avg 37.5%</span></div>';
+  if (data) window._aaiiHist = data;
+  const byDate = {};
+  (window._aaiiHist || []).forEach(h => { if (h && h.d && h.bull != null && h.bear != null) byDate[h.d] = h; });
+  const all = Object.keys(byDate).sort().map(d => byDate[d]);
+  const label = document.getElementById('aaiiChartLabel');
+  if (all.length < 2) {
+    if (label) label.textContent = '⬡ AAII SENTIMENT HISTORY';
+    el.innerHTML = '<div class="no-data" style="padding:20px;">The survey history is written by the weekly sentiment run.</div>';
+    return;
+  }
+  const key = window._aaiiRange || '26w';
+  const range = AAII_RANGES.find(r => r[0] === key) || AAII_RANGES[0];
+  const rows = all.slice(-Math.min(all.length, range[2]));
+  const spreadView = rows.length > 60;
+  const n = rows.length;
+  if (label) label.textContent = '⬡ AAII SENTIMENT HISTORY — ' + (range[2] === Infinity ? 'ALL ' + all.length.toLocaleString('en-US') + ' WEEKS SINCE ' + all[0].d.slice(0, 4) : range[1]);
+  const W = 800, H = 220, P = { t: 12, r: 20, b: 30, l: 40 };
+  const cW = W - P.l - P.r, cH = H - P.t - P.b;
+  const x = i => P.l + (n === 1 ? 0 : i / (n - 1) * cW);
+  let lo, hi;
+  if (spreadView) {
+    const m = Math.max(...rows.map(r => Math.abs(r.bull - r.bear)));
+    hi = Math.ceil(m / 10) * 10; lo = -hi;
+  } else {
+    lo = 0; hi = Math.ceil(Math.max(...rows.flatMap(r => [r.bull, r.neu ?? 0, r.bear])) / 10) * 10;
+  }
+  const y = v => P.t + cH - (v - lo) / (hi - lo) * cH;
+  const step = spreadView ? (hi >= 40 ? 20 : 10) : 10;
+  let grid = '';
+  for (let v = lo; v <= hi; v += step) {
+    const yy = y(v).toFixed(1);
+    grid += '<line x1="' + P.l + '" x2="' + (P.l + cW) + '" y1="' + yy + '" y2="' + yy + '" stroke="' + (v === 0 && spreadView ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.06)') + '" stroke-width="1"/>'
+      + '<text x="' + (P.l - 5) + '" y="' + (parseFloat(yy) + 3) + '" text-anchor="end" font-size="9" fill="#9090c0">' + (spreadView && v > 0 ? '+' : '') + v + (spreadView ? '' : '%') + '</text>';
+  }
+  const ticks = 6, fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', n > 60 ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' });
+  let xl = '';
+  for (let k = 0; k < ticks; k++) {
+    const i = Math.round(k * (n - 1) / (ticks - 1));
+    xl += '<text x="' + x(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="' + (k === 0 ? 'start' : k === ticks - 1 ? 'end' : 'middle') + '" font-size="9" fill="#9090c0">' + fmtD(rows[i].d) + '</text>';
+  }
+  const poly = (fn, col, w) => '<polyline points="' + rows.map((r, i) => x(i).toFixed(1) + ',' + y(fn(r)).toFixed(1)).join(' ') + '" fill="none" stroke="' + col + '" stroke-width="' + w + '" stroke-linejoin="round"/>';
+  const last = rows[n - 1];
+  let body, legend;
+  if (spreadView) {
+    const avg = rows.reduce((a, r) => a + (r.bull - r.bear), 0) / n;
+    body = '<line x1="' + P.l + '" x2="' + (P.l + cW) + '" y1="' + y(avg).toFixed(1) + '" y2="' + y(avg).toFixed(1) + '" stroke="rgba(0,204,255,0.4)" stroke-dasharray="4,3"/>'
+      + poly(r => r.bull - r.bear, '#00ccff', n > 600 ? 0.8 : 1.4)
+      + '<circle cx="' + x(n - 1).toFixed(1) + '" cy="' + y(last.bull - last.bear).toFixed(1) + '" r="3" fill="#00ccff"/>';
+    legend = '<span style="color:#00ccff;">━ Bullish minus bearish</span><span style="color:rgba(0,204,255,0.6);">- - Average over this range ' + (avg >= 0 ? '+' : '') + avg.toFixed(1) + '</span><span style="color:var(--text2);">Latest ' + (last.bull - last.bear >= 0 ? '+' : '') + (last.bull - last.bear).toFixed(1) + ' (' + fmtDate(last.d) + ')</span>';
+  } else {
+    const avgY = y(37.5).toFixed(1);
+    body = '<line x1="' + P.l + '" x2="' + (P.l + cW) + '" y1="' + avgY + '" y2="' + avgY + '" stroke="rgba(0,255,136,0.25)" stroke-dasharray="4,3"/>'
+      + poly(r => r.bull, '#00ff88', 2) + (rows.every(r => r.neu != null) ? poly(r => r.neu, '#ffcc00', 2) : '') + poly(r => r.bear, '#ff3355', 2)
+      + ['bull', 'neu', 'bear'].map(k2 => last[k2] == null ? '' : '<circle cx="' + x(n - 1).toFixed(1) + '" cy="' + y(last[k2]).toFixed(1) + '" r="3" fill="' + { bull: '#00ff88', neu: '#ffcc00', bear: '#ff3355' }[k2] + '"/>').join('');
+    legend = '<span style="color:#00ff88;">⬤ Bullish ' + fmt(last.bull, 1) + '%</span><span style="color:#ffcc00;">⬤ Neutral ' + (last.neu != null ? fmt(last.neu, 1) + '%' : '—') + '</span><span style="color:#ff3355;">⬤ Bearish ' + fmt(last.bear, 1) + '%</span><span style="color:rgba(0,255,136,0.6);">- - Long-run bullish average 37.5%</span>';
+  }
+  const btns = AAII_RANGES.map(r => '<button onclick="window._aaiiRange=\'' + r[0] + '\';renderAAIIChart()" style="font-family:\'Orbitron\',monospace;font-size:8px;letter-spacing:1px;padding:3px 8px;margin-right:4px;cursor:pointer;background:' + (r[0] === range[0] ? 'var(--cyan)' : 'var(--bg3)') + ';color:' + (r[0] === range[0] ? 'var(--bg)' : 'var(--text3)') + ';border:1px solid var(--border);">' + r[1] + '</button>').join('');
+  el.innerHTML = '<div style="margin-bottom:6px;">' + btns + '</div>'
+    + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;">' + grid + body + xl + '</svg>'
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:6px;font-size:11px;font-family:\'Share Tech Mono\',monospace;">' + legend + '</div>'
+    + (spreadView ? '<div style="font-size:10px;color:var(--text3);text-align:center;margin-top:4px;">At this range the three lines would overlap into noise, so the chart shows bullish minus bearish. Above zero, more respondents were bullish than bearish that week.</div>' : '');
 }
 
 // ─────────────────────────────────────────────
@@ -3441,7 +3456,7 @@ async function loadCOT() {
 
     // TFF groups
     const groups = [
-      { label:'LEVERAGED MONEY / SPECULATORS', sublabel:'Hedge Funds & CTAs — fast money, most predictive signal',
+      { label:'LEVERAGED MONEY / SPECULATORS', sublabel:'Hedge funds and commodity trading advisers',
         l:d.lev_l, s:d.lev_s, net:d.lev_net, chg:d.chg_lev_net, color:'#ff8800', key:'lev' },
       { label:'ASSET MANAGER', sublabel:'Pensions / Mutual Funds — institutional conviction',
         l:d.asset_l, s:d.asset_s, net:d.asset_net, chg:d.chg_asset_net, color:'#00ccff', key:'asset' },
