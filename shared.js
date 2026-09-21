@@ -39,3 +39,40 @@ function evidenceFold(key, label, body) {
     + '<summary style="cursor:pointer;list-style:none;font-family:\'Orbitron\',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);padding:10px 14px;border:1px solid var(--border);border-radius:4px;background:var(--bg3);margin-bottom:12px;">\u25B8 ' + label + '</summary>'
     + body + '</details>';
 }
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function monthWords(m) { return m ? MONTH_NAMES[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4) : ''; }
+function panelWidth(id, fallback) {
+  const el = typeof document !== 'undefined' && document.getElementById ? document.getElementById(id) : null;
+  return el && el.clientWidth ? el.clientWidth - 28 : (fallback || 600);
+}
+function monthlyChart(o) {
+  const pts = (o.series || []).filter(r => r[1] != null);
+  if (pts.length < 2) return '';
+  const W = Math.max(320, Math.round(o.width || 600)), H = o.height || 150, L = 6, R = 64, T = 12, B = 22;
+  const cW = W - L - R, cH = H - T - B;
+  const vals = pts.map(r => r[1]);
+  const refs = (o.refs || []).filter(r => r >= Math.min(...vals) && r <= Math.max(...vals));
+  const lo = o.floor != null ? o.floor : Math.min(...vals), hi = Math.max(...vals);
+  const x = i => L + i / (pts.length - 1) * cW;
+  const y = v => T + cH - (v - lo) / ((hi - lo) || 1) * cH;
+  const fmt = o.format || (v => String(Math.round(v)));
+  const col = o.color || 'var(--cyan)';
+  const text = (xx, yy, s, anchor, fill) => `<text x="${xx.toFixed(1)}" y="${yy.toFixed(1)}" text-anchor="${anchor}" font-size="11" fill="${fill || 'var(--text3)'}" font-family="Share Tech Mono,monospace">${s}</text>`;
+  const line = pts.map((r, i) => `${x(i).toFixed(1)},${y(r[1]).toFixed(1)}`).join(' ');
+  let g = `<polygon points="${x(0).toFixed(1)},${T + cH} ${line} ${x(pts.length - 1).toFixed(1)},${T + cH}" fill="${col}" opacity="0.1"/>`;
+  refs.forEach(v => { g += `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="rgba(255,255,255,0.25)" stroke-dasharray="4,3"/>` + text(W - R + 6, y(v) + 4, fmt(v), 'start'); });
+  [lo, hi].forEach(v => { g += text(W - R + 6, y(v) + 4, fmt(v), 'start'); });
+  g += `<polyline points="${line}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round"/>`;
+  if (o.mark) {
+    const k = pts.findIndex(r => r[0] === o.mark.month);
+    if (k >= 0) g += `<circle cx="${x(k).toFixed(1)}" cy="${y(pts[k][1]).toFixed(1)}" r="3.5" fill="#ff3355"/>` + text(Math.min(x(k), W - R - 4), y(pts[k][1]) - 7 < T + 8 ? y(pts[k][1]) + 16 : y(pts[k][1]) - 7, o.mark.label, x(k) > W - R - 120 ? 'end' : 'middle', '#ff3355');
+  }
+  g += `<circle cx="${x(pts.length - 1).toFixed(1)}" cy="${y(vals[vals.length - 1]).toFixed(1)}" r="3.5" fill="${col}"/>`;
+  const ticks = Math.min(6, pts.length);
+  for (let k = 0; k < ticks; k++) {
+    const i = Math.round(k * (pts.length - 1) / (ticks - 1));
+    const m = pts[i][0];
+    g += text(x(i), H - 6, MONTH_NAMES[+m.slice(5, 7) - 1].slice(0, 3) + ' ' + m.slice(0, 4), k === 0 ? 'start' : k === ticks - 1 ? 'end' : 'middle');
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;margin-top:8px;">${g}</svg>`;
+}

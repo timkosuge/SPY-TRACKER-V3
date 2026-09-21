@@ -1,9 +1,9 @@
 """Builds smart_dumb.js: institutional against small-trader positioning, and what each extreme has preceded.
 
 Raw net positions measure a category's structural role, not its stance — the sell side is short almost every week. Each
-category is therefore converted to a COT index: where this week's net sits between its own three-year low and high, from 0
-to 100. Institutions are the leveraged funds and asset managers; small traders are the non-reportable position and the
-retail survey. The composite is the gap between them. Forward returns run from the first session that could act on the
+reading is therefore ranked against its own last three years: the share of those weeks it is higher than, from 0 to 100.
+A rank is not set by one extreme week the way a position between the three-year low and high is. Institutions are the
+leveraged funds and asset managers; small traders are the traders under the CFTC's reporting threshold and the AAII survey. The composite is the gap between them. Forward returns run from the first session that could act on the
 report, and every claim carries its interval.
 """
 import json
@@ -18,11 +18,12 @@ from trading_days import add_trading_days
 DB_PATH = "spy_data.db"
 OUTPUT = "smart_dumb.js"
 LOOKBACK = 156
+MIN_WEEKS = 52
 FLOOR = 30
 HORIZONS = [5, 21, 63]
 DAILY_PRICE_YEARS = 5
 CATEGORIES = [("lev", "Leveraged Funds", "institutional"), ("asset", "Asset Manager / Institutional", "institutional"),
-              ("nonrept", "Non-Reportable (small traders)", "small"), ("other", "Other Reportable", "small"),
+              ("nonrept", "Non-Reportable (small traders)", "small"), ("other", "Other Reportable", "large, not in either side"),
               ("dealer", "Dealer / Intermediary", "sell side")]
 
 
@@ -40,9 +41,14 @@ def beats_base(cell, base_rate):
 
 
 def cot_index(values, i, look=LOOKBACK):
+    """The share of the last `look` weeks this week is higher than, ties counted half; None until a year of weeks exists."""
     window = values[max(0, i - look + 1):i + 1]
-    lo, hi = min(window), max(window)
-    return None if hi == lo else round((values[i] - lo) / (hi - lo) * 100, 1)
+    if len(window) < MIN_WEEKS:
+        return None
+    v = values[i]
+    below = sum(1 for x in window if x < v)
+    equal = sum(1 for x in window if x == v) - 1
+    return round((below + 0.5 * equal) / (len(window) - 1) * 100, 1)
 
 
 def first_tradeable(week_end, days_after):
@@ -94,12 +100,12 @@ def build(conn):
         a = nearest_aaii(w["d"])
         mean = lambda vals: (sum(vals) / len(vals)) if vals else None
         inst = mean([v for v in (w["lev_idx"], w["asset_idx"]) if v is not None])
-        small = mean([v for v in (w["nonrept_idx"], w["other_idx"], a) if v is not None])
+        small = mean([v for v in (w["nonrept_idx"], a) if v is not None])
         if inst is None or small is None:
             continue
         rec = {"d": w["d"], "institutional": round(inst, 1), "small": round(small, 1), "spread": round(inst - small, 1),
                "institutional_parts": [c for c in ("lev", "asset") if w[c + "_idx"] is not None],
-               "small_parts": [c for c in ("nonrept", "other") if w[c + "_idx"] is not None] + (["survey"] if a is not None else []),
+               "small_parts": [c for c in ("nonrept",) if w[c + "_idx"] is not None] + (["survey"] if a is not None else []),
                "aaii_idx": a, **{c + "_idx": w[c + "_idx"] for c in order}, **{c + "_net": w[c] for c in order}}
         entry = first_tradeable(w["d"], 6).isoformat()
         while entry not in idx and entry <= dates[-1]:
@@ -156,7 +162,7 @@ def verdicts(d):
     if not d.get("available"):
         return [{"level": "info", "topic": "Positioning index", "text": f"Not built yet: {d.get('reason')}."}]
     L = d["latest"]
-    V = [{"level": "info", "topic": "Where the sides stand", "text": f"Institutions read {L['institutional']:.0f} of 100, small traders {L['small']:.0f} — a gap of {L['spread']:+.0f}. Each figure is where this week's net position sits between its own three-year low and high, so a structurally short category is not read as bearish. Leveraged funds {L['lev_idx']:.0f}, asset managers {L['asset_idx']:.0f}, non-reportable {L['nonrept_idx']:.0f}" + (f", retail survey {L['aaii_idx']:.0f}" if L.get("aaii_idx") is not None else "") + f", sell side {L['dealer_idx']:.0f}."}]
+    V = [{"level": "info", "topic": "Where the sides stand", "text": f"Institutions read {L['institutional']:.0f} of 100, small traders {L['small']:.0f} — a gap of {L['spread']:+.0f}. Each figure is the share of the last three years' weeks that group's position is higher than, so a structurally short category is not read as bearish and no single week sets the scale. Leveraged funds {L['lev_idx']:.0f}, asset managers {L['asset_idx']:.0f}, non-reportable {L['nonrept_idx']:.0f}" + (f", retail survey {L['aaii_idx']:.0f}" if L.get("aaii_idx") is not None else "") + f", sell side {L['dealer_idx']:.0f}."}]
     any_sep = False
     for key, t in sorted(d["tests"].items()):
         hits = [k for k, v in t["separated"].items() if v]

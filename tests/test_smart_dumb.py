@@ -6,22 +6,32 @@ import generate_smart_dumb as G
 
 
 class Index(unittest.TestCase):
-    def test_the_index_is_the_place_in_the_categorys_own_range(self):
-        v = [10, 20, 30, 40, 50]
-        self.assertEqual(G.cot_index(v, 4), 100.0)
-        self.assertEqual(G.cot_index(v, 0), None)
-        self.assertEqual(G.cot_index(v, 2), 100.0)
-        self.assertEqual(G.cot_index([50, 10, 30], 2), 50.0)
+    def test_the_figure_is_the_share_of_the_window_this_week_is_higher_than(self):
+        v = list(range(60))
+        self.assertEqual(G.cot_index(v, 59), 100.0)
+        self.assertEqual(G.cot_index(list(reversed(v)), 59), 0.0)
+        self.assertEqual(G.cot_index([5] * 60, 59), 50.0)
+
+    def test_nothing_is_ranked_before_a_year_of_weeks(self):
+        self.assertIsNone(G.cot_index(list(range(60)), G.MIN_WEEKS - 2))
+        self.assertIsNotNone(G.cot_index(list(range(60)), G.MIN_WEEKS - 1))
 
     def test_a_structurally_short_category_is_not_read_as_bearish(self):
-        shorts = [-900, -800, -700, -600, -500]
-        self.assertEqual(G.cot_index(shorts, 4), 100.0)
-        self.assertEqual(G.cot_index(shorts, 1), 100.0)
+        shorts = [-900 + k for k in range(60)]
+        self.assertEqual(G.cot_index(shorts, 59), 100.0)
+
+    def test_one_extreme_week_does_not_set_the_scale(self):
+        v = [-500] + [40 + (k % 21) for k in range(100)] + [50]
+        ranked = G.cot_index(v, len(v) - 1)
+        low, high = min(v), max(v)
+        between_low_and_high = (v[-1] - low) / (high - low) * 100
+        self.assertAlmostEqual(ranked, 50, delta=4)
+        self.assertGreater(between_low_and_high, 90)
 
     def test_the_window_only_looks_back_its_own_length(self):
-        v = [0] + [100] * 5 + [50]
-        self.assertEqual(G.cot_index(v, 6, look=3), 0.0)
-        self.assertEqual(G.cot_index(v, 6, look=7), 50.0)
+        v = [0] * 100 + list(range(100, 160))
+        self.assertEqual(G.cot_index(v, 159, look=60), 100.0)
+        self.assertEqual(G.cot_index([1000] + [0] * 60 + [1], 61, look=60), 100.0)
 
 
 class Timing(unittest.TestCase):

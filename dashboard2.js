@@ -3143,11 +3143,21 @@ async function fredFetch() {
   } catch (e) { return null; }
 }
 
-async function loadMichiganSentiment() {
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  let sentimentResize = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(sentimentResize);
+    sentimentResize = setTimeout(() => {
+      const m = document.getElementById('michiganPanel');
+      if (m && m.clientWidth) { loadMichiganSentiment(true); loadMarginDebtSentiment(); }
+    }, 200);
+  });
+}
+
+async function loadMichiganSentiment(redraw) {
   const el = $('michiganPanel');
   if (!el) return;
-  // Skip if already showing real data
-  if (el.textContent.trim().length > 50 && !el.querySelector('.no-data')) return;
+  if (!redraw && el.textContent.trim().length > 50 && !el.querySelector('.no-data')) return;
   try {
     let fredData = fredCacheRead();
     if (!fredData || !(fredData.series || {}).UMCSENT) fredData = await fredFetch();
@@ -3170,32 +3180,6 @@ async function loadMichiganSentiment() {
     const color = val >= 90 ? '#00ff88' : val >= 75 ? '#88cc00' : val >= 60 ? '#ffcc00' : val >= 45 ? '#ff8800' : '#ff3355';
     const signal = val >= 90 ? 'CONFIDENT' : val >= 75 ? 'POSITIVE' : val >= 60 ? 'CAUTIOUS' : val >= 45 ? 'PESSIMISTIC' : 'RECESSION FEAR';
 
-    // Sparkline
-    const spark = (hist, col, h=60) => {
-      if (!hist || hist.length < 2) return '';
-      const vals = hist.map(d => d.v).filter(v => v != null);
-      if (vals.length < 2) return '';
-      const min = Math.min(...vals), max = Math.max(...vals);
-      const range = max - min || 1;
-      const W = 500, H = h, P = 4;
-      const x = i => P + (i / (vals.length-1)) * (W - P*2);
-      const y = v => H - P - ((v-min)/range) * (H - P*2);
-      const pts = vals.map((v,i) => x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
-      const fill = x(0).toFixed(1)+','+H+' '+pts+' '+x(vals.length-1).toFixed(1)+','+H;
-      return '<svg width="100%" height="'+h+'" viewBox="0 0 '+(W+20)+' '+(H+4)+'" style="display:block;margin-top:8px;">' +
-        '<polygon points="'+fill+'" fill="'+col+'" opacity="0.12"/>' +
-        '<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.5"/>' +
-        '<circle cx="'+x(vals.length-1).toFixed(1)+'" cy="'+y(vals[vals.length-1]).toFixed(1)+'" r="3" fill="'+col+'"/>' +
-        // Historical reference lines at 60, 75, 90
-        [60,75,90].map(ref => {
-          if (ref < min || ref > max) return '';
-          const yy = y(ref).toFixed(1);
-          return '<line x1="'+P+'" y1="'+yy+'" x2="'+(W-P)+'" y2="'+yy+'" stroke="'+col+'" stroke-width="0.5" opacity="0.25" stroke-dasharray="3,3"/>'+
-                 '<text x="'+(W+2)+'" y="'+(parseFloat(yy)+3)+'" font-size="8" fill="'+col+'" opacity="0.5" font-family="Share Tech Mono,monospace">'+ref+'</text>';
-        }).join('') +
-        '</svg>';
-    };
-
     // Historical context
     const allVals = history.map(d => d.v).filter(v => v != null);
     const avg10y = allVals.length ? (allVals.reduce((a,b)=>a+b,0)/allVals.length).toFixed(1) : null;
@@ -3214,8 +3198,8 @@ async function loadMichiganSentiment() {
           (avg10y?'<div style="font-size:11px;color:var(--text3);margin-top:6px;">Historical avg (this period): <span style="color:'+color+'">'+avg10y+'</span> · Current '+(vsAvg>=0?'<span style="color:#00ff88">+'+vsAvg+' above avg</span>':'<span style="color:#ff8800">'+vsAvg+' below avg</span>')+'</div>':'') +
         '</div>' +
       '</div>' +
-      spark(history, color, 80) +
-      '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Source: FRED / University of Michigan · Monthly · ' + (umcs.latest_date||'') + '</div>';
+      monthlyChart({ series: history.map(h => [h.d, h.v]), width: panelWidth('michiganPanel'), height: 150, color: color, refs: [60, 75, 90], format: v => v.toFixed(0) }) +
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Source: FRED, University of Michigan · monthly · latest ' + monthWords((umcs.latest_date || '').slice(0, 7)) + '</div>';
 
   } catch(e) {
     if ($('michiganPanel')) $('michiganPanel').innerHTML = '<div class="no-data">Michigan Sentiment unavailable: ' + e.message + '</div>';
@@ -3254,23 +3238,9 @@ async function loadMarginDebtSentiment() {
   const L = M.latest, R = M.record;
   const up = M.change_mom_pct != null && M.change_mom_pct >= 0;
   const color = R.pct_from_record >= -5 ? '#ff8800' : '#ffcc00';
-  const series = M.series;
-  const vals = series.map(r => r[1]);
-  const maxV = Math.max(...vals), minV = 0;
-  const W = 500, H = 90, P = 6;
-  const px = i => P + (i / (vals.length - 1)) * (W - P * 2);
-  const py = v => H - P - ((v - minV) / (maxV - minV || 1)) * (H - P * 2);
-  const pts = vals.map((v, i) => px(i).toFixed(1) + ',' + py(v).toFixed(1)).join(' ');
-  const fill = px(0).toFixed(1) + ',' + H + ' ' + pts + ' ' + px(vals.length - 1).toFixed(1) + ',' + H;
-  const recIdx = series.findIndex(r => r[0] === R.month);
-  const yearTicks = series.map((r, i) => [r[0], i]).filter(([m]) => m.endsWith('-01') && (+m.slice(0, 4)) % 5 === 0);
-  const spark = `<svg width="100%" height="${H + 20}" viewBox="0 0 ${W} ${H + 20}" style="display:block;margin-top:10px;">
-    <polygon points="${fill}" fill="${color}" opacity="0.1"/>
-    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/>
-    <circle cx="${px(recIdx).toFixed(1)}" cy="${py(R.debit).toFixed(1)}" r="3" fill="#ff3355"/>
-    <circle cx="${px(vals.length - 1).toFixed(1)}" cy="${py(vals[vals.length - 1]).toFixed(1)}" r="3.5" fill="${color}"/>
-    ${yearTicks.map(([m, i]) => `<text x="${px(i).toFixed(1)}" y="${H + 14}" text-anchor="middle" font-size="8" fill="var(--text3)" font-family="Share Tech Mono,monospace">${m.slice(0, 4)}</text>`).join('')}
-  </svg>`;
+  const spark = monthlyChart({ series: M.series, width: panelWidth('marginDebtPanel'), height: 160, color: color, floor: 0,
+    format: v => v >= 1e6 ? '$' + (v / 1e6).toFixed(2) + 'T' : '$' + Math.round(v / 1e3) + 'B',
+    mark: { month: R.month, label: 'Record ' + monthWords(R.month) } });
   el.innerHTML =
     '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;margin-bottom:6px;">' +
       '<div style="text-align:center;min-width:130px;">' +
@@ -3284,11 +3254,7 @@ async function loadMarginDebtSentiment() {
       '</div>' +
     '</div>' +
     spark +
-    '<div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">Debit balances in customers\' securities margin accounts, reported monthly to FINRA by its member firms; every month since ' + marginMonthWords(M.first) + '. ' + marginStatus(M) + '</div>';
-}
-function marginMonthWords(m) {
-  const N = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  return m ? N[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4) : '';
+    '<div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">Debit balances in customers\' securities margin accounts, reported monthly to FINRA by its member firms; every month since ' + monthWords(M.first) + '. ' + marginStatus(M) + '</div>';
 }
 
 // ─────────────────────────────────────────────

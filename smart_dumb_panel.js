@@ -30,7 +30,7 @@
     const useDaily = range[2] !== Infinity && (D.daily_px || []).length && t(D.daily_px[0][0]) <= tStart + 7 * 864e5;
     const px = (useDaily ? D.daily_px.map(([d, c]) => ({ d, c })) : series.filter(r => r.px != null).map(r => ({ d: r.d, c: r.px }))).filter(r => t(r.d) >= tStart);
     if (wk.length < 2) return '<div style="font-size:11px;color:var(--text3);">Not enough weeks in this range.</div>';
-    const W = Math.max(640, Math.round(width || 960)), H = 420, L = 40, R = 60, T = 10, B = 26;
+    const W = Math.max(640, Math.round(width || 960)), H = Math.max(380, Math.min(640, Math.round(W * 0.4))), L = 40, R = 60, T = 10, B = 26;
     const cW = W - L - R, cH = H - T - B;
     const pTop = T + 6, pH = cH * 0.34, iTop = T + cH * 0.40, iH = cH * 0.60;
     const tMin = Math.min(t(wk[0].d), px.length ? t(px[0].d) : Infinity), tMax = tEnd;
@@ -81,7 +81,7 @@
         ${poly(px.map(r => `${x(r.d).toFixed(1)},${py(r.c).toFixed(1)}`), 'var(--text2)', 1.4)}${poly(wk.map(r => `${x(r.d).toFixed(1)},${iy(r.inst).toFixed(1)}`), SMART, 2)}${poly(wk.map(r => `${x(r.d).toFixed(1)},${iy(r.small).toFixed(1)}`), DUMB, 2)}${dot(last.inst, SMART)}${dot(last.small, DUMB)}
         ${call(last.inst, SMART, 'Smart money')}${call(last.small, DUMB, 'Dumb money')}
       </svg>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px;">Smart money is leveraged funds and asset managers. Dumb money is traders under the reporting threshold, other reportable traders and the AAII survey. Each line is where that group's position sits between its own three-year low (0) and high (100); the dashed lines are where both lines have sat on only one week in ten since ${since} (above ${Math.round(HI)} or below ${Math.round(LO)}), and a callout appears when the latest reading is past either. The left scale is fitted to the lines in view and always includes both extremes. Positions are reported weekly, so the lines move in weekly steps; price is daily${range[2] === Infinity ? ' except in the full-history view, which is weekly' : ''}.</div>`;
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">Smart money is leveraged funds and asset managers. Dumb money is traders under the CFTC's reporting threshold and the AAII survey. Each line is the share of the last three years' weeks that group's position is higher than, from 0 to 100; the dashed lines are where both lines have sat on only one week in ten since ${since} (above ${Math.round(HI)} or below ${Math.round(LO)}), and a callout appears when the latest reading is past either. The left scale is fitted to the lines in view and always includes both extremes. Positions are reported weekly, so the lines move in weekly steps; price is daily${range[2] === Infinity ? ' except in the full-history view, which is weekly' : ''}.</div>`;
   }
 
   function render() {
@@ -102,9 +102,9 @@
     const cats = (D.categories || []).map(c => `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:4px 8px;color:var(--text);">${c.label}</td><td style="padding:4px 8px;font-size:10px;color:var(--text3);">${c.side}</td><td style="padding:4px 8px;font-family:'Share Tech Mono',monospace;color:${(L[c.key + '_net'] || 0) >= 0 ? 'var(--green)' : 'var(--red)'};">${L[c.key + '_net'] != null ? (L[c.key + '_net'] >= 0 ? '+' : '') + L[c.key + '_net'].toLocaleString('en-US') : '—'}</td><td style="padding:4px 8px;font-family:'Share Tech Mono',monospace;color:var(--text);">${f0(L[c.key + '_idx'])}</td></tr>`).join('');
     el.innerHTML = `
       <div class="panel" style="margin-bottom:12px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">POSITIONING INDEX · REPORT OF ${fmtDate(D.last).toUpperCase()} · EACH FIGURE IS WHERE THIS WEEK'S NET SITS BETWEEN ITS OWN THREE-YEAR LOW AND HIGH</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">POSITIONING INDEX · REPORT OF ${fmtDate(D.last).toUpperCase()} · EACH FIGURE IS THE SHARE OF THE LAST THREE YEARS' WEEKS THIS WEEK IS HIGHER THAN</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start;">
-          <div>${gauge('INSTITUTIONS — leveraged funds and asset managers', L.institutional, 'var(--cyan)')}${gauge('SMALL TRADERS — non-reportable, other reportable' + (L.aaii_idx != null ? ', retail survey' : ''), L.small, '#ff8800')}${gauge('SELL SIDE — dealers and intermediaries', L.dealer_idx, 'var(--purple)')}</div>
+          <div>${gauge('INSTITUTIONS — leveraged funds and asset managers', L.institutional, 'var(--cyan)')}${gauge('SMALL TRADERS — under the reporting threshold' + (L.aaii_idx != null ? ', and the AAII survey' : ''), L.small, '#ff8800')}${gauge('SELL SIDE — dealers and intermediaries', L.dealer_idx, 'var(--purple)')}</div>
           <div style="text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">INSTITUTIONS MINUS SMALL TRADERS</div>
             <div style="font-family:'Share Tech Mono',monospace;font-size:34px;color:${gapCol};">${L.spread >= 0 ? '+' : ''}${f0(L.spread)}</div>
@@ -112,7 +112,7 @@
           </div>
           <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>${['CATEGORY', 'SIDE', 'NET CONTRACTS', 'INDEX'].map(th).join('')}</tr></thead><tbody>${cats}</tbody></table></div>
         </div>
-        <div style="font-size:10px;color:var(--text3);margin-top:8px;">${D.weeks.toLocaleString('en-US')} weekly reports, ${fmtDate(D.first, 'short')} → ${fmtDate(D.last, 'short')}, with ${D.aaii_weeks.toLocaleString('en-US')} survey weeks. The index uses each category's own ${D.lookback_weeks}-week low and high, so a category that is short almost every week by the nature of its business does not read as bearish.</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:8px;">${D.weeks.toLocaleString('en-US')} weekly reports, ${fmtDate(D.first, 'short')} → ${fmtDate(D.last, 'short')}, with ${D.aaii_weeks.toLocaleString('en-US')} survey weeks. Each figure ranks the category against its own last ${D.lookback_weeks} weeks: the share of them it is higher than. A category that is short almost every week by the nature of its business does not read as bearish, and no single extreme week sets the scale.</div>
       </div>
       <div class="panel" style="margin-bottom:12px;border-left:4px solid var(--purple);">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--purple);margin-bottom:8px;">⬡ WHAT THIS SAYS — RECOMPUTED EVERY RUN</div>
