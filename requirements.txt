@@ -5,3 +5,4 @@ pandas
 market-calendar-tool
 numpy
 xlrd
+openpyxl

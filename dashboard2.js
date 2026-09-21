@@ -3018,6 +3018,8 @@ async function renderLiquidity() {
   const chgSign  = n => n > 0 ? '+' : '';
 
   const buildHTML = d => {
+    const MF = marginFacts();
+    const mg = MF ? { month_words: MF.latest.month_words, margin_debt: MF.latest.debit * 1e6, free_credit_margin: MF.latest.free_margin != null ? MF.latest.free_margin * 1e6 : null, free_credit_cash: MF.latest.free_cash != null ? MF.latest.free_cash * 1e6 : null, net_margin: MF.latest.net * 1e6, change_mom: MF.change_mom != null ? MF.change_mom * 1e6 : null, change_pct: MF.change_mom_pct, current: MF.current } : null;
     const regimeColor = d.regime === 'EASING' ? '#00ff88' :
                         d.regime === 'SLIGHTLY EASING' ? '#88cc00' :
                         d.regime === 'SLIGHTLY TIGHTENING' ? '#ff8800' : '#ff3355';
@@ -3067,28 +3069,28 @@ async function renderLiquidity() {
         ${metricCard('M2 MONEY SUPPLY', d.m2?.value, d.m2?.change_mom, d.m2?.change_pct, d.m2?.date, '#00ff88', 'Total money in circulation. Leads stocks by 6-12 months.')}
       </div>
 
-      ${d.margin ? `
+      ${mg ? `
       <div class="panel">
-        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;">⬡ FINRA MARGIN DEBT & LEVERAGE — ${d.margin.date}${d.margin.source==='static_fallback'?' (estimated)':''}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:12px;">⬡ FINRA MARGIN DEBT & LEVERAGE — ${mg.month_words.toUpperCase()}${mg.current ? '' : ' · LATEST AVAILABLE, NOT CURRENT'}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
           <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#ff3355;margin-bottom:6px;">MARGIN DEBT</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:#ff3355;">${fmtT(d.margin.margin_debt)}</div>
-            ${d.margin.change_mom != null ? `<div style="font-size:12px;color:${chgColor(d.margin.change_mom)};margin-top:4px;">${chgSign(d.margin.change_mom)}${fmtT(d.margin.change_mom)} M/M</div>` : ''}
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:#ff3355;">${fmtT(mg.margin_debt)}</div>
+            ${mg.change_mom != null ? `<div style="font-size:12px;color:${chgColor(mg.change_mom)};margin-top:4px;">${chgSign(mg.change_mom)}${fmtT(mg.change_mom)} M/M</div>` : ''}
           </div>
           <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#00ff88;margin-bottom:6px;">FREE CREDIT (MARGIN ACCTS)</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:#00ff88;">${fmtT(d.margin.free_credit_margin)}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:#00ff88;">${fmtT(mg.free_credit_margin)}</div>
             <div style="font-size:11px;color:var(--text3);margin-top:4px;">Idle cash in margin accounts</div>
           </div>
           <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#00ff88;margin-bottom:6px;">FREE CREDIT (CASH ACCTS)</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:#00ff88;">${fmtT(d.margin.free_credit_cash)}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:#00ff88;">${fmtT(mg.free_credit_cash)}</div>
             <div style="font-size:11px;color:var(--text3);margin-top:4px;">Idle cash in cash accounts</div>
           </div>
-          <div style="background:var(--bg3);border:1px solid ${chgColor(d.margin.net_margin)}44;border-left:3px solid ${chgColor(d.margin.net_margin)};border-radius:3px;padding:12px;text-align:center;">
+          <div style="background:var(--bg3);border:1px solid ${chgColor(mg.net_margin)}44;border-left:3px solid ${chgColor(mg.net_margin)};border-radius:3px;padding:12px;text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);margin-bottom:6px;">NET LEVERAGE</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:${chgColor(d.margin.net_margin)};">${fmtT(d.margin.net_margin)}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:900;color:${chgColor(mg.net_margin)};">${fmtT(mg.net_margin)}</div>
             <div style="font-size:11px;color:var(--text3);margin-top:4px;">Debt minus all free credit</div>
           </div>
         </div>
@@ -3120,33 +3122,35 @@ async function renderLiquidity() {
 // ─────────────────────────────────────────────
 // MICHIGAN CONSUMER SENTIMENT (FRED)
 // ─────────────────────────────────────────────
+function fredCacheable(d) { return !!(d && d.series && !d.throttled && Object.keys(d.series).length > 0); }
+function fredCacheRead() {
+  try {
+    const p = JSON.parse(localStorage.getItem('spy_fred_cache') || 'null');
+    return p && p.data && fredCacheable(p.data) && (Date.now() - p.ts) < 4 * 60 * 60 * 1000 ? p.data : null;
+  } catch (e) { return null; }
+}
+function fredCacheWrite(d) {
+  if (!fredCacheable(d)) return;
+  try { localStorage.setItem('spy_fred_cache', JSON.stringify({ ts: Date.now(), data: d })); } catch (e) {}
+}
+async function fredFetch() {
+  try {
+    const r = await fetch('/fred?t=' + Date.now());
+    if (!r.ok) return null;
+    const d = await r.json();
+    fredCacheWrite(d);
+    return d;
+  } catch (e) { return null; }
+}
+
 async function loadMichiganSentiment() {
   const el = $('michiganPanel');
   if (!el) return;
   // Skip if already showing real data
   if (el.textContent.trim().length > 50 && !el.querySelector('.no-data')) return;
   try {
-    // Use localStorage FRED cache first (same key as macro.js), fall back to live fetch
-    let fredData = null;
-    try {
-      const cached = localStorage.getItem('spy_fred_cache');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed?.data && (Date.now() - parsed.ts) < 4 * 60 * 60 * 1000) {
-          fredData = parsed.data;
-        }
-      }
-    } catch(e) {}
-    if (!fredData) {
-      try {
-        const r = await fetch('/fred?t=' + Date.now());
-        if (r.ok) {
-          fredData = await r.json();
-          // Save to cache for next time
-          try { localStorage.setItem('spy_fred_cache', JSON.stringify({ ts: Date.now(), data: fredData })); } catch(e) {}
-        }
-      } catch(e) {}
-    }
+    let fredData = fredCacheRead();
+    if (!fredData || !(fredData.series || {}).UMCSENT) fredData = await fredFetch();
 
     const S = fredData?.series || {};
     const umcs = S.UMCSENT;
@@ -3221,96 +3225,70 @@ async function loadMichiganSentiment() {
 // ─────────────────────────────────────────────
 // MARGIN DEBT (FINRA via liquidity.js)
 // ─────────────────────────────────────────────
+function marginFacts() {
+  const M = typeof MARGIN_DATA !== 'undefined' ? MARGIN_DATA : null;
+  return M && M.available ? M : null;
+}
+function marginMoney(millions) {
+  if (millions == null) return '—';
+  const v = millions * 1e6, a = Math.abs(v);
+  return (v < 0 ? '−' : '') + '$' + (a >= 1e12 ? (a / 1e12).toFixed(2) + ' trillion' : (a / 1e9).toFixed(1) + ' billion');
+}
+function marginStatus(M) {
+  const f = M.fetch, L = M.latest;
+  const when = ts => ts ? new Date(ts).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) + ' CT' : '';
+  const fresh = M.current
+    ? `${L.month_words} is the latest month FINRA has published. FINRA publishes each month in the third week of the next.`
+    : `<span style="color:#ff3355;">FINRA's ${M.expected_words} figures should be out by now; the latest here is ${L.month_words}, ${M.months_behind} month${M.months_behind === 1 ? '' : 's'} behind.</span>`;
+  const fetchLine = !f ? 'The pipeline has not asked FINRA yet; these figures come from the history stored with the site.'
+    : f.ok ? `Fetched from FINRA ${when(f.attempted_at)}.`
+    : `The pipeline's last request to FINRA, ${when(f.attempted_at)}, did not get the data: ${f.detail}.` + (f.last_success ? ` Last successful fetch ${when(f.last_success)}.` : ' It has never succeeded; these figures come from the history stored with the site.');
+  return fresh + ' ' + fetchLine;
+}
+
 async function loadMarginDebtSentiment() {
   const el = $('marginDebtPanel');
   if (!el) return;
-  // Use cached liquidity data if available, otherwise fetch it
-  let ld = window._liquidityData?.margin;
-  if (!ld || !ld.margin_debt) {
-    try {
-      if (typeof renderLiquidity === 'function') await renderLiquidity();
-      ld = window._liquidityData?.margin;
-    } catch(e) {}
-  }
-  if (!ld || !ld.margin_debt) {
-    // Try fetching liquidity data directly
-    try {
-      const r = await fetch('/liquidity?t=' + Date.now());
-      if (r.ok) {
-        const d = await r.json();
-        ld = d?.margin || null;
-        if (ld) { if (!window._liquidityData) window._liquidityData = {}; window._liquidityData.margin = ld; }
-      }
-    } catch(e) {}
-  }
-  // Use static fallback if still no data
-  if (!ld || !ld.margin_debt) {
-    ld = null;
-  }
-  if (!ld) { const _el = $('marginDebtPanel'); if (_el) _el.innerHTML = '<div class="no-data">Margin debt unavailable — FINRA source not reachable</div>'; return; }
-  const debt = ld.margin_debt;
-  const prev = ld.prev_margin_debt;
-  const momPct = prev ? ((debt - prev) / prev * 100) : null;
-  const color = momPct == null ? '#ffcc00' : momPct > 5 ? '#ff8800' : momPct > 0 ? '#ffcc00' : momPct > -5 ? '#00ff88' : '#ff3355';
-  const signal = momPct == null ? '—' : momPct > 8 ? 'LEVERAGED EUPHORIA' : momPct > 3 ? 'RISING LEVERAGE' : momPct > -3 ? 'STABLE' : momPct > -8 ? 'DELEVERAGING' : 'FORCED SELLING';
-  const fmtB = v => { const abs=Math.abs(v); return (v<0?'-':'')+'$'+(abs>=1e12?(abs/1e12).toFixed(2)+'T':abs>=1e9?(abs/1e9).toFixed(1)+'B':(abs/1e6).toFixed(0)+'M'); };
-
-  // Historical FINRA margin debt ($B) — monthly, Jan 2018 → Feb 2026
-  const MARGIN_HISTORY = [
-    {d:'Jan-18',v:665},{d:'Apr-18',v:668},{d:'Jul-18',v:647},{d:'Oct-18',v:607},
-    {d:'Jan-19',v:554},{d:'Apr-19',v:607},{d:'Jul-19',v:601},{d:'Oct-19',v:591},
-    {d:'Jan-20',v:562},{d:'Mar-20',v:479},{d:'Jul-20',v:556},{d:'Oct-20',v:617},
-    {d:'Jan-21',v:778},{d:'Apr-21',v:847},{d:'Jul-21',v:882},{d:'Oct-21',v:936},
-    {d:'Jan-22',v:830},{d:'Apr-22',v:733},{d:'Jul-22',v:628},{d:'Oct-22',v:601},
-    {d:'Jan-23',v:617},{d:'Apr-23',v:660},{d:'Jul-23',v:698},{d:'Oct-23',v:672},
-    {d:'Jan-24',v:731},{d:'Apr-24',v:790},{d:'Jul-24',v:812},{d:'Oct-24',v:856},
-    {d:'Jan-25',v:871},{d:'Apr-25',v:863},{d:'Jul-25',v:878},{d:'Oct-25',v:882},
-    {d:'Jan-26',v:887},{d:'Feb-26',v:892},
-  ];
-  // Append live value if newer
-  const liveValB = Math.round(debt / 1e9);
-  if (MARGIN_HISTORY[MARGIN_HISTORY.length-1].v !== liveValB) {
-    MARGIN_HISTORY.push({ d: ld.date || 'Live', v: liveValB });
-  }
-
-  // Build SVG sparkline
-  const vals = MARGIN_HISTORY.map(d => d.v);
-  const minV = Math.min(...vals), maxV = Math.max(...vals);
-  const W = 500, H = 80, P = 6;
-  const px = (i) => P + (i / (vals.length - 1)) * (W - P * 2);
-  const py = (v) => H - P - ((v - minV) / (maxV - minV || 1)) * (H - P * 2);
+  const M = marginFacts();
+  if (!M) { el.innerHTML = '<div class="no-data">margin_data.js is not loaded yet — it is written by the daily pipeline.</div>'; return; }
+  const L = M.latest, R = M.record;
+  const up = M.change_mom_pct != null && M.change_mom_pct >= 0;
+  const color = R.pct_from_record >= -5 ? '#ff8800' : '#ffcc00';
+  const series = M.series;
+  const vals = series.map(r => r[1]);
+  const maxV = Math.max(...vals), minV = 0;
+  const W = 500, H = 90, P = 6;
+  const px = i => P + (i / (vals.length - 1)) * (W - P * 2);
+  const py = v => H - P - ((v - minV) / (maxV - minV || 1)) * (H - P * 2);
   const pts = vals.map((v, i) => px(i).toFixed(1) + ',' + py(v).toFixed(1)).join(' ');
-  const fill = px(0).toFixed(1)+','+H+' '+pts+' '+px(vals.length-1).toFixed(1)+','+H;
-  // Mark peak (Oct 2021 = $936B)
-  const peakIdx = vals.indexOf(Math.max(...vals));
-  const sparkSVG = `<svg width="100%" height="${H+20}" viewBox="0 0 ${W} ${H+20}" style="display:block;margin-top:10px;">
+  const fill = px(0).toFixed(1) + ',' + H + ' ' + pts + ' ' + px(vals.length - 1).toFixed(1) + ',' + H;
+  const recIdx = series.findIndex(r => r[0] === R.month);
+  const yearTicks = series.map((r, i) => [r[0], i]).filter(([m]) => m.endsWith('-01') && (+m.slice(0, 4)) % 5 === 0);
+  const spark = `<svg width="100%" height="${H + 20}" viewBox="0 0 ${W} ${H + 20}" style="display:block;margin-top:10px;">
     <polygon points="${fill}" fill="${color}" opacity="0.1"/>
     <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/>
-    <circle cx="${px(vals.length-1).toFixed(1)}" cy="${py(vals[vals.length-1]).toFixed(1)}" r="3.5" fill="${color}"/>
-    <circle cx="${px(peakIdx).toFixed(1)}" cy="${py(vals[peakIdx]).toFixed(1)}" r="3" fill="#ff3355" opacity="0.8"/>
-    <text x="${px(peakIdx).toFixed(1)}" y="${(py(vals[peakIdx])-6).toFixed(1)}" text-anchor="middle" font-size="8" fill="#ff3355" font-family="Share Tech Mono,monospace">PEAK $936B</text>
-    <text x="${P}" y="${H+14}" font-size="8" fill="var(--text3)" font-family="Share Tech Mono,monospace">${MARGIN_HISTORY[0].d}</text>
-    <text x="${W-P}" y="${H+14}" text-anchor="end" font-size="8" fill="${color}" font-family="Share Tech Mono,monospace">${MARGIN_HISTORY[MARGIN_HISTORY.length-1].d}: ${fmtB(debt)}</text>
+    <circle cx="${px(recIdx).toFixed(1)}" cy="${py(R.debit).toFixed(1)}" r="3" fill="#ff3355"/>
+    <circle cx="${px(vals.length - 1).toFixed(1)}" cy="${py(vals[vals.length - 1]).toFixed(1)}" r="3.5" fill="${color}"/>
+    ${yearTicks.map(([m, i]) => `<text x="${px(i).toFixed(1)}" y="${H + 14}" text-anchor="middle" font-size="8" fill="var(--text3)" font-family="Share Tech Mono,monospace">${m.slice(0, 4)}</text>`).join('')}
   </svg>`;
-
   el.innerHTML =
-    '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;margin-bottom:10px;">' +
-      '<div style="text-align:center;min-width:120px;">' +
-        '<div style="font-family:Share Tech Mono,monospace;font-size:36px;font-weight:900;color:'+color+';line-height:1;">'+fmtB(debt)+'</div>' +
-        '<div style="font-family:Orbitron,monospace;font-size:9px;letter-spacing:1.5px;color:'+color+';margin-top:4px;">'+signal+'</div>' +
-        (momPct!=null?'<div style="font-size:11px;color:'+(momPct>=0?'#ffcc00':'#ff3355')+';margin-top:4px;">'+(momPct>=0?'+':'')+momPct.toFixed(1)+'% MoM</div>':'') +
-        '<div style="margin-top:8px;font-size:10px;color:var(--text3);">vs $936B peak<br><span style="color:#ff3355;">'+(((debt/936e9)-1)*100).toFixed(1)+'% off peak</span></div>' +
+    '<div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;margin-bottom:6px;">' +
+      '<div style="text-align:center;min-width:130px;">' +
+        '<div style="font-family:Share Tech Mono,monospace;font-size:30px;font-weight:900;color:' + color + ';line-height:1;">' + marginMoney(L.debit) + '</div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px;">borrowed on margin, ' + L.month_words + '</div>' +
       '</div>' +
-      '<div>' +
-        '<div style="font-size:12px;color:var(--text2);line-height:1.6;">FINRA margin debt is total borrowed money used to buy securities. ' +
-        'Rising margin debt signals leveraged optimism. ' +
-        'Sharp drops = forced deleveraging that accelerates selloffs. Peaked at <span style="color:#ff3355;">$936B Oct 2021</span> before the 2022 bear market.</div>' +
-        '<div style="font-size:11px;color:var(--text3);margin-top:6px;">Free credit cash: <span style="color:#00ccff">'+fmtB(ld.free_credit_cash||0)+'</span> · ' +
-        'Free credit margin: <span style="color:#00ccff">'+fmtB(ld.free_credit_margin||0)+'</span></div>' +
+      '<div style="font-size:12px;color:var(--text2);line-height:1.8;">' +
+        '<div><b style="color:var(--text);">' + (M.change_mom_pct == null ? '—' : (up ? 'Up ' : 'Down ') + Math.abs(M.change_mom_pct).toFixed(1) + '%') + '</b> on the month · <b style="color:var(--text);">' + (M.change_yoy_pct == null ? '—' : (M.change_yoy_pct >= 0 ? 'up ' : 'down ') + Math.abs(M.change_yoy_pct).toFixed(1) + '%') + '</b> on the year</div>' +
+        '<div>' + (R.pct_from_record >= 0 ? '<b style="color:#ff3355;">A record</b>' : '<b style="color:var(--text);">' + Math.abs(R.pct_from_record).toFixed(1) + '% below the record</b> of ' + marginMoney(R.debit) + ' in ' + R.month_words) + '</div>' +
+        '<div style="color:var(--text3);font-size:11px;">Free credit in cash accounts ' + marginMoney(L.free_cash) + ' · in margin accounts ' + marginMoney(L.free_margin) + '</div>' +
       '</div>' +
     '</div>' +
-    sparkSVG +
-    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Source: FINRA · Monthly · ' + (ld.date||'') + ' · Jan 2018 → present</div>';
+    spark +
+    '<div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">Debit balances in customers\' securities margin accounts, reported monthly to FINRA by its member firms; every month since ' + marginMonthWords(M.first) + '. ' + marginStatus(M) + '</div>';
+}
+function marginMonthWords(m) {
+  const N = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  return m ? N[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4) : '';
 }
 
 // ─────────────────────────────────────────────
@@ -4957,18 +4935,12 @@ async function renderMacro() {
     return;
   }
 
-  // Try localStorage cache first (shared with macro.js, 4hr TTL)
-  try {
-    const cached = localStorage.getItem('spy_fred_cache');
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (parsed?.data && (Date.now() - parsed.ts) < 4 * 60 * 60 * 1000) {
-        _macroData = parsed.data;
-        _renderMacroHTML(_macroData);
-        return;
-      }
-    }
-  } catch(e) {}
+  const cachedFred = fredCacheRead();
+  if (cachedFred) {
+    _macroData = cachedFred;
+    _renderMacroHTML(_macroData);
+    return;
+  }
 
   _macroLoading = true;
   el.innerHTML = `<div style="padding:60px;text-align:center;color:var(--text3);">
@@ -4980,8 +4952,7 @@ async function renderMacro() {
     const r = await fetch('/fred?t=' + Date.now());
     if (!r.ok) throw new Error('FRED endpoint returned ' + r.status);
     _macroData = await r.json();
-    // Save to localStorage cache
-    try { localStorage.setItem('spy_fred_cache', JSON.stringify({ ts: Date.now(), data: _macroData })); } catch(e) {}
+    fredCacheWrite(_macroData);
     _macroLoading = false;
     _renderMacroHTML(_macroData);
   } catch(e) {
