@@ -29,6 +29,7 @@ SESSION.headers.update({
 })
 
 NOW_UTC = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+AAII_FULL_SERIES = []
 
 
 def last_thursday_et():
@@ -59,21 +60,33 @@ def fetch_aaii():
         )
         if r.status_code == 200 and "Date" in r.text:
             lines = [l for l in r.text.strip().split("\n") if l.strip()]
-            # CSV: Date,Open,High,Low,Close,Volume
-            # "Close" is the bullish %. Grab last row.
+            bull_rows = {}
+            for l in lines[1:]:
+                c = l.split(",")
+                if len(c) >= 5 and c[4] not in ("", "N/A"):
+                    bull_rows[c[0]] = float(c[4])
             last = lines[-1].split(",")
             bull_date = last[0]
-            bull = float(last[4])  # Close = weekly bullish %
+            bull = float(last[4])
 
-            # Also grab bearish
             r2 = SESSION.get(
                 "https://stooq.com/q/d/l/?s=aaii_bear&i=w",
                 timeout=15,
             )
             bear = None
+            bear_rows = {}
             if r2.status_code == 200 and "Date" in r2.text:
                 lines2 = [l for l in r2.text.strip().split("\n") if l.strip()]
+                for l in lines2[1:]:
+                    c = l.split(",")
+                    if len(c) >= 5 and c[4] not in ("", "N/A"):
+                        bear_rows[c[0]] = float(c[4])
                 bear = float(lines2[-1].split(",")[4])
+            global AAII_FULL_SERIES
+            AAII_FULL_SERIES = [{"date": d, "bullish": round(b, 2), "bearish": round(bear_rows[d], 2) if d in bear_rows else None,
+                                 "neutral": max(0.0, round(100.0 - b - bear_rows[d], 2)) if d in bear_rows else None,
+                                 "spread": round(b - bear_rows[d], 2) if d in bear_rows else None, "source": "stooq"}
+                                for d, b in sorted(bull_rows.items())]
 
             neu = max(0.0, round(100.0 - bull - (bear or 0), 2)) if bear else None
             print(f"  AAII (Stooq): bull={bull:.1f}% bear={bear}% date={bull_date}")
@@ -398,6 +411,10 @@ def main():
             history = json.load(f)
     except Exception:
         history = {"aaii": [], "cot": []}
+    if AAII_FULL_SERIES:
+        have = {h.get("date") for h in history["aaii"]}
+        history["aaii"].extend(h for h in AAII_FULL_SERIES if h["date"] not in have)
+        history["aaii"].sort(key=lambda h: h["date"])
     if aaii and aaii.get("date") and not any(h.get("date") == aaii["date"] for h in history["aaii"]):
         history["aaii"].append({k: aaii.get(k) for k in ("date", "bullish", "neutral", "bearish", "spread", "source")})
         history["aaii"].sort(key=lambda h: h["date"])

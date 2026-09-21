@@ -53,6 +53,7 @@ function _switchPanelOnly(id) {
   // Tab-specific renders
   if(id==='analog') { if(typeof renderAnalog==='function') renderAnalog(); }
   if(id==='media') initMediaTab();
+  if(id==='health') renderHealth();
   if(id==='journal') renderJournalEntries();
   if(id==='overview' && typeof _md!=='undefined' && _md) { try { renderOverview(_md); } catch(e){ console.warn('overview:',e); } }
   if(id==='events') { try { if(typeof renderEvReleases==='function') renderEvReleases(); } catch(e){ console.warn('events:',e); } }
@@ -104,6 +105,7 @@ function switchTab(id){
 
   const p=$('panel-'+id); if(p)p.classList.add('active');
   if(id==='media') initMediaTab();
+  if(id==='health') renderHealth();
   if(id==='journal') renderJournalEntries();
   if(id==='analog') { renderAnalog(); }
   if(id==='hub') { try { if(typeof renderHub==='function'&&window._md) renderHub(window._md,window._sd||{}); } catch(e){ console.warn('hub:',e); } }
@@ -3474,3 +3476,25 @@ function loadIgnitionData() {
   }
 }
 window.loadIgnitionData = loadIgnitionData;
+
+async function renderHealth() {
+  const el = document.getElementById('healthContent'); if (!el) return;
+  try {
+    const r = await fetch('health.json', { cache: 'no-cache' }); if (!r.ok) throw new Error('health.json ' + r.status);
+    const h = await r.json();
+    const gen = new Date(h.generated_at);
+    const ageMin = Math.round((Date.now() - gen.getTime()) / 60000);
+    const S = nyseSession(new Date());
+    const runExpectedMin = S.state === 'open' ? 45 : 26 * 60;
+    const runOk = ageMin <= runExpectedMin;
+    const row = (name, value, ok, detail) => `<tr><td style="padding:8px 10px;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text3);white-space:nowrap;">${name}</td><td style="padding:8px 10px;font-family:'Share Tech Mono',monospace;font-size:12px;color:${ok?'var(--green)':'var(--red)'};">${ok?'●':'●'} ${value}</td><td style="padding:8px 10px;font-size:11px;color:var(--text3);">${detail}</td></tr>`;
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+      ${row('Last pipeline run', `${gen.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'})} CT · ${ageMin} min ago`, runOk, S.state==='open' ? 'runs every 30 minutes during the session' : 'the last close run of the previous session')}
+      ${h.rows.map(x => row(x.name, x.value, x.ok, x.detail)).join('')}
+    </table>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px;">Written by generate_health.py at the end of every pipeline run. Red means the check failed on that run; a row that stays red across runs is a broken producer.</div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="no-data">Health file not available: ${e.message}</div>`;
+  }
+}
+window.renderHealth = renderHealth;

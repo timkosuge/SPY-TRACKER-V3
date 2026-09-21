@@ -110,6 +110,10 @@ jobs:
         if: steps.clock.outputs.run == 'true'
         run: python generate_edge_stats.py
 
+      - name: Data health
+        if: steps.clock.outputs.run == 'true'
+        run: python generate_health.py
+
       - name: Snapshot gamma exposure
         if: steps.clock.outputs.run == 'true'
         run: curl -s -o /dev/null -w "gex snapshot HTTP %{http_code}\n" "https://spy-tracker-v3.pages.dev/gex?t=$(date +%s)"
@@ -137,7 +141,7 @@ jobs:
                      session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
                      large_gap_stats.js release_data.js edge_stats_data.js \
                      data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv \
-                     breadth_data.json tic_holdings.js
+                     breadth_data.json tic_holdings.js health.json
           if git diff --staged --quiet; then
             echo "No payload changes"
             exit 0

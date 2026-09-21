@@ -64,6 +64,11 @@ def init_db(conn):
         close REAL, volume INTEGER,
         PRIMARY KEY (date, time))""")
     c.execute("DROP TABLE IF EXISTS intraday_5m")
+    c.execute("""CREATE TABLE IF NOT EXISTS option_chain (
+        captured_at TEXT, session_date TEXT, spot REAL, expiry TEXT, cp TEXT, strike REAL,
+        bid REAL, ask REAL, iv REAL, open_interest INTEGER, volume INTEGER, gamma REAL,
+        PRIMARY KEY (captured_at, expiry, cp, strike))""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_option_chain_session ON option_chain(session_date, expiry)")
     c.execute("""CREATE TABLE IF NOT EXISTS intraday_session_stats (
         date TEXT PRIMARY KEY,
         gap_pct REAL,
@@ -503,12 +508,28 @@ def fetch_spy_options_cboe():
             "spot":            float(spot),
             "gex":             gex,
             "source":          "cboe",
+            "chain":           parsed,
         }
 
     except Exception as e:
         print(f"  CBOE options parse error: {e}")
         import traceback; traceback.print_exc()
         return {}
+
+
+def store_option_chain(conn, options_data, session_date):
+    """Persist the parsed CBOE chain as returned: strike, expiry, side, bid, ask, IV, open interest, volume, gamma."""
+    chain = (options_data or {}).get("chain") or []
+    if not chain:
+        return 0
+    captured_at = datetime.now(ET).isoformat(timespec="seconds")
+    spot = float(options_data.get("spot") or 0)
+    rows = [(captured_at, session_date, spot, o["exp"].isoformat(), o["cp"], float(o["strike"]),
+             o["bid"], o["ask"], o["iv"], o["oi"], o["vol"], o["gamma"]) for o in chain]
+    conn.executemany("INSERT OR IGNORE INTO option_chain VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+    conn.commit()
+    print(f"  option_chain: {len(rows)} contracts stored at {captured_at}")
+    return len(rows)
 
 
 def compute_gex_cboe(parsed, spot, near_expiries):
@@ -2138,6 +2159,10 @@ def main():
 
         print("\n── Options Data ─────────────────────────────────────────────")
         options_data = fetch_spy_options_cboe()
+        try:
+            store_option_chain(conn, options_data, ref_str)
+        except Exception as e:
+            print(f"  option_chain store error: {e}")
         if not options_data or not options_data.get("max_pain"):
             print("  CBOE unavailable, falling back to yfinance options...")
             options_data = fetch_spy_options_yf_fallback()
