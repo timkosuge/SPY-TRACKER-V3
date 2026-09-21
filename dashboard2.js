@@ -5049,37 +5049,10 @@ function _renderMacroHTML(data) {
   };
 
   // SVG line chart
-  const lineChart = (history, color, unit, height=80) => {
-    if (!history || history.length < 2) return '';
-    const vals = history.map(h => h.v).filter(v => v != null);
-    const dates = history.filter(h => h.v != null).map(h => h.d);
-    if (vals.length < 2) return '';
-    const min = Math.min(...vals), max = Math.max(...vals);
-    const range = max - min || Math.abs(min) * 0.1 || 1;
-    const W = 400, H = height, PAD = 4;
-    const x = i => PAD + (i / (vals.length - 1)) * (W - PAD*2);
-    const y = v => H - PAD - ((v - min) / range) * (H - PAD*2);
-    const pts = vals.map((v,i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-    const fillPts = `${x(0).toFixed(1)},${H} ` + pts + ` ${x(vals.length-1).toFixed(1)},${H}`;
-    // X-axis labels - first, middle, last
-    const labelIdxs = [0, Math.floor(vals.length/2), vals.length-1];
-    const xLabels = labelIdxs.map(i =>
-      `<text x="${x(i).toFixed(1)}" y="${H+12}" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="8" font-family="Share Tech Mono,monospace">${dates[i]||''}</text>`
-    ).join('');
-    // Y-axis labels
-    const yLabels = [min, (min+max)/2, max].map((v,i) => {
-      const yp = [H-PAD, H/2, PAD][i];
-      const label = unit==='%' ? v.toFixed(1)+'%' : Math.abs(v)>=1000 ? (v/1000).toFixed(1)+'K' : v.toFixed(1);
-      return `<text x="${W+4}" y="${yp+3}" fill="rgba(255,255,255,0.3)" font-size="8" font-family="Share Tech Mono,monospace">${label}</text>`;
-    }).join('');
-    return `<svg width="100%" viewBox="0 0 ${W+40} ${H+18}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:10px;overflow:visible;">
-      <defs><linearGradient id="cg${color.replace('#','')}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.3"/><stop offset="100%" stop-color="${color}" stop-opacity="0.02"/></linearGradient></defs>
-      <polygon points="${fillPts}" fill="url(#cg${color.replace('#','')})" />
-      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
-      <circle cx="${x(vals.length-1).toFixed(1)}" cy="${y(vals[vals.length-1]).toFixed(1)}" r="3" fill="${color}"/>
-      ${xLabels}${yLabels}
-    </svg>`;
-  };
+  const lineChart = (history, color, unit, height=80) => stretchChart({
+    series: (history || []).map(h => [h.d, h.v]), color: color, height: height, labels: true,
+    format: v => unit === '%' ? v.toFixed(1) + '%' : Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'K' : v.toFixed(1),
+  });
   // Keep spark as alias for small inline use
   const spark = lineChart;
 
@@ -5089,7 +5062,7 @@ function _renderMacroHTML(data) {
     const isGood = s.good_direction;
     const tc = trendColor(s.trend, isGood);
     const isPct = (s.units || '').toLowerCase().startsWith('percent');
-    const yoyStr = s.change_yoy != null ? ` · ${s.change_yoy > 0 ? '+' : ''}${isPct ? fmt2(s.change_yoy) + 'pp' : fredValue(s.change_yoy, s.units, id)} YoY (vs ${s.year_ago_date})` : '';
+    const yoyStr = s.change_yoy != null ? ` · ${s.change_yoy > 0 ? '+' : ''}${isPct ? fmt2(s.change_yoy) + 'pp' : fredValue(s.change_yoy, s.units, id)} YoY (vs ${periodLabel(s.year_ago_date, s.freq)})` : '';
     const chgStr = s.change != null ? ` ${s.change > 0 ? '+' : ''}${isPct ? fmt2(s.change) + 'pp' : fredValue(s.change, s.units, id)} vs prior` : '';
     const headline = s.display === 'change' && s.change != null ? `${s.change > 0 ? '+' : ''}${fredValue(s.change, s.units, id)}` : fredValue(s.latest, s.units, id);
     const color = tc;
@@ -5098,7 +5071,7 @@ function _renderMacroHTML(data) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
         <div>
           <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${color};margin-bottom:3px;">${desc}</div>
-          <div style="font-size:10px;color:var(--text3);">FRED: <a href="${fredUrl}" target="_blank" style="color:var(--text3);text-decoration:none;">${id}</a> · ${s.freq} · ${s.latest_date}${s.units ? ' · ' + s.units : ''}</div>
+          <div style="font-size:10px;color:var(--text3);">FRED: <a href="${fredUrl}" target="_blank" style="color:var(--text3);text-decoration:none;">${id}</a> · ${s.freq} · ${periodLabel(s.latest_date, s.freq)}${s.units ? ' · ' + s.units : ''}</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:20px;color:${color};">${trendIcon(s.trend)}</div>
@@ -5109,7 +5082,7 @@ function _renderMacroHTML(data) {
         ${s.show_yoy && s.change_yoy_pct != null ? `
           <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${fmt1(s.change_yoy_pct)}%</div>
           <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">YoY</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text3);">index ${fmt1(s.latest)} · vs ${s.year_ago_date}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text3);">index ${fmt1(s.latest)} · vs ${periodLabel(s.year_ago_date, s.freq)}</div>
         ` : `
           <div style="font-family:'Share Tech Mono',monospace;font-size:32px;font-weight:900;color:var(--text);">${headline}</div>
           ${s.display === 'change' ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text3);">level ${fredValue(s.latest, s.units, id)}</div>` : (s.change != null ? `<div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${tc};">${chgStr}</div>` : '')}
@@ -5960,23 +5933,7 @@ function _renderSovereignHTML(data) {
   const trendColor = t => t === 'rising' ? '#00ff88' : t === 'falling' ? '#ff3355' : '#ffcc00';
 
   // Mini sparkline SVG
-  const spark = (history, color = '#00ccff', h = 50) => {
-    if (!history || history.length < 2) return '';
-    const vals = history.map(d => d.v).filter(v => v != null);
-    if (vals.length < 2) return '';
-    const min = Math.min(...vals), max = Math.max(...vals);
-    const range = max - min || Math.abs(min) * 0.05 || 1;
-    const W = 200, H = h, P = 3;
-    const x = i => P + (i / (vals.length - 1)) * (W - P*2);
-    const y = v => H - P - ((v - min) / range) * (H - P*2);
-    const pts = vals.map((v,i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-    const fill = `${x(0).toFixed(1)},${H} ` + pts + ` ${x(vals.length-1).toFixed(1)},${H}`;
-    return `<svg width="${W}" height="${H}" style="display:block;width:100%;height:${H}px;">
-      <polygon points="${fill}" fill="${color}" opacity="0.12"/>
-      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.9"/>
-      <circle cx="${x(vals.length-1)}" cy="${y(vals[vals.length-1])}" r="2.5" fill="${color}"/>
-    </svg>`;
-  };
+  const spark = (history, color = '#00ccff', h = 50) => stretchChart({ series: (history || []).map(d => [d.d, d.v]), color: color, height: h });
 
   // Data card
   const dataCard = (title, value, unit, change, changeLabel, history, color, desc) => {
@@ -6077,13 +6034,7 @@ function _renderSovereignHTML(data) {
         const J = T.series.japan.slice(-120), C = T.series.china.slice(-120);
         const byD = Object.fromEntries(C.map(x => [x.d, x.v]));
         const dates = J.map(x => x.d), jv = J.map(x => x.v), cv = dates.map(d => byD[d] ?? null);
-        const all = [...jv, ...cv.filter(v => v != null)]; const minV = Math.min(...all) * 0.95, maxV = Math.max(...all) * 1.02;
-        const W = 800, H = 180, PL = 60, PR = 20, PT = 20, PB = 30, iW = W-PL-PR, iH = H-PT-PB;
-        const x = i => PL + (i/(dates.length-1))*iW, y = v => PT + iH - ((v-minV)/(maxV-minV))*iH;
-        const line = (vals, color) => `<polyline points="${vals.map((v,i)=>v==null?null:x(i).toFixed(1)+','+y(v).toFixed(1)).filter(Boolean).join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>`;
-        const ticks = [0, Math.floor(dates.length/2), dates.length-1].map(i => `<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">${dates[i]}</text>`).join('');
-        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">${line(jv,'#00ccff')}${line(cv,'#ff3355')}${ticks}
-          <text x="${PL}" y="${PT-6}" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">$${(minV).toFixed(0)}B – $${(maxV).toFixed(0)}B</text></svg>`;
+        return stretchChart({ series: dates.map((d, i) => [d, jv[i]]), color: '#00ccff', extra: [{ color: '#ff3355', values: cv }], fill: false, height: 180, labels: true, format: v => '$' + v.toFixed(0) + 'B' });
       })();
       return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
         ${card('JAPAN HOLDINGS', 'japan', '#00ccff', 'largest foreign holder')}

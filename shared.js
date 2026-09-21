@@ -76,3 +76,48 @@ function monthlyChart(o) {
   }
   return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;margin-top:8px;">${g}</svg>`;
 }
+function shortDateLabel(d) {
+  if (!d) return '';
+  const s = String(d);
+  const m = MONTH_NAMES[+s.slice(5, 7) - 1];
+  if (!m) return s;
+  return s.length >= 10 ? `${m.slice(0, 3)} ${+s.slice(8, 10)}, ${s.slice(0, 4)}` : `${m.slice(0, 3)} ${s.slice(0, 4)}`;
+}
+function stretchChart(o) {
+  const pts = (o.series || []).filter(r => r[1] != null);
+  if (pts.length < 2) return '';
+  const H = o.height || 80, VW = 1000, P = 4;
+  const vals = pts.map(r => r[1]);
+  const extra = (o.extra || []).map(e => ({ color: e.color, values: e.values.slice(0, pts.length) }));
+  const every = vals.concat(...extra.map(e => e.values.filter(v => v != null)));
+  const min = Math.min(...every), max = Math.max(...every);
+  const range = max - min || Math.abs(min) * 0.1 || 1;
+  const x = i => i / (pts.length - 1) * VW;
+  const y = v => P + (1 - (v - min) / range) * (H - 2 * P);
+  const col = o.color || 'var(--cyan)';
+  const path = values => values.map((v, i) => v == null ? null : `${x(i).toFixed(1)},${y(v).toFixed(1)}`).filter(Boolean).join(' ');
+  const line = path(vals);
+  const dot = (values, c) => { const k = values.map(v => v != null).lastIndexOf(true); return k < 0 ? '' : `<span style="position:absolute;left:${(x(k) / VW * 100).toFixed(2)}%;top:${(y(values[k]) / H * 100).toFixed(1)}%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:${c};"></span>`; };
+  const svg = `<svg viewBox="0 0 ${VW} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:${H}px;">
+      ${o.fill === false ? '' : `<polygon points="0,${H} ${line} ${VW},${H}" fill="${col}" opacity="0.14"/>`}
+      <polyline points="${line}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      ${extra.map(e => `<polyline points="${path(e.values)}" fill="none" stroke="${e.color}" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`).join('')}
+    </svg>${dot(vals, col)}${extra.map(e => dot(e.values, e.color)).join('')}`;
+  if (!o.labels) return `<div style="position:relative;margin-top:${o.gap != null ? o.gap : 6}px;">${svg}</div>`;
+  const fmt = o.format || (v => v.toFixed(1));
+  const label = 'font-family:Share Tech Mono,monospace;font-size:11px;color:var(--text3);';
+  const mid = Math.floor((pts.length - 1) / 2);
+  return `<div style="display:grid;grid-template-columns:1fr auto;column-gap:8px;margin-top:10px;">
+    <div style="position:relative;">${svg}</div>
+    <div style="display:flex;flex-direction:column;justify-content:space-between;height:${H}px;${label}"><span>${fmt(max)}</span><span>${fmt((min + max) / 2)}</span><span>${fmt(min)}</span></div>
+    <div style="display:flex;justify-content:space-between;margin-top:3px;${label}"><span>${shortDateLabel(pts[0][0])}</span><span>${shortDateLabel(pts[mid][0])}</span><span>${shortDateLabel(pts[pts.length - 1][0])}</span></div>
+  </div>`;
+}
+function periodLabel(d, freq) {
+  if (!d) return '';
+  const s = String(d), m = +s.slice(5, 7);
+  if (!m) return s;
+  if (/quarter/i.test(freq || '')) return `Q${Math.floor((m - 1) / 3) + 1} ${s.slice(0, 4)}`;
+  if (/month/i.test(freq || '') || s.length < 10) return `${MONTH_NAMES[m - 1]} ${s.slice(0, 4)}`;
+  return `${MONTH_NAMES[m - 1]} ${+s.slice(8, 10)}, ${s.slice(0, 4)}`;
+}

@@ -2860,7 +2860,7 @@ function renderVolatility(md){
     const atr5  = atrFromRows(sd, 5);
     const atr10 = atrFromRows(sd, 10);
     const atr20 = atrFromRows(sd, 20);
-    const todayRow=rows[0];
+    const todayRow=sd[0];
     const todayRange = todayRow ? (todayRow.high||0)-(todayRow.low||0) : (spy.high&&spy.low?spy.high-spy.low:null);
     const liveRange = spy.high&&spy.low ? spy.high-spy.low : null;
     const useRange = liveRange||todayRange;
