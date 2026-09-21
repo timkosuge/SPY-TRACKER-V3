@@ -65,6 +65,7 @@ def init_db(conn):
         PRIMARY KEY (date, time))""")
     c.execute("DROP TABLE IF EXISTS intraday_5m")
     c.execute("CREATE TABLE IF NOT EXISTS vix_daily (date TEXT PRIMARY KEY, open REAL, high REAL, low REAL, close REAL)")
+    c.execute("CREATE TABLE IF NOT EXISTS futures_bars (ts TEXT PRIMARY KEY, open REAL, high REAL, low REAL, close REAL, volume INTEGER)")
     c.execute("""CREATE TABLE IF NOT EXISTS option_chain (
         captured_at TEXT, session_date TEXT, spot REAL, expiry TEXT, cp TEXT, strike REAL,
         bid REAL, ask REAL, iv REAL, open_interest INTEGER, volume INTEGER, gamma REAL,
@@ -733,6 +734,27 @@ def store_vix_history(conn):
         return len(rows)
     except Exception as e:
         print(f"  vix_daily error: {e}")
+        return 0
+
+
+def store_futures_bars(conn):
+    """Upsert ES front-month 5-minute bars around the clock, timestamped in New York; 60 days on an empty table, 5 days otherwise."""
+    try:
+        import yfinance as yf
+        have = conn.execute("SELECT COUNT(*) FROM futures_bars").fetchone()[0]
+        hist = yf.Ticker("ES=F").history(period="60d" if not have else "5d", interval="5m", prepost=True)
+        if hist is None or hist.empty:
+            print("  futures_bars: no data returned")
+            return 0
+        et = hist.index.tz_convert("America/New_York")
+        rows = [(t.isoformat(timespec="minutes"), float(r["Open"]), float(r["High"]), float(r["Low"]), float(r["Close"]), int(r["Volume"] or 0))
+                for t, (_, r) in zip(et, hist.iterrows()) if r["Close"] == r["Close"]]
+        conn.executemany("INSERT OR REPLACE INTO futures_bars VALUES (?,?,?,?,?,?)", rows)
+        conn.commit()
+        print(f"  futures_bars: {len(rows)} bars upserted, through {rows[-1][0]}")
+        return len(rows)
+    except Exception as e:
+        print(f"  futures_bars error: {e}")
         return 0
 
 
@@ -2185,6 +2207,7 @@ def main():
         except Exception as e:
             print(f"  option_chain store error: {e}")
         store_vix_history(conn)
+        store_futures_bars(conn)
         if not options_data or not options_data.get("max_pain"):
             print("  CBOE unavailable, falling back to yfinance options...")
             options_data = fetch_spy_options_yf_fallback()
