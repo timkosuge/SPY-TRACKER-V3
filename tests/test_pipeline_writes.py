@@ -22,6 +22,7 @@ class RowValidity(unittest.TestCase):
 class MeasurementGate(unittest.TestCase):
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")
+        self.addCleanup(self.conn.close)
         fa.init_db(self.conn)
         rows = [
             ("2026-09-15", 750.0, 755.0, 748.0, 754.0, 1000),
@@ -59,6 +60,7 @@ class MeasurementGate(unittest.TestCase):
 class VwapColumnMigration(unittest.TestCase):
     def test_existing_vwap_column_is_dropped(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("CREATE TABLE daily_ohlcv (date TEXT PRIMARY KEY, open REAL, high REAL, low REAL, close REAL, volume INTEGER, vwap REAL)")
         fa.init_db(conn)
         cols = [r[1] for r in conn.execute("PRAGMA table_info(daily_ohlcv)")]

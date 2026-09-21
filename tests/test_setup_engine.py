@@ -37,6 +37,7 @@ class Registry(unittest.TestCase):
 class Frame(unittest.TestCase):
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")
+        self.addCleanup(self.conn.close)
         self.conn.execute("CREATE TABLE daily_ohlcv (date TEXT, open REAL, high REAL, low REAL, close REAL, volume INTEGER)")
         self.conn.execute("CREATE TABLE weekly_em (week_start TEXT, week_end TEXT, static_wem_high REAL, static_wem_low REAL)")
         rows = [("2026-09-14", 100.0, 101.0, 99.0, 100.5), ("2026-09-15", 101.0, 103.0, 100.0, 102.0), ("2026-09-16", 102.5, 104.0, 98.0, 99.0),

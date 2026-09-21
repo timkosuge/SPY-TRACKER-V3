@@ -23,6 +23,7 @@ class Measures(unittest.TestCase):
 class Build(unittest.TestCase):
     def frame(self, vix_level, drift):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("CREATE TABLE daily_ohlcv (date TEXT, open REAL, high REAL, low REAL, close REAL, volume INTEGER)")
         conn.execute("CREATE TABLE vix_daily (date TEXT PRIMARY KEY, open REAL, high REAL, low REAL, close REAL)")
         conn.execute("CREATE TABLE vol_term_daily (date TEXT PRIMARY KEY, vix9d REAL, vix REAL, vix3m REAL, vvix REAL)")

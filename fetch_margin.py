@@ -1,7 +1,7 @@
 """FINRA margin statistics: parse FINRA's workbook, fetch it, and keep every month in margin_monthly.
 
 FINRA publishes the monthly figures only on its page and as an Excel download; it offers no feed. The pipeline asks for
-the download once a day. Every attempt is logged with its result, so the site can say when a month could not be fetched
+the download once a day, directly and then through the site's route on Cloudflare. Every attempt is logged with its result, so the site can say when a month could not be fetched
 instead of showing an old figure as the latest.
 """
 import csv
@@ -17,6 +17,7 @@ DB_PATH = "spy_data.db"
 HISTORY_CSV = "data/finra_margin_history.csv"
 FINRA_XLSX = "https://www.finra.org/sites/default/files/2021-03/margin-statistics.xlsx"
 FINRA_PAGE = "https://www.finra.org/rules-guidance/key-topics/margin-accounts/margin-statistics"
+SITE_ROUTE = "https://spy-tracker-v3.pages.dev/finra-margin"
 HEADER = "Year-Month"
 ET = pytz.timezone("America/New_York")
 
@@ -59,23 +60,41 @@ def create(conn):
     conn.execute("CREATE TABLE IF NOT EXISTS margin_fetch_log (attempted_at TEXT PRIMARY KEY, http_status INTEGER, ok INTEGER, months INTEGER, latest TEXT, detail TEXT)")
 
 
-def fetch():
-    """One request for FINRA's workbook. Returns (rows or None, http status, detail)."""
+def _workbook_from(url, headers):
+    """One request. Returns (rows or None, http status, what happened)."""
     try:
-        r = requests.get(FINRA_XLSX, timeout=45, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-            "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
-            "Referer": FINRA_PAGE})
+        r = requests.get(url, timeout=45, headers=headers)
     except requests.RequestException as e:
         return None, 0, f"request failed: {e}"
+    if r.status_code == 200 and r.content[:2] == b"PK":
+        try:
+            return parse_workbook(r.content), 200, "workbook fetched"
+        except Exception as e:
+            return None, 200, f"workbook unreadable: {e}"
+    if r.status_code == 502 and r.content[:1] == b"{":
+        try:
+            import json
+            body = json.loads(r.content)
+            return None, body.get("finra_status") or 502, body.get("error") or "the site's route could not reach FINRA"
+        except ValueError:
+            pass
     if r.status_code != 200:
         return None, r.status_code, f"FINRA answered HTTP {r.status_code}"
-    if r.content[:2] != b"PK":
-        return None, r.status_code, "FINRA answered with a page, not the workbook"
-    try:
-        return parse_workbook(r.content), r.status_code, "workbook fetched"
-    except Exception as e:
-        return None, r.status_code, f"workbook unreadable: {e}"
+    return None, r.status_code, "FINRA answered with a page, not the workbook"
+
+
+def fetch():
+    """FINRA's workbook, asked for directly and then through the site's own route on Cloudflare. Returns (rows, status, detail)."""
+    direct = _workbook_from(FINRA_XLSX, {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
+        "Referer": FINRA_PAGE})
+    if direct[0]:
+        return direct[0], direct[1], "workbook fetched from FINRA directly"
+    routed = _workbook_from(SITE_ROUTE, {"User-Agent": "spy-tracker-pipeline"})
+    if routed[0]:
+        return routed[0], routed[1], "workbook fetched through the site's Cloudflare route"
+    return None, routed[1] or direct[1], f"refused on both networks: GitHub got '{direct[2]}', Cloudflare got '{routed[2]}'"
 
 
 def main():

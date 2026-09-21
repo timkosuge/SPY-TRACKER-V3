@@ -11,6 +11,7 @@ import fetch_and_analyze as fa
 class OptionChainCapture(unittest.TestCase):
     def test_chain_is_stored_as_returned(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("""CREATE TABLE option_chain (
             captured_at TEXT, session_date TEXT, spot REAL, expiry TEXT, cp TEXT, strike REAL,
             bid REAL, ask REAL, iv REAL, open_interest INTEGER, volume INTEGER, gamma REAL,
@@ -26,6 +27,7 @@ class OptionChainCapture(unittest.TestCase):
 
     def test_empty_chain_stores_nothing(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         self.assertEqual(fa.store_option_chain(conn, {}, "2026-09-21"), 0)
 
 

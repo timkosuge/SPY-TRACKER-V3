@@ -32,6 +32,7 @@ class Timing(unittest.TestCase):
 class Build(unittest.TestCase):
     def frame(self, weeks=200):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("""CREATE TABLE cot_weekly (report_date TEXT PRIMARY KEY, open_interest INTEGER,
             dealer_long INTEGER, dealer_short INTEGER, asset_long INTEGER, asset_short INTEGER,
             lev_long INTEGER, lev_short INTEGER, other_long INTEGER, other_short INTEGER,

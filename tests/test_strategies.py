@@ -31,6 +31,7 @@ class Outcomes(unittest.TestCase):
 
     def test_intraday_path_measures_from_the_10_00_bar(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("CREATE TABLE intraday_bars (date TEXT, timestamp TEXT, open REAL, high REAL, low REAL, close REAL, volume INTEGER, vwap REAL)")
         rows = []
         for i in range(390):
@@ -57,6 +58,7 @@ class Outcomes(unittest.TestCase):
 
     def test_option_best_uses_entry_ask_and_exit_bid_at_min_dte(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("CREATE TABLE option_chain (captured_at TEXT, session_date TEXT, spot REAL, expiry TEXT, cp TEXT, strike REAL, bid REAL, ask REAL, iv REAL, open_interest INTEGER, volume INTEGER, gamma REAL)")
         rows = [("2026-09-18T10:02:00-04:00", "2026-09-18", 760, "2026-09-22", "C", 762, 1.0, 1.1, 0.2, 1, 1, 0),
                 ("2026-09-18T10:02:00-04:00", "2026-09-18", 760, "2026-09-19", "C", 762, 0.5, 0.6, 0.2, 1, 1, 0),

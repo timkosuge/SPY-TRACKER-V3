@@ -20,6 +20,7 @@ class Reproduction(unittest.TestCase):
     def test_large_gap_generator_matches_its_frozen_payload_at_the_cutoff(self):
         import generate_large_gap_stats as g
         conn = sqlite3.connect("spy_data.db")
+        self.addCleanup(conn.close)
         with open("large_gap_stats.js", encoding="utf-8") as f:
             frozen = json.loads(re.search(r"=\s*(\{.*\})\s*;?\s*$", f.read(), re.S).group(1))
         mine = g.build(conn, cutoff=frozen["overall"]["date_range"]["to"])
@@ -43,6 +44,7 @@ class Stamps(unittest.TestCase):
 
     def test_every_stamped_payload_matches_the_database(self):
         conn = sqlite3.connect("spy_data.db")
+        self.addCleanup(conn.close)
         mx = conn.execute("SELECT MAX(date) FROM daily_ohlcv WHERE close IS NOT NULL").fetchone()[0]
         for f in self.OWNED + self.PIPELINE:
             with open(f, encoding="utf-8") as fh:

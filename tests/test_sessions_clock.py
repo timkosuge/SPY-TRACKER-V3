@@ -10,6 +10,7 @@ import generate_clock as K
 class Daily(unittest.TestCase):
     def test_overnight_and_session_split_and_monday_pairing(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("CREATE TABLE daily_ohlcv (date TEXT, open REAL, high REAL, low REAL, close REAL, volume INTEGER)")
         rows = [("2026-09-10", 100, 101, 99, 100), ("2026-09-11", 101, 102, 100, 102), ("2026-09-14", 103, 104, 102, 104), ("2026-09-15", 103, 104, 102, 103.5)]
         conn.executemany("INSERT INTO daily_ohlcv VALUES (?,?,?,?,?,0)", rows)
@@ -23,6 +24,7 @@ class Daily(unittest.TestCase):
 class Overnight(unittest.TestCase):
     def test_session_day_key_and_event_windows(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("CREATE TABLE futures_bars (ts TEXT PRIMARY KEY, open REAL, high REAL, low REAL, close REAL, volume INTEGER)")
         t = datetime.fromisoformat("2026-09-14T18:00-04:00")
         rows = []

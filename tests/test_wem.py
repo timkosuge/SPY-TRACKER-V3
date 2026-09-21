@@ -24,6 +24,7 @@ def db_with_week():
 class ScoringAgainstTheStaticBand(unittest.TestCase):
     def test_settled_week_is_scored_against_static_low_and_high(self):
         conn = db_with_week()
+        self.addCleanup(conn.close)
         fa.score_week(conn, "2026-09-14", "2026-09-18", 760.0, settled=True)
         row = conn.execute("SELECT week_open, week_high, week_low, week_close, weekly_gap, closed_inside, breach, breach_side, breach_day, breach_intraweek FROM weekly_em").fetchone()
         self.assertEqual(row[:4], (761.0, 773.0, 748.0, 757.0))
@@ -34,12 +35,14 @@ class ScoringAgainstTheStaticBand(unittest.TestCase):
 
     def test_open_week_has_no_close_and_no_inside_verdict(self):
         conn = db_with_week()
+        self.addCleanup(conn.close)
         fa.score_week(conn, "2026-09-14", "2026-09-18", 760.0, settled=False)
         row = conn.execute("SELECT week_close, closed_inside, breach FROM weekly_em").fetchone()
         self.assertIsNone(row[0]); self.assertIsNone(row[1]); self.assertEqual(row[2], 1)
 
     def test_unavailable_band_yields_no_outcomes(self):
         conn = db_with_week()
+        self.addCleanup(conn.close)
         conn.execute("UPDATE weekly_em SET static_band_status='unavailable'")
         fa.score_week(conn, "2026-09-14", "2026-09-18", 760.0, settled=True)
         row = conn.execute("SELECT week_close, closed_inside, breach, breach_intraweek FROM weekly_em").fetchone()
@@ -48,6 +51,7 @@ class ScoringAgainstTheStaticBand(unittest.TestCase):
 
     def test_gap_sign_follows_open_minus_prior_close(self):
         conn = db_with_week()
+        self.addCleanup(conn.close)
         fa.score_week(conn, "2026-09-14", "2026-09-18", 763.0, settled=True)
         self.assertEqual(conn.execute("SELECT weekly_gap FROM weekly_em").fetchone()[0], -2.0)
 
@@ -55,6 +59,7 @@ class ScoringAgainstTheStaticBand(unittest.TestCase):
 class StaticCapture(unittest.TestCase):
     def test_capture_uses_seven_calendar_days_and_no_multiplier(self):
         conn = db_with_week()
+        self.addCleanup(conn.close)
         fa.set_next_week_static_wem(conn, "2026-09-18", 0.20)
         row = conn.execute("SELECT static_wem_low, static_wem_high, static_band_status FROM weekly_em WHERE week_start='2026-09-21'").fetchone()
         half = fa.expected_move(757.0, 0.20, 7)
@@ -64,12 +69,14 @@ class StaticCapture(unittest.TestCase):
 
     def test_capture_is_written_once(self):
         conn = db_with_week()
+        self.addCleanup(conn.close)
         fa.set_next_week_static_wem(conn, "2026-09-18", 0.20)
         fa.set_next_week_static_wem(conn, "2026-09-18", 0.50)
         self.assertEqual(conn.execute("SELECT static_wem_iv FROM weekly_em WHERE week_start='2026-09-21'").fetchone()[0], 0.20)
 
     def test_null_close_does_not_raise_and_writes_nothing(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         fa.init_db(conn)
         conn.execute("INSERT INTO daily_ohlcv (date,open,high,low,close,volume) VALUES ('2026-09-18', 751.0, 758.0, 748.0, NULL, 1)")
         fa.set_next_week_static_wem(conn, "2026-09-18", 0.20)
@@ -79,6 +86,7 @@ class StaticCapture(unittest.TestCase):
 class VixFallback(unittest.TestCase):
     def test_capture_uses_the_vix_close_when_no_weekly_iv_and_labels_it(self):
         conn = db_with_week()
+        self.addCleanup(conn.close)
         original = fa.vix_close_on
         fa.vix_close_on = lambda d: 0.1481
         try:
@@ -90,6 +98,7 @@ class VixFallback(unittest.TestCase):
 
     def test_a_weekly_iv_capture_replaces_a_vix_band(self):
         conn = db_with_week()
+        self.addCleanup(conn.close)
         original = fa.vix_close_on
         fa.vix_close_on = lambda d: 0.1481
         try:
@@ -102,6 +111,7 @@ class VixFallback(unittest.TestCase):
 
     def test_vix_bands_are_scored(self):
         conn = db_with_week()
+        self.addCleanup(conn.close)
         conn.execute("UPDATE weekly_em SET static_band_status='vix'")
         fa.score_week(conn, "2026-09-14", "2026-09-18", 760.0, settled=True)
         self.assertEqual(conn.execute("SELECT closed_inside FROM weekly_em").fetchone()[0], 1)

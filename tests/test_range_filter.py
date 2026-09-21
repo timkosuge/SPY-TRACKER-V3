@@ -25,6 +25,7 @@ class Classification(unittest.TestCase):
 class OpeningRange(unittest.TestCase):
     def test_or_and_best_excursion_are_measured_from_the_or_close(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("CREATE TABLE intraday_bars (date TEXT, timestamp TEXT, open REAL, high REAL, low REAL, close REAL, volume INTEGER, vwap REAL)")
         rows = []
         for i in range(390):

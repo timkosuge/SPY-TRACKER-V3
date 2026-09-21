@@ -9,6 +9,7 @@ import migrate_clock
 class WriterClock(unittest.TestCase):
     def test_bars_are_stamped_eastern_and_filtered_to_the_session(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         fa.init_db(conn)
         pre   = int(datetime(2026, 9, 21, 13, 29, tzinfo=timezone.utc).timestamp() * 1000)
         open_ = int(datetime(2026, 9, 21, 13, 30, tzinfo=timezone.utc).timestamp() * 1000)
@@ -21,6 +22,7 @@ class WriterClock(unittest.TestCase):
 
     def test_volume_analysis_is_written_from_the_stored_bars(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         fa.init_db(conn)
         conn.executemany("INSERT INTO intraday_bars VALUES (?,?,?,?,?,?,?,?)", [
             ("2026-09-21", "09:30", 1, 1, 1, 1, 100, None),
@@ -46,6 +48,7 @@ class VolumeBuckets(unittest.TestCase):
 
     def test_old_schema_is_rebuilt(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("CREATE TABLE volume_analysis (date TEXT PRIMARY KEY, total_volume INTEGER, vol_830_900 INTEGER)")
         fa.init_db(conn)
         cols = [r[1] for r in conn.execute("PRAGMA table_info(volume_analysis)")]

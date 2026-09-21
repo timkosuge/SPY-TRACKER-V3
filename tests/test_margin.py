@@ -99,24 +99,72 @@ class Workbook(unittest.TestCase):
 
 
 class Fetch(unittest.TestCase):
-    def fake(self, status, content):
+    def serve(self, answers):
         class R:
-            pass
-        r = R(); r.status_code = status; r.content = content
-        return lambda *a, **k: r
+            def __init__(self, status, content):
+                self.status_code, self.content = status, content
+        return lambda url, **k: R(*answers[url])
 
-    def test_a_refusal_is_reported_not_hidden(self):
+    def run_fetch(self, answers):
         orig = F.requests.get
         try:
-            F.requests.get = self.fake(403, b"<html>denied</html>")
-            self.assertEqual(F.fetch(), (None, 403, "FINRA answered HTTP 403"))
-            F.requests.get = self.fake(200, b"<html>challenge</html>")
-            self.assertEqual(F.fetch()[2], "FINRA answered with a page, not the workbook")
-            F.requests.get = self.fake(200, WORKBOOK)
-            rows, status, detail = F.fetch()
-            self.assertEqual((len(rows), status, detail), (4, 200, "workbook fetched"))
+            F.requests.get = self.serve(answers)
+            return F.fetch()
         finally:
             F.requests.get = orig
+
+    def test_a_direct_answer_is_used_first(self):
+        rows, status, detail = self.run_fetch({F.FINRA_XLSX: (200, WORKBOOK), F.SITE_ROUTE: (502, b"{}")})
+        self.assertEqual((len(rows), detail), (4, "workbook fetched from FINRA directly"))
+
+    def test_a_refused_direct_request_falls_back_to_the_cloudflare_route(self):
+        rows, status, detail = self.run_fetch({F.FINRA_XLSX: (403, b"<html>denied</html>"), F.SITE_ROUTE: (200, WORKBOOK)})
+        self.assertEqual((len(rows), detail), (4, "workbook fetched through the site's Cloudflare route"))
+
+    def test_a_refusal_on_both_networks_is_reported_with_what_each_was_told(self):
+        routed = b'{"error": "FINRA answered HTTP 403", "finra_status": 403}'
+        rows, status, detail = self.run_fetch({F.FINRA_XLSX: (403, b"<html>denied</html>"), F.SITE_ROUTE: (502, routed)})
+        self.assertIsNone(rows)
+        self.assertEqual(status, 403)
+        self.assertEqual(detail, "refused on both networks: GitHub got 'FINRA answered HTTP 403', Cloudflare got 'FINRA answered HTTP 403'")
+
+    def test_a_challenge_page_is_not_mistaken_for_the_workbook(self):
+        rows, status, detail = self.run_fetch({F.FINRA_XLSX: (200, b"<html>challenge</html>"), F.SITE_ROUTE: (200, b"<html>challenge</html>")})
+        self.assertIsNone(rows)
+        self.assertIn("a page, not the workbook", detail)
+
+
+ROUTE = r"""
+import('./functions/finra-margin.js').then(async m => {
+  const asked = [];
+  const store = new Map();
+  globalThis.caches = { default: { match: async k => store.get(k.url), put: async (k, v) => { store.set(k.url, v); } } };
+  const pending = [];
+  const ctx = { request: new Request('https://x/finra-margin?url=https://evil.example'), waitUntil: p => pending.push(p) };
+  const out = { isWorkbook: m.isWorkbook(new Uint8Array([0x50, 0x4b, 3])), notWorkbook: m.isWorkbook(new Uint8Array([0x3c, 0x68])) };
+  globalThis.fetch = async (url) => { asked.push(String(url)); return new Response('<html>denied</html>', { status: 403 }); };
+  const refused = await m.onRequestGet(ctx);
+  out.refused = { status: refused.status, body: await refused.json() };
+  globalThis.fetch = async (url) => { asked.push(String(url)); return new Response(new Uint8Array([0x50, 0x4b, 1, 2]), { status: 200 }); };
+  const ok = await m.onRequestGet(ctx);
+  await Promise.all(pending);
+  out.ok = { status: ok.status, type: ok.headers.get('Content-Type'), via: ok.headers.get('X-Fetched-Via') };
+  out.cached = !!store.get('https://finra-margin.cache/workbook');
+  out.asked = [...new Set(asked)];
+  process.stdout.write(JSON.stringify(out));
+});
+"""
+
+
+class CloudflareRoute(unittest.TestCase):
+    def test_the_route_fetches_only_finras_workbook_and_passes_refusals_back(self):
+        out = json.loads(subprocess.run(["node", "-e", ROUTE], capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+        self.assertEqual((out["isWorkbook"], out["notWorkbook"]), (True, False))
+        self.assertEqual(out["refused"], {"status": 502, "body": {"error": "FINRA answered HTTP 403", "finra_status": 403}})
+        self.assertEqual(out["ok"]["status"], 200)
+        self.assertEqual(out["ok"]["via"], "cloudflare")
+        self.assertTrue(out["cached"])
+        self.assertEqual(out["asked"], [F.FINRA_XLSX])
 
 
 class Currency(unittest.TestCase):
@@ -141,6 +189,7 @@ class Currency(unittest.TestCase):
 class Merge(unittest.TestCase):
     def test_fetched_months_override_the_committed_history_and_the_last_attempt_is_reported(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         F.create(conn)
         conn.execute("INSERT INTO margin_monthly VALUES ('2099-01', 7, 1, 1, 'finra_xlsx')")
         conn.execute("INSERT INTO margin_fetch_log VALUES ('2099-02-20T16:00:00-05:00', 403, 0, 0, NULL, 'FINRA answered HTTP 403')")
