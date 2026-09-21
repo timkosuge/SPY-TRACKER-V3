@@ -20,6 +20,7 @@ OUTPUT = "smart_dumb.js"
 LOOKBACK = 156
 FLOOR = 30
 HORIZONS = [5, 21, 63]
+DAILY_PRICE_YEARS = 5
 CATEGORIES = [("lev", "Leveraged Funds", "institutional"), ("asset", "Asset Manager / Institutional", "institutional"),
               ("nonrept", "Non-Reportable (small traders)", "small"), ("other", "Other Reportable", "small"),
               ("dealer", "Dealer / Intermediary", "sell side")]
@@ -140,10 +141,15 @@ def build(conn):
                                      "tails_separated": bool(separated(cells["bottom fifth"], cells["top fifth"])), "stability": stab}
 
     series = [{"d": r["d"], "inst": r["institutional"], "small": r["small"], "spread": r["spread"], "px": closes.get(r.get("entry"))} for r in rows]
+    last_d = date.fromisoformat(dates[-1])
+    daily_from = max(rows[0]["d"], last_d.replace(year=last_d.year - DAILY_PRICE_YEARS).isoformat())
+    daily_px = [[d, round(closes[d], 2)] for d in dates if d >= daily_from]
+    pooled = sorted([r["institutional"] for r in rows] + [r["small"] for r in rows])
+    extremes = {"hi": round(percentile(pooled, 0.9), 1), "lo": round(percentile(pooled, 0.1), 1), "since": rows[0]["d"]}
     return {"available": True, "weeks": len(rows), "first": rows[0]["d"], "last": latest["d"], "lookback_weeks": LOOKBACK,
             "latest": {k: latest.get(k) for k in ("d", "institutional", "small", "spread", "aaii_idx")} | {"entry": first_tradeable(latest["d"], 6).isoformat()} | {c + "_idx": latest[c + "_idx"] for c in order} | {c + "_net": latest[c + "_net"] for c in order},
             "categories": [{"key": k, "label": l, "side": s} for k, l, s in CATEGORIES],
-            "aaii_weeks": len(aaii_idx), "tests": tests, "series": series, "horizons": HORIZONS, "floor": FLOOR}
+            "aaii_weeks": len(aaii_idx), "tests": tests, "series": series, "daily_px": daily_px, "extremes": extremes, "horizons": HORIZONS, "floor": FLOOR}
 
 
 def verdicts(d):

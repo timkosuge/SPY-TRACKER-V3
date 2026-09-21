@@ -14,21 +14,73 @@
       </div></div>`;
   }
 
-  function chart(series) {
-    if (!series || series.length < 2) return '';
-    const W = 960, H = 250, P = { t: 14, r: 52, b: 26, l: 40 };
-    const cW = W - P.l - P.r, cH = H - P.t - P.b;
-    const x = i => P.l + i / (series.length - 1) * cW;
-    const y = v => P.t + cH - (v / 100) * cH;
-    const px = series.map(s => s.px).filter(v => v != null);
-    const pmin = Math.min(...px), pmax = Math.max(...px);
-    const py = v => P.t + cH - (Math.log(v / pmin) / Math.log(pmax / pmin)) * cH;
-    const line = (fn, col, w) => `<polyline points="${series.map((s, i) => fn(s) == null ? null : `${x(i).toFixed(1)},${(fn === (t => t.px) ? py(s.px) : y(fn(s))).toFixed(1)}`).filter(Boolean).join(' ')}" fill="none" stroke="${col}" stroke-width="${w}" opacity="0.9"/>`;
-    const mid = `<line x1="${P.l}" y1="${y(50).toFixed(1)}" x2="${W - P.r}" y2="${y(50).toFixed(1)}" stroke="var(--border)" stroke-dasharray="4,3"/>`;
-    const ticks = [0, Math.floor(series.length / 2), series.length - 1].map(i => `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">${series[i].d}</text>`).join('');
-    const yl = [100, 50, 0].map(v => `<text x="${P.l - 5}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">${v}</text>`).join('');
-    const pl = [pmax, pmin].map(v => `<text x="${W - P.r + 5}" y="${(py(v) + 3).toFixed(1)}" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">$${Math.round(v)}</text>`).join('');
-    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">${mid}${line(s => s.px, 'var(--text3)', 1)}${line(s => s.inst, 'var(--cyan)', 1.8)}${line(s => s.small, '#ff8800', 1.8)}${ticks}${yl}${pl}</svg>`;
+  const SD_RANGES = [['6m', '6 MONTHS', 182], ['1y', '1 YEAR', 365], ['3y', '3 YEARS', 1096], ['5y', '5 YEARS', 1826], ['all', 'ALL SINCE 2006', Infinity]];
+  const SMART = '#4aa3ff', DUMB = '#e0455a';
+  function chart(D) {
+    const series = D.series || [];
+    if (series.length < 2) return '';
+    const X = D.extremes || { hi: 80, lo: 20 };
+    const HI = X.hi, LO = X.lo, since = X.since ? X.since.slice(0, 4) : '';
+    const key = window._sdRange || '6m';
+    const range = SD_RANGES.find(r => r[0] === key) || SD_RANGES[0];
+    const t = d => Date.parse(d + 'T12:00:00Z');
+    const tEnd = t(series[series.length - 1].d);
+    const tStart = range[2] === Infinity ? t(series[0].d) : tEnd - range[2] * 864e5;
+    const wk = series.filter(r => t(r.d) >= tStart && r.inst != null && r.small != null);
+    const useDaily = range[2] !== Infinity && (D.daily_px || []).length && t(D.daily_px[0][0]) <= tStart + 7 * 864e5;
+    const px = (useDaily ? D.daily_px.map(([d, c]) => ({ d, c })) : series.filter(r => r.px != null).map(r => ({ d: r.d, c: r.px }))).filter(r => t(r.d) >= tStart);
+    if (wk.length < 2) return '<div style="font-size:11px;color:var(--text3);">Not enough weeks in this range.</div>';
+    const W = 960, L = 44, R = 64, PH = 140, IH = 210, GAP = 18, B = 24;
+    const H = PH + GAP + IH + B + 8;
+    const cW = W - L - R;
+    const tMin = Math.min(t(wk[0].d), px.length ? t(px[0].d) : Infinity), tMax = tEnd;
+    const x = d => L + (t(d) - tMin) / (tMax - tMin || 1) * cW;
+    const pMin = Math.min(...px.map(r => r.c)), pMax = Math.max(...px.map(r => r.c));
+    const logScale = pMax / pMin > 2;
+    const f = v => logScale ? Math.log(v) : v;
+    const fMin = f(pMin), fMax = f(pMax), pad = (fMax - fMin) * 0.08 || 1;
+    const py = v => 6 + PH - (f(v) - (fMin - pad)) / ((fMax + pad) - (fMin - pad)) * PH;
+    const iTop = 6 + PH + GAP;
+    const iy = v => iTop + IH - v / 100 * IH;
+    const poly = (pts, col, w) => `<polyline points="${pts.join(' ')}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round"/>`;
+    const pricePts = px.map(r => `${x(r.d).toFixed(1)},${py(r.c).toFixed(1)}`);
+    const smartPts = wk.map(r => `${x(r.d).toFixed(1)},${iy(r.inst).toFixed(1)}`);
+    const dumbPts = wk.map(r => `${x(r.d).toFixed(1)},${iy(r.small).toFixed(1)}`);
+    let g = `<rect x="${L}" y="6" width="${cW}" height="${PH}" fill="rgba(255,255,255,0.015)"/><rect x="${L}" y="${iTop}" width="${cW}" height="${IH}" fill="rgba(255,255,255,0.015)"/>`;
+    [pMin, logScale ? Math.sqrt(pMin * pMax) : (pMin + pMax) / 2, pMax].forEach(v => { g += `<text x="${W - R + 6}" y="${(py(v) + 3).toFixed(1)}" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">$${Math.round(v)}</text>`; });
+    [0, LO, 50, HI, 100].forEach(v => {
+      const yy = iy(v).toFixed(1), dash = v === HI || v === LO;
+      g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="${dash ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.06)'}" ${dash ? 'stroke-dasharray="5,4"' : ''}/>`;
+      g += `<text x="${L - 6}" y="${(+yy + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">${dash ? Math.round(v) : v}</text>`;
+    });
+    for (let k = 0; k < 6; k++) {
+      const tt = tMin + k * (tMax - tMin) / 5, d = new Date(tt).toISOString().slice(0, 10);
+      const lab = new Date(tt).toLocaleDateString('en-US', range[2] <= 400 ? { month: 'short', day: 'numeric' } : { month: 'short', year: 'numeric', timeZone: 'UTC' });
+      g += `<text x="${x(d).toFixed(1)}" y="${H - 6}" text-anchor="${k === 0 ? 'start' : k === 5 ? 'end' : 'middle'}" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">${lab}</text>`;
+    }
+    const last = wk[wk.length - 1], lx = x(last.d);
+    const dot = (v, col) => `<circle cx="${lx.toFixed(1)}" cy="${iy(v).toFixed(1)}" r="3.5" fill="${col}"/>`;
+    const call = (v, col, who) => {
+      const where = v >= HI ? `higher than on 9 weeks in 10 since ${since}` : v <= LO ? `lower than on 9 weeks in 10 since ${since}` : null;
+      if (!where) return '';
+      const yy = iy(v), above = v <= LO;
+      const bx = Math.max(L + 4, lx - 330), by = above ? yy - 44 : yy + 16;
+      return `<line x1="${(bx + 320).toFixed(1)}" y1="${(above ? by + 26 : by).toFixed(1)}" x2="${(lx - 4).toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#f5a623" stroke-width="1.2"/>
+        <rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="320" height="26" fill="var(--bg2, #111)" stroke="#f5a623" stroke-width="1.2" rx="2"/>
+        <text x="${(bx + 160).toFixed(1)}" y="${(by + 17).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="${col}">${who} is ${where}</text>`;
+    };
+    const btns = SD_RANGES.map(r => `<button onclick="window._sdRange='${r[0]}';renderSmartDumb()" style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;padding:3px 8px;margin-right:4px;cursor:pointer;background:${r[0] === range[0] ? 'var(--cyan)' : 'var(--bg3)'};color:${r[0] === range[0] ? 'var(--bg)' : 'var(--text3)'};border:1px solid var(--border);">${r[1]}</button>`).join('');
+    const legend = `<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;font-size:11px;font-family:'Share Tech Mono',monospace;margin:4px 0 6px;">
+        <span style="color:var(--text2);">━ SPY${logScale ? ' (log scale)' : ''}</span>
+        <span style="color:${SMART};">━ Smart money (Last = ${Math.round(last.inst)})</span>
+        <span style="color:${DUMB};">━ Dumb money (Last = ${Math.round(last.small)})</span>
+        <span style="color:var(--text3);">- - Extremes: ${Math.round(HI)} and ${Math.round(LO)}</span></div>`;
+    return `<div style="margin-bottom:4px;">${btns}</div>${legend}
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">${g}
+        ${poly(pricePts, 'var(--text2)', 1.4)}${poly(smartPts, SMART, 2)}${poly(dumbPts, DUMB, 2)}${dot(last.inst, SMART)}${dot(last.small, DUMB)}
+        ${call(last.inst, SMART, 'Smart money')}${call(last.small, DUMB, 'Dumb money')}
+      </svg>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">Smart money is leveraged funds and asset managers. Dumb money is traders under the reporting threshold, other reportable traders and the AAII survey. Each line is where that group's position sits between its own three-year low (0) and high (100); the dashed lines are where both lines have sat on only one week in ten since ${since} (above ${Math.round(HI)} or below ${Math.round(LO)}), and a callout appears when the latest reading is past either. Positions are reported weekly, so the lines move in weekly steps; price is daily${range[2] === Infinity ? ' except in the full-history view, which is weekly' : ''}.</div>`;
   }
 
   function render() {
@@ -66,9 +118,8 @@
         ${verd}
       </div>
       <div class="panel" style="margin-bottom:12px;">
-        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ THE TWO SIDES AGAINST SPY — <span style="color:var(--cyan);">━ INSTITUTIONS</span> <span style="color:#ff8800;">━ SMALL TRADERS</span> <span style="color:var(--text3);">━ SPY (LOG SCALE, RIGHT)</span></div>
-        ${chart(D.series)}
-        <div style="font-size:10px;color:var(--text3);margin-top:6px;">Both indexes run 0 to 100 on the left. The dashed line is the middle of each category's own three-year range.</div>
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ SMART MONEY / DUMB MONEY</div>
+        ${chart(D)}
       </div>
       <div class="panel">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ WHAT EACH EXTREME HAS PRECEDED — SHARE OF REPORTS AFTER WHICH SPY CLOSED HIGHER</div>
