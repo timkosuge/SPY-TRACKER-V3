@@ -249,6 +249,32 @@ def fetch_cot():
     return out
 
 
+def store_aaii_weeks(weeks, db_path="spy_data.db"):
+    """Upsert every survey week into aaii_weekly; the table is the site's own history."""
+    if not weeks:
+        return 0
+    try:
+        with open(db_path, "rb") as f:
+            if f.read(16) != b"SQLite format 3\x00":
+                return 0
+    except OSError:
+        return 0
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute("""CREATE TABLE IF NOT EXISTS aaii_weekly (
+            week_end TEXT PRIMARY KEY, bullish REAL, neutral REAL, bearish REAL, spread REAL, source TEXT)""")
+        conn.executemany("INSERT OR REPLACE INTO aaii_weekly VALUES (?,?,?,?,?,?)",
+                         [(w["date"], w["bullish"], w["neutral"], w["bearish"], w["spread"], w.get("source", "aaii_xls")) for w in weeks])
+        conn.commit()
+        n = conn.execute("SELECT COUNT(*) FROM aaii_weekly").fetchone()[0]
+        conn.close()
+        print(f"  aaii_weekly: {len(weeks)} weeks upserted, table holds {n}")
+        return len(weeks)
+    except sqlite3.Error as e:
+        print(f"  aaii_weekly store failed: {e}")
+        return 0
+
+
 def store_cot_weeks(weeks, db_path="spy_data.db"):
     """Upsert every retrieved report into cot_weekly; the table is the site's own history."""
     if not weeks:

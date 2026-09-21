@@ -136,8 +136,9 @@ jobs:
       - name: Capture positioning and build its history
         if: steps.clock.outputs.close == 'true'
         run: |
-          python -c "import fetch_sentiment as fs; fs.store_cot_weeks(fs.fetch_cot_weeks())"
+          python -c "import fetch_sentiment as fs; fs.store_cot_weeks(fs.fetch_cot_weeks()); fs.fetch_aaii(); fs.store_aaii_weeks(fs.AAII_FULL_SERIES)"
           python generate_cot.py
+          python generate_smart_dumb.py
 
       - name: Data health
         if: steps.clock.outputs.run == 'true'
@@ -170,7 +171,7 @@ jobs:
                      session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
                      large_gap_stats.js release_data.js edge_stats_data.js \
                      data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv \
-                     breadth_data.json tic_holdings.js health.json chains_data.js range_filter.js strategies_data.js strategies.json clock_data.js options_env.js cot_data.js
+                     breadth_data.json tic_holdings.js health.json chains_data.js range_filter.js strategies_data.js strategies.json clock_data.js options_env.js cot_data.js smart_dumb.js
           if git diff --staged --quiet; then
             echo "No payload changes"
             exit 0
