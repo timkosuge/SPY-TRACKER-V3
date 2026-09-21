@@ -1,6 +1,6 @@
 const CHANNELS = {
-  UCIALMKvObZNtJ6AmdCLP7Lg: 'Bloomberg Television',
-  'UC4-aIBtpNAPqEcMhAyFN6iQ': 'Notting Hill Gate Cam',
+  UCIALMKvObZNtJ6AmdCLP7Lg: { name: 'Bloomberg Television', seed: 'QB5BNdBFujE' },
+  'UC4-aIBtpNAPqEcMhAyFN6iQ': { name: 'Notting Hill Gate Cam', seed: '8YrRACoeqKs' },
 };
 
 export function liveVideoId(html) {
@@ -13,14 +13,16 @@ export function liveVideoId(html) {
 export async function onRequestGet(context) {
   const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=600' };
   const channel = new URL(context.request.url).searchParams.get('channel') || '';
-  if (!CHANNELS[channel]) {
+  const cfg = CHANNELS[channel];
+  if (!cfg) {
     return new Response(JSON.stringify({ error: 'channel not served', channel }), { status: 404, headers: { ...headers, 'Cache-Control': 'no-store' } });
   }
-  const cacheKey = new Request(`https://ytlive.cache/${channel}`);
   const cache = caches.default;
+  const cacheKey = new Request(`https://ytlive.cache/${channel}`);
+  const lastKey = new Request(`https://ytlive.cache/last/${channel}`);
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-  let videoId = null, error = null;
+  let videoId = null, error = null, source = 'live';
   try {
     const r = await fetch(`https://www.youtube.com/channel/${channel}/live`, {
       headers: {
@@ -31,11 +33,19 @@ export async function onRequestGet(context) {
     });
     if (r.ok) videoId = liveVideoId(await r.text());
     else error = `youtube HTTP ${r.status}`;
-    if (!videoId && !error) error = 'channel is not live';
+    if (!videoId && !error) error = 'the live page did not name a live video';
   } catch (e) {
     error = e.message;
   }
-  const res = new Response(JSON.stringify({ channel, name: CHANNELS[channel], videoId, error }), { headers: videoId ? headers : { ...headers, 'Cache-Control': 'public, max-age=120' } });
+  if (videoId) {
+    context.waitUntil(cache.put(lastKey, new Response(videoId, { headers: { 'Cache-Control': 'public, max-age=2592000' } })));
+  } else {
+    const last = await cache.match(lastKey);
+    videoId = last ? await last.text() : cfg.seed;
+    source = last ? 'last resolved' : 'seed';
+  }
+  const res = new Response(JSON.stringify({ channel, name: cfg.name, videoId, source, error }),
+    { headers: source === 'live' ? headers : { ...headers, 'Cache-Control': 'public, max-age=120' } });
   context.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
 }
