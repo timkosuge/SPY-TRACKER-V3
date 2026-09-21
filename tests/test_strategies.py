@@ -68,6 +68,21 @@ class Outcomes(unittest.TestCase):
         self.assertAlmostEqual(best["return_pct"], (3.3 / 1.1 - 1) * 100, places=1)
 
 
+class Decision(unittest.TestCase):
+    def test_verdict_reads_the_roles(self):
+        r = lambda k, n: G.rate(k, n)
+        mk = lambda id, role, mode, e, hold=None: {"id": id, "name": id, "role": role, "mode": mode, "hold": hold, "n": 100, "either_side": {"0.75": e, "1.5": e}, "exits": {"close": {"n": 100, "long": r(50, 100), "short": r(50, 100)}, "3": {"n": 100, "long": r(50, 100), "short": r(50, 100)}}, "peak_min_median": 240, "contracts": {"scored": 0}}
+        results = [mk("A0", "control", "A", r(35, 100)), mk("A4", "trade", "A", r(75, 100)), mk("A5", "avoid", "A", r(10, 100)), mk("B0", "control", "B", r(50, 100), 3), mk("B5", "avoid", "B", r(15, 100), 3), mk("B1", "trade", "B", r(80, 100), 3)]
+        today = {"prior_class": "narrow", "vix": 14.8, "vix_bucket": "under 15", "dd_bucket": "within 2%"}
+        d = G.decide(results, [], today, ["B0", "B5"], ["A0", "A4", "A5"], 760.0, [{"id": "close", "label": "Close"}])
+        self.assertEqual(d["verdict"], "NO HOLD · DAY TRADE ONLY IF THE 9:00 CT RANGE IS WIDE")
+        self.assertTrue(any("no trade" in l for l in d["lines"]))
+        self.assertTrue(any("stay out" in l for l in d["lines"]))
+        d = G.decide(results, [], today, ["B0", "B1"], ["A0"], 760.0, [{"id": "close", "label": "Close"}])
+        self.assertEqual(d["hold"], "HOLD CANDIDATE")
+        self.assertEqual(d["day"], "NO DAY TRADE")
+
+
 class Findings(unittest.TestCase):
     def test_a_finding_needs_non_overlapping_intervals(self):
         self.assertTrue(G.separated(G.rate(60, 80), G.rate(30, 80)))

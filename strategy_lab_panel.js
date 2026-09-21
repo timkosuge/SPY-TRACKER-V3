@@ -67,6 +67,7 @@
       </div>`;
     }
     el.innerHTML = `
+      ${decisionCard(false)}
       <div class="panel" style="margin-bottom:12px;border-left:4px solid var(--purple);">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--purple);margin-bottom:8px;">⬡ FINDINGS — RECOMPUTED EVERY RUN, DATA THROUGH ${fmtDate(D.as_of).toUpperCase()}</div>
         ${findingsHtml || '<div style="color:var(--text3);font-size:11px;">No strategy has enough trades to score yet.</div>'}
@@ -83,6 +84,19 @@
       </div>
       ${detail}`;
   }
+  function decisionCard(compact) {
+    const D = data(); if (!D || !D.decision) return '';
+    const d = D.decision; const holdOk = /CANDIDATE/.test(d.hold); const dayOk = /ONLY IF/.test(d.day);
+    const col = holdOk || dayOk ? 'var(--green)' : 'var(--red)';
+    return `<div class="panel" style="border-left:4px solid ${col};margin-bottom:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">DECISION FOR THE NEXT SESSION · FROM THE CLOSE OF ${fmtDate(D.as_of).toUpperCase()}</div>
+      <div style="font-family:'Orbitron',monospace;font-size:${compact ? 13 : 16}px;letter-spacing:2px;color:${col};margin-bottom:6px;">${d.verdict}</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">${d.context}</div>
+      ${d.lines.map(l => `<div style="font-size:12px;color:var(--text2);line-height:1.7;padding:3px 0 3px 8px;border-left:2px solid var(--border);margin-bottom:3px;">${l}</div>`).join('')}
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">Every rate is on SPY's move from the entry price against the same trade taken every session; an edge is stated only when the intervals do not overlap. Recomputed nightly from the strategy record.</div>
+    </div>`;
+  }
+  window.renderDecisionCard = decisionCard;
   window._slOpen = id => { S.open = id; render(); const el = document.getElementById('strategyLabContent'); if (id && el) { const d = el.querySelector('.panel[style*="var(--cyan)"]'); if (d) d.scrollIntoView({ block: 'nearest' }); } };
   window.renderStrategyLab = render;
 })();

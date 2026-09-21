@@ -5241,6 +5241,7 @@ function _renderMacroHTML(data) {
         </div>
         <div style="text-align:center;">
           <div style="font-family:'Share Tech Mono',monospace;font-size:42px;font-weight:900;color:${regColor};">${regScore > 0 ? '+' : ''}${regScore}</div>
+          <div style="font-size:10px;color:var(--text2);margin-top:2px;">${regime.summary || ''}</div>
           <div style="font-size:10px;color:var(--text3);">REGIME SCORE</div>
           <div style="font-size:10px;color:var(--text3);">-100 → +100</div>
         </div>

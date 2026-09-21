@@ -5,7 +5,8 @@
       "name": "Every session (control)",
       "mode": "A",
       "entry": [],
-      "note": "The same 9:00 CT entry on every session with bars. Every day-trade strategy is read against this row."
+      "note": "The same 9:00 CT entry on every session with bars. Every day-trade strategy is read against this row.",
+      "role": "control"
     },
     {
       "id": "A1",
@@ -15,7 +16,8 @@
         "prior_wide",
         "or_wide"
       ],
-      "note": "The core day-trade setup: yesterday's range in the top quartile, the 30-minute opening range in the top quartile, entered at 9:00 CT."
+      "note": "The core day-trade setup: yesterday's range in the top quartile, the 30-minute opening range in the top quartile, entered at 9:00 CT.",
+      "role": "trade"
     },
     {
       "id": "A2",
@@ -25,7 +27,8 @@
         "or_wide",
         "vix_20_30"
       ],
-      "note": "The opening range plus the regime that lifted it most in the analysis."
+      "note": "The opening range plus the regime that lifted it most in the analysis.",
+      "role": "trade"
     },
     {
       "id": "A3",
@@ -35,7 +38,8 @@
         "or_wide",
         "dd_2_5"
       ],
-      "note": "The opening range plus the drawdown state."
+      "note": "The opening range plus the drawdown state.",
+      "role": "trade"
     },
     {
       "id": "A4",
@@ -44,7 +48,8 @@
       "entry": [
         "or_wide"
       ],
-      "note": "The opening range alone, as the control for A1 to A3."
+      "note": "The opening range alone, as the control for A1 to A3.",
+      "role": "trade"
     },
     {
       "id": "A5",
@@ -54,7 +59,8 @@
         "prior_narrow",
         "or_narrow"
       ],
-      "note": "The no-trade corner, scored so the cost of trading it is on the record."
+      "note": "The no-trade corner, scored so the cost of trading it is on the record.",
+      "role": "avoid"
     },
     {
       "id": "B0",
@@ -62,7 +68,8 @@
       "mode": "B",
       "entry": [],
       "hold": 3,
-      "note": "Entered at every open and held three sessions. Every hold strategy is read against this row."
+      "note": "Entered at every open and held three sessions. Every hold strategy is read against this row.",
+      "role": "control"
     },
     {
       "id": "B1",
@@ -72,7 +79,8 @@
         "prior_wide"
       ],
       "hold": 3,
-      "note": "Enter the next open after a wide day, exit at the third close."
+      "note": "Enter the next open after a wide day, exit at the third close.",
+      "role": "trade"
     },
     {
       "id": "B2",
@@ -82,7 +90,8 @@
         "prior_wide"
       ],
       "hold": 5,
-      "note": "Same entry, held to the fifth close."
+      "note": "Same entry, held to the fifth close.",
+      "role": "trade"
     },
     {
       "id": "B3",
@@ -94,7 +103,8 @@
         "vix_15_20"
       ],
       "hold": 3,
-      "note": "The cell the analysis singled out inside the usual regime."
+      "note": "The cell the analysis singled out inside the usual regime.",
+      "role": "trade"
     },
     {
       "id": "B4",
@@ -104,7 +114,8 @@
         "vix_over_20"
       ],
       "hold": 3,
-      "note": "The regime alone, any range."
+      "note": "The regime alone, any range.",
+      "role": "trade"
     },
     {
       "id": "B5",
@@ -116,7 +127,8 @@
         "dd_within_2"
       ],
       "hold": 3,
-      "note": "The quietest corner, scored as the control."
+      "note": "The quietest corner, scored as the control.",
+      "role": "avoid"
     }
   ],
   "exits_a": [

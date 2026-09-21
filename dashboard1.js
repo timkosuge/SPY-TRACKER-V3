@@ -295,6 +295,7 @@ function renderHub(md,sd){
     return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
   };
 
+  { const _hd = $('hubDecision'); if (_hd && typeof window.renderDecisionCard === 'function') _hd.innerHTML = window.renderDecisionCard(true); }
   $('hubDayTracker').innerHTML=`
     <div class="panel" style="border-left:4px solid ${sessionColor};">
       <div style="display:grid;grid-template-columns:auto auto auto 1fr auto auto auto;gap:16px;align-items:center;">

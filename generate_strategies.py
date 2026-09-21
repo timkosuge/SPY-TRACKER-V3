@@ -236,6 +236,78 @@ def analyze(results, reg, exits_a):
     return F
 
 
+def decide(results, findings, today, armed_b, armed_a_pending, price, exits_a):
+    """The next session in plain sentences: trade or no trade, the size edge, the direction edge, the timing, the contract."""
+    byid = {r["id"]: r for r in results}
+    labels = {e["id"]: e["label"] for e in exits_a}
+    lines = []
+    ctx = f"Yesterday was a {today['prior_class']} day, VIX closed at {today['vix']:.2f} ({today['vix_bucket']}), and the market is {today['dd_bucket']} of its 20-session high."
+    live = [i for i in armed_b if i != "B0"]; pending = [i for i in armed_a_pending if i != "A0"]
+    scored = lambda st: st["n"] >= FLOOR
+    def size_line(st, ctrl, th):
+        e, c = st["either_side"][th], ctrl["either_side"][th]
+        if separated(e, c) and e["rate"] > c["rate"]:
+            return "significant", f"a {th}% move came on {e['rate']:.0f}% of {e['n']} sessions like this against {c['rate']:.0f}% on an ordinary session"
+        if separated(e, c):
+            return "negative", f"a {th}% move came on only {e['rate']:.0f}% of {e['n']} sessions like this against {c['rate']:.0f}% on an ordinary session"
+        return "none", f"a {th}% move came on {e['rate']:.0f}% of {e['n']} sessions like this against {c['rate']:.0f}% on an ordinary session — not a measurable difference"
+    def direction_line(st, ctrl):
+        best = None
+        for eid, ag in st["exits"].items():
+            if ag["n"] >= FLOOR:
+                L, C = ag["long"], (ctrl["exits"].get(eid) or {}).get("long")
+                if C and separated(L, C) and L["rate"] > C["rate"] and (best is None or L["rate"] > best[1]["rate"]):
+                    best = (eid, L, C)
+                S, CS = ag["short"], (ctrl["exits"].get(eid) or {}).get("short")
+                if CS and separated(S, CS) and S["rate"] > CS["rate"] and (best is None or S["rate"] > best[1]["rate"]):
+                    best = (eid, S, CS, "short")
+        if not best:
+            return "Neither side has a directional edge on this record; the size of the move is the edge, not its direction."
+        side = "short" if len(best) == 4 else "long"
+        lab = labels.get(best[0], f"day {best[0]}")
+        return f"The {side} side has an edge on this record: it closed in profit on {best[1]['rate']:.0f}% of {best[1]['n']} trades exited at {lab} ({best[1]['lo']:.0f}–{best[1]['hi']:.0f}) against {best[2]['rate']:.0f}% on an ordinary session. This is measured on the period the record covers and no further."
+    def timing_line(st):
+        if st["mode"] == "A" and st.get("peak_min_median") is not None:
+            t = 8 * 60 + 30 + st["peak_min_median"]; return f"The best move typically lands around {t // 60}:{t % 60:02d} CT; the record does not support holding into the last hour."
+        return f"Measured from the next open to the close of session {st['hold']}."
+    def contract_line(st):
+        c = st.get("contracts") or {}
+        if c.get("scored", 0) >= 10:
+            f = [x for x in findings if x["strategy"] == st["id"] and "best contract" in x["text"]]
+            return f[0]["text"] if f else ""
+        return f"Contract guidance needs ten trades with the option chain captured at entry and exit; {c.get('scored', 0)} so far."
+    hold_v, day_v = "NO HOLD", "NO DAY TRADE"
+    avoid = [byid[i] for i in live if byid[i].get("role") == "avoid" and scored(byid[i])]
+    trades = [byid[i] for i in live if byid[i].get("role") == "trade" and scored(byid[i])]
+    ctrl_b = byid["B0"]
+    if trades:
+        st = max(trades, key=lambda x: x["either_side"]["1.5"]["rate"])
+        kind, why = size_line(st, ctrl_b, "1.5")
+        hold_v = "HOLD CANDIDATE" if kind == "significant" else "NO HOLD"
+        lines.append(f"Multi-day: {st['name']} — size edge {kind}: {why}. {direction_line(st, ctrl_b)} {timing_line(st)}")
+    elif avoid:
+        st = avoid[0]; kind, why = size_line(st, ctrl_b, "1.5")
+        lines.append(f"Multi-day: no trade — {why}. {direction_line(st, ctrl_b)}")
+    else:
+        lines.append("Multi-day: no hold strategy has its conditions met.")
+    day_trades = [byid[i] for i in pending if byid[i].get("role") == "trade" and scored(byid[i])]
+    day_avoid = [byid[i] for i in pending if byid[i].get("role") == "avoid" and scored(byid[i])]
+    if day_trades:
+        st = max(day_trades, key=lambda x: x["either_side"]["0.75"]["rate"]); ctrl = byid["A0"]
+        kind, why = size_line(st, ctrl, "0.75")
+        day_v = "DAY TRADE ONLY IF THE 9:00 CT RANGE IS WIDE" if kind == "significant" else "NO DAY TRADE"
+        lines.append(f"Day trade: if the 9:00 CT opening range comes in wide, {st['name'].lower()} applies — size edge {kind}: {why}. {direction_line(st, ctrl)} {timing_line(st)} {contract_line(st)}")
+        if day_avoid:
+            a = day_avoid[0]; e = a["either_side"]["0.75"]
+            lines.append(f"If the opening range comes in narrow instead, stay out: a 0.75% move came on only {e['rate']:.0f}% of {e['n']} such sessions.")
+    elif day_avoid:
+        a = day_avoid[0]; e = a["either_side"]["0.75"]
+        lines.append(f"Day trade: no trade if the opening range is narrow — a 0.75% move came on only {e['rate']:.0f}% of {e['n']} such sessions.")
+    else:
+        lines.append("Day trade: no day-trade strategy has its conditions met before the opening range.")
+    return {"verdict": f"{hold_v} · {day_v}", "hold": hold_v, "day": day_v, "context": ctx, "lines": [l for l in lines if l]}
+
+
 def main():
     reg = load_registry()
     exits_a = reg["exits_a"]
@@ -327,7 +399,8 @@ def main():
     today_ctx["dd_bucket"] = bucket(today_ctx["dd"], DD_BUCKETS)
     armed_b = [st["id"] for st in reg["strategies"] if st["mode"] == "B" and all(CONDS[n](today_ctx) for n in st["entry"])]
     armed_a_pending = [st["id"] for st in reg["strategies"] if st["mode"] == "A" and all(CONDS[n](today_ctx) for n in st["entry"] if not n.startswith("or_"))]
-    out = {"as_of": latest, "current_price": rows[-1][4], "strategies": results, "findings": findings, "exits_a": exits_a, "targets": reg["targets"], "stops": reg["stops"], "min_dte": reg["min_dte"], "floor": FLOOR,
+    decision = decide(results, findings, {**today_ctx, "dd_bucket": today_ctx["dd_bucket"]}, armed_b, armed_a_pending, rows[-1][4], exits_a)
+    out = {"as_of": latest, "current_price": rows[-1][4], "strategies": results, "findings": findings, "decision": decision, "exits_a": exits_a, "targets": reg["targets"], "stops": reg["stops"], "min_dte": reg["min_dte"], "floor": FLOOR,
            "or_thresholds": {"wide_pct": round(or_q["q75"], 3) if or_q["q75"] is not None else None, "narrow_pct": round(or_q["q25"], 3) if or_q["q25"] is not None else None},
            "today": {**today_ctx, "dd": round(today_ctx["dd"], 2), "armed_b": armed_b, "armed_a_pending_or": armed_a_pending},
            "chains": {"available": have_chains, "since": chain_first}}

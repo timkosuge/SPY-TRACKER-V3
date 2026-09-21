@@ -373,7 +373,6 @@ export async function onRequestGet(context) {
     else { scoreFactors.push({ f: 'Unit Labor Costs', v: ulcSignal.current.toFixed(1), signal: 'RISING — HUMAN ECONOMY' }); }
   }
 
-  bridgeScore = Math.min(95, Math.max(5, bridgeScore));
 
   // ── OUTCOME PROBABILITIES ─────────────────────────────────────────────────
   // Based on bridge score and macro conditions

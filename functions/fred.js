@@ -253,7 +253,9 @@ function computeRegime(stats) {
   else if (score >= -30){ regime = 'SLOWDOWN';     color = '#ff8800'; }
   else                  { regime = 'CONTRACTION';  color = '#ff3355'; }
 
-  return { score, regime, color, signals };
+  const tally = { supportive: scores.filter(x => x > 0).length, against: scores.filter(x => x < 0).length, neutral: scores.filter(x => x === 0).length };
+  const summary = `${tally.supportive} supportive, ${tally.against} against, ${tally.neutral} neutral of ${scores.length} signals`;
+  return { score, regime, color, signals, tally, summary };
 }
 
 export async function onRequestOptions() {
