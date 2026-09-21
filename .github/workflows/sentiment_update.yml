@@ -16,6 +16,10 @@ env:
 permissions:
   contents: write
 
+concurrency:
+  group: sentiment-update
+  cancel-in-progress: false
+
 jobs:
   fetch-sentiment:
     runs-on: ubuntu-latest
@@ -48,5 +52,13 @@ jobs:
             exit 0
           fi
           git commit -m "Auto: sentiment data update $(TZ=America/Chicago date +'%Y-%m-%d %H:%M %Z')"
-          git pull --rebase --autostash origin main
-          git push
+          for attempt in 1 2 3; do
+            git fetch origin main
+            if git rebase -X theirs --autostash origin/main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 10))
+          done
+          echo "Could not push after three attempts"
+          exit 1
