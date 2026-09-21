@@ -1,0 +1,169 @@
+{
+  "strategies": [
+    {
+      "id": "A0",
+      "name": "Every session (control)",
+      "mode": "A",
+      "entry": [],
+      "note": "The same 9:00 CT entry on every session with bars. Every day-trade strategy is read against this row."
+    },
+    {
+      "id": "A1",
+      "name": "Wide day, wide opening range",
+      "mode": "A",
+      "entry": [
+        "prior_wide",
+        "or_wide"
+      ],
+      "note": "The core day-trade setup: yesterday's range in the top quartile, the 30-minute opening range in the top quartile, entered at 9:00 CT."
+    },
+    {
+      "id": "A2",
+      "name": "Wide opening range, VIX 20 to 30",
+      "mode": "A",
+      "entry": [
+        "or_wide",
+        "vix_20_30"
+      ],
+      "note": "The opening range plus the regime that lifted it most in the analysis."
+    },
+    {
+      "id": "A3",
+      "name": "Wide opening range, 2 to 5% off the high",
+      "mode": "A",
+      "entry": [
+        "or_wide",
+        "dd_2_5"
+      ],
+      "note": "The opening range plus the drawdown state."
+    },
+    {
+      "id": "A4",
+      "name": "Any wide opening range",
+      "mode": "A",
+      "entry": [
+        "or_wide"
+      ],
+      "note": "The opening range alone, as the control for A1 to A3."
+    },
+    {
+      "id": "A5",
+      "name": "Narrow day, narrow opening range",
+      "mode": "A",
+      "entry": [
+        "prior_narrow",
+        "or_narrow"
+      ],
+      "note": "The no-trade corner, scored so the cost of trading it is on the record."
+    },
+    {
+      "id": "B0",
+      "name": "Every session, hold 3 (control)",
+      "mode": "B",
+      "entry": [],
+      "hold": 3,
+      "note": "Entered at every open and held three sessions. Every hold strategy is read against this row."
+    },
+    {
+      "id": "B1",
+      "name": "Wide day, hold 3 sessions",
+      "mode": "B",
+      "entry": [
+        "prior_wide"
+      ],
+      "hold": 3,
+      "note": "Enter the next open after a wide day, exit at the third close."
+    },
+    {
+      "id": "B2",
+      "name": "Wide day, hold 5 sessions",
+      "mode": "B",
+      "entry": [
+        "prior_wide"
+      ],
+      "hold": 5,
+      "note": "Same entry, held to the fifth close."
+    },
+    {
+      "id": "B3",
+      "name": "2 to 5% off the high, VIX 15 to 20, wide day, hold 3",
+      "mode": "B",
+      "entry": [
+        "prior_wide",
+        "dd_2_5",
+        "vix_15_20"
+      ],
+      "hold": 3,
+      "note": "The cell the analysis singled out inside the usual regime."
+    },
+    {
+      "id": "B4",
+      "name": "VIX over 20, hold 3 sessions",
+      "mode": "B",
+      "entry": [
+        "vix_over_20"
+      ],
+      "hold": 3,
+      "note": "The regime alone, any range."
+    },
+    {
+      "id": "B5",
+      "name": "Narrow day, VIX under 15, within 2% of the high, hold 3",
+      "mode": "B",
+      "entry": [
+        "prior_narrow",
+        "vix_under_15",
+        "dd_within_2"
+      ],
+      "hold": 3,
+      "note": "The quietest corner, scored as the control."
+    }
+  ],
+  "exits_a": [
+    {
+      "id": "0930",
+      "label": "9:30 CT",
+      "bar": "10:30"
+    },
+    {
+      "id": "1030",
+      "label": "10:30 CT",
+      "bar": "11:30"
+    },
+    {
+      "id": "1130",
+      "label": "11:30 CT",
+      "bar": "12:30"
+    },
+    {
+      "id": "1230",
+      "label": "12:30 CT",
+      "bar": "13:30"
+    },
+    {
+      "id": "1330",
+      "label": "1:30 CT",
+      "bar": "14:30"
+    },
+    {
+      "id": "1430",
+      "label": "2:30 CT",
+      "bar": "15:30"
+    },
+    {
+      "id": "close",
+      "label": "Close",
+      "bar": "15:59"
+    }
+  ],
+  "targets": [
+    0.5,
+    0.75,
+    1.0
+  ],
+  "stops": [
+    0.3,
+    0.5
+  ],
+  "min_dte": 2
+}

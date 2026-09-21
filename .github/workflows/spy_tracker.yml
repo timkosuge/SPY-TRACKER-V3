@@ -3,6 +3,7 @@ name: SPY Daily Tracker
 on:
   schedule:
     - cron: '30 13-21 * * 1-5'
+    - cron: '0 14,15 * * 1-5'
   workflow_dispatch:
 
 env:
@@ -24,6 +25,8 @@ jobs:
           RUN=false; CLOSE=false
           if [ "$MANUAL" = "true" ]; then RUN=true; CLOSE=true; fi
           if [ "$DOW" -le 5 ] && [ "$NOW" -ge 0925 ] && [ "$NOW" -le 1700 ]; then RUN=true; fi
+          MIN=$(TZ=America/New_York date +%M)
+          if [ "$MANUAL" != "true" ] && [ "$MIN" -lt 15 ] && { [ "$NOW" -lt 0955 ] || [ "$NOW" -gt 1005 ]; }; then RUN=false; fi
           if [ "$NOW" -ge 1605 ]; then CLOSE=true; fi
           echo "run=$RUN" >> "$GITHUB_OUTPUT"
           echo "close=$CLOSE" >> "$GITHUB_OUTPUT"
@@ -118,6 +121,10 @@ jobs:
         if: steps.clock.outputs.run == 'true'
         run: python generate_range_filter.py
 
+      - name: Score strategies
+        if: steps.clock.outputs.run == 'true'
+        run: python generate_strategies.py
+
       - name: Data health
         if: steps.clock.outputs.run == 'true'
         run: python generate_health.py
@@ -149,7 +156,7 @@ jobs:
                      session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
                      large_gap_stats.js release_data.js edge_stats_data.js \
                      data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv \
-                     breadth_data.json tic_holdings.js health.json chains_data.js range_filter.js
+                     breadth_data.json tic_holdings.js health.json chains_data.js range_filter.js strategies_data.js strategies.json
           if git diff --staged --quiet; then
             echo "No payload changes"
             exit 0
