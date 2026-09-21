@@ -20,6 +20,7 @@ DB_PATH = "spy_data.db"
 OUTPUT = "options_env.js"
 FLOOR = 30
 FORWARD = 21
+MEDIAN_ABS_NORMAL = 0.6745
 VIX_BUCKETS = [("under 15", 0, 15), ("15 to 20", 15, 20), ("20 to 30", 20, 30), ("over 30", 30, 1e9)]
 
 
@@ -103,6 +104,7 @@ def build(conn):
                     "implied_percentile_3y": pct_rank(vix_3y, today_vix), "verdict": verdict,
                     "term": {k: (round(v, 2) if v is not None else None) for k, v in t.items()}, "term_shape": shape,
                     "expected_daily_move_pct": round(today_vix / math.sqrt(252), 3) if today_vix else None,
+                    "typical_move_priced_pct": round(today_vix / math.sqrt(252) * MEDIAN_ABS_NORMAL, 3) if today_vix else None,
                     "delivered_daily_move_pct": round(percentile([abs(closes[i] / closes[i - 1] - 1) * 100 for i in range(len(closes) - 20, len(closes))], 0.5), 3)}
 
     # does the spread at decision time say anything about the premium that follows
@@ -171,7 +173,7 @@ def verdicts(o):
             V.append({"level": "finding", "topic": "The premium by regime", "text": f"The overcharge is largest when volatility is already high: a median {hi[1]['median_premium']:+.2f} points with VIX {hi[0]} against {lo[1]['median_premium']:+.2f} with VIX {lo[0]}. High volatility is not a discount for a buyer; it is the most expensive state."})
     if t.get("verdict"):
         V.append({"level": "finding", "topic": "Where today sits", "text": f"Contracts are {t['verdict']} right now: 30-day implied {t['implied_30d']:.2f} against {t['realized_20d']:.2f} realized over the last 20 sessions — a spread of {t['spread']:+.2f} points, the {t['spread_percentile_3y']:.0f}th percentile of the last three years. Implied volatility itself is at the {t['implied_percentile_3y']:.0f}th percentile."})
-        V.append({"level": "info", "topic": "What is priced against what moves", "text": f"At {t['implied_30d']:.2f} implied, a session is priced for {t['expected_daily_move_pct']:.2f}%; the median of the last 20 sessions was {t['delivered_daily_move_pct']:.2f}%. Measured on highs and lows rather than closes, the last 20 sessions ran at {t['realized_20d_high_low']:.2f}."})
+        V.append({"level": "info", "topic": "What is priced against what moves", "text": f"At {t['implied_30d']:.2f} implied, the typical session is priced to move {t['typical_move_priced_pct']:.2f}% (one standard deviation is {t['expected_daily_move_pct']:.2f}%); the typical session over the last 20 moved {t['delivered_daily_move_pct']:.2f}%. Measured on highs and lows rather than closes, the last 20 sessions ran at {t['realized_20d_high_low']:.2f}."})
     if t.get("term_shape") and o.get("term_structure", {}).get(t["term_shape"]):
         ts = o["term_structure"][t["term_shape"]]
         others = {k: v for k, v in o["term_structure"].items() if k != t["term_shape"]}
@@ -180,7 +182,9 @@ def verdicts(o):
     if o.get("spread_predicts"):
         sp = o["spread_predicts"]
         gap = sp["top_quartile_median_premium"] - sp["bottom_quartile_median_premium"]
-        V.append({"level": "none" if abs(gap) < 1.0 else "finding", "topic": "Does today's spread predict tomorrow's", "text": f"When implied ran furthest above trailing realized, the premium that followed was a median {sp['top_quartile_median_premium']:+.2f} points ({sp['n_top']:,} sessions); when it ran closest, {sp['bottom_quartile_median_premium']:+.2f} ({sp['n_bottom']:,}). " + ("The spread you can see does not tell you much about the overcharge that follows." if abs(gap) < 1.0 else "The spread carries information about the premium that follows.")})
+        V.append({"level": "none" if abs(gap) < 1.0 else "finding", "topic": "Does today's spread predict tomorrow's",
+                  "headline": "Today's gap does not predict the overcharge that follows." if abs(gap) < 1.0 else "Today's gap predicts the overcharge that follows.",
+                  "why": f"Widest gaps were followed by {sp['top_quartile_median_premium']:+.2f} points, narrowest by {sp['bottom_quartile_median_premium']:+.2f}.", "text": f"When implied ran furthest above trailing realized, the premium that followed was a median {sp['top_quartile_median_premium']:+.2f} points ({sp['n_top']:,} sessions); when it ran closest, {sp['bottom_quartile_median_premium']:+.2f} ({sp['n_bottom']:,}). " + ("The spread you can see does not tell you much about the overcharge that follows." if abs(gap) < 1.0 else "The spread carries information about the premium that follows.")})
     w = o.get("weekly_range") or {}
     if w.get("n", 0) >= FLOOR:
         V.append({"level": "info", "topic": "The weekly expected move", "text": f"The static weekly range has held on {w['held']['rate']}% of {w['n']} weeks ({w['held']['lo']}–{w['held']['hi']}). When it broke high the median overshoot was {w['median_overshoot_high']:.2f}%; low, {w['median_overshoot_low']:.2f}%."})
@@ -197,11 +201,62 @@ def verdicts(o):
     return V
 
 
+def answer_rows(o):
+    """The page's questions, each as a short answer and the one figure behind it."""
+    R = []
+    t = o["today"]; p = o["premium"]
+    if t.get("verdict"):
+        a = {"expensive": "Expensive", "cheap": "Cheap", "ordinary": "Fairly priced"}[t["verdict"]]
+        R.append({"q": "Are contracts expensive right now?", "a": a, "tone": {"expensive": "stop", "cheap": "go"}.get(t["verdict"], "info"),
+                  "why": f"The market charges {t['implied_30d']:.2f} for the next 30 days; the last 20 sessions delivered {t['realized_20d']:.2f}. That gap of {t['spread']:+.2f} sits at the {t['spread_percentile_3y']:.0f}th percentile of the last three years."})
+    if t.get("typical_move_priced_pct") and t.get("delivered_daily_move_pct") is not None:
+        ratio = t["delivered_daily_move_pct"] / t["typical_move_priced_pct"]
+        a = "Much less than priced" if ratio < 0.6 else "Less than priced" if ratio < 0.85 else "More than priced" if ratio > 1.15 else "About as priced"
+        R.append({"q": "Is SPY moving a lot?", "a": a, "tone": "info",
+                  "why": f"Options price the typical session to move {t['typical_move_priced_pct']:.2f}%; the typical session over the last 20 moved {t['delivered_daily_move_pct']:.2f}%."})
+    b = p.get("2010_on")
+    if b:
+        R.append({"q": "What does a buyer start against?", "a": f"About {b['median_premium']:.1f} points of overcharge", "tone": "stop",
+                  "why": f"Since 2010, implied volatility was higher than the volatility that followed on {b['overcharged' if 'overcharged' in b else 'overpriced']['rate']:.0f}% of {b['n']:,} sessions."})
+    bv = {k: v for k, v in (p.get("by_vix") or {}).items() if v}
+    if t.get("implied_30d") is not None and bv:
+        now = next((k for k, lo, hi in VIX_BUCKETS if lo <= t["implied_30d"] < hi), None)
+        lo_k = min(bv, key=lambda k: bv[k]["median_premium"]); hi_k = max(bv, key=lambda k: bv[k]["median_premium"])
+        if now in bv:
+            a = "The least overcharged regime" if now == lo_k else "The most overcharged regime" if now == hi_k else "A middle regime"
+            others = [k for k in (lo_k, hi_k) if k != now]
+            R.append({"q": f"Does VIX {now} change that?", "a": a, "tone": "go" if now == lo_k else "stop" if now == hi_k else "info",
+                      "why": f"The overcharge has been {bv[now]['median_premium']:+.2f} points with VIX {now}" + "".join(f", against {bv[k]['median_premium']:+.2f} with VIX {k}" for k in others) + "."})
+    ts = (o.get("term_structure") or {}).get(t.get("term_shape") or "")
+    if t.get("term_shape"):
+        shape = {"upward": "Upward, the normal shape", "flat": "Flat", "inverted": "Inverted, near-term fear"}[t["term_shape"]]
+        tm = t.get("term") or {}
+        R.append({"q": "What is the volatility curve saying?", "a": shape, "tone": "stop" if t["term_shape"] == "inverted" else "info",
+                  "why": f"9-day {tm.get('vix9d')}, 30-day {tm.get('vix')}, 3-month {tm.get('vix3m')}." + (f" After this shape the overcharge has been {ts['median_premium']:+.2f} points." if ts else "")})
+    c = o.get("chain") or {}
+    if c.get("available") and c.get("buckets"):
+        atm = c["buckets"].get("2 to 4|at the money") or c["buckets"].get("5 to 9|at the money")
+        wide = max(c["buckets"].items(), key=lambda kv: kv[1]["median_spread_pct"])
+        wd, wx = wide[0].split("|")
+        wide_words = f"contracts {wd} days out, {wx if wx == 'at the money' else wx + ' from spot'}"
+        if atm:
+            R.append({"q": "What does it cost to trade?", "a": f"{atm['median_spread_pct']:.1f}% at the money", "tone": "info",
+                      "why": f"The bid-ask spread as a share of the contract's price, 2 to 9 days out. The most expensive to cross is {wide_words}, at {wide[1]['median_spread_pct']:.1f}%."})
+    else:
+        R.append({"q": "What does it cost to trade?", "a": "No chain captured yet", "tone": "info", "why": "The bid-ask spread by strike and expiry appears once the option chain has been captured."})
+    w = o.get("weekly_range") or {}
+    if w.get("n", 0) >= FLOOR:
+        R.append({"q": "Does the weekly expected move hold?", "a": f"{w['held']['rate']:.0f}% of weeks", "tone": "info",
+                  "why": f"Over {w['n']} weeks. When it broke, price ran a median {w['median_overshoot_high']:.2f}% past the top or {w['median_overshoot_low']:.2f}% past the bottom."})
+    return R
+
+
 def main():
     conn = sqlite3.connect(DB_PATH)
     out = build(conn)
     conn.close()
     out["verdicts"] = verdicts(out)
+    out["rows"] = answer_rows(out)
     out["floor"] = FLOOR
     out.update(stamp(None))
     with open(OUTPUT, "w") as f:
