@@ -2010,6 +2010,39 @@ function clearJournal() {
 // Chat
 
 // Pattern alerts
+function aiDayKey() { return etToday(); }
+function aiCacheRead(name) {
+  try {
+    const raw = localStorage.getItem('spy_ai_' + name);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    return (v && v.day === aiDayKey() && v.html) ? v : null;
+  } catch (e) { return null; }
+}
+function aiCacheWrite(name, el) {
+  const at = Date.now();
+  try { localStorage.setItem('spy_ai_' + name, JSON.stringify({ day: aiDayKey(), at, html: el.innerHTML })); } catch (e) {}
+  const stamp = el.parentElement && el.parentElement.querySelector('.ai-written-at');
+  if (stamp) stamp.textContent = aiWrittenAt(at);
+}
+function aiCacheClear() {
+  try { Object.keys(localStorage).filter(k => k.startsWith('spy_ai_')).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+}
+function aiServe(name, el, force) {
+  if (force) { try { localStorage.removeItem('spy_ai_' + name); } catch (e) {} return false; }
+  const c = aiCacheRead(name);
+  if (!c) return false;
+  el.innerHTML = c.html;
+  el.classList.remove('loading');
+  const stamp = el.parentElement && el.parentElement.querySelector('.ai-written-at');
+  if (stamp) stamp.textContent = aiWrittenAt(c.at);
+  return true;
+}
+function aiWrittenAt(ts) {
+  return 'Written ' + new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
+}
+window.aiCacheClear = aiCacheClear;
+
 function runPatternAlerts(md, sd) {
   const el = document.getElementById('aiAlerts');
   if (!el) return;
@@ -2084,10 +2117,9 @@ async function generateSummary(md, sd, forceRefresh) {
   const el = document.getElementById('aiSummary');
   if (!el) return;
 
-  // Throttle: do not re-run within 10 min unless forced
-  const now = Date.now();
-  if (!forceRefresh && window._lastSummaryTs && (now - window._lastSummaryTs) < 10 * 60 * 1000) return;
-  window._lastSummaryTs = now;
+  if (aiServe('summary', el, forceRefresh)) return;
+  if (window._aiSummaryRunning) return;
+  window._aiSummaryRunning = true;
 
   el.textContent = '';
   el.classList.add('loading');
@@ -2139,17 +2171,23 @@ CRITICAL OPTIONS RULES:
     }
 
     if (badge) badge.textContent = '● GROK';
+    aiCacheWrite('summary', el);
 
   } catch(e) {
     el.classList.remove('loading');
     el.innerHTML = `<span style="color:var(--text3);font-size:12px;">Overview unavailable — ${e.message}</span>`;
     if (badge) { badge.textContent = '● ERROR'; badge.style.color = '#ff3355'; }
+  } finally {
+    window._aiSummaryRunning = false;
   }
 }
 
-async function generateTradeIdeas(md, sd) {
+async function generateTradeIdeas(md, sd, forceRefresh) {
   const el = document.getElementById('aiTradeIdeas');
   if (!el) return;
+  if (aiServe('ideas', el, forceRefresh)) return;
+  if (window._aiRun_ideas) return;
+  window._aiRun_ideas = true;
   try {
     const context = buildContext(md, sd);
     const reply = await callAI(
@@ -2165,15 +2203,19 @@ async function generateTradeIdeas(md, sd) {
         <span style="font-family:'Orbitron',monospace;font-size:8px;color:${c};margin-right:6px;">${i+1}</span>${line.trim()}
       </div>`;
     }).join('');
+    aiCacheWrite('ideas', el);
   } catch(e) {
     el.innerHTML = `<div class="no-data">Unavailable — ${e.message}</div>`;
-  }
+  } finally { window._aiRun_ideas = false; }
 }
 
 // Level analysis
-async function generateLevelAnalysis(md, sd) {
+async function generateLevelAnalysis(md, sd, forceRefresh) {
   const el = document.getElementById('aiLevelAnalysis');
   if (!el) return;
+  if (aiServe('levels', el, forceRefresh)) return;
+  if (window._aiRun_levels) return;
+  window._aiRun_levels = true;
   try {
     const q = md.quotes||{}, spy = q['SPY']||{};
     const cur = spy.price||0;
@@ -2251,15 +2293,19 @@ UNFILLED GAPS within $20: ${gaps.length?gaps.join(', '):'none found'}`;
       400
     );
     el.innerHTML = `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${reply.replace(/\n/g,'<br>')}</div>`;
+    aiCacheWrite('levels', el);
   } catch(e) {
     el.innerHTML = `<div class="no-data">Unavailable — ${e.message}</div>`;
-  }
+  } finally { window._aiRun_levels = false; }
 }
 
 
-async function generateVolumeAnalysis(md, sd) {
+async function generateVolumeAnalysis(md, sd, forceRefresh) {
   const el = document.getElementById('aiVolumeAnalysis');
   if (!el) return;
+  if (aiServe('volume', el, forceRefresh)) return;
+  if (window._aiRun_volume) return;
+  window._aiRun_volume = true;
   try {
     const q = md.quotes||{}, spy = q['SPY']||{};
     const today = sd?.[0]||{};
@@ -2349,15 +2395,19 @@ ${hvns.length ? hvns.join('\n') : 'No HVN data available'}`;
       450
     );
     el.innerHTML = `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${reply.replace(/\n/g,'<br>')}</div>`;
+    aiCacheWrite('volume', el);
   } catch(e) {
     el.innerHTML = `<div class="no-data">Unavailable — ${e.message}</div>`;
-  }
+  } finally { window._aiRun_volume = false; }
 }
 
 // Risk assessment
-async function generateRiskAssessment(md, sd) {
+async function generateRiskAssessment(md, sd, forceRefresh) {
   const el = document.getElementById('aiRiskAssessment');
   if (!el) return;
+  if (aiServe('risk', el, forceRefresh)) return;
+  if (window._aiRun_risk) return;
+  window._aiRun_risk = true;
   try {
     const context = buildContext(md, sd);
     const reply = await callAI(
@@ -2384,9 +2434,10 @@ async function generateRiskAssessment(md, sd) {
     } else {
       el.innerHTML = `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${reply.replace(/\n/g,'<br>')}</div>`;
     }
+    aiCacheWrite('risk', el);
   } catch(e) {
     el.innerHTML = `<div class="no-data">Unavailable — ${e.message}</div>`;
-  }
+  } finally { window._aiRun_risk = false; }
 }
 
 // Event impact
@@ -4225,9 +4276,8 @@ async function loadData(){
       }
     }, 300000); // every 5 minutes
 
-    // Refresh all AI sections every 30 minutes
     setInterval(() => {
-      if (_md && _sd) {
+      if (_md && _sd && document.visibilityState === 'visible') {
         generateSummary(_md, _sd);
         generateTradeIdeas(_md, _sd);
         generateLevelAnalysis(_md, _sd);
@@ -4235,7 +4285,7 @@ async function loadData(){
         generateRiskAssessment(_md, _sd);
         runPatternAlerts(_md, _sd);
       }
-    }, 1800000); // every 30 minutes
+    }, 1800000);
     
   }catch(e){console.error('Load error:',e);}
 }
@@ -4929,9 +4979,12 @@ async function renderMacro() {
   }
 }
 
-async function generateMacroAI(data) {
+async function generateMacroAI(data, force) {
   const el = document.getElementById('macroAIText');
   if (!el) return;
+  if (aiServe('macro', el, force)) return;
+  if (window._aiRun_macro) return;
+  window._aiRun_macro = true;
 
   const S = data.series || {};
   const regime = data.regime || {};
@@ -5008,15 +5061,16 @@ Write your macro analysis. Be thorough and tell the complete story of where we a
         `<p style="margin:0 0 14px;line-height:1.9;">${p.trim()}</p>`
       ).join('');
     }
+    aiCacheWrite('macro', el);
   } catch(e) {
     if (el) el.innerHTML = `<span style="color:var(--text3);font-style:italic;">AI analysis unavailable: ${e.message}</span>`;
-  }
+  } finally { window._aiRun_macro = false; }
 }
 
 async function refreshMacroAI() {
   const el = document.getElementById('macroAIText');
   if (el) el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Regenerating analysis...</span>';
-  if (_macroData) await generateMacroAI(_macroData);
+  if (_macroData) await generateMacroAI(_macroData, true);
 }
 
 function _renderMacroHTML(data) {
@@ -5830,9 +5884,12 @@ function _renderTransitionHTML(data) {
   </div>`;
 }
 
-async function generateTransitionAI(data) {
+async function generateTransitionAI(data, force) {
   const el = document.getElementById('transitionAIText');
   if (!el) return;
+  if (aiServe('transition', el, force)) return;
+  if (window._aiRun_transition) return;
+  window._aiRun_transition = true;
 
   const score = data.bridge_score ?? null;
   const prod = data.productivity_signal || {};
@@ -5875,15 +5932,16 @@ Write your analysis of where we are in the civilizational transition. Be thoroug
 
       el.innerHTML = paras.map(p => `<p style="margin:0 0 14px;line-height:1.9;">${p.trim()}</p>`).join('');
     }
+    aiCacheWrite('transition', el);
   } catch(e) {
     if (el) el.innerHTML = `<span style="color:var(--text3);font-style:italic;">AI analysis unavailable: ${e.message}</span>`;
-  }
+  } finally { window._aiRun_transition = false; }
 }
 
 async function refreshTransitionAI() {
   const el = document.getElementById('transitionAIText');
   if (el) el.innerHTML = '<span style="color:var(--text3);font-style:italic;">Regenerating...</span>';
-  if (_transitionData) await generateTransitionAI(_transitionData);
+  if (_transitionData) await generateTransitionAI(_transitionData, true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

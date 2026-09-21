@@ -824,8 +824,9 @@
     <div class="panel-label">
       ⬡ AI MARKET BRIEF
       <div style="display:flex;align-items:center;gap:10px;">
+        <span class="ai-written-at" style="font-size:9px;color:var(--text3);font-family:'Share Tech Mono',monospace;"></span>
         <span class="ai-ov-badge" id="aiSummaryModel">● GROK</span>
-        <button id="aiSummaryRefresh" onclick="generateSummary(_md,_sd,true)">↻ REFRESH</button>
+        <button id="aiSummaryRefresh" onclick="generateSummary(_md,_sd,true)" title="Writes a new overview now; otherwise one is written per day">↻ REFRESH</button>
       </div>
     </div>
     <div id="aiSummary"><span style="color:var(--text3);font-size:12px;">Generating overview...</span></div>
