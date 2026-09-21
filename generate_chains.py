@@ -52,6 +52,10 @@ def build_frame(conn):
             except (TypeError, ValueError):
                 pass
     releases = load_release_dates()
+    vix = {}
+    if conn.execute("SELECT name FROM sqlite_master WHERE name='vix_daily'").fetchone():
+        vix = {d: c for d, c in conn.execute("SELECT date, close FROM vix_daily WHERE close IS NOT NULL")}
+    closes = [r[4] for r in rows]
     frame = []
     n = len(rows)
     for i, (d, o, h, l, c) in enumerate(rows):
@@ -82,6 +86,8 @@ def build_frame(conn):
             "is_month_last": nxt is None or nxt[:7] != d[:7],
             "wem_high": wh, "wem_low": wl,
             "is_cpi": d in releases["cpi"], "is_nfp": d in releases["nfp"], "is_fomc": d in releases["fomc"],
+            "vix": round(vix[prev[0]], 2) if prev and prev[0] in vix else None,
+            "dd20": round((prev[4] / max(closes[max(0, i - 20):i]) - 1) * 100, 3) if prev else None,
             "holds": holds,
             "worst_min": worst_min.get(d),
         })
@@ -94,6 +100,8 @@ def earliest_by_requirement(frame):
     out["weekly_em"] = date.fromisoformat(w[0]) if w else None
     e = [r["date"] for r in frame if r["is_cpi"] or r["is_nfp"] or r["is_fomc"]]
     out["release_dates"] = date.fromisoformat(e[0]) if e else None
+    v = [r["date"] for r in frame if r["vix"] is not None]
+    out["vix_daily"] = date.fromisoformat(v[0]) if v else None
     return out
 
 
@@ -125,7 +133,7 @@ def main():
         raise SystemExit("no sessions")
     ebr = earliest_by_requirement(frame)
     era_starts = eras(frame)
-    keys = ["date", "open", "high", "low", "close", "gap_pct", "prior_oc_pct", "weekday", "is_monthly_opex", "is_month_first", "is_month_last", "wem_high", "wem_low", "is_cpi", "is_nfp", "is_fomc", "holds", "worst_min"]
+    keys = ["date", "open", "high", "low", "close", "gap_pct", "prior_oc_pct", "weekday", "is_monthly_opex", "is_month_first", "is_month_last", "wem_high", "wem_low", "is_cpi", "is_nfp", "is_fomc", "vix", "dd20", "holds", "worst_min"]
     compact = [[r[k] for k in keys] for r in frame]
     out = {
         "keys": keys,

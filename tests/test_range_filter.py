@@ -50,16 +50,20 @@ class OpeningRange(unittest.TestCase):
 
 class Panel(unittest.TestCase):
     def test_panel_renders_today_and_the_live_setup(self):
-        cell = lambda n: {"n": n, "median_best": 1.0, "ge_050": {"k": n, "n": n, "rate": 90.0, "lo": 80.0, "hi": 95.0}, "ge_075": {"k": n, "n": n, "rate": 80.0, "lo": 70.0, "hi": 88.0}, "ge_100": {"k": n, "n": n, "rate": 50.0, "lo": 40.0, "hi": 60.0}, "median_adverse": 0.3, "peak_min_median": 300, "peak_min_q25": 200, "peak_min_q75": 350, "side_with_or": {"k": n // 2, "n": n, "rate": 50.0, "lo": 40.0, "hi": 60.0}}
-        hold = lambda n: {"n": n, "median_best": 1.8, "ge_100": {"k": n, "n": n, "rate": 85.0, "lo": 80.0, "hi": 90.0}, "ge_150": {"k": n, "n": n, "rate": 60.0, "lo": 50.0, "hi": 70.0}, "ge_200": {"k": n, "n": n, "rate": 40.0, "lo": 30.0, "hi": 50.0}}
+        cell = lambda n: {"n": n, "median_best": 1.0, "stability": {"holds": True}, "ge_050": {"k": n, "n": n, "rate": 90.0, "lo": 80.0, "hi": 95.0}, "ge_075": {"k": n, "n": n, "rate": 80.0, "lo": 70.0, "hi": 88.0}, "ge_100": {"k": n, "n": n, "rate": 50.0, "lo": 40.0, "hi": 60.0}, "median_adverse": 0.3, "peak_min_median": 300, "peak_min_q25": 200, "peak_min_q75": 350, "side_with_or": {"k": n // 2, "n": n, "rate": 50.0, "lo": 40.0, "hi": 60.0}}
+        hold = lambda n: {"n": n, "median_best": 1.8, "stability": {"holds": True}, "ge_100": {"k": n, "n": n, "rate": 85.0, "lo": 80.0, "hi": 90.0}, "ge_150": {"k": n, "n": n, "rate": 60.0, "lo": 50.0, "hi": 70.0}, "ge_200": {"k": n, "n": n, "rate": 40.0, "lo": 30.0, "hi": 50.0}}
         data = {"as_of": "2026-09-18", "next_session": "2026-09-21", "current_price": 760.0,
                 "day_thresholds": {"wide_pct": 1.2, "narrow_pct": 0.6, "window_start": "2025-09-18", "n": 252},
                 "or_thresholds": {"wide_pct": 0.5, "narrow_pct": 0.25, "window_start": "2025-09-18", "n": 250},
-                "latest_session": {"date": "2026-09-18", "range_pct": 1.5, "range_pts": 11.4, "class": "wide"},
+                "latest_session": {"date": "2026-09-18", "range_pct": 1.5, "range_pts": 11.4, "class": "wide", "vix": 17.5, "vix_bucket": "15 to 20", "dd_pct": -3.1, "dd_bucket": "2 to 5% below"},
                 "table_a": {f"{p}/{o}": cell(40) for p in ("wide", "middle", "narrow") for o in ("wide", "middle", "narrow")},
                 "table_a_coverage": {"sessions": 500, "first": "2024-07-11", "last": "2026-09-18"},
                 "table_b": {k: {"start": "2023-09-18", **{p: {"1": hold(100), "3": hold(100), "5": hold(100)} for p in ("wide", "middle", "narrow")}} for k in ("3y", "all")},
-                "log": [{"date": "2026-09-18", "prior_class": "narrow", "prior_range_pct": 0.5, "or_pct": 0.3, "or_class": "middle", "best_pct": 0.3, "best_side": "up", "peak_min": 385, "day_range_pct": 0.53, "oc_pct": 0.05}],
+                "table_b_regime": {k: {"vix": {b: {"1": hold(100), "3": hold(100), "5": hold(100)} for b in ("under 15", "15 to 20", "20 to 30", "over 30")}, "dd": {b: {"1": hold(100), "3": hold(100), "5": hold(100)} for b in ("more than 5% below", "2 to 5% below", "within 2%")}} for k in ("3y", "all")},
+                "table_b_cells": {k: {"15 to 20|2 to 5% below|wide": {"1": hold(40), "3": hold(40), "5": hold(40)}} for k in ("3y", "all")},
+                "table_a_regime": {"vix": {b: {o: cell(35) for o in ("wide", "middle", "narrow")} for b in ("under 15", "15 to 20", "20 to 30", "over 30")}, "dd": {b: {o: cell(35) for o in ("wide", "middle", "narrow")} for b in ("more than 5% below", "2 to 5% below", "within 2%")}},
+                "vix_buckets": ["under 15", "15 to 20", "20 to 30", "over 30"], "dd_buckets": ["more than 5% below", "2 to 5% below", "within 2%"], "vix_coverage": {"sessions": 8488, "last": "2026-09-18"},
+                "log": [{"date": "2026-09-18", "prior_class": "narrow", "prior_vix": "15 to 20", "prior_dd": "within 2%", "prior_range_pct": 0.5, "or_pct": 0.3, "or_class": "middle", "best_pct": 0.3, "best_side": "up", "peak_min": 385, "day_range_pct": 0.53, "oc_pct": 0.05}],
                 "or_minutes": 30, "floor": 30, "generated": "2026-09-20T18:00:00-04:00"}
         with open(RF_PATH, "w") as f:
             json.dump(data, f)
@@ -79,6 +83,22 @@ window.renderRangeFilter(); process.stdout.write(html.replace(/<[^>]+>/g,' ').re
         self.assertIn("0.70% ($5.32) WIDE", out)
         self.assertIn("Setup WIDE day + WIDE OR", out)
         self.assertIn("Wide ≥ 1.20% ($9.12)", out)
+        self.assertIn("VIX CLOSE 17.50 15 to 20", out)
+        self.assertIn("reached a 1.5% one-sided move on 60.0% of 40 three-session holds", out)
+
+    def test_stability_splits_the_cell_in_date_order(self):
+        st = R.stability([2.0] * 40 + [0.5] * 40, 1.5)
+        self.assertEqual((st["first"]["rate"], st["second"]["rate"], st["holds"]), (100.0, 0.0, False))
+        st = R.stability([2.0, 0.5] * 40, 1.5)
+        self.assertTrue(st["holds"])
+        self.assertIsNone(R.stability([2.0] * 20, 1.5)["holds"])
+
+    def test_buckets_are_words(self):
+        self.assertEqual(R.bucket(14.9, R.VIX_BUCKETS), "under 15")
+        self.assertEqual(R.bucket(30.0, R.VIX_BUCKETS), "over 30")
+        self.assertEqual(R.bucket(-2.0, R.DD_BUCKETS), "within 2%")
+        self.assertEqual(R.bucket(-2.01, R.DD_BUCKETS), "2 to 5% below")
+        self.assertIsNone(R.bucket(None, R.VIX_BUCKETS))
 
 
 if __name__ == "__main__":

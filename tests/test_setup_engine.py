@@ -23,6 +23,11 @@ class Registry(unittest.TestCase):
             C.validate_chain(["monday", "friday"])
         self.assertEqual([c["name"] for c in C.validate_chain(["gap_up_030", "prior_red", "monday"])], ["gap_up_030", "prior_red", "monday"])
 
+    def test_regime_conditions_are_registered_one_per_category(self):
+        with self.assertRaises(C.ChainError):
+            C.validate_chain(["vix_under_15", "vix_over_30"])
+        self.assertEqual([c["category"] for c in C.validate_chain(["vix_20_30", "dd_2_5", "gap_up_030"])], ["vix_regime", "drawdown", "gap"])
+
     def test_pool_start_names_the_binding_condition(self):
         conds = C.validate_chain(["gap_up_030", "open_above_wem_high"])
         start, bound = C.pool_start(conds, {"daily_ohlcv": date(1993, 1, 29), "weekly_em": date(2025, 12, 29)})
@@ -56,6 +61,15 @@ class Frame(unittest.TestCase):
         self.assertAlmostEqual(oc3, (99.5 - 101.0) / 101.0 * 100, places=4)
         self.assertAlmostEqual(adverse3, (101.0 - 97.0) / 101.0 * 100, places=4)
         self.assertIsNone(r["2026-09-17"]["holds"][2])
+
+    def test_frame_carries_vix_and_drawdown_from_the_prior_close(self):
+        self.conn.execute("CREATE TABLE vix_daily (date TEXT PRIMARY KEY, open REAL, high REAL, low REAL, close REAL)")
+        self.conn.execute("INSERT INTO vix_daily VALUES ('2026-09-15', 0, 0, 0, 18.5)")
+        f = G.build_frame(self.conn)
+        r = {x["date"]: x for x in f}
+        self.assertEqual(r["2026-09-16"]["vix"], 18.5)
+        self.assertIsNone(r["2026-09-15"]["vix"])
+        self.assertAlmostEqual(r["2026-09-17"]["dd20"], (99.0 / 102.0 - 1) * 100, places=3)
 
     def test_weekly_range_and_month_flags(self):
         f = G.build_frame(self.conn)

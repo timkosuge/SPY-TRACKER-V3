@@ -1,6 +1,6 @@
 (function () {
   const S = { chain: [], era: '3y', hold: 1, pain: null, evaluated: 0, bootstrap: null, bootstrapKey: null };
-  const CAT_LABELS = { gap: 'GAP AT THE OPEN', prior_session: 'PRIOR SESSION', weekday: 'WEEKDAY', calendar: 'CALENDAR', weekly_range: 'STATIC WEEKLY RANGE', event: 'SCHEDULED RELEASES' };
+  const CAT_LABELS = { vix_regime: 'VIX AT THE PRIOR CLOSE', drawdown: 'PRIOR CLOSE VS 20-SESSION HIGH', gap: 'GAP AT THE OPEN', prior_session: 'PRIOR SESSION', weekday: 'WEEKDAY', calendar: 'CALENDAR', weekly_range: 'STATIC WEEKLY RANGE', event: 'SCHEDULED RELEASES' };
   const FLOOR = 30, LIST_FLOOR = 10;
 
   function data() { return (typeof CHAINS_DATA !== 'undefined') ? CHAINS_DATA : null; }
@@ -20,6 +20,8 @@
     monday: r => r.weekday === 0, tuesday: r => r.weekday === 1, wednesday: r => r.weekday === 2, thursday: r => r.weekday === 3, friday: r => r.weekday === 4,
     monthly_opex: r => !!r.is_monthly_opex, month_first: r => !!r.is_month_first, month_last: r => !!r.is_month_last,
     open_above_wem_high: r => r.wem_high != null && r.open > r.wem_high, open_below_wem_low: r => r.wem_low != null && r.open < r.wem_low, open_inside_wem: r => r.wem_low != null && r.open >= r.wem_low && r.open <= r.wem_high,
+    vix_under_15: r => r.vix != null && r.vix < 15, vix_15_20: r => r.vix != null && r.vix >= 15 && r.vix < 20, vix_20_30: r => r.vix != null && r.vix >= 20 && r.vix < 30, vix_over_30: r => r.vix != null && r.vix >= 30,
+    dd_over_5: r => r.dd20 != null && r.dd20 < -5, dd_2_5: r => r.dd20 != null && r.dd20 >= -5 && r.dd20 < -2, dd_within_2: r => r.dd20 != null && r.dd20 >= -2,
     cpi_day: r => !!r.is_cpi, nfp_day: r => !!r.is_nfp, fomc_day: r => !!r.is_fomc, no_event: r => !(r.is_cpi || r.is_nfp || r.is_fomc),
   };
 
