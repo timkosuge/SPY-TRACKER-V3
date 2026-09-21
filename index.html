@@ -735,6 +735,7 @@
   <div class="subtab-group" id="subtabs-desk">
     <div class="subtab active" onclick="switchGroupSub('live-chart',this)">CHART</div>
     <div class="subtab" onclick="switchGroupSub('desk',this)">DASHBOARD</div>
+    <div class="subtab" onclick="switchGroupSub('range-filter',this)">⬡ RANGE FILTER</div>
     <div class="subtab" onclick="switchGroupSub('gap-stats',this)">GAPS</div>
     <div class="subtab" onclick="switchGroupSub('intraday',this)">INTRADAY PATTERNS</div>
     <div class="subtab" onclick="switchGroupSub('time-of-day',this)">TIMING</div>
@@ -855,6 +856,10 @@
 <!-- ═══════════════════════════════════════════════════════
      TRADING DESK
 ════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-range-filter">
+  <div id="rangeFilterContent"><div class="no-data">Loading...</div></div>
+</div>
+
 <div class="tab-panel" id="panel-desk">
   <div id="deskContent"><div class="no-data">Loading Trading Desk...</div></div>
 </div>
@@ -3304,7 +3309,7 @@
 <!-- FLOATING CHAT -->
 
 
-<script src="session_vol_profile.js"></script><script src="intraday_vol_profile.js"></script><script src="intraday_vol_stats.js"></script><script src="window_stats.js"></script><script src="gap_stats.js"></script><script src="large_gap_stats.js"></script><script src="analog_data.js"></script><script src="relief_data.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script><script src="tic_holdings.js"></script><script src="chains_data.js"></script><script src="setup_engine.js"></script>
+<script src="session_vol_profile.js"></script><script src="intraday_vol_profile.js"></script><script src="intraday_vol_stats.js"></script><script src="window_stats.js"></script><script src="gap_stats.js"></script><script src="large_gap_stats.js"></script><script src="analog_data.js"></script><script src="relief_data.js"></script><script src="decline_data.js"></script><script src="release_data.js"></script><script src="intraday_patterns.js"></script><script src="expiry_data.js"></script><script src="intraday_library.js"></script><script src="tod_stats.js"></script><script src="tic_holdings.js"></script><script src="chains_data.js"></script><script src="setup_engine.js"></script><script src="range_filter.js"></script><script src="range_filter_panel.js"></script>
 <script>
 // ── Theme toggle ──────────────────────────────────────────────────────────────
 function toggleTheme() {

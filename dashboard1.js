@@ -3,7 +3,7 @@ window.expectedMove=expectedMove;
 
 // Group tab mapping
 const GROUP_TABS = {
-  desk:        ['desk','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol'],
+  desk:        ['desk','range-filter','live-chart','gap-stats','intraday','time-of-day','intraday-windows','intraday-volume','session-vol'],
   derivatives: ['options','gex','gex-intraday','wem','volatility'],
   macro:       ['macro-overview','transition','ignition','sovereign-chess'],
   history:     ['pricehistory','volhistory','edgestats','events','volstats','analog','setup'],
@@ -72,6 +72,7 @@ function _switchPanelOnly(id) {
   if(id==='bonds' && _md) { try { renderBonds(_md); } catch(e){} }
   if(id==='sentiment' && _md) { try { renderSentiment(_md); } catch(e){} }
   if(id==='live-chart') { setTimeout(renderLiveChart, 50); }
+  if(id==='range-filter') { if(typeof renderRangeFilter==='function') renderRangeFilter(); }
   if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
   if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); }, 50); }
   if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }

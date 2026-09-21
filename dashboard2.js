@@ -4085,6 +4085,7 @@ async function refreshLiveData() {
       const active = id => { const el = document.getElementById('panel-' + id); return !!(el && el.classList.contains('active')); };
       if (active('hub')) { renderHub(merged, _sd); loadFuturesChart(); }
       if (active('desk')) renderDesk(merged, _sd);
+      if (active('range-filter') && typeof renderRangeFilter === 'function') renderRangeFilter();
       updateLevelBar(merged.quotes?.['SPY']?.price);
       updateWEMPrice(merged.quotes?.['SPY']?.price);
       if (active('overview')) renderOverview(merged);
