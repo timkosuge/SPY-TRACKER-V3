@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-21T02:15:14Z",
+  "updated": "2026-09-21T03:05:03Z",
   "aaii": {
     "date": "2026-09-16",
     "bullish": 28.8,
@@ -8,7 +8,7 @@
     "spread": -24.5,
     "avg_bullish": 37.5,
     "avg_bearish": 31.0,
-    "source": "aaii_html",
+    "source": "aaii_xls",
     "age_days": 5,
     "stale": false
   },
