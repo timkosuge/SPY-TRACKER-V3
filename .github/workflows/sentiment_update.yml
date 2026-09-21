@@ -32,12 +32,13 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests xlrd
 
       - name: Fetch AAII + COT data
         run: python fetch_sentiment.py
 
       - name: Commit sentiment_data.json
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

@@ -18,7 +18,7 @@ import csv
 import sqlite3
 import re
 import requests
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 
 SESSION = requests.Session()
 SESSION.headers.update({
@@ -33,6 +33,50 @@ NOW_UTC = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 AAII_FULL_SERIES = []
 
 
+def survey_week_end(d):
+    """AAII's survey week ends Wednesday; the spreadsheet dates the same survey on the Thursday after."""
+    while d.weekday() != 2:
+        d = d - timedelta(days=1)
+    return d
+
+
+AAII_XLS_URL = "https://www.aaii.com/files/surveys/sentiment.xls"
+
+
+def parse_aaii_workbook(content):
+    """Every week in AAII's survey spreadsheet, dated to the Wednesday the survey week ends."""
+    import io as _io
+    try:
+        import xlrd
+    except ImportError:
+        print("  AAII spreadsheet: xlrd is not installed")
+        return []
+    try:
+        book = xlrd.open_workbook(file_contents=content)
+    except Exception as e:
+        print(f"  AAII spreadsheet: not a workbook ({e})")
+        return []
+    sheet = book.sheet_by_index(0)
+    out = []
+    for row in range(sheet.nrows):
+        cell = sheet.cell(row, 0)
+        if cell.ctype != xlrd.XL_CELL_DATE:
+            continue
+        try:
+            y, m, day = xlrd.xldate_as_tuple(cell.value, book.datemode)[:3]
+            vals = [sheet.cell_value(row, c) for c in (1, 2, 3)]
+            bull, neu, bear = (round(float(v) * 100, 1) for v in vals)
+        except (ValueError, TypeError, IndexError):
+            continue
+        if not (99 <= bull + neu + bear <= 101):
+            continue
+        d = survey_week_end(date(y, m, day)).isoformat()
+        out.append({"date": d, "bullish": bull, "neutral": neu, "bearish": bear,
+                    "spread": round(bull - bear, 1), "source": "aaii_xls"})
+    out.sort(key=lambda x: x["date"])
+    return out
+
+
 def last_survey_wednesday_et():
     """AAII's survey week ends Wednesday; a scrape with no date on the page is the most recent Wednesday in New York."""
     from zoneinfo import ZoneInfo
@@ -45,100 +89,37 @@ def last_survey_wednesday_et():
 # ── AAII ───────────────────────────────────────────────────────────────────────
 
 def fetch_aaii():
-    """
-    Try three methods in order:
-    1. Stooq mirror CSV (most reliable, structured data)
-    2. AAII XLS (tab-separated) direct download
-    3. AAII HTML page scrape (fragile, last resort)
-    Returns dict with bullish/neutral/bearish/spread/date/source or None.
-    """
+    """AAII's survey spreadsheet first, its web page second. Returns the latest week or None."""
 
-    # Method 1 — Stooq (most reliable — tried first)
+    # Method 1 — AAII's own survey spreadsheet: the current week and the whole history
     try:
         r = SESSION.get(
-            "https://stooq.com/q/d/l/?s=aaii_bull&i=w",
-            timeout=15,
+            AAII_XLS_URL,
+            timeout=45,
+            headers={"Referer": "https://www.aaii.com/sentimentsurvey", "Accept": "application/vnd.ms-excel,*/*"},
         )
-        if r.status_code == 200 and "Date" in r.text:
-            lines = [l for l in r.text.strip().split("\n") if l.strip()]
-            bull_rows = {}
-            for l in lines[1:]:
-                c = l.split(",")
-                if len(c) >= 5 and c[4] not in ("", "N/A"):
-                    bull_rows[c[0]] = float(c[4])
-            last = lines[-1].split(",")
-            bull_date = last[0]
-            bull = float(last[4])
-
-            r2 = SESSION.get(
-                "https://stooq.com/q/d/l/?s=aaii_bear&i=w",
-                timeout=15,
-            )
-            bear = None
-            bear_rows = {}
-            if r2.status_code == 200 and "Date" in r2.text:
-                lines2 = [l for l in r2.text.strip().split("\n") if l.strip()]
-                for l in lines2[1:]:
-                    c = l.split(",")
-                    if len(c) >= 5 and c[4] not in ("", "N/A"):
-                        bear_rows[c[0]] = float(c[4])
-                bear = float(lines2[-1].split(",")[4])
-            global AAII_FULL_SERIES
-            AAII_FULL_SERIES = [{"date": d, "bullish": round(b, 2), "bearish": round(bear_rows[d], 2) if d in bear_rows else None,
-                                 "neutral": max(0.0, round(100.0 - b - bear_rows[d], 2)) if d in bear_rows else None,
-                                 "spread": round(b - bear_rows[d], 2) if d in bear_rows else None, "source": "stooq"}
-                                for d, b in sorted(bull_rows.items())]
-
-            neu = max(0.0, round(100.0 - bull - (bear or 0), 2)) if bear else None
-            print(f"  AAII (Stooq): bull={bull:.1f}% bear={bear}% date={bull_date}")
-            return {
-                "date":       bull_date,
-                "bullish":    round(bull, 2),
-                "neutral":    neu,
-                "bearish":    round(bear, 2) if bear else None,
-                "spread":     round(bull - bear, 2) if bear else None,
-                "avg_bullish": 37.5,
-                "avg_bearish": 31.0,
-                "source":     "stooq",
-            }
+        if r.status_code == 200 and r.content[:5] != b"<html" and len(r.content) > 100000:
+            weeks = parse_aaii_workbook(r.content)
+            if weeks:
+                global AAII_FULL_SERIES
+                AAII_FULL_SERIES = weeks
+                latest = weeks[-1]
+                print(f"  AAII (spreadsheet): {len(weeks)} weeks, latest {latest['date']} bull={latest['bullish']}% neu={latest['neutral']}% bear={latest['bearish']}%")
+                return {
+                    "date":       latest["date"],
+                    "bullish":    latest["bullish"],
+                    "neutral":    latest["neutral"],
+                    "bearish":    latest["bearish"],
+                    "spread":     latest["spread"],
+                    "avg_bullish": 37.5,
+                    "avg_bearish": 31.0,
+                    "source":     "aaii_xls",
+                }
+            print("  AAII spreadsheet: no usable rows parsed")
+        else:
+            print(f"  AAII spreadsheet: HTTP {r.status_code}, {len(r.content)} bytes — not the workbook")
     except Exception as e:
-        print(f"  AAII Stooq failed: {e}")
-
-    # Method 2 — AAII XLS download (tab-separated)
-    try:
-        r = SESSION.get(
-            "https://www.aaii.com/files/surveys/sentiment.xls",
-            timeout=15,
-            headers={"Referer": "https://www.aaii.com/sentimentsurvey"},
-        )
-        if r.status_code == 200 and len(r.content) > 500:
-            text = r.content.decode("utf-8", errors="replace")
-            lines = [l for l in text.split("\n") if l.strip()]
-            # Walk backwards to find the last valid data row
-            for line in reversed(lines):
-                cols = line.split("\t")
-                if len(cols) >= 4:
-                    try:
-                        bull = float(cols[1])
-                        neu  = float(cols[2])
-                        bear = float(cols[3])
-                        if 0 < bull < 100 and 0 < bear < 100:
-                            date_raw = cols[0].strip()
-                            print(f"  AAII (XLS): bull={bull:.1f}% bear={bear:.1f}% date={date_raw}")
-                            return {
-                                "date":     date_raw,
-                                "bullish":  round(bull, 2),
-                                "neutral":  round(neu,  2),
-                                "bearish":  round(bear, 2),
-                                "spread":   round(bull - bear, 2),
-                                "avg_bullish": 37.5,
-                                "avg_bearish": 31.0,
-                                "source":   "aaii_xls",
-                            }
-                    except (ValueError, IndexError):
-                        continue
-    except Exception as e:
-        print(f"  AAII XLS failed: {e}")
+        print(f"  AAII spreadsheet failed: {e}")
 
     # Method 3 — AAII HTML page scrape
     try:
@@ -383,6 +364,13 @@ def main():
         json.dump(history, f, indent=1)
     print(f"  history: aaii {len(history['aaii'])} weeks, cot {len(history['cot'])} reports")
 
+    stale = []
+    for key, date_field, max_age, label in (("aaii", "date", 10, "AAII"), ("cot", "report_date", 12, "COT")):
+        block = output.get(key)
+        age = block.get("age_days") if block else None
+        if not block or age is None or age > max_age:
+            stale.append(f"{label} is {age if age is not None else 'un'}dated{'' if age is None else f' {age} days old'} (allowed {max_age})")
+
     print(f"\n✓ sentiment_data.json written ({NOW_UTC})")
     if output["aaii"]:
         a = output["aaii"]
@@ -391,6 +379,10 @@ def main():
         c = output["cot"]
         net = c.get("lev_net", c.get("nc_net"))
         print(f"  COT   → report {c.get('report_date')}  leveraged/non-commercial net={net}  [{c.get('source')}]")
+
+    if stale:
+        print("\n✗ sentiment sources are stale: " + "; ".join(stale))
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
