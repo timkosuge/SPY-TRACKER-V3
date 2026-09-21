@@ -5406,7 +5406,7 @@ function _renderMacroHTML(data) {
       ${seriesCard('WTREGEN', 'Treasury General Account (TGA)',
         'The US Government checking account at the Fed. When Treasury spends from TGA, money flows into the economy (bullish). When Treasury rebuilds TGA, it drains liquidity (bearish). Debt ceiling cycles make this volatile.',
         'The debt ceiling fight in 2023 caused TGA to drop to near-zero, then Treasury refilled it rapidly after resolution — draining $700B+ from markets in weeks and contributing to summer volatility.')}
-      ${seriesCard('WSHOMCG', 'Fed MBS Holdings',
+      ${seriesCard('WSHOMCB', 'Fed MBS Holdings',
         'Fed holdings of mortgage-backed securities. The Fed bought MBS to suppress mortgage rates. Slow runoff means the private market must absorb supply the Fed once bought — keeping mortgage rates elevated.',
         'Fed MBS peaked at $2.7T in 2022. Unlike Treasuries, MBS prepay unpredictably — making QT less controllable and keeping the Fed in the housing market longer than intended.')}
       ${seriesCard('TREAST', 'Fed Treasury Holdings',
@@ -6001,15 +6001,11 @@ function _renderSovereignHTML(data) {
   ];
 
   // Treasury ownership data
-  const japanUST  = S.FDHBJA;
-  const chinaUST  = S.FDHBCHI;
-  const totalForeign = S.FDHBFIN;
 
   // Japan economy
   const jpyusd    = S.DEXJPUS;
   const jpn10y    = S.IRLTLT01JPM156N;
-  const jpnUnemp  = S.JPNURQPDS;
-  const jpnCpi    = S.JPNCPIALLMINMEI;
+  const jpnUnemp  = S.LRUNTTTTJPM156S;
   const jpnGdp    = S.JPNRGDPEXP;
 
   // Crypto + dollar
@@ -6017,55 +6013,6 @@ function _renderSovereignHTML(data) {
   const usdJpy    = S.DEXJPUS;
   const usdCny    = S.DEXCHUS;
 
-  // Compute Japan vs China gap in UST holdings
-  const japanLatest = japanUST?.latest;
-  const chinaLatest = chinaUST?.latest;
-  const gapBillions = japanLatest && chinaLatest ? japanLatest - chinaLatest : null;
-
-  // Build Japan vs China holdings chart data
-  const buildComparisonChart = () => {
-    if (!japanUST?.history || !chinaUST?.history) return '';
-    const jHist = japanUST.history.slice(-36);
-    const cHist = chinaUST.history.slice(-36);
-    // Align by date
-    const dates = jHist.map(d => d.d);
-    const jVals = jHist.map(d => d.v);
-    const cVals = dates.map(d => {
-      const found = chinaUST.history.find(h => h.d === d);
-      return found ? found.v : null;
-    });
-
-    const allVals = [...jVals, ...cVals.filter(v => v != null)];
-    const minV = Math.min(...allVals) * 0.95;
-    const maxV = Math.max(...allVals) * 1.02;
-    const range = maxV - minV;
-    const W = 800, H = 180, PL = 60, PR = 20, PT = 20, PB = 30;
-    const iW = W - PL - PR, iH = H - PT - PB;
-    const x = i => PL + (i / (dates.length - 1)) * iW;
-    const y = v => PT + iH - ((v - minV) / range) * iH;
-
-    const jLine = jVals.map((v,i) => (i===0?'M':'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
-    const cLine = cVals.map((v,i) => v != null ? ((i===0||cVals[i-1]==null?'M':'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)) : '').filter(Boolean).join(' ');
-
-    // Label indices
-    const labelIdxs = [0, Math.floor(dates.length/4), Math.floor(dates.length/2), Math.floor(3*dates.length/4), dates.length-1];
-
-    return `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;">
-      <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+iH}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-      <line x1="${PL}" y1="${PT+iH}" x2="${PL+iW}" y2="${PT+iH}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-      ${[0,0.25,0.5,0.75,1].map(pct => {
-        const val = minV + pct * range;
-        const yy = y(val);
-        return `<line x1="${PL}" y1="${yy.toFixed(1)}" x2="${PL+iW}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-          <text x="${PL-5}" y="${(yy+4).toFixed(1)}" text-anchor="end" fill="rgba(255,255,255,0.3)" font-size="9" font-family="Share Tech Mono,monospace">$${(val/1000).toFixed(0)}B</text>`;
-      }).join('')}
-      ${labelIdxs.map(i => `<text x="${x(i).toFixed(1)}" y="${H-5}" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="9" font-family="Share Tech Mono,monospace">${dates[i]?.slice(0,7)||''}</text>`).join('')}
-      <path d="${jLine}" fill="none" stroke="#00ccff" stroke-width="2" opacity="0.9"/>
-      <path d="${cLine}" fill="none" stroke="#ff3355" stroke-width="2" opacity="0.9"/>
-      <text x="${PL+iW-60}" y="${y(jVals[jVals.length-1])-8}" fill="#00ccff" font-size="10" font-family="Orbitron,monospace">JAPAN</text>
-      <text x="${PL+iW-60}" y="${y(cVals.filter(v=>v!=null).slice(-1)[0]||minV)+14}" fill="#ff3355" font-size="10" font-family="Orbitron,monospace">CHINA</text>
-    </svg>`;
-  };
 
   try {
   el.innerHTML = `<div style="padding:16px 16px;max-width:1400px;margin:0 auto;">
@@ -6089,54 +6036,52 @@ function _renderSovereignHTML(data) {
       </div>
     </div>
 
-    ${secHdr('🏛️', 'US TREASURY OWNERSHIP — WHO HOLDS AMERICA\'S DEBT', 'Monthly TIC data from US Treasury via FRED · Japan vs China displacement', '#ffcc00')}
+    ${secHdr('🏛️', 'US TREASURY OWNERSHIP — WHO HOLDS AMERICA\'S DEBT', 'Monthly TIC data from the U.S. Treasury · Japan vs China', '#ffcc00')}
 
     <!-- KEY METRICS ROW -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
-      <div class="panel" style="border-top:2px solid #00ccff;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">JAPAN HOLDINGS</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#00ccff;">${japanLatest ? '$' + (japanLatest/1000).toFixed(1) + 'T' : '—'}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">#1 Foreign Holder</div>
-        <div style="font-size:11px;color:${japanUST?.trend ? trendColor(japanUST.trend) : 'var(--text3)'};margin-top:4px;">${japanUST?.trend ? trendArrow(japanUST.trend) + ' ' + japanUST.trend : '—'}</div>
-      </div>
-      <div class="panel" style="border-top:2px solid #ff3355;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">CHINA HOLDINGS</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#ff3355;">${chinaLatest ? '$' + (chinaLatest/1000).toFixed(1) + 'T' : '—'}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">#2 Foreign Holder</div>
-        <div style="font-size:11px;color:${chinaUST?.trend ? trendColor(chinaUST.trend) : 'var(--text3)'};margin-top:4px;">${chinaUST?.trend ? trendArrow(chinaUST.trend) + ' ' + chinaUST.trend : '—'}</div>
-      </div>
-      <div class="panel" style="border-top:2px solid #ffcc00;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">JAPAN vs CHINA GAP</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#ffcc00;">${gapBillions ? '$' + Math.abs(gapBillions).toFixed(0) + 'B' : '—'}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">Japan leads by</div>
-        <div style="font-size:11px;color:${gapBillions > 0 ? '#00ccff' : '#ff3355'};margin-top:4px;">${gapBillions > 0 ? '▲ Japan ahead' : '▼ China ahead'}</div>
-      </div>
-      <div class="panel" style="border-top:2px solid #8855ff;text-align:center;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">TOTAL FOREIGN</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#8855ff;">${totalForeign?.latest ? '$' + (totalForeign.latest/1000).toFixed(1) + 'T' : '—'}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:2px;">All Foreign Holdings</div>
-        <div style="font-size:11px;color:${totalForeign?.trend ? trendColor(totalForeign.trend) : 'var(--text3)'};margin-top:4px;">${totalForeign?.trend ? trendArrow(totalForeign.trend) + ' ' + totalForeign.trend : '—'}</div>
-      </div>
-    </div>
-
-    <!-- JAPAN vs CHINA CHART -->
-    <div class="panel" style="margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div>
-          <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#ffcc00;">⬡ JAPAN vs CHINA — US TREASURY HOLDINGS ($B)</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:2px;">Monthly TIC data · Source: US Treasury via FRED</div>
+    ${(() => {
+      const T = (typeof TIC_HOLDINGS !== 'undefined') ? TIC_HOLDINGS : null;
+      const last = k => T && T.series[k] && T.series[k].length ? T.series[k][T.series[k].length-1] : null;
+      const prev = k => T && T.series[k] && T.series[k].length > 12 ? T.series[k][T.series[k].length-13] : null;
+      const fmtT = v => v == null ? '—' : '$' + (v/1000).toFixed(2) + 'T';
+      const asOf = T ? new Date(T.latest + '-15T12:00:00').toLocaleDateString('en-US', {month:'long', year:'numeric'}) : '—';
+      const card = (label, k, color, sub) => { const l = last(k), p = prev(k); const yoy = l && p ? l.v - p.v : null;
+        return `<div class="panel" style="border-top:2px solid ${color};text-align:center;">
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">${label}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:${color};">${fmtT(l?.v)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub}</div>
+          <div style="font-size:11px;color:${yoy == null ? 'var(--text3)' : yoy >= 0 ? '#00ff88' : '#ff3355'};margin-top:4px;">${yoy == null ? '—' : (yoy >= 0 ? '+' : '') + yoy.toFixed(1) + 'B vs a year earlier'}</div>
+        </div>`; };
+      const jp = last('japan'), cn = last('china'), gap = jp && cn ? jp.v - cn.v : null;
+      const chart = (() => {
+        if (!T) return '';
+        const J = T.series.japan.slice(-120), C = T.series.china.slice(-120);
+        const byD = Object.fromEntries(C.map(x => [x.d, x.v]));
+        const dates = J.map(x => x.d), jv = J.map(x => x.v), cv = dates.map(d => byD[d] ?? null);
+        const all = [...jv, ...cv.filter(v => v != null)]; const minV = Math.min(...all) * 0.95, maxV = Math.max(...all) * 1.02;
+        const W = 800, H = 180, PL = 60, PR = 20, PT = 20, PB = 30, iW = W-PL-PR, iH = H-PT-PB;
+        const x = i => PL + (i/(dates.length-1))*iW, y = v => PT + iH - ((v-minV)/(maxV-minV))*iH;
+        const line = (vals, color) => `<polyline points="${vals.map((v,i)=>v==null?null:x(i).toFixed(1)+','+y(v).toFixed(1)).filter(Boolean).join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>`;
+        const ticks = [0, Math.floor(dates.length/2), dates.length-1].map(i => `<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">${dates[i]}</text>`).join('');
+        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">${line(jv,'#00ccff')}${line(cv,'#ff3355')}${ticks}
+          <text x="${PL}" y="${PT-6}" font-size="9" fill="var(--text3)" font-family="Share Tech Mono,monospace">$${(minV).toFixed(0)}B – $${(maxV).toFixed(0)}B</text></svg>`;
+      })();
+      return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+        ${card('JAPAN HOLDINGS', 'japan', '#00ccff', 'largest foreign holder')}
+        ${card('CHINA HOLDINGS', 'china', '#ff3355', 'mainland China')}
+        <div class="panel" style="border-top:2px solid #ffcc00;text-align:center;">
+          <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);margin-bottom:4px;">JAPAN MINUS CHINA</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:24px;color:#ffcc00;">${gap == null ? '—' : '$' + Math.abs(gap).toFixed(0) + 'B'}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">${gap == null ? '' : gap >= 0 ? 'Japan holds more' : 'China holds more'}</div>
         </div>
-        <div style="display:flex;gap:16px;font-size:11px;font-family:'Share Tech Mono',monospace;">
-          <span style="color:#00ccff;">━━ Japan</span>
-          <span style="color:#ff3355;">━━ China</span>
-        </div>
+        ${card('ALL FOREIGN', 'total', '#8855ff', 'grand total')}
       </div>
-      ${buildComparisonChart()}
-      <div style="margin-top:12px;font-size:12px;color:var(--text2);line-height:1.7;padding:10px;background:rgba(255,204,0,0.04);border-radius:3px;border-left:3px solid #ffcc00;">
-        <strong style="color:#ffcc00;">What to watch:</strong> China has been reducing UST holdings since 2013 peak (~$1.3T). Japan has held steady and is now the clear #1. 
-        A sustained divergence — Japan growing, China shrinking — is the financial signature of the US-China decoupling. 
-        Every $100B China sells that Japan (or another ally) absorbs is a transfer of leverage.
-      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#ffcc00;margin-bottom:8px;">⬡ JAPAN vs CHINA — US TREASURY HOLDINGS ($B) · <span style="color:#00ccff;">━ Japan</span> <span style="color:#ff3355;">━ China</span></div>
+        ${chart || '<div class="no-data">TIC holdings not loaded</div>'}
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;">U.S. Treasury TIC, Major Foreign Holders · monthly, holdings at end of month · latest ${asOf} · published with about a two-month lag</div>
+      </div>`;
+    })()}
     </div>
 
     ${secHdr('🗾', 'JAPAN ECONOMY — THE SLEEPING GIANT AWAKENS', 'Live FRED data · BOJ policy · Inflation era begins after 30 years', '#00ccff')}
@@ -6155,8 +6100,6 @@ function _renderSovereignHTML(data) {
         'Japan unemployment near 50-year lows. Full employment + rising wages = domestic consumption story finally works. Critical for non-export GDP growth.')}
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
-      ${dataCard('JAPAN CPI (YoY)', jpnCpi?.latest ? fmt1(jpnCpi.latest) + '%' : '—', 'YoY', jpnCpi?.change_yoy, 'pp YoY chg', jpnCpi?.history, '#ff8800',
-        'Japan CPI above 2% for the first time since the 1990s. This is the end of deflation. For 30 years Japanese consumers hoarded cash because prices fell — that behavior is reversing.')}
       ${dataCard('JAPAN REAL GDP GROWTH', jpnGdp?.latest ? fmt1(jpnGdp.latest) + '%' : '—', 'QoQ Ann.', jpnGdp?.change, 'pp vs prev Q', jpnGdp?.history, '#8855ff',
         'Japan GDP oscillates between contraction and modest growth. The AI/tech buildout thesis says this breaks structurally higher as capex floods in and robotics drives productivity.')}
       <div class="panel" style="border-top:2px solid #ffcc00;">
@@ -6264,7 +6207,7 @@ function _renderSovereignHTML(data) {
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;">
       ${dataCard('TRADE-WEIGHTED DOLLAR INDEX', S.DTWEXBGS?.latest ? fmt1(S.DTWEXBGS.latest) : '—', 'Index', S.DTWEXBGS?.change, 'vs prev', S.DTWEXBGS?.history, '#00ccff', 'Broadest measure of dollar strength vs all trading partners. Rising dollar = tighter global financial conditions, EM stress, commodity headwinds.')}
-      ${dataCard('GOLD (LONDON FIX)', S.GOLDAMGBD228NLBM?.latest ? '$' + S.GOLDAMGBD228NLBM.latest.toLocaleString('en-US',{maximumFractionDigits:0}) : '—', '$/oz', S.GOLDAMGBD228NLBM?.change, 'vs prev', S.GOLDAMGBD228NLBM?.history, '#ffcc00', 'Gold is the anti-dollar. Central banks (especially China, Russia, India) have been buying aggressively since 2022 sanctions showed dollar reserves can be frozen. De-dollarization in action.')}
+      ${dataCard('GOLD (FUTURES, GC=F)', lq['GC=F']?.price ? '$' + lq['GC=F'].price.toLocaleString('en-US',{maximumFractionDigits:0}) : '—', '', lq['GC=F']?.change, '$ vs prev', null, '#ffcc00', 'Front-month COMEX gold from the quote tape; FRED withdrew its London fix series.')}
     </div>
 
     <!-- AI Analysis button -->
@@ -6282,7 +6225,7 @@ function _renderSovereignHTML(data) {
     </div>
 
     <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);text-align:right;padding:8px 0;">
-      Data: FRED (US Treasury TIC, BOJ, OECD) · Latest observation ${data.as_of ? new Date(data.as_of+'T12:00:00').toLocaleDateString('en-US', {month:'long',day:'numeric',year:'numeric'}) : '—'} · ${data.seriesCount || Object.keys(S).length} of 64 series loaded <button onclick="renderSovereign(true)" style="margin-left:12px;background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.25);color:#ffcc00;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:Orbitron,monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH DATA</button>
+      Data: FRED (US Treasury TIC, BOJ, OECD) · Latest observation ${data.as_of ? new Date(data.as_of+'T12:00:00').toLocaleDateString('en-US', {month:'long',day:'numeric',year:'numeric'}) : '—'} · ${data.seriesCount || Object.keys(S).length} of 56 series loaded <button onclick="renderSovereign(true)" style="margin-left:12px;background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.25);color:#ffcc00;padding:3px 10px;border-radius:3px;cursor:pointer;font-family:Orbitron,monospace;font-size:8px;letter-spacing:1px;">↻ REFRESH DATA</button>
     </div>
   </div>`;
   } catch(sovereignErr) {
@@ -6305,15 +6248,12 @@ async function generateSovereignAI() {
   const lq = window._macroMD?.quotes || {};
   const btc = lq['BTC-USD'];
   const jpyusd = S.DEXJPUS;
-  const japanUST = S.FDHBJA;
-  const chinaUST = S.FDHBCHI;
   const dxy = S.DTWEXBGS;
   const jpn10y = S.IRLTLT01JPM156N;
 
   const context = `Current Sovereign Chess data:
-- Japan US Treasury holdings: $${japanUST?.latest ? (japanUST.latest/1000).toFixed(2) + 'T' : 'N/A'} (trend: ${japanUST?.trend || 'N/A'})
-- China US Treasury holdings: $${chinaUST?.latest ? (chinaUST.latest/1000).toFixed(2) + 'T' : 'N/A'} (trend: ${chinaUST?.trend || 'N/A'})
-- Japan vs China gap: $${japanUST?.latest && chinaUST?.latest ? ((japanUST.latest - chinaUST.latest)/1000).toFixed(2) + 'T Japan lead' : 'N/A'}
+- Japan US Treasury holdings: ${(typeof TIC_HOLDINGS!=='undefined' && TIC_HOLDINGS.series.japan.length) ? '$'+(TIC_HOLDINGS.series.japan.slice(-1)[0].v/1000).toFixed(2)+'T as of '+TIC_HOLDINGS.latest : 'N/A'}
+- China US Treasury holdings: ${(typeof TIC_HOLDINGS!=='undefined' && TIC_HOLDINGS.series.china.length) ? '$'+(TIC_HOLDINGS.series.china.slice(-1)[0].v/1000).toFixed(2)+'T as of '+TIC_HOLDINGS.latest : 'N/A'}
 - USD/JPY: ${jpyusd?.latest?.toFixed(2) || 'N/A'} (trend: ${jpyusd?.trend || 'N/A'})
 - Japan 10Y yield: ${jpn10y?.latest?.toFixed(2) || 'N/A'}% (trend: ${jpn10y?.trend || 'N/A'})
 - Trade-weighted dollar: ${dxy?.latest?.toFixed(1) || 'N/A'} (trend: ${dxy?.trend || 'N/A'})

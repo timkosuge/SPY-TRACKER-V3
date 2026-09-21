@@ -53,6 +53,10 @@ jobs:
         if: steps.clock.outputs.close == 'true'
         run: python generate_breadth.py
 
+      - name: Fetch Treasury TIC holdings
+        if: steps.clock.outputs.close == 'true'
+        run: python generate_tic_holdings.py
+
       - name: Run SPY tracker
         if: steps.clock.outputs.run == 'true'
         env:
@@ -130,7 +134,7 @@ jobs:
                      session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
                      large_gap_stats.js release_data.js edge_stats_data.js \
                      data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv \
-                     breadth_data.json
+                     breadth_data.json tic_holdings.js
           if git diff --staged --quiet; then
             echo "No payload changes"
             exit 0

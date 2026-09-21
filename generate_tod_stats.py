@@ -75,6 +75,7 @@ def main():
 
     hod_mins_list = []
     lod_mins_list = []
+    sessions = []
     days_ok = 0
 
     for date in dates:
@@ -107,9 +108,11 @@ def main():
         hod_mins_list.append(ts_to_mins(hod_ts))
         lod_mins_list.append(ts_to_mins(lod_ts))
 
-        if hbi < lbi:   hod_before_lod += 1
-        elif hbi > lbi: hod_after_lod  += 1
-        else:           hod_same_lod   += 1
+        hm, lm = ts_to_mins(hod_ts), ts_to_mins(lod_ts)
+        if hm < lm:   hod_before_lod += 1
+        elif hm > lm: hod_after_lod  += 1
+        else:         hod_same_lod   += 1
+        sessions.append({"date": date, "hod_min": hm, "lod_min": lm, "hod_bucket": hbi, "lod_bucket": lbi})
 
         if hbi == 0: hod_first30 += 1
         if lbi == 0: lod_first30 += 1
@@ -132,6 +135,7 @@ def main():
     output = {
         "days": days_ok,
         "date_range": {"start": dates[0], "end": dates[-1]},
+        "sessions": sessions,
         "buckets": BUCKET_LABELS,
         "hod": {
             "by_bucket": [

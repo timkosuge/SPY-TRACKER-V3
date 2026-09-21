@@ -68,9 +68,7 @@
   function computeRev30(data) {
     let up_rev=0,up_hold=0,dn_rev=0,dn_hold=0;
     data.forEach(d=>{
-      let dir=d.or_break_dir;
-      if(!dir&&d.or_high!=null&&d.or_low!=null&&d.open_price!=null)
-        dir=(d.or_high-d.open_price)>(d.open_price-d.or_low)?'UP':'DOWN';
+      const dir=d.or_break_dir;
       if(!dir||d.close_price==null||d.open_price==null) return;
       const dayUp=d.close_price>d.open_price;
       if(dir==='UP'){dayUp?up_hold++:up_rev++;}else{dayUp?dn_rev++:dn_hold++;}

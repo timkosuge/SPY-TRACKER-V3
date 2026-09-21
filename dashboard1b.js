@@ -2431,7 +2431,7 @@ function renderIntradayVolProfile() {
     fbtn(d==='all'?'ALL DAYS':d.toUpperCase(), _ivpDow===d, `_ivpSetDow('${d}')`)
   ).join(' ');
 
-  const nSessions = profile[0]?.n ? Math.round(profile[0].n / 5) : '?';
+  const nSessions = profile.length ? Math.max(...profile.map(b => b.n || 0)) : '?';
 
   // Find top 3 high/low volume slots
   const sorted = [...profile].sort((a,b) => b.pct - a.pct);
@@ -2474,7 +2474,7 @@ function renderIntradayVolProfile() {
         <div style="text-align:right;font-size:10px;color:var(--text3);">
           <div>${profile.length} buckets · ~${nSessions} sessions</div>
           <div style="margin-top:2px;">5-min avg volume · Central Time</div>
-          <div style="margin-top:2px;">bars = % of mid-session vol · top 10% trimmed · open/close 15min excluded</div>
+          <div style="margin-top:2px;">bars = % of mid-session vol · trimmed mean (top 10% of sessions in each slot dropped) · open/close 15min excluded</div>
         </div>
       </div>
 
@@ -2540,9 +2540,10 @@ function renderIntradayVolStats() {
   // ── SECTION 1: Volume Quintile Summary Cards ──────────────────────────────
   const quintileCards = qs.map(q => {
     const phData = S.power_hour_by_q[q.label] || {up:0,down:0,none:0};
-    const phTotal = phData.up + phData.down + phData.none;
-    const phUpPct = phTotal ? Math.round(phData.up/phTotal*100) : 0;
-    const phDnPct = phTotal ? Math.round(phData.down/phTotal*100) : 0;
+    const phKnown = phData.up + phData.down;
+    const phUpPct = phKnown ? Math.round(phData.up/phKnown*100) : null;
+    const phDnPct = phKnown ? Math.round(phData.down/phKnown*100) : null;
+    const phNote = phKnown ? `n=${phKnown}${phData.none?` · ${phData.none} no value`:''}` : `${phData.none||0} days, no power-hour value`;
     return `<div style="background:var(--bg2);border:1px solid var(--border);border-top:3px solid ${q.color};border-radius:4px;padding:12px;">
       <div style="font-family:'Orbitron',monospace;font-size:9px;color:${q.color};letter-spacing:1px;margin-bottom:6px;">${q.label.toUpperCase()} VOL</div>
       <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);margin-bottom:8px;">${fmtM(q.vol_lo)}–${fmtM(q.vol_hi)} · ${q.n} days</div>
@@ -2561,7 +2562,7 @@ function renderIntradayVolStats() {
       <div style="display:flex;justify-content:space-between;">
         <span style="font-size:10px;color:var(--text3);">Power hour</span>
         <span style="font-family:'Share Tech Mono',monospace;font-size:10px;">
-          <span style="color:#00ff88;">▲${phUpPct}%</span> <span style="color:#ff3355;">▼${phDnPct}%</span>
+          ${phUpPct!=null?`<span style="color:#00ff88;">▲${phUpPct}%</span> <span style="color:#ff3355;">▼${phDnPct}%</span>`:'—'} <span style="color:var(--text3);font-size:9px;">${phNote}</span>
         </span>
       </div>
     </div>`;
@@ -2632,7 +2633,7 @@ function renderIntradayVolStats() {
     return `<div style="margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
         <span style="font-family:'Orbitron',monospace;font-size:9px;color:${g.c};">${g.lbl}</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${g.c};">${fmtM(d.avg)}M avg <span style="font-size:9px;color:var(--text3);">(${d.n} days)</span></span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${g.c};">${fmtM(d.avg)} avg <span style="font-size:9px;color:var(--text3);">(${d.n} days)</span></span>
       </div>
       <div style="height:10px;background:var(--bg3);border-radius:3px;overflow:hidden;">
         <div style="width:${w}%;height:100%;background:${g.c};opacity:0.7;border-radius:3px;"></div>
@@ -3606,29 +3607,23 @@ function renderTimeOfDay() {
   const bucketLabels = T.buckets;
   const BUCKET_COLORS = ['#ff8800','#ffcc00','#00ff88','#00ccff','#8855ff','#00ccff','#ffcc00','#ff5500'];
 
-  let yearScale = 1.0;
-  if (_todLookback === 'year') {
-    const allN  = ALL.length;
-    const yearN = ALL.filter(s => s.date && s.date.startsWith(String(curYear))).length;
-    yearScale   = allN > 0 ? yearN / allN : 1;
-  }
-
-  function todBuckets(byDow) {
-    let counts;
-    if (_todDow === 'all') {
-      counts = new Array(8).fill(0);
-      byDow.forEach(row => row.counts.forEach((c,i) => { counts[i] += c; }));
-    } else {
-      const idx = DOW_IDX[_todDow];
-      counts = idx !== undefined ? [...(byDow[idx]?.counts || new Array(8).fill(0))] : new Array(8).fill(0);
-    }
-    if (_todLookback === 'year' && yearScale < 1) counts = counts.map(c => Math.round(c * yearScale));
-    const total = counts.reduce((s,c)=>s+c,0) || 1;
-    return bucketLabels.map((label,i) => ({ label, count:counts[i], pct:counts[i]/total*100 }));
-  }
-
-  const hodBuckets = todBuckets(T.hod.by_dow);
-  const lodBuckets = todBuckets(T.lod.by_dow);
+  const todAll = T.sessions || [];
+  const todSel = filterSessions(todAll);
+  const todN = todSel.length;
+  const countBy = (key) => { const counts = new Array(8).fill(0); todSel.forEach(s => { if (s[key] != null) counts[s[key]] += 1; }); return counts; };
+  const toBuckets = (counts) => { const total = counts.reduce((a,c)=>a+c,0) || 1; return bucketLabels.map((label,i) => ({ label, count:counts[i], pct:counts[i]/total*100 })); };
+  const hodBuckets = toBuckets(countBy('hod_bucket'));
+  const lodBuckets = toBuckets(countBy('lod_bucket'));
+  const byDowOf = (key) => ['Mon','Tue','Wed','Thu','Fri'].map((dow, di) => {
+    const rows = todSel.filter(s => sessionDow(s.date) === di + 1);
+    const counts = new Array(8).fill(0); rows.forEach(s => { if (s[key] != null) counts[s[key]] += 1; });
+    const total = counts.reduce((a,c)=>a+c,0) || 1;
+    return { dow, counts, pcts: counts.map(c => c/total*100) };
+  });
+  const hodByDow = byDowOf('hod_bucket'), lodByDow = byDowOf('lod_bucket');
+  const seqBefore = todSel.filter(s => s.hod_min < s.lod_min).length, seqAfter = todSel.filter(s => s.hod_min > s.lod_min).length, seqSame = todN - seqBefore - seqAfter;
+  const avgClock = (key) => { if (!todN) return '—'; const m = Math.round(todSel.reduce((a,s)=>a+s[key],0)/todN) - 60; return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`; };
+  const todRange = todSel.length ? `${todSel[0].date} → ${todSel[todSel.length-1].date}` : '—';
 
   // ── Shared helpers ─────────────────────────────────────────────────────────
   const fbtn = (lbl, active, fn) =>
@@ -3688,14 +3683,14 @@ function renderTimeOfDay() {
 
   const hodTop = hodBuckets.reduce((a,b)=>b.pct>a.pct?b:a);
   const lodTop = lodBuckets.reduce((a,b)=>b.pct>a.pct?b:a);
-  const seqHodFirst = T.sequence.hod_before_lod?.pct ?? 0;
-  const seqLodFirst = T.sequence.hod_after_lod?.pct  ?? 0;
+  const seqHodFirst = todN ? seqBefore/todN*100 : 0;
+  const seqLodFirst = todN ? seqAfter/todN*100 : 0;
 
   const panel1Body = explain(`Each bar shows what percentage of sessions had their High of Day (or Low of Day) set during that time window.
     For example, if the <strong>8:30–9:00</strong> bar shows 22%, it means the session's absolute high (or low) was printed in the first 30 minutes on 22% of all days.
     <br><br>This tells you <em>when to pay attention</em>: if the HOD is most likely to be set in the first 30 minutes or in the close window, you know the morning open and the power hour are the two highest-risk/highest-opportunity windows.
     The mid-day buckets (10:30–2:00) are where extremes are set least often — that's the "grind" period with the lowest edge.
-    <br><br>Data: ${n > 0 ? n : T.days} sessions · ${T.date_range.start} → ${T.date_range.end} · 1-min bars · Central Time`) +
+    <br><br>Data: ${todN} sessions · ${todRange} · 1-min bars · Central Time`) +
     `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div>
         <div style="font-family:'Orbitron',monospace;font-size:9px;color:#00ff88;margin-bottom:10px;letter-spacing:1px;">▲ HIGH OF DAY — WHEN IS IT SET?</div>
@@ -3707,15 +3702,15 @@ function renderTimeOfDay() {
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px;">
-      ${statCard('AVG HOD TIME', T.hod.avg_time+' CT', '#00ff88', 'Average time HOD is set')}
-      ${statCard('AVG LOD TIME', T.lod.avg_time+' CT', '#ff3355', 'Average time LOD is set')}
+      ${statCard('AVG HOD TIME', avgClock('hod_min')+' CT', '#00ff88', 'Average time HOD is set')}
+      ${statCard('AVG LOD TIME', avgClock('lod_min')+' CT', '#ff3355', 'Average time LOD is set')}
       ${statCard('HOD BEFORE LOD', seqHodFirst.toFixed(0)+'%', '#ffcc00', 'HOD prints first then LOD')}
       ${statCard('LOD BEFORE HOD', seqLodFirst.toFixed(0)+'%', '#00ccff', 'LOD prints first then HOD')}
     </div>`;
 
   // ── PANEL 2: HOD/LOD heatmap by DOW ──────────────────────────────────────
   const dowNames = ['Mon','Tue','Wed','Thu','Fri'];
-  const hodHeatRows = T.hod.by_dow.map((hd,i) => {
+  const hodHeatRows = hodByDow.map((hd,i) => {
     const maxP = Math.max(...hd.pcts);
     const cells = hd.pcts.map((p,j) => {
       const alpha = maxP > 0 ? Math.round((p/maxP)*180) : 0;
@@ -3733,7 +3728,7 @@ function renderTimeOfDay() {
     </tr>`;
   }).join('');
 
-  const lodHeatRows = T.lod.by_dow.map((ld,i) => {
+  const lodHeatRows = lodByDow.map((ld,i) => {
     const maxP = Math.max(...ld.pcts);
     const cells = ld.pcts.map((p,j) => {
       const alpha = maxP > 0 ? Math.round((p/maxP)*180) : 0;
@@ -3914,7 +3909,7 @@ function renderTimeOfDay() {
   const panel5Body = explain(`These statistics describe the typical <strong>size</strong> of moves in different phases of the session, measured across your filtered sessions.
     <strong>Opening Range (OR) range</strong> is the percent spread from OR low to OR high — how wide the first 30 minutes were.
     <strong>Day range</strong> is the full session high-to-low spread as a percent of price.
-    <strong>Lunch range</strong> is the range from 12:00–1:00pm CT — the quietest mid-day window.
+    <strong>Lunch range</strong> is the high-to-low range from 10:30 AM to 12:00 PM CT (11:30–1:00 ET), as a percent of the open.
     <strong>Power hour range</strong> covers 2:30–3:30pm CT and shows how active the late-day window is.
     <br><br>The ratio of OR range to day range tells you how much of the day's total move was "used up" in the first 30 minutes.
     A high ratio means the open set the tone early and the rest of the day was quieter. A low ratio means the day's real range built throughout the session.`) +
@@ -3924,7 +3919,7 @@ function renderTimeOfDay() {
       ${statCard('DAY RANGE AVG', f2(avg(dayRanges)), '#00ccff', `${dayRanges.length} sessions`)}
       ${statCard('DAY RANGE MED', f2(med(dayRanges)), '#00ccff', 'median')}
       ${statCard('LUNCH RANGE AVG', f2(avg(lunchRanges)), '#8855ff', `${lunchRanges.length} sessions`)}
-      ${statCard('PH RANGE AVG', f2(avg(phRanges)), '#ff8800', `${phRanges.length} sessions`)}
+      ${statCard('PH NET MOVE AVG', f2(avg(phRanges)), '#ff8800', `${phRanges.length} sessions · signed open-to-close of 2:00–3:00 CT`)}
       ${statCard('PH UP DAYS', phDirTotal>0?(phUpDays/phDirTotal*100).toFixed(0)+'%':'—', '#00ff88', `${phUpDays} of ${phDirTotal}`)}
       ${statCard('PH DOWN DAYS', phDirTotal>0?(phDnDays/phDirTotal*100).toFixed(0)+'%':'—', '#ff3355', `${phDnDays} of ${phDirTotal}`)}
     </div>
@@ -3932,7 +3927,7 @@ function renderTimeOfDay() {
       <strong style="color:var(--cyan);">OR-to-Day Ratio:</strong>
       ${avg(orRanges)!=null && avg(dayRanges)!=null ?
         `The average OR range is <strong style="color:#ffcc00;">${f2(avg(orRanges))}</strong> and the average day range is <strong style="color:#00ccff;">${f2(avg(dayRanges))}</strong>.
-        That means the first 30 minutes accounts for roughly <strong style="color:#ffcc00;">${(avg(orRanges)/avg(dayRanges)*100).toFixed(0)}%</strong> of the typical day's total range.
+        Both are percentages of the day's open, so the first 30 minutes accounts for roughly <strong style="color:#ffcc00;">${(avg(orRanges)/avg(dayRanges)*100).toFixed(0)}%</strong> of the typical day's total range.
         ${avg(orRanges)/avg(dayRanges) > 0.5 ?
           'The open is doing most of the work — the market tends to find its range early.' :
           'The day builds its range over time — the open is just the starting point.'}` :
@@ -4002,8 +3997,8 @@ function renderTimeOfDay() {
         </div>
       </div>
       <div style="font-size:10px;color:var(--text3);text-align:right;line-height:1.7;">
-        <div>${n} sessions in filter · ${T.days} total available</div>
-        <div>${T.date_range.start} → ${T.date_range.end}</div>
+        <div>${todN} sessions in the selected window · ${todAll.length} total available</div>
+        <div>${todRange}</div>
         <div>1-min intraday bars · Central Time</div>
       </div>
     </div>
@@ -4176,7 +4171,7 @@ function renderSessionVolStats() {
   const maxAvg = Math.max(...avgs);
   const minAvg = Math.min(...avgs);
   const sorted = [...profile].sort((a,b)=>b.avg-a.avg);
-  const nSessions = profile[0]?.n ? Math.round(profile[0].n / 5) : '?';
+  const nSessions = profile.length ? Math.max(...profile.map(b => b.n || 0)) : '?';
   const openBar = profile[0];
   const openCT  = etToCT(openBar.ts);
 

@@ -66,7 +66,7 @@ const SERIES = {
   CSUSHPISA:      { name: 'Case-Shiller Home Price Index',  cat: 'growth',   unit: 'Index', freq: 'monthly', good_direction: 'stable' },
 
   // MONETARY — additional
-  WSHOMCG:        { name: 'Fed MBS Holdings',               cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
+  WSHOMCB:        { name: 'Fed MBS Holdings',               cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
   TREAST:      { name: 'Fed Treasury Holdings',          cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
   BOGMBASE:       { name: 'Monetary Base',                  cat: 'liquidity', unit: '$B', freq: 'weekly',  good_direction: 'stable' },
   TOTRESNS:       { name: 'Bank Reserves at Fed',           cat: 'liquidity', unit: '$B', freq: 'monthly', good_direction: 'stable' },
@@ -78,28 +78,19 @@ const SERIES = {
   TOTALSL:        { name: 'Total Consumer Credit',          cat: 'consumer', unit: '$B',  freq: 'monthly', good_direction: 'stable' },
 
   // SOVEREIGN DEBT — US TREASURY FOREIGN HOLDINGS (TIC Data, monthly, $B)
-  FDHBJA:    { name: 'Japan US Treasury Holdings',  cat: 'sovereign', unit: '$B', freq: 'monthly', good_direction: 'up' },
-  FDHBCHI:   { name: 'China US Treasury Holdings',  cat: 'sovereign', unit: '$B', freq: 'monthly', good_direction: 'stable' },
   FDHBFIN:   { name: 'Total Foreign UST Holdings',  cat: 'sovereign', unit: '$B', freq: 'monthly', good_direction: 'up' },
 
   // JAPAN ECONOMY
   DEXJPUS:           { name: 'USD/JPY Exchange Rate',    cat: 'japan', unit: '¥/$',  freq: 'daily',   good_direction: 'stable' },
   IRLTLT01JPM156N:   { name: 'Japan 10Y Bond Yield',     cat: 'japan', unit: '%',    freq: 'monthly', good_direction: 'stable' },
-  JPNURQPDS:         { name: 'Japan Unemployment Rate',  cat: 'japan', unit: '%',    freq: 'quarterly', good_direction: 'down' },
-  JPNCPIALLMINMEI:   { name: 'Japan CPI',                cat: 'japan', unit: 'Index',freq: 'monthly', good_direction: 'stable' },
+  LRUNTTTTJPM156S:   { name: 'Japan Unemployment Rate',  cat: 'japan', unit: '%',    freq: 'monthly', good_direction: 'down' },
   JPNRGDPEXP:        { name: 'Japan Real GDP',            cat: 'japan', unit: '$B',   freq: 'quarterly', good_direction: 'up' },
 
   // DOLLAR & GLOBAL
   DTWEXBGS:  { name: 'Trade-Weighted Dollar (Broad)', cat: 'dollar', unit: 'Index', freq: 'weekly',  good_direction: 'stable' },
   DEXCHUS:   { name: 'USD/CNY Exchange Rate',         cat: 'dollar', unit: 'CNY/$', freq: 'daily',   good_direction: 'stable' },
   DEXUSEU:   { name: 'USD/EUR Exchange Rate',         cat: 'dollar', unit: '$/EUR', freq: 'daily',   good_direction: 'stable' },
-  GOLDAMGBD228NLBM: { name: 'Gold Price (London Fix)', cat: 'dollar', unit: '$/oz', freq: 'daily',   good_direction: 'up' },
 
-  // FISCAL & DEBT
-  GFDEBTN:          { name: 'Federal Debt Outstanding',      cat: 'fiscal', unit: '$B',  freq: 'quarterly', good_direction: 'stable' },
-  GFDEGDQ188S:      { name: 'Federal Debt to GDP',           cat: 'fiscal', unit: '%',   freq: 'quarterly', good_direction: 'down' },
-  FYFSD:            { name: 'Federal Budget Surplus/Deficit', cat: 'fiscal', unit: '$B',  freq: 'annual',    good_direction: 'up' },
-  INTGSTUSESM193N:  { name: 'Interest Payments as % GDP',    cat: 'fiscal', unit: '%',   freq: 'monthly',   good_direction: 'down' },
 
   // CONSUMER
   UMCSENT:   { name: 'Consumer Sentiment',     cat: 'consumer', unit: 'Index',     freq: 'monthly', good_direction: 'up' },

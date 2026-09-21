@@ -1862,7 +1862,7 @@ def export_intraday_vol_stats(conn):
         fills = [d for d in gaps if sessions[d].get('gap_filled') == 1]
         hod_dist = Counter(ct_hour(day_hod_ts[d]) for d in dq if d in day_hod_ts)
         lod_dist = Counter(ct_hour(day_lod_ts[d]) for d in dq if d in day_lod_ts)
-        thr_lo = thresholds[qi-1] if qi > 0 else 0
+        thr_lo = thresholds[qi-1] if qi > 0 else min(daily_vol.values())
         thr_hi = thresholds[qi] if qi < 4 else max(daily_vol.values())
         q_stats.append({
             'label': labels[qi], 'color': colors[qi], 'n': len(dq),
@@ -1976,7 +1976,9 @@ def export_intraday_vol_profile(conn):
             result.append({
                 'ts': ts,
                 'avg': round(sum(raw_t) / len(raw_t), 0),
+                'mean': round(sum(raw_s) / n, 0),
                 'pct': round(sum(pct_t) / len(pct_t), 3),
+                'pct_mean': round(sum(pct_s) / len(pct_s), 3) if pct_s else None,
                 'n': n,
             })
         return result
