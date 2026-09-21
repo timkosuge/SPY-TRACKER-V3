@@ -257,7 +257,8 @@ function phRenderFiltered(sd, opts) {
   _renderGapOHLCBlocks(sd);
   // ── Raw table ──
   // Raw table — price history
-  $('priceHistBody').innerHTML=tableRows.map(day=>{
+  window._phTableRows = tableRows; window._phTableShown = Math.min(tableRows.length, 500);
+  const phRow = day=>{
     const m=day.measurements||{};
     const oc=m.oc_pts??m.open_to_close, ocp=m.oc_pct??m.pct_open_to_close;
     const rng=m.range_pts??m.day_range, rngp=m.range_pct??m.pct_day_range;
@@ -275,7 +276,10 @@ function phRenderFiltered(sd, opts) {
     <td class="${clr(ol)}">${sign(ol)}${fmt(ol,2)}</td>
     <td class="${clr(hc)}">${sign(hc)}${fmt(hc,2)}</td>
     <td class="${clr(lc)}">${sign(lc)}${fmt(lc,2)}</td>
-  </tr>`;}).join('');
+  </tr>`;};
+  window._phRowHtml = phRow;
+  $('priceHistBody').innerHTML=tableRows.slice(0, window._phTableShown).map(phRow).join('');
+  if (tableRows.length > window._phTableShown) $('priceHistBody').insertAdjacentHTML('beforeend', `<tr><td colspan="14" style="text-align:center;padding:8px;"><button onclick="phShowMore()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 12px;background:var(--bg3);border:1px solid var(--border);color:var(--cyan);cursor:pointer;">SHOW 500 MORE (${tableRows.length - window._phTableShown} remaining)</button></td></tr>`);
 }
 
 
@@ -3907,14 +3911,20 @@ async function fetchWeekOpen() {
 }
 
 // Schedules the next live-quote refresh at the appropriate interval
+function liveRefreshDelay() {
+  const st = nyseSession(new Date()).state;
+  if (st === 'open') return 15000;
+  if (st === 'pre' || st === 'after') return 60000;
+  return 300000;
+}
 function scheduleLiveRefresh() {
   if (_liveInterval) clearTimeout(_liveInterval);
-  const delay = isMarketOpen() ? 15000 : 60000;
   _liveInterval = setTimeout(async () => {
-    await refreshLiveData();
-    scheduleLiveRefresh(); // reschedule after each cycle
-  }, delay);
+    if (document.visibilityState === 'visible') await refreshLiveData();
+    scheduleLiveRefresh();
+  }, liveRefreshDelay());
 }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && _md) { refreshLiveData(); scheduleLiveRefresh(); } });
 
 // Lightweight WEM price update — runs every tick without rebuilding heavy SVG charts
 function updateWEMPrice(price) {
@@ -3985,10 +3995,9 @@ async function refreshLiveData() {
   const staticRefreshInterval = 15 * 60 * 1000;
   if (!_lastStaticRefresh || now - _lastStaticRefresh > staticRefreshInterval) {
     try {
-      const [freshMd, freshSd] = await Promise.all([
-        fetch('market_data.json?t=' + now).then(r => r.json()),
-        fetch('spy_data.json?t=' + now).then(r => r.json()).catch(() => null)
-      ]);
+      const freshMd = await fetch('market_data.json', { cache: 'no-cache' }).then(r => r.json());
+      const advanced = freshMd && freshMd.updated && freshMd.updated !== (_md && _md.updated);
+      const freshSd = advanced ? await fetch('spy_data.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => null) : null;
       if (freshMd) {
         // Preserve any live patches already on _md (quotes, gex, fear_greed)
         freshMd.quotes = _md.quotes;
@@ -4073,19 +4082,17 @@ async function refreshLiveData() {
       }
       _md = merged; window._macroMD = _md;
       
-      // Re-render all live-data-dependent tabs
-      renderHub(merged, _sd);
-      renderDesk(merged, _sd);
+      const active = id => { const el = document.getElementById('panel-' + id); return !!(el && el.classList.contains('active')); };
+      if (active('hub')) { renderHub(merged, _sd); loadFuturesChart(); }
+      if (active('desk')) renderDesk(merged, _sd);
       updateLevelBar(merged.quotes?.['SPY']?.price);
       updateWEMPrice(merged.quotes?.['SPY']?.price);
-      renderOverview(merged);
-      loadFuturesChart();
-
-      renderVolatility(merged);
-      renderBreadth(merged, _sd);
-      renderSentiment(merged);
+      if (active('overview')) renderOverview(merged);
+      if (active('volatility')) renderVolatility(merged);
+      if (active('breadth')) renderBreadth(merged, _sd);
+      if (active('sentiment')) renderSentiment(merged);
       runPatternAlerts(merged, _sd);
-      renderGEX(merged);
+      if (active('gex')) renderGEX(merged);
       
       _lastLiveSuccess = new Date();
       setLiveStatus('live', _lastLiveSuccess.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Chicago' }) + ' CT');
@@ -4123,8 +4130,8 @@ async function loadData(){
   try{
     // Fetch static data + live OHLC + F&G + live GEX all at once
     const [md, sd, spyOHLC, liveFG, liveGEX] = await Promise.all([
-      fetch('market_data.json?t='+Date.now()).then(r=>r.json()),
-      fetch('spy_data.json?t='+Date.now()).then(r=>r.json()).catch(()=>[]),
+      fetch('market_data.json', { cache: 'no-cache' }).then(r=>r.json()),
+      fetch('spy_data.json', { cache: 'no-cache' }).then(r=>r.json()).catch(()=>[]),
       fetchSPYIntraday(),
       fetchLiveFG(),
       fetchLiveGEX()
@@ -4394,7 +4401,7 @@ function _renderGapOHLCBlocks(sd, gapDays) {
 
     // Gap table
     if(gapTableEl) {
-      gapTableEl.innerHTML = [...gaps].map(g=>{
+      const gapRow = g=>{
         const c = g.dir==='UP'?'#00ff88':'#ff3355';
         const fillC = g.filledSameDay?'#00ff88':'#ff3355';
         return `<tr>
@@ -4409,7 +4416,10 @@ function _renderGapOHLCBlocks(sd, gapDays) {
           <td class="dn">$${fmt(g.low,2)}</td>
           <td style="color:${g.close>=g.open?'#00ff88':'#ff3355'};">$${fmt(g.close,2)}</td>
         </tr>`;
-      }).join('');
+      };
+      window._gapRowHtml = gapRow; window._gapTableRows = [...gaps]; window._gapTableShown = Math.min(gaps.length, 500);
+      gapTableEl.innerHTML = window._gapTableRows.slice(0, window._gapTableShown).map(gapRow).join('');
+      if (gaps.length > window._gapTableShown) gapTableEl.insertAdjacentHTML('beforeend', `<tr><td colspan="10" style="text-align:center;padding:8px;"><button onclick="gapShowMore()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 12px;background:var(--bg3);border:1px solid var(--border);color:var(--cyan);cursor:pointer;">SHOW 500 MORE (${gaps.length - window._gapTableShown} remaining)</button></td></tr>`);
     }
   }
 
@@ -6275,3 +6285,22 @@ async function generateSovereignAI() {
     if (el) el.innerHTML = `<span style="color:var(--text3);">Analysis unavailable: ${e.message}</span>`;
   }
 }
+
+window.phShowMore = function() {
+  const rows = window._phTableRows || []; const from = window._phTableShown || 0;
+  window._phTableShown = Math.min(rows.length, from + 500);
+  const body = document.getElementById('priceHistBody'); if (!body) return;
+  const btn = body.lastElementChild; if (btn && btn.querySelector('button')) btn.remove();
+  const chunk = rows.slice(from, window._phTableShown).map(window._phRowHtml).join('');
+  body.insertAdjacentHTML('beforeend', chunk);
+  if (rows.length > window._phTableShown) body.insertAdjacentHTML('beforeend', `<tr><td colspan="14" style="text-align:center;padding:8px;"><button onclick="phShowMore()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 12px;background:var(--bg3);border:1px solid var(--border);color:var(--cyan);cursor:pointer;">SHOW 500 MORE (${rows.length - window._phTableShown} remaining)</button></td></tr>`);
+};
+
+window.gapShowMore = function() {
+  const rows = window._gapTableRows || []; const from = window._gapTableShown || 0;
+  window._gapTableShown = Math.min(rows.length, from + 500);
+  const body = document.getElementById('gapHistBody'); if (!body) return;
+  const btn = body.lastElementChild; if (btn && btn.querySelector('button')) btn.remove();
+  body.insertAdjacentHTML('beforeend', rows.slice(from, window._gapTableShown).map(window._gapRowHtml).join(''));
+  if (rows.length > window._gapTableShown) body.insertAdjacentHTML('beforeend', `<tr><td colspan="10" style="text-align:center;padding:8px;"><button onclick="gapShowMore()" style="font-family:'Orbitron',monospace;font-size:9px;padding:4px 12px;background:var(--bg3);border:1px solid var(--border);color:var(--cyan);cursor:pointer;">SHOW 500 MORE (${rows.length - window._gapTableShown} remaining)</button></td></tr>`);
+};

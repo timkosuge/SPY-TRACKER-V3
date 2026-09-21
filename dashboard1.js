@@ -436,8 +436,10 @@ function renderHub(md,sd){
 async function loadHubNews() {
   const el = $('hubNews');
   if(!el) return;
+  if (window._lastNewsFetch && Date.now() - window._lastNewsFetch < 5 * 60 * 1000) return;
+  window._lastNewsFetch = Date.now();
   try {
-    const r = await fetch('/news?t='+Date.now());
+    const r = await fetch('/news');
     if(!r.ok) throw new Error('News fetch failed');
     const d = await r.json();
     if(!d.items || d.items.length===0) throw new Error('No items');
@@ -641,13 +643,18 @@ function startWeatherScroll(el, text) {
   let pos = 0;
   const speed = 0.4;
   const totalW = el.scrollWidth / 2; // text is doubled so we loop at half
-  if(window._weatherScrollInterval) clearInterval(window._weatherScrollInterval);
+  if(window._weatherScrollFrame) cancelAnimationFrame(window._weatherScrollFrame);
   el.parentElement.style.overflow = 'hidden';
-  window._weatherScrollInterval = setInterval(() => {
-    pos += speed;
-    if(pos >= totalW) pos = 0;
-    el.style.transform = `translateX(-${pos}px)`;
-  }, 16);
+  const step = () => {
+    const hub = document.getElementById('panel-hub');
+    if (document.visibilityState === 'visible' && hub && hub.classList.contains('active')) {
+      pos += speed;
+      if(pos >= totalW) pos = 0;
+      el.style.transform = `translateX(-${pos}px)`;
+    }
+    window._weatherScrollFrame = requestAnimationFrame(step);
+  };
+  window._weatherScrollFrame = requestAnimationFrame(step);
 }
 
 function atrFromRows(sd, n) {
