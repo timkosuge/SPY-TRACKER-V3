@@ -1056,68 +1056,37 @@ def build_wem_stats(weekly_em_list):
     }
 
 
+ECON_CALENDAR_FEED = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+
+
+def econ_events(feed):
+    """US events from the ForexFactory weekly feed, with date and time in Eastern."""
+    events = []
+    for e in feed if isinstance(feed, list) else []:
+        if not isinstance(e, dict) or e.get("country") != "USD" or not e.get("date"):
+            continue
+        try:
+            at = datetime.fromisoformat(e["date"]).astimezone(ET)
+        except ValueError:
+            continue
+        events.append({"date": at.strftime("%Y-%m-%d"), "time": at.strftime("%H:%M"), "event": e.get("title", ""),
+                       "impact": e.get("impact") or "Low", "previous": e.get("previous", ""),
+                       "forecast": e.get("forecast", ""), "actual": e.get("actual", "")})
+    return sorted(events, key=lambda x: (x["date"], x["time"]))
+
+
 def fetch_econ_calendar():
-    """Fetch USD economic calendar with multiple fallbacks."""
-    # Method 1: market-calendar-tool
     try:
-        from market_calendar_tool import scrape_calendar, clean_calendar_data
-        today = datetime.now(CT).date()
-        monday = today - timedelta(days=today.weekday())
-        friday = monday + timedelta(days=4)
-        raw  = scrape_calendar(date_from=monday.strftime("%Y-%m-%d"), date_to=friday.strftime("%Y-%m-%d"))
-        data = clean_calendar_data(raw)
-        df = data.base
-        if df is not None and not df.empty:
-            events = []
-            for _, row in df.iterrows():
-                currency = str(row.get("currency","")).strip().upper()
-                if currency not in ("USD","$","US"): continue
-                impact_raw = str(row.get("impact","")).strip().lower()
-                impact = "High" if "high" in impact_raw else "Medium" if "medium" in impact_raw else "Low"
-                events.append({
-                    "date": str(row.get("date",""))[:10],
-                    "time": str(row.get("time","")),
-                    "event": str(row.get("event","")),
-                    "impact": impact,
-                    "previous": str(row.get("previous","") or ""),
-                    "forecast": str(row.get("forecast","") or ""),
-                    "actual": str(row.get("actual","") or ""),
-                })
-            events.sort(key=lambda x: (x["date"], x["time"]))
-            if events:
-                print(f"  Econ calendar (market-calendar-tool): {len(events)} USD events")
-                return events
-    except ImportError:
-        print("  market-calendar-tool not installed, trying fallback...")
+        r = requests.get(ECON_CALENDAR_FEED, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"}, timeout=15)
+        if r.status_code != 200:
+            print(f"  Econ calendar: the feed answered HTTP {r.status_code}")
+            return []
+        events = econ_events(r.json())
+        print(f"  Econ calendar: {len(events)} US events this week")
+        return events
     except Exception as e:
-        print(f"  market-calendar-tool error: {e}")
-
-    # Method 2: ForexFactory CDN
-    try:
-        headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.forexfactory.com/"}
-        r = requests.get("https://cdn-nfs.faireconomy.media/ff_calendar_thisweek.json", headers=headers, timeout=15)
-        if r.status_code == 200:
-            events = []
-            for e in r.json():
-                if e.get("country") != "USD": continue
-                events.append({
-                    "date": e.get("date","")[:10],
-                    "time": e.get("time",""),
-                    "event": e.get("title",""),
-                    "impact": {"High":"High","Medium":"Medium","Low":"Low"}.get(e.get("impact","Low"),"Low"),
-                    "previous": e.get("previous",""),
-                    "forecast": e.get("forecast",""),
-                    "actual": e.get("actual",""),
-                })
-            events.sort(key=lambda x: (x["date"], x["time"]))
-            if events:
-                print(f"  Econ calendar (FF CDN): {len(events)} USD events")
-                return events
-    except Exception as e:
-        print(f"  FF CDN error: {e}")
-
-    print("  Econ calendar: all sources failed")
-    return []
+        print(f"  Econ calendar: {e}")
+        return []
 
 
 def export_market_data(conn, options_data=None):

@@ -406,33 +406,35 @@ function renderHub(md,sd){
 
   // Calendar
   const cal=md.econ_calendar||[];
+  const calMessage = text => { $('calList').innerHTML = `<div class="cal-empty">${text}</div>`; };
   const renderCal = (events) => {
-    if (!events || !events.length) { $('calList').innerHTML='<div class="cal-empty">No data</div>'; return; }
+    const todayET = nyseSession(new Date()).etDate;
     const impactRank = i => { const s=(i||'').toLowerCase(); return s==='high'?0:s==='medium'||s==='med'?1:2; };
-    const toShow = [...events].filter(e => !e.date || e.date >= todayET).sort((a,b) => {
+    const toShow = (events || []).filter(e => impactRank(e.impact) < 2 && (!e.date || e.date >= todayET)).sort((a,b) => {
       const dateTimeCmp = (a.date+a.time).localeCompare(b.date+b.time);
       if (dateTimeCmp !== 0) return dateTimeCmp;
       return impactRank(a.impact) - impactRank(b.impact);
     });
+    if (!toShow.length) { calMessage('No high- or medium-impact US releases left this week.'); return; }
     const etToCt = t => { if(!t||!t.includes(':'))return t||'—'; const [h,m]=t.split(':').map(Number); if(isNaN(h)||isNaN(m))return t; const hh=(h-1+24)%24; return `${String(hh).padStart(2,'0')}:${String(m).padStart(2,'0')} CT`; };
-    const todayET = nyseSession(new Date()).etDate;
-    const dayN = d => { if(!d)return ''; return ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date(d+'T12:00:00').getDay()]; };
-    const shortD = d => { if(!d)return ''; const [y,mo,dd]=d.split('-'); return `${mo}/${dd}`; };
+    const calDay = d => { if(!d)return ''; const t=new Date(d+'T12:00:00'); return t.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); };
     $('calList').style.maxHeight='320px';
     $('calList').style.overflowY='auto';
     $('calList').innerHTML=toShow.map(ev=>{
       const ic=ev.impact==='High'||ev.impact==='high'?'#ff3355':ev.impact==='Medium'||ev.impact==='med'?'#ffcc00':'#606060';
       return `<div style="display:grid;grid-template-columns:70px 60px 60px 1fr;gap:6px;align-items:center;padding:6px 8px;border-left:3px solid ${ic};background:var(--bg3);border-radius:0 3px 3px 0;margin-bottom:4px;font-size:13px;">
-        <span style="font-family:'Share Tech Mono',monospace;color:var(--cyan);font-size:11px;">${dayN(ev.date)} ${shortD(ev.date)}</span>
+        <span style="font-family:'Share Tech Mono',monospace;color:var(--cyan);font-size:11px;">${calDay(ev.date)}</span>
         <span style="font-family:'Share Tech Mono',monospace;color:var(--text2);font-size:11px;">${etToCt(ev.time)}</span>
         <span style="font-family:'Orbitron',monospace;font-size:8px;color:${ic};padding:2px 4px;background:${ic}22;border-radius:2px;">${String(ev.impact||'LOW').toUpperCase()}</span>
-        <span style="color:var(--text)">${ev.event||ev.title||'—'}${ev.scheduled===false?' <span style="font-size:9px;color:var(--text3);">(estimated date)</span>':''}</span>
+        <span style="color:var(--text)">${ev.event||ev.title||'—'}</span>
       </div>`;
     }).join('');
   };
-  renderCal(cal);
-  // Initial fetch + re-fetch every 30 min so calendar stays current across week boundary
-  const _doCalFetch = () => fetch('/cal?t='+Date.now()).then(r=>r.ok?r.json():null).then(d=>{ if(d&&d.events&&d.events.length>0) renderCal(d.events); }).catch(()=>{});
+  if (cal.length) renderCal(cal); else calMessage('Loading the calendar…');
+  const _doCalFetch = () => fetch('/cal?t='+Date.now()).then(r=>r.ok?r.json():null).then(d=>{
+    if (d && d.events && d.events.length) renderCal(d.events);
+    else if (!cal.length) calMessage(d && d.error ? `Calendar feed unavailable: ${d.error}.` : 'Calendar feed unavailable.');
+  }).catch(e => { console.warn('calendar:', e); if (!cal.length) calMessage('Calendar feed unavailable.'); });
   _doCalFetch();
   if(!window._calRefreshTimer) window._calRefreshTimer = setInterval(_doCalFetch, 30 * 60 * 1000);
 
