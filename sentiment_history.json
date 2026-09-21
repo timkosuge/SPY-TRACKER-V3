@@ -1,1 +1,26 @@
-{"aaii": [], "cot": []}
+{
+ "aaii": [
+  {
+   "date": "2026-09-16",
+   "bullish": 28.8,
+   "neutral": 17.9,
+   "bearish": 53.3,
+   "spread": -24.5,
+   "source": "aaii_html"
+  }
+ ],
+ "cot": [
+  {
+   "report_date": "2026-09-15",
+   "source": "cftc_fin_zip",
+   "dealer_net": -702938,
+   "chg_dealer_net": -17596,
+   "asset_net": 904684,
+   "chg_asset_net": -7677,
+   "lev_net": -293143,
+   "chg_lev_net": 47961,
+   "other_net": 127,
+   "nonrept_net": 91270
+  }
+ ]
+}
