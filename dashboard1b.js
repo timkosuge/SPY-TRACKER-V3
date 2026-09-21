@@ -602,11 +602,6 @@ function renderBondsAdditions(md) {
   }
 }
 
-function wilson95(k, n) {
-  if (!n) return null;
-  const z = 1.96, p = k / n, d = 1 + z*z/n, c = p + z*z/(2*n), r = z * Math.sqrt(p*(1-p)/n + z*z/(4*n*n));
-  return { lo: Math.max(0, (c - r) / d) * 100, hi: Math.min(1, (c + r) / d) * 100 };
-}
 const rateWithCI = (k, n, digits) => { const ci = wilson95(k, n); return ci ? `${(k/n*100).toFixed(digits==null?1:digits)}% <span style="font-size:9px;color:var(--text3);">(${ci.lo.toFixed(0)}–${ci.hi.toFixed(0)}, n=${n})</span>` : '—'; };
 window.wilson95 = wilson95; window.rateWithCI = rateWithCI;
 

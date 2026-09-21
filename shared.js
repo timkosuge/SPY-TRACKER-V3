@@ -7,4 +7,9 @@ const etToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'})
 const clr=n=>n>0?'up':n<0?'dn':'neu';
 const sign=n=>n>0?'+':'';
 const fmt12=t=>{if(!t||!t.includes(':'))return t||'—';const[h,m]=t.split(':').map(Number);const ampm=h>=12?'PM':'AM';const h12=h%12||12;return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;};
+function wilson95(k, n) {
+  if (!n) return null;
+  const z = 1.96, p = k / n, d = 1 + z*z/n, c = p + z*z/(2*n), r = z * Math.sqrt(p*(1-p)/n + z*z/(4*n*n));
+  return { lo: Math.max(0, (c - r) / d) * 100, hi: Math.min(1, (c + r) / d) * 100 };
+}
 const $=id=>document.getElementById(id);

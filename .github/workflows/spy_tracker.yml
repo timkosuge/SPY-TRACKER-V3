@@ -110,6 +110,10 @@ jobs:
         if: steps.clock.outputs.run == 'true'
         run: python generate_edge_stats.py
 
+      - name: Build setup-engine day frame
+        if: steps.clock.outputs.run == 'true'
+        run: python generate_chains.py
+
       - name: Data health
         if: steps.clock.outputs.run == 'true'
         run: python generate_health.py
@@ -141,7 +145,7 @@ jobs:
                      session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
                      large_gap_stats.js release_data.js edge_stats_data.js \
                      data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv \
-                     breadth_data.json tic_holdings.js health.json
+                     breadth_data.json tic_holdings.js health.json chains_data.js
           if git diff --staged --quiet; then
             echo "No payload changes"
             exit 0
