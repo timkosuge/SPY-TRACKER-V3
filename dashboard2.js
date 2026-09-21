@@ -1483,11 +1483,19 @@ SECTORS: ${sectorStr}`;
 
 // Call AI proxy
 async function callAI(messages, system, maxTokens = 800) {
-  const resp = await fetch('/ai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, system, max_tokens: maxTokens })
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 60000);
+  let resp;
+  try {
+    resp = await fetch('/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, system, max_tokens: maxTokens }),
+      signal: ctrl.signal
+    });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? 'AI request timed out after 60 seconds' : e.message);
+  } finally { clearTimeout(timer); }
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
   return data.content;
@@ -2401,9 +2409,10 @@ async function generateEventImpact(md, sd) {
     const dynEvents = [];
     const upcomingCpi = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.cpi) || [];
     const upcomingNfp = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.nfp) || [];
-    if (upcomingCpi.length || upcomingNfp.length) {
-      upcomingCpi.filter(d => d >= todayStr).forEach(d => dynEvents.push({ name: 'CPI', dates: [d] }));
-      upcomingNfp.filter(d => d >= todayStr).forEach(d => dynEvents.push({ name: 'NFP', dates: [d] }));
+    const futureCpi = upcomingCpi.filter(d => d >= todayStr), futureNfp = upcomingNfp.filter(d => d >= todayStr);
+    if (futureCpi.length || futureNfp.length) {
+      futureCpi.forEach(d => dynEvents.push({ name: 'CPI', dates: [d] }));
+      futureNfp.forEach(d => dynEvents.push({ name: 'NFP', dates: [d] }));
     } else {
       for (let offset = 0; offset <= 4; offset++) {
         const d = new Date(today); d.setMonth(d.getMonth() + offset);
@@ -2514,9 +2523,10 @@ async function renderKeyEvents() {
     // Prefer RELEASE_DATA.upcoming which has actual BLS-published dates
     const upcomingCpi = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.cpi) || [];
     const upcomingNfp = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.nfp) || [];
-    if (upcomingCpi.length || upcomingNfp.length) {
-      upcomingCpi.filter(d => d >= todayStr).forEach(d => result.push({ name: 'CPI REPORT',       date: d, type: 'CPI', icon: '📊' }));
-      upcomingNfp.filter(d => d >= todayStr).forEach(d => result.push({ name: 'NONFARM PAYROLLS', date: d, type: 'NFP', icon: '💼' }));
+    const futureCpi = upcomingCpi.filter(d => d >= todayStr), futureNfp = upcomingNfp.filter(d => d >= todayStr);
+    if (futureCpi.length || futureNfp.length) {
+      futureCpi.forEach(d => result.push({ name: 'CPI REPORT',       date: d, type: 'CPI', icon: '📊' }));
+      futureNfp.forEach(d => result.push({ name: 'NONFARM PAYROLLS', date: d, type: 'NFP', icon: '💼' }));
     } else {
       // Algorithmic fallback (less accurate — CPI is not always 2nd Wednesday)
       for (let offset = 0; offset <= monthsAhead; offset++) {
@@ -2581,7 +2591,6 @@ async function renderKeyEvents() {
       if (data.meetings && data.meetings.length > 0) {
         data.meetings.forEach(m => {
           events.push({ name: 'FOMC DECISION', date: m.date, type: 'FOMC', icon: '🏦' });
-          if (m.press_conference) events.push({ name: 'FOMC PRESS CONF', date: m.date, type: 'FOMC', icon: '🎙️' });
         });
       }
     }
@@ -3638,7 +3647,7 @@ async function fetchSPYIntraday() {
       // Always return the response — callers check d.available themselves.
       // Checking d.open here meant pre-market responses (available:false, no open)
       // were silently dropped, preventing the volume panel from updating.
-      if (d) return d;
+      if (d) { window._spyIntraday = d; window._spyIntradayFetchedAt = Date.now(); return d; }
     }
   } catch(e) {}
   return null;
@@ -3810,20 +3819,13 @@ let _lastStaticRefresh = null; // tracks when market_data.json was last re-fetch
 
 // Returns true if US equities market is currently open (ET, weekdays 9:30–16:00)
 function isMarketOpen() {
-  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const dow = et.getDay();
-  if (dow === 0 || dow === 6) return false;
-  const mins = et.getHours() * 60 + et.getMinutes();
-  return mins >= 9 * 60 + 30 && mins < 16 * 60;
+  return nyseSession(new Date()).state === 'open';
 }
 
 // Returns true if pre-market or market hours (4 AM–4 PM ET weekdays)
 function isExtendedHours() {
-  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const dow = et.getDay();
-  if (dow === 0 || dow === 6) return false;
-  const mins = et.getHours() * 60 + et.getMinutes();
-  return mins >= 4 * 60 && mins < 16 * 60;
+  const st = nyseSession(new Date()).state;
+  return st === 'pre' || st === 'open';
 }
 
 // Fetch and cache the current weeks opening price (Monday open, or first trading day)
@@ -3893,9 +3895,8 @@ async function fetchWeekOpen() {
     // ── Source 4: /spyintraday on Monday only ────────────────────────────────
     if (!isWeekend && dow === 1) {
       try {
-        const r = await fetch('/spyintraday?t=' + Date.now());
-        if (r.ok) {
-          const d = await r.json();
+        const d = window._spyIntraday || null;
+        if (d) {
           if (d.available && d.open) {
             if (window._spyLevels) window._spyLevels.todayOpen = d.open;
             applyWeekOpen(d.open);

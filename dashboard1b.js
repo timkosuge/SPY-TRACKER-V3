@@ -2076,7 +2076,6 @@ function renderHubEventInsight() {
       }).join('')}
     </div>` : '';
 
-  // Call AI with web search to generate the insight
   const system = `You are a sharp SPY trader writing a brief market event preview for a live trading dashboard. Be specific, direct, and use real numbers. No disclaimers. No hedging language. Write 2-3 tight paragraphs in plain prose — no bullets, no headers. Focus on: what the consensus expectation is, what SPY historically does around this event, and what the key risk or opportunity is right now given current market conditions. Use the historical stats provided.`;
 
   const userMsg = `Write a focused preview for the upcoming ${label} release on ${next.date} (${daysAway} days away). Search for the current consensus estimate and any recent data or analyst expectations. ${statsContext} Current SPY price is around $${window._md?.quotes?.SPY?.price?.toFixed(2) || '655'}. Mention the specific consensus number if you can find it, what a beat or miss would mean for SPY right now, and what the historical stats tell us about positioning.`;
@@ -2087,7 +2086,7 @@ function renderHubEventInsight() {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
           <span style="font-family:'Orbitron',monospace;font-size:10px;color:${color};padding:3px 8px;background:${color}22;border:1px solid ${color}44;border-radius:3px;">${label}</span>
           <span style="color:var(--text3);font-size:11px;">${next.date} · ${daysAway} day${daysAway===1?'':'s'} away</span>
-          <span style="font-size:9px;color:var(--text3);margin-left:auto;">AI · web search</span>
+          <span style="font-size:9px;color:var(--text3);margin-left:auto;">AI · site data only</span>
         </div>
         <div style="font-size:12px;color:var(--text2);line-height:1.7;">${reply.replace(/\n\n/g,'</p><p style=\"margin:0 0 8px;\">').replace(/\n/g,' ')}</div>
         ${queueHtml}`;
@@ -4482,9 +4481,8 @@ async function renderLiveChart() {
   // ── CLOSED-MARKET: 20-day OHLC candle chart + volume bars + overlays ──────
   async function fetchAndDraw() {
     try {
-      const r = await fetch('/spyintraday?t=' + Date.now());
-      if (!r.ok) throw new Error('fetch failed');
-      const d = await r.json();
+      let d = (window._spyIntradayFetchedAt && Date.now() - window._spyIntradayFetchedAt < 20000) ? window._spyIntraday : null;
+      if (!d) { const r = await fetch('/spyintraday?t=' + Date.now()); if (!r.ok) throw new Error('fetch failed'); d = await r.json(); }
 
       const statusEl = document.getElementById('lcStatus');
       const priceEl  = document.getElementById('lcPrice');
@@ -4545,7 +4543,7 @@ async function renderLiveChart() {
       const chg = d.changePct, up = (chg ?? 0) >= 0;
       if (priceEl)  { priceEl.textContent = '$' + d.close.toFixed(2); priceEl.style.color = up ? 'var(--green)' : 'var(--red)'; }
       if (changeEl) { changeEl.textContent = chg != null ? (up?'+':'')+chg.toFixed(2)+'%' : '—'; changeEl.style.color = up ? 'var(--green)' : 'var(--red)'; }
-      if (statusEl) { statusEl.textContent = '● LIVE · ' + d.bars + ' bars · ' + new Date(d.asOf).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CT'; statusEl.style.color = 'var(--green)'; }
+      if (statusEl) { const live = !!d.session_live; statusEl.textContent = (live ? '● LIVE · ' : '● SESSION ' + (d.session_date || '') + ' (closed) · ') + d.bars + ' bars · ' + new Date(d.asOf).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CT'; statusEl.style.color = live ? 'var(--green)' : 'var(--text3)'; }
 
       drawLiveChart(d.rawBars, _chartType);
       renderLcStats(d);

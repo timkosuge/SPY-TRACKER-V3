@@ -1034,7 +1034,7 @@ def fetch_econ_calendar():
 
 def export_market_data(conn, options_data=None):
     """Fetch all market data and write market_data.json."""
-    output = {"updated": datetime.now(CT).strftime("%Y-%m-%d %H:%M CT")}
+    output = {"updated": datetime.now(ET).isoformat(timespec="minutes")}
 
     # ── Quotes ────────────────────────────────────────────────────────────────
     try:

@@ -1,3 +1,5 @@
+import { lastSession, etEpoch, earlyClose } from './_nyse.js';
+
 // Cloudflare Pages Function — /spyintraday
 // Fetches SPY regular-session intraday OHLC from Yahoo Finance 1m bars
 // Returns: { open, high, low, close, volume, change, changePct, prev_close, bars, asOf,
@@ -13,15 +15,10 @@ export async function onRequest(context) {
   try {
     // Yahoo Finance chart API — 1m bars for today
     const now   = new Date();
-    const today = now.toISOString().slice(0, 10);
-
-    // Regular session: 9:30am–4:00pm ET = 14:30–21:00 UTC
-    const p1 = Math.floor(new Date(`${today}T13:00:00Z`).getTime() / 1000); // give 30m buffer before open
-    const p2 = Math.floor(Math.min(new Date(`${today}T21:30:00Z`).getTime(), now.getTime()) / 1000);
-
-    if (p2 <= p1) {
-      return new Response(JSON.stringify({ error: 'Market not open yet', available: false }), { headers });
-    }
+    const today = lastSession(now);
+    const closeMins = earlyClose(today) ? 13 * 60 : 16 * 60;
+    const p1 = etEpoch(today, 9 * 60);
+    const p2 = Math.min(etEpoch(today, closeMins + 30), Math.floor(now.getTime() / 1000));
 
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1m&period1=${p1}&period2=${p2}&includePrePost=false`;
 
@@ -164,6 +161,8 @@ export async function onRequest(context) {
 
     return new Response(JSON.stringify({
       available:    true,
+      session_date: today,
+      session_live: Math.floor(now.getTime() / 1000) < etEpoch(today, closeMins) && Math.floor(now.getTime() / 1000) >= p1,
       open:         Math.round(sessionOpen  * 100) / 100,
       high:         Math.round(sessionHigh  * 100) / 100,
       low:          Math.round(sessionLow   * 100) / 100,
@@ -196,6 +195,6 @@ export async function onRequest(context) {
     }), { headers });
 
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message, available: false }), { headers, status: 200 });
+    return new Response(JSON.stringify({ error: e.message, available: false }), { headers, status: 502 });
   }
 }

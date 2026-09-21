@@ -1,3 +1,5 @@
+import { etEpoch, isTradingDay } from './_nyse.js';
+
 // Cloudflare Pages Function — /weekopen
 // Returns SPY's Monday open price (first trading day of current week)
 // Uses Yahoo Finance v8 chart API (no crumb/cookie needed for this endpoint)
@@ -32,10 +34,10 @@ export async function onRequestGet(context) {
     const pad = n => String(n).padStart(2, '0');
     const monStr = `${monDate.getFullYear()}-${pad(monDate.getMonth()+1)}-${pad(monDate.getDate())}`;
 
-    // period1 = Monday 9:30am ET in UTC
-    // During EDT (summer): 9:30am ET = 13:30 UTC; during EST (winter): 14:30 UTC
-    // Use 14:00 UTC as a safe universal time that covers both (market is open by then)
-    const p1 = Math.floor(new Date(monStr + 'T14:00:00Z').getTime() / 1000);
+    let firstSession = new Date(monStr + 'T12:00:00Z');
+    while (!isTradingDay(firstSession)) firstSession = new Date(firstSession.getTime() + 864e5);
+    const firstStr = firstSession.toISOString().slice(0, 10);
+    const p1 = etEpoch(firstStr, 9 * 60 + 30);
     const p2 = Math.floor(now.getTime() / 1000);
 
     if (p2 <= p1) {
@@ -64,13 +66,14 @@ export async function onRequestGet(context) {
     const weekOpen = Math.round(opens[0] * 100) / 100;
     const weekOpenDate = timestamps[0]
       ? new Date(timestamps[0] * 1000).toISOString().slice(0, 10)
-      : monStr;
+      : firstStr;
 
     return new Response(JSON.stringify({
       available: true,
       weekOpen,
       weekOpenDate,
       monStr,
+      firstSession: firstStr,
       daysFromMon,
     }), { headers });
 

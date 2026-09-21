@@ -1,3 +1,26 @@
+function sessionStartEpoch(now) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(now).filter(x => x.type !== 'literal').map(x => [x.type, x.value]));
+  const etMins = Number(p.hour) * 60 + Number(p.minute);
+  const utcGuess = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute));
+  const offsetMs = utcGuess - now.getTime();
+  const startLocalMs = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), 18, 0) - (etMins < 18 * 60 ? 864e5 : 0);
+  return Math.floor((startLocalMs - offsetMs) / 1000);
+}
+
+function sessionPayload(bars) {
+  const start = sessionStartEpoch(new Date());
+  const inSession = bars.filter(b => b.t >= start);
+  const use = inSession.length >= 2 ? inSession : bars;
+  const first = use[0], last = use[use.length - 1];
+  return {
+    bars: use, session_start: start, session_in_window: inSession.length >= 2,
+    last_price: last?.c ?? null, session_open: first?.o ?? first?.c ?? null,
+    change: last && first ? last.c - (first.o ?? first.c) : null,
+    change_pct: last && first && (first.o ?? first.c) ? (last.c - (first.o ?? first.c)) / (first.o ?? first.c) * 100 : null,
+    bar_count: use.length,
+  };
+}
+
 export async function onRequestGet(context) {
   const corsHeaders = {
     'Content-Type': 'application/json',
@@ -24,15 +47,8 @@ export async function onRequestGet(context) {
             t: Math.floor(b.t / 1000),
             o: b.o, h: b.h, l: b.l, c: b.c, v: b.v
           }));
-          const last = bars[bars.length - 1];
-          const first = bars[0];
           return new Response(JSON.stringify({
-            symbol: 'ES1!', name: 'S&P 500 Futures', source: 'polygon',
-            bars, last_price: last?.c, open_price: first?.c,
-            change: last && first ? last.c - first.c : null,
-            change_pct: last && first ? ((last.c - first.c) / first.c * 100) : null,
-            bar_count: bars.length
-          }), { headers: corsHeaders });
+            symbol: 'ES1!', name: 'S&P 500 Futures', source: 'polygon', ...sessionPayload(bars) }), { headers: corsHeaders });
         }
       }
     } catch(e) {}
@@ -69,51 +85,12 @@ export async function onRequestGet(context) {
           const last = bars[bars.length - 1];
           const first = bars[0];
           return new Response(JSON.stringify({
-            symbol: 'ES=F', name: 'S&P 500 Futures', source: 'yahoo_v8',
-            bars, last_price: last?.c, open_price: first?.c,
-            change: last && first ? last.c - first.c : null,
-            change_pct: last && first ? ((last.c - first.c) / first.c * 100) : null,
-            bar_count: bars.length
+            symbol: 'ES=F', name: 'S&P 500 Futures', source: 'yahoo_v8', ...sessionPayload(bars)
           }), { headers: corsHeaders });
         }
       }
     }
   } catch(e) {}
 
-  // ── Source 3: Stooq CSV (no auth, reliable fallback) ────────────────────────
-  try {
-    const r = await fetch('https://stooq.com/q/d/l/?s=%40ES.F&i=5', {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    if (r.ok) {
-      const text = await r.text();
-      const lines = text.trim().split('\n').slice(1);
-      const bars = [];
-      for (const line of lines) {
-        const parts = line.split(',');
-        if (parts.length < 5) continue;
-        const [date, time, open, high, low, close, volume] = parts;
-        if (!close || isNaN(parseFloat(close))) continue;
-        const t = Math.floor(new Date(`${date}T${time || '00:00:00'}`).getTime() / 1000);
-        if (!isNaN(t)) bars.push({ t, o: parseFloat(open), h: parseFloat(high), l: parseFloat(low), c: parseFloat(close), v: parseInt(volume) || 0 });
-      }
-      const cutoff = Math.floor(Date.now() / 1000) - 30 * 60 * 60;
-      const recent = bars.filter(b => b.t >= cutoff);
-      if (recent.length >= 2) {
-        const last = recent[recent.length - 1];
-        const first = recent[0];
-        return new Response(JSON.stringify({
-          symbol: '@ES.F', name: 'S&P 500 Futures', source: 'stooq',
-          bars: recent, last_price: last?.c, open_price: first?.c,
-          change: last && first ? last.c - first.c : null,
-          change_pct: last && first ? ((last.c - first.c) / first.c * 100) : null,
-          bar_count: recent.length
-        }), { headers: corsHeaders });
-      }
-    }
-  } catch(e) {}
-
-  return new Response(JSON.stringify({ error: 'All futures data sources unavailable', bars: [] }), {
-    status: 503, headers: corsHeaders
-  });
+  return new Response(JSON.stringify({ error: 'Futures unavailable from Polygon and Yahoo', bars: [] }), { headers: corsHeaders, status: 502 });
 }

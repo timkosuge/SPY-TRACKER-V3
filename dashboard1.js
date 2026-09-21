@@ -220,54 +220,37 @@ function renderHub(md,sd){
 
   // Trading Day Tracker
   const now = new Date();
-  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const dayName = days[now.getDay()];
-  const isWeekend = now.getDay()===0||now.getDay()===6;
-
-  // Get times in each timezone
-  const etNow  = new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
-  const ctNow  = new Date(now.toLocaleString('en-US',{timeZone:'America/Chicago'}));
-  const lonNow = new Date(now.toLocaleString('en-US',{timeZone:'Europe/London'}));
-  const tokyoNow = new Date(now.toLocaleString('en-US',{timeZone:'Asia/Tokyo'}));
-
-  const etH = etNow.getHours(), etM = etNow.getMinutes();
-  const ctH = ctNow.getHours(), ctM = ctNow.getMinutes(), ctS = ctNow.getSeconds();
-
-  // US session times (ET)
-  // Pre-market: 4:00 AM - 9:30 AM ET
-  // Regular:    9:30 AM - 4:00 PM ET
-  // After-hours:4:00 PM - 8:00 PM ET
-  // Overnight:  8:00 PM - 4:00 AM ET
-  const etMins = etH*60+etM;
-  const isPremarket  = !isWeekend && etMins >= 4*60   && etMins < 9*60+30;
-  const isMarketHours= !isWeekend && etMins >= 9*60+30 && etMins < 16*60;
-  const isAfterHours = !isWeekend && etMins >= 16*60   && etMins < 20*60;
-  const isOvernight  = !isMarketHours && !isPremarket && !isAfterHours;
+  const S = nyseSession(now);
+  const dayName = {Sun:'Sunday',Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday'}[S.weekday];
+  const isWeekend = S.state === 'weekend';
+  const isHoliday = S.state === 'holiday';
+  const isPremarket = S.state === 'pre';
+  const isMarketHours = S.state === 'open';
+  const isAfterHours = S.state === 'after';
+  const lonZ = zoneMinutes(now, 'Europe/London'), tokZ = zoneMinutes(now, 'Asia/Tokyo'), ctZ = zoneMinutes(now, 'America/Chicago');
+  const ctH = Math.floor(ctZ.mins / 60), ctM = ctZ.mins % 60, ctS = S.etSecs;
 
   let sessionLabel, sessionColor;
   if(isWeekend)      {sessionLabel='WEEKEND';     sessionColor='#606080';}
+  else if(isHoliday) {sessionLabel='CLOSED · '+S.holiday.toUpperCase(); sessionColor='#ff3355';}
   else if(isPremarket)   {sessionLabel='PRE-MARKET';  sessionColor='#ffcc00';}
   else if(isMarketHours) {sessionLabel='MARKET OPEN'; sessionColor='#00ff88';}
   else if(isAfterHours)  {sessionLabel='AFTER HOURS'; sessionColor='#ff8800';}
   else                   {sessionLabel='OVERNIGHT';   sessionColor='#606080';}
 
   // Global sessions (all times local to each city)
-  const lonH = lonNow.getHours(), lonM = lonNow.getMinutes();
-  const lonMins = lonH*60+lonM;
-  const lonDow = lonNow.getDay();
-  const lonWeekend = lonDow===0||lonDow===6;
+  const lonMins = lonZ.mins;
+  const lonWeekend = lonZ.weekday==='Sat'||lonZ.weekday==='Sun';
   // London: 8:00 AM - 4:30 PM London time
   const lonOpen = 8*60, lonClose = 16*60+30;
   const lonIsOpen = !lonWeekend && lonMins>=lonOpen && lonMins<lonClose;
   const lonIsPremarket = !lonWeekend && lonMins>=7*60 && lonMins<lonOpen;
   const lonStatus = lonWeekend?'CLOSED':lonIsOpen?'OPEN':lonIsPremarket?'PRE':'CLOSED';
   const lonColor = lonIsOpen?'#00ff88':lonIsPremarket?'#ffcc00':'#606080';
-  const lonTimeStr = lonNow.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+  const lonTimeStr = zoneClock(now, 'Europe/London');
 
-  const tokyoH = tokyoNow.getHours(), tokyoM = tokyoNow.getMinutes();
-  const tokyoMins = tokyoH*60+tokyoM;
-  const tokyoDow = tokyoNow.getDay();
-  const tokyoWeekend = tokyoDow===0||tokyoDow===6;
+  const tokyoMins = tokZ.mins;
+  const tokyoWeekend = tokZ.weekday==='Sat'||tokZ.weekday==='Sun';
   // Tokyo: 9:00 AM - 3:00 PM Tokyo time (closed 11:30-12:30 lunch)
   const tokyoOpen = 9*60, tokyoClose = 15*60;
   const tokyoLunch = tokyoMins>=11*60+30 && tokyoMins<12*60+30;
@@ -275,67 +258,36 @@ function renderHub(md,sd){
   const tokyoIsPremarket = !tokyoWeekend && tokyoMins>=8*60 && tokyoMins<tokyoOpen;
   const tokyoStatus = tokyoWeekend?'CLOSED':tokyoIsOpen?'OPEN':tokyoIsPremarket?'PRE':tokyoLunch?'LUNCH':'CLOSED';
   const tokyoColor = tokyoIsOpen?'#00ff88':tokyoIsPremarket?'#ffcc00':tokyoLunch?'#ff8800':'#606080';
-  const tokyoTimeStr = tokyoNow.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+  const tokyoTimeStr = zoneClock(now, 'Asia/Tokyo');
 
   // Countdown helper
-  const secsUntilMins = (targetMins) => {
-    const nowMins = ctH*60+ctM;
-    const diff = (targetMins - nowMins)*60 - ctS;
-    return Math.max(0, diff);
-  };
 
-  // Market holidays 2026
-  const holidays = [
-    { date: '2026-01-01', name: "New Year's Day" },
-    { date: '2026-01-19', name: 'MLK Day' },
-    { date: '2026-02-16', name: "Presidents' Day" },
-    { date: '2026-04-03', name: 'Good Friday' },
-    { date: '2026-05-25', name: 'Memorial Day' },
-    { date: '2026-06-19', name: 'Juneteenth' },
-    { date: '2026-07-04', name: 'Independence Day' },
-    { date: '2026-07-03', name: 'Independence Day (observed)' },
-    { date: '2026-09-07', name: 'Labor Day' },
-    { date: '2026-11-26', name: 'Thanksgiving' },
-    { date: '2026-11-27', name: 'Thanksgiving (half day)' },
-    { date: '2026-12-25', name: 'Christmas' },
-  ];
-  const todayStr = now.toISOString().split('T')[0];
-  const upcomingHolidays = holidays
-    .filter(h => h.date >= todayStr)
-    .sort((a,b) => a.date.localeCompare(b.date))
-    .slice(0, 4);
-
-  // Next holiday
+  const upcomingHolidays = upcomingClosures(now, 4);
   const nextHol = upcomingHolidays[0];
-  const nextHolDays = nextHol ? Math.round((new Date(nextHol.date+'T12:00:00') - now) / 86400000) : null;
+  const nextHolDays = nextHol ? Math.round((new Date(nextHol.date+'T12:00:00Z') - new Date(S.etDate+'T12:00:00Z')) / 86400000) : null;
 
-  // Countdown to next US market event
   let countdownSecs = 0;
   let countdownLabel = '';
   let countdownColor = '#606080';
-  const marketOpenCT = 8*60+30, marketCloseCT = 15*60, nowMins = ctH*60+ctM;
-
   if(isMarketHours){
-    countdownSecs = Math.max(0, (marketCloseCT - nowMins)*60 - ctS);
-    countdownLabel = 'CLOSES IN';
+    countdownSecs = Math.max(0, S.secsToClose);
+    countdownLabel = S.earlyClose ? 'CLOSES IN (1:00 PM ET)' : 'CLOSES IN';
     countdownColor = '#00ff88';
   } else if(isPremarket){
-    countdownSecs = Math.max(0, (marketOpenCT - nowMins)*60 - ctS);
+    countdownSecs = Math.max(0, S.secsToOpen);
     countdownLabel = 'OPENS IN';
     countdownColor = '#ffcc00';
   } else {
-    // Find next 8:30 CT on a weekday
-    const target = new Date(ctNow);
-    target.setHours(8, 30, 0, 0);
-    if(target <= ctNow) target.setDate(target.getDate() + 1);
-    while(target.getDay()===0||target.getDay()===6) target.setDate(target.getDate()+1);
-    countdownSecs = Math.max(0, Math.floor((target - ctNow)/1000));
+    const nextOpen = new Date(S.nextOpenDate + 'T12:00:00Z');
+    const offsetMins = (() => { const p = zoneMinutes(nextOpen, 'America/New_York'); return p.mins - 12*60; })();
+    const openUtc = new Date(nextOpen.getTime() + ((9*60+30) - 12*60 - offsetMins) * 60000);
+    countdownSecs = Math.max(0, Math.floor((openUtc - now)/1000));
     countdownLabel = 'OPENS IN';
-    countdownColor = '#ffcc00'; // always yellow for OPENS IN
+    countdownColor = '#ffcc00';
   }
 
-  const dateStr = now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  const timeStr = ctNow.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZoneName:'short'});
+  const dateStr = new Date(S.etDate+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric',timeZone:'UTC'});
+  const timeStr = zoneClock(now, 'America/Chicago', true, true);
 
   const fmtCountdown = s => {
     s = Math.max(0, Math.floor(s));
@@ -384,18 +336,18 @@ function renderHub(md,sd){
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:${isMarketHours?'#00ff88':(!isMarketHours&&!isPremarket&&!isAfterHours)?'#ff3355':'var(--text3)'};">NEW YORK</span>
             <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:2px;color:${sessionColor};background:${sessionColor}22;">${isMarketHours?'OPEN':isPremarket?'PRE':'CLOSED'}</span>
           </div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${isMarketHours?'#00ff88':(!isMarketHours&&!isPremarket&&!isAfterHours)?'#ff3355':sessionColor};" id="hubEtClock">${etNow.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})}</div>
-          <div style="font-size:11px;color:${isMarketHours?'#00ff88':isPremarket?'#ffcc00':'#ff3355'};margin-top:2px;">9:30–16:00 ET · 8:30–15:00 CT</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:bold;color:${isMarketHours?'#00ff88':(!isMarketHours&&!isPremarket&&!isAfterHours)?'#ff3355':sessionColor};" id="hubEtClock">${zoneClock(now, 'America/New_York')}</div>
+          <div style="font-size:11px;color:${isMarketHours?'#00ff88':isPremarket?'#ffcc00':'#ff3355'};margin-top:2px;">${S.earlyClose?'9:30–13:00 ET · 8:30–12:00 CT · early close':'9:30–16:00 ET · 8:30–15:00 CT'}</div>
         </div>
       </div>
       ${upcomingHolidays.length ? `
       <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <span style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:#ffcc00;">UPCOMING CLOSURES:</span>
         ${upcomingHolidays.map(h=>{
-          const d=new Date(h.date+'T12:00:00');
-          const dstr=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-          const days=Math.round((d-now)/86400000);
-          const halfDay=h.name.includes('half');
+          const d=new Date(h.date+'T12:00:00Z');
+          const dstr=d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
+          const days=Math.round((d-new Date(S.etDate+'T12:00:00Z'))/86400000);
+          const halfDay=!h.full;
           const c=days<=7?'#ff8800':days<=14?'#ffcc00':'#ffcc00';
           return `<div style="background:var(--bg3);border:1px solid ${days<=7?'rgba(255,136,0,0.3)':'rgba(255,204,0,0.2)'};border-radius:3px;padding:4px 10px;display:flex;gap:8px;align-items:center;">
             <span style="font-family:'Orbitron',monospace;font-size:9px;color:${c};">${dstr}</span>
@@ -416,17 +368,13 @@ function renderHub(md,sd){
     window._hubClockInterval = setInterval(()=>{
       const t = new Date();
       const c=$('hubClock');
-      if(c) c.textContent=new Date(t.toLocaleString('en-US',{timeZone:'America/Chicago'}))
-        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});
+      if(c) c.textContent=zoneClock(t, 'America/Chicago', true, true);
       const lc=$('hubLonClock');
-      if(lc) lc.textContent=new Date(t.toLocaleString('en-US',{timeZone:'Europe/London'}))
-        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Europe/London'});
+      if(lc) lc.textContent=zoneClock(t, 'Europe/London');
       const tc=$('hubTokyoClock');
-      if(tc) tc.textContent=new Date(t.toLocaleString('en-US',{timeZone:'Asia/Tokyo'}))
-        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Tokyo'});
+      if(tc) tc.textContent=zoneClock(t, 'Asia/Tokyo');
       const ec=$('hubEtClock');
-      if(ec) ec.textContent=new Date(t.toLocaleString('en-US',{timeZone:'America/New_York'}))
-        .toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/New_York'});
+      if(ec) ec.textContent=zoneClock(t, 'America/New_York');
       const cd=$('hubCountdown');
       if(cd && window._hubCountdownSecs>0){
         window._hubCountdownSecs--;
@@ -458,12 +406,13 @@ function renderHub(md,sd){
   const renderCal = (events) => {
     if (!events || !events.length) { $('calList').innerHTML='<div class="cal-empty">No data</div>'; return; }
     const impactRank = i => { const s=(i||'').toLowerCase(); return s==='high'?0:s==='medium'||s==='med'?1:2; };
-    const toShow = [...events].sort((a,b) => {
+    const toShow = [...events].filter(e => !e.date || e.date >= todayET).sort((a,b) => {
       const dateTimeCmp = (a.date+a.time).localeCompare(b.date+b.time);
       if (dateTimeCmp !== 0) return dateTimeCmp;
       return impactRank(a.impact) - impactRank(b.impact);
     });
-    const etToCt = t => { if(!t||!t.includes(':'))return t; const [h,m]=t.split(':').map(Number); return `${String(h-1).padStart(2,'0')}:${String(m).padStart(2,'0')} CT`; };
+    const etToCt = t => { if(!t||!t.includes(':'))return t||'—'; const [h,m]=t.split(':').map(Number); if(isNaN(h)||isNaN(m))return t; const hh=(h-1+24)%24; return `${String(hh).padStart(2,'0')}:${String(m).padStart(2,'0')} CT`; };
+    const todayET = nyseSession(new Date()).etDate;
     const dayN = d => { if(!d)return ''; return ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date(d+'T12:00:00').getDay()]; };
     const shortD = d => { if(!d)return ''; const [y,mo,dd]=d.split('-'); return `${mo}/${dd}`; };
     $('calList').style.maxHeight='320px';
@@ -473,8 +422,8 @@ function renderHub(md,sd){
       return `<div style="display:grid;grid-template-columns:70px 60px 60px 1fr;gap:6px;align-items:center;padding:6px 8px;border-left:3px solid ${ic};background:var(--bg3);border-radius:0 3px 3px 0;margin-bottom:4px;font-size:13px;">
         <span style="font-family:'Share Tech Mono',monospace;color:var(--cyan);font-size:11px;">${dayN(ev.date)} ${shortD(ev.date)}</span>
         <span style="font-family:'Share Tech Mono',monospace;color:var(--text2);font-size:11px;">${etToCt(ev.time)}</span>
-        <span style="font-family:'Orbitron',monospace;font-size:8px;color:${ic};padding:2px 4px;background:${ic}22;border-radius:2px;">${ev.impact||'LOW'}</span>
-        <span style="color:var(--text)">${ev.event||ev.title||'—'}</span>
+        <span style="font-family:'Orbitron',monospace;font-size:8px;color:${ic};padding:2px 4px;background:${ic}22;border-radius:2px;">${String(ev.impact||'LOW').toUpperCase()}</span>
+        <span style="color:var(--text)">${ev.event||ev.title||'—'}${ev.scheduled===false?' <span style="font-size:9px;color:var(--text3);">(estimated date)</span>':''}</span>
       </div>`;
     }).join('');
   };
@@ -707,13 +656,20 @@ function startWeatherScroll(el, text) {
   }, 16);
 }
 
+function atrFromRows(sd, n) {
+  const rows = sd.filter(r => r && r.close && r.high && r.low).slice(0, n + 1);
+  const trs = rows.slice(0, -1).map((r, i) => { const p = rows[i + 1]; return Math.max(r.high - r.low, Math.abs(r.high - p.close), Math.abs(r.low - p.close)); }).filter(v => v > 0);
+  return trs.length >= n ? trs.slice(0, n).reduce((a, b) => a + b, 0) / n : null;
+}
+window.atrFromRows = atrFromRows;
+
 async function _fetchFuturesBars() {
   // Try 1: /futures Cloudflare function (server-side, no CORS — uses Polygon or Yahoo)
   try {
     const r = await fetch('/futures?t=' + Date.now());
     if (r.ok) {
       const d = await r.json();
-      if (d.bars && d.bars.length >= 2) return { bars: d.bars, symbol: d.symbol || 'ES=F', source: 'futures' };
+      if (d.bars && d.bars.length >= 2) return { bars: d.bars, symbol: d.symbol || 'ES=F', source: d.source || 'futures', fut: d };
     }
   } catch(e) {}
 
@@ -749,10 +705,10 @@ async function loadFuturesChart() {
     requestAnimationFrame(checkSize);
   });
 
-  let bars, symbol = 'ES=F', source = '';
+  let bars, symbol = 'ES=F', source = '', fut = null;
   try {
     const result = await barsPromise;
-    if(result) { bars = result.bars; symbol = result.symbol || 'ES=F'; source = result.source || ''; }
+    if(result) { bars = result.bars; symbol = result.symbol || 'ES=F'; source = result.source || ''; fut = result.fut || null; }
   } catch(e) { bars = null; }
 
   if(!bars || bars.length < 2) {
@@ -784,9 +740,10 @@ async function loadFuturesChart() {
   const py = p => pad.t + ch - ((p - minP) / range) * ch;
 
   const last   = bars[bars.length - 1].c;
-  const open   = bars[0].c;
+  const open   = (fut && fut.session_open) ? fut.session_open : (bars[0].o ?? bars[0].c);
   const chg    = last - open;
   const chgPct = chg / open * 100;
+  const sinceLabel = (fut && fut.session_in_window) ? 'since session open 6:00 PM ET' : 'since first bar shown';
   const isUp   = chg >= 0;
   const lineC  = isUp ? '#00ff88' : '#ff3355';
 
@@ -811,13 +768,13 @@ async function loadFuturesChart() {
     ctx.fillText(p.toFixed(0), pad.l - 4, y + 3);
   }
 
-  // Open price dashed line
   const openY = py(open);
   ctx.strokeStyle = 'rgba(255,204,0,0.4)';
   ctx.lineWidth = 1;
   ctx.setLineDash([5, 4]);
   ctx.beginPath(); ctx.moveTo(pad.l, openY); ctx.lineTo(W - pad.r, openY); ctx.stroke();
   ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,204,0,0.6)'; ctx.font = '7px "Orbitron", monospace'; ctx.textAlign = 'right'; ctx.fillText((fut && fut.session_in_window) ? 'SESSION OPEN 6:00 PM ET' : 'FIRST BAR', W - pad.r - 2, openY - 3);
 
   // Session dividers
   bars.forEach((b, i) => {
@@ -835,7 +792,7 @@ async function loadFuturesChart() {
       ctx.fillStyle = 'rgba(0,204,255,0.5)';
       ctx.font = '7px "Orbitron", monospace';
       ctx.textAlign = 'left';
-      ctx.fillText('OPEN', x + 3, pad.t + 10);
+      ctx.fillText('RTH OPEN 9:30 ET', x + 3, pad.t + 10);
     }
   });
 
@@ -898,10 +855,11 @@ async function loadFuturesChart() {
   hdrDiv.innerHTML = `
     <div>
       <span style="font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:bold;color:${lineC};">${last.toFixed(2)}</span>
-      <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${lineC};margin-left:8px;">${isUp?'+':''}${chg.toFixed(2)} (${isUp?'+':''}${chgPct.toFixed(2)}%)</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${lineC};margin-left:8px;">${isUp?'+':''}${chg.toFixed(2)} (${isUp?'+':''}${chgPct.toFixed(2)}%) <span style="font-size:9px;color:var(--text3);">${sinceLabel}</span></span>
     </div>
     <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;">${symbol} · ${bars.length} BARS · ${source.includes('1m')?'1MIN':'5MIN'}</div>`;
   el.style.position = 'relative';
+  const _fl = document.getElementById('futuresPanelLabel'); if (_fl) _fl.textContent = `⬡ S&P 500 FUTURES — ${symbol} · ${source}`;
   el.appendChild(hdrDiv);
 }
 
@@ -938,7 +896,8 @@ function renderDesk(md,sd){
     return mon.toISOString().split('T')[0];
   };
   const thisWeek=getWeekOf(today);
-  const prevWeekRows=rows.filter(r=>r.date<thisWeek);
+  const _pwMon=new Date(thisWeek+'T12:00:00Z'); _pwMon.setUTCDate(_pwMon.getUTCDate()-7); const prevWeekStart=_pwMon.toISOString().slice(0,10);
+  const prevWeekRows=rows.filter(r=>r.date>=prevWeekStart&&r.date<thisWeek);
   const pwDates=prevWeekRows.map(r=>r.date);
   const pwStart=pwDates.length?pwDates[pwDates.length-1]:null;
   const pwEnd=pwDates.length?pwDates[0]:null;
@@ -1013,7 +972,7 @@ function renderDesk(md,sd){
   };
 
   // Previous close + gap
-  const prevClose = spy.prev_close || spy.previous_close || prevRow?.close || 0;
+  const prevClose = prevRow?.close || spy.prev_close || spy.previous_close || 0;
   const changeAmt = cur && prevClose ? cur - prevClose : null;
   const changePct = changeAmt && prevClose ? changeAmt / prevClose * 100 : null;
   const todayOpen = spy.open || todayRow?.open || 0;
@@ -2998,15 +2957,9 @@ function renderVolatility(md){
   const atrEl=$('volRangeATR');
   if(atrEl){
     // Compute ATR from sd (daily_ohlcv rows)
-    const rows=sd.slice(0,21).filter(r=>r.close);
-    const trs=rows.slice(0,-1).map((r,i)=>{
-      const prev=rows[i+1];
-      if(!prev?.close)return r.high-r.low;
-      return Math.max(r.high-r.low, Math.abs(r.high-prev.close), Math.abs(r.low-prev.close));
-    }).filter(v=>v>0);
-    const atr5  = trs.length>=5  ? trs.slice(0,5).reduce((a,b)=>a+b,0)/5  : null;
-    const atr10 = trs.length>=10 ? trs.slice(0,10).reduce((a,b)=>a+b,0)/10 : null;
-    const atr20 = trs.length>=20 ? trs.slice(0,20).reduce((a,b)=>a+b,0)/20 : null;
+    const atr5  = atrFromRows(sd, 5);
+    const atr10 = atrFromRows(sd, 10);
+    const atr20 = atrFromRows(sd, 20);
     const todayRow=rows[0];
     const todayRange = todayRow ? (todayRow.high||0)-(todayRow.low||0) : (spy.high&&spy.low?spy.high-spy.low:null);
     const liveRange = spy.high&&spy.low ? spy.high-spy.low : null;
@@ -3237,11 +3190,7 @@ function renderVolatility(md){
       const maxR=Math.max(...ranges2.map(r=>r.range));
       const avgR=ranges2.reduce((a,r)=>a+r.range,0)/ranges2.length;
       // ATR line from full sd
-      const trs2=sd.slice(0,21).map((r,i)=>{
-        if(!sd[i+1]?.close)return r.high-r.low;
-        return Math.max(r.high-r.low,Math.abs(r.high-sd[i+1].close),Math.abs(r.low-sd[i+1].close));
-      }).filter(v=>v>0);
-      const atr5b=trs2.length>=5?trs2.slice(0,5).reduce((a,b)=>a+b,0)/5:null;
+      const atr5b=atrFromRows(sd, 5);
 
       histEl.innerHTML=`
         <div style="display:flex;align-items:flex-end;gap:3px;height:100px;padding:4px 0;margin-bottom:8px;">

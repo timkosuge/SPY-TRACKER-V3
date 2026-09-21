@@ -19,6 +19,7 @@ Fields per record:
 
 import sqlite3, json, math
 from fetch_and_analyze import GAP_THRESHOLD_PCT
+from trading_days import is_trading_day
 from datetime import date, timedelta
 
 DB_PATH = 'spy_data.db'
@@ -26,19 +27,15 @@ OUT_PATH = 'expiry_data.js'
 
 DOW_NAMES = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+def monthly_opex_date(year, month):
+    """Third Friday, or the Thursday before it when that Friday is an exchange holiday."""
+    first = date(year, month, 1)
+    third_friday = first + timedelta(days=(4 - first.weekday()) % 7 + 14)
+    return third_friday if is_trading_day(third_friday) else third_friday - timedelta(days=1)
+
+
 def is_monthly_opex(d):
-    """3rd Friday of the month."""
-    if d.weekday() != 4:  # not Friday
-        return False
-    # Count Fridays in this month up to this date
-    first = d.replace(day=1)
-    friday_count = 0
-    cur = first
-    while cur <= d:
-        if cur.weekday() == 4:
-            friday_count += 1
-        cur += timedelta(days=1)
-    return friday_count == 3
+    return d == monthly_opex_date(d.year, d.month)
 
 def main():
     conn = sqlite3.connect(DB_PATH)
