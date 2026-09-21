@@ -276,6 +276,20 @@ def decide(results, findings, today, armed_b, armed_a_pending, price, exits_a):
             f = [x for x in findings if x["strategy"] == st["id"] and "best contract" in x["text"]]
             return f[0]["text"] if f else ""
         return f"Contract guidance needs ten trades with the option chain captured at entry and exit; {c.get('scored', 0)} so far."
+    def direction_short(st, ctrl):
+        best = None
+        for eid, ag in st["exits"].items():
+            if ag["n"] < FLOOR:
+                continue
+            for side in ("long", "short"):
+                own, base = ag[side], (ctrl["exits"].get(eid) or {}).get(side)
+                if base and separated(own, base) and own["rate"] > base["rate"] and (best is None or own["rate"] > best[2]["rate"]):
+                    best = (side, eid, own, base)
+        if not best:
+            return "No edge either way", "Longs and shorts closed in profit about as often as on an ordinary day. The edge is the size of the move, not its direction."
+        side, eid, own, base = best
+        return f"{side.capitalize()} edge", f"The {side} side closed in profit on {own['rate']:.0f}% of {own['n']} trades by {labels.get(eid, 'day ' + eid)}. Normal: {base['rate']:.0f}%. Measured on this record's period only."
+    rows = []
     hold_v, day_v = "NO HOLD", "NO DAY TRADE"
     avoid = [byid[i] for i in live if byid[i].get("role") == "avoid" and scored(byid[i])]
     trades = [byid[i] for i in live if byid[i].get("role") == "trade" and scored(byid[i])]
@@ -284,28 +298,52 @@ def decide(results, findings, today, armed_b, armed_a_pending, price, exits_a):
         st = max(trades, key=lambda x: x["either_side"]["1.5"]["rate"])
         kind, why = size_line(st, ctrl_b, "1.5")
         hold_v = "HOLD CANDIDATE" if kind == "significant" else "NO HOLD"
+        e, c = st["either_side"]["1.5"], ctrl_b["either_side"]["1.5"]
+        rows.append({"q": f"Hold {st['hold']} sessions?", "a": "Candidate" if kind == "significant" else "No", "tone": "go" if kind == "significant" else "stop",
+                     "why": f"This setup reached a 1.5% move on {e['rate']:.0f}% of {e['n']:,} past cases. Normal: {c['rate']:.0f}%."})
         lines.append(f"Multi-day: {st['name']} — size edge {kind}: {why}. {direction_line(st, ctrl_b)} {timing_line(st)}")
     elif avoid:
         st = avoid[0]; kind, why = size_line(st, ctrl_b, "1.5")
+        e, c = st["either_side"]["1.5"], ctrl_b["either_side"]["1.5"]
+        rows.append({"q": f"Hold {st['hold']} sessions?", "a": "No", "tone": "stop",
+                     "why": f"This setup reached a 1.5% move on only {e['rate']:.0f}% of {e['n']:,} past cases. Normal: {c['rate']:.0f}%."})
         lines.append(f"Multi-day: no trade — {why}. {direction_line(st, ctrl_b)}")
     else:
         lines.append("Multi-day: no hold strategy has its conditions met.")
+        rows.append({"q": "Hold for several sessions?", "a": "No setup", "tone": "stop", "why": "No hold strategy matches today's conditions."})
     day_trades = [byid[i] for i in pending if byid[i].get("role") == "trade" and scored(byid[i])]
     day_avoid = [byid[i] for i in pending if byid[i].get("role") == "avoid" and scored(byid[i])]
     if day_trades:
         st = max(day_trades, key=lambda x: x["either_side"]["0.75"]["rate"]); ctrl = byid["A0"]
         kind, why = size_line(st, ctrl, "0.75")
         day_v = "DAY TRADE ONLY IF THE 9:00 CT RANGE IS WIDE" if kind == "significant" else "NO DAY TRADE"
+        e, c = st["either_side"]["0.75"], ctrl["either_side"]["0.75"]
+        rows.append({"q": "Day trade?", "a": "Only if the 9:00 CT range is wide" if kind == "significant" else "No", "tone": "go" if kind == "significant" else "stop",
+                     "why": f"When it is, a 0.75% move came on {e['rate']:.0f}% of {e['n']:,} past sessions. Normal: {c['rate']:.0f}%."})
+        if day_avoid:
+            a = day_avoid[0]; ea = a["either_side"]["0.75"]
+            rows.append({"q": "If the range is narrow?", "a": "Stay out", "tone": "stop", "why": f"A 0.75% move came on only {ea['rate']:.0f}% of {ea['n']:,} such sessions."})
+        da, dw = direction_short(st, ctrl)
+        rows.append({"q": "Which direction?", "a": da, "tone": "go" if da != "No edge either way" else "info", "why": dw})
+        if st.get("peak_min_median") is not None:
+            t = 8 * 60 + 30 + st["peak_min_median"]
+            rows.append({"q": "When does the move land?", "a": f"Around {t // 60 if t // 60 <= 12 else t // 60 - 12}:{t % 60:02d} CT", "tone": "info", "why": "The median time of the day's biggest move on these sessions."})
+        cs = (st.get("contracts") or {}).get("scored", 0)
+        cf = [x for x in findings if x["strategy"] == st["id"] and "best contract" in x["text"]]
+        rows.append({"q": "Which contract?", "a": "Not enough data yet" if cs < 10 or not cf else "See below", "tone": "info",
+                     "why": f"Needs ten trades with the option chain captured at entry and exit; {cs} so far." if cs < 10 or not cf else cf[0]["text"]})
         lines.append(f"Day trade: if the 9:00 CT opening range comes in wide, {st['name'].lower()} applies — size edge {kind}: {why}. {direction_line(st, ctrl)} {timing_line(st)} {contract_line(st)}")
         if day_avoid:
             a = day_avoid[0]; e = a["either_side"]["0.75"]
             lines.append(f"If the opening range comes in narrow instead, stay out: a 0.75% move came on only {e['rate']:.0f}% of {e['n']} such sessions.")
     elif day_avoid:
         a = day_avoid[0]; e = a["either_side"]["0.75"]
+        rows.append({"q": "Day trade?", "a": "No", "tone": "stop", "why": f"A 0.75% move came on only {e['rate']:.0f}% of {e['n']:,} such sessions."})
         lines.append(f"Day trade: no trade if the opening range is narrow — a 0.75% move came on only {e['rate']:.0f}% of {e['n']} such sessions.")
     else:
         lines.append("Day trade: no day-trade strategy has its conditions met before the opening range.")
-    return {"verdict": f"{hold_v} · {day_v}", "hold": hold_v, "day": day_v, "context": ctx, "lines": [l for l in lines if l]}
+        rows.append({"q": "Day trade?", "a": "No setup", "tone": "stop", "why": "No day-trade strategy matches today's conditions."})
+    return {"verdict": f"{hold_v} · {day_v}", "hold": hold_v, "day": day_v, "context": ctx, "lines": [l for l in lines if l], "rows": rows}
 
 
 def main():

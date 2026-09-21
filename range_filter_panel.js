@@ -78,15 +78,6 @@
     const cellLine = tc3 && tc3.n >= floor ? `Sessions like this one — VIX ${L.vix_bucket}, ${L.dd_bucket} of the 20-session high, ${L.class} day — reached a 1.5% one-sided move on <strong style="color:${tc3.ge_150.rate >= 60 ? 'var(--green)' : tc3.ge_150.rate >= 40 ? 'var(--yellow)' : 'var(--red)'};">${f1(tc3.ge_150.rate)}%</strong> of ${tc3.n} three-session holds (${f1(tc3.ge_150.lo)}–${f1(tc3.ge_150.hi)}), median ${f2(tc3.median_best)}% (${dollars(tc3.median_best)}); ${tc5 && tc5.n >= floor ? `${f1(tc5.ge_150.rate)}% of five-session holds` : ''}. ${holdsMark(tc3.stability)}` : `Too few sessions in this exact cell (n=${tc3 ? tc3.n : 0}); read the two regime rows instead.`;
     el.innerHTML = `
       ${typeof window.renderDecisionCard === 'function' ? window.renderDecisionCard(false) : ''}
-      <div class="panel" style="border-left:4px solid var(--purple);margin-bottom:12px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">REGIME AT THE CLOSE OF ${fmtDate(L.date).toUpperCase()}</div>
-        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:baseline;">
-          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">VIX CLOSE</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--text);">${L.vix != null ? L.vix.toFixed(2) : '—'}</span> <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);">${L.vix_bucket || '—'}</span></div>
-          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">FROM THE 20-SESSION HIGH</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--text);">${L.dd_pct != null ? L.dd_pct.toFixed(2) + '%' : '—'}</span> <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);">${L.dd_bucket || '—'}</span></div>
-          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">DAY'S RANGE</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--text);">${f2(L.range_pct)}%</span> ${badge(L.class)}</div>
-        </div>
-        <div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.7;">${cellLine}</div>
-      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div class="panel" style="border-left:4px solid ${candColor};margin:0;">
           <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">STEP 1 — LATEST SESSION'S RANGE DECIDES ${fmtDate(D.next_session).toUpperCase()}</div>
@@ -99,6 +90,16 @@
           ${liveHtml}
           <div style="font-size:10px;color:var(--text3);margin-top:6px;">Wide ≥ ${f2(O.wide_pct)}% (${dollars(O.wide_pct)}), narrow ≤ ${f2(O.narrow_pct)}% (${dollars(O.narrow_pct)}) — quartiles of the ${O.n} sessions with 1-minute bars since ${fmtDate(O.window_start, 'short')}.</div>
         </div>
+      </div>
+      ${evidenceFold('rfEvidence', 'SHOW THE EVIDENCE — TODAY\'S REGIME, BOTH TABLES, THE RULES AND THE RECORD', `
+      <div class="panel" style="border-left:4px solid var(--purple);margin-bottom:12px;">
+        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">REGIME AT THE CLOSE OF ${fmtDate(L.date).toUpperCase()}</div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:baseline;">
+          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">VIX CLOSE</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--text);">${L.vix != null ? L.vix.toFixed(2) : '—'}</span> <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);">${L.vix_bucket || '—'}</span></div>
+          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">FROM THE 20-SESSION HIGH</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--text);">${L.dd_pct != null ? L.dd_pct.toFixed(2) + '%' : '—'}</span> <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);">${L.dd_bucket || '—'}</span></div>
+          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">DAY'S RANGE</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--text);">${f2(L.range_pct)}%</span> ${badge(L.class)}</div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.7;">${cellLine}</div>
       </div>
       <div class="panel" style="margin-bottom:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ MODE A — DAY TRADE ON A 2+ DTE CONTRACT · BEST ONE-SIDED MOVE AFTER THE OPENING RANGE CLOSES</div>
@@ -134,7 +135,7 @@
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ THE RECORD — LAST ${D.log.length} SESSIONS</div>
         <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>${['SESSION', 'PRIOR DAY', 'VIX · DRAWDOWN', 'OPENING RANGE', 'BEST MOVE AFTER 9:00 CT', 'DAY RANGE', 'OPEN→CLOSE'].map(h => `<th style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);">${h}</th>`).join('')}</tr></thead><tbody>${logRows}</tbody></table></div>
         <div style="font-size:10px;color:var(--text3);margin-top:6px;">Prior-day and opening-range classes use the thresholds in force now; frame stamped ${D.generated ? fmtDate(D.generated.slice(0, 10)) : '—'}, data through ${fmtDate(D.as_of)}.</div>
-      </div>`;
+      </div>`)}`;
   }
   window._rfEra = k => { S.era = k; render(); };
   window.renderRangeFilter = render;

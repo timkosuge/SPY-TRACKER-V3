@@ -206,11 +206,57 @@ def verdicts(daily, session, overnight):
     return V
 
 
+def ct_time(hhmm_et):
+    h, m = int(hhmm_et[:2]), int(hhmm_et[3:])
+    h = (h - 1) % 24
+    return f"{12 if h % 12 == 0 else h % 12}:{m:02d} {'AM' if h < 12 else 'PM'} CT"
+
+
+def add_headlines(V, daily, session, overnight):
+    """A short headline and a one-line reason for each verdict, from the same figures its text uses."""
+    d = daily.get("2010-2026") or {}
+    z = session.get("zones") or {}
+    lc = session.get("london_close") or {}
+    mvf = (session.get("monday_vs_friday") or {}).get("same_direction") or {}
+    events = {ev["label"]: ev for ev in (overnight.get("events") or {}).values()}
+    for v in V:
+        t, ok = v["topic"], v["level"] == "finding"
+        if t == "Overnight vs session" and d:
+            v["headline"] = "The gain is made overnight. The movement happens in the session."
+            v["why"] = f"Since 2010: {d['cum_overnight']:+.0f}% close to open against {d['cum_session']:+.0f}% open to close. A typical session moves {d['median_abs_session']:.2f}%, a typical night {d['median_abs_overnight']:.2f}%."
+        elif t == "Monday as continuation" and d:
+            mc, wc = d["monday_continues_friday"], d["weekday_continues_prior"]
+            v["headline"] = "Monday tends to continue Friday." if ok else "Monday does not continue Friday."
+            v["why"] = f"Monday went Friday's way {mc['rate']:.0f}% of {mc['n']:,} times; any weekday followed the day before {wc['rate']:.0f}%."
+        elif t == "The weekend gap" and d:
+            v["headline"] = "The weekend gap is no bigger than any other night's."
+            v["why"] = f"Median Monday gap {d['monday_gap_median_abs']:.2f}% against {d['other_gap_median_abs']:.2f}% on other days."
+        elif t == "The midday lull" and z:
+            a, b = z.get("11:00–1:00", {}), z.get("9:30–11:00", {})
+            v["headline"] = "11:00 AM to 1:00 PM CT is the quietest stretch of the day."
+            v["why"] = f"{a['range_median']:.2f}% range and {a['volume_share_per_slot']:.1f}% of the day's volume per half hour, against {b['range_median']:.2f}% and {b['volume_share_per_slot']:.1f}% from 9:30 to 11:00."
+        elif t == "The London close (10:30 CT)" and lc:
+            a = lc["against_morning_next_30"]
+            v["headline"] = "The London close reverses the morning." if ok else "No reversal at the London close (10:30 AM CT)."
+            v["why"] = f"The next half hour went against the morning {a['rate']:.0f}% of {a['n']:,} sessions; other half hours {lc['control_other_slots_mean']:.0f}%."
+        elif t == "Monday morning vs Friday afternoon" and mvf:
+            v["headline"] = "Monday morning follows Friday afternoon." if ok else "Monday morning does not follow Friday afternoon."
+            v["why"] = f"Same direction on {mvf['rate']:.0f}% of {mvf['n']} Mondays."
+        elif t in events and v["level"] != "info":
+            ev = events[t]
+            v["headline"] = f"More movement at the {t} ({ct_time(ev['time_et'])})." if ok else f"Nothing measurable at the {t} ({ct_time(ev['time_et'])})."
+            v["why"] = f"Half-hour range {ev['range_at']:.3f}% at the event against {ev['range_before']:.3f}% before it, on {ev['n']} sessions of futures data so far."
+        else:
+            v["headline"] = v["text"]
+            v["why"] = ""
+    return V
+
+
 def main():
     conn = sqlite3.connect(DB_PATH)
     daily = daily_tests(conn); session = session_tests(conn); overnight = overnight_tests(conn)
     conn.close()
-    out = {"daily": daily, "session": session, "overnight": overnight, "verdicts": verdicts(daily, session, overnight), "floor": FLOOR}
+    out = {"daily": daily, "session": session, "overnight": overnight, "verdicts": add_headlines(verdicts(daily, session, overnight), daily, session, overnight), "floor": FLOOR}
     out.update(stamp(None))
     with open(OUTPUT, "w") as f:
         f.write("const CLOCK_DATA = " + json.dumps(out, separators=(",", ":")) + ";\n")

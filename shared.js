@@ -33,3 +33,9 @@ if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mountLiveEmbeds());
   else mountLiveEmbeds();
 }
+function evidenceFold(key, label, body) {
+  window._folds = window._folds || {};
+  return '<details class="evidence-fold"' + (window._folds[key] ? ' open' : '') + ' ontoggle="window._folds=window._folds||{};window._folds[\'' + key + '\']=this.open" style="margin-top:4px;">'
+    + '<summary style="cursor:pointer;list-style:none;font-family:\'Orbitron\',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);padding:10px 14px;border:1px solid var(--border);border-radius:4px;background:var(--bg3);margin-bottom:12px;">\u25B8 ' + label + '</summary>'
+    + body + '</details>';
+}

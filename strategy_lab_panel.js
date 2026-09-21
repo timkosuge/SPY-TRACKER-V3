@@ -66,8 +66,50 @@
         <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>${['SESSION', 'ENTRY', 'CONTEXT', 'BEST UP', 'BEST DOWN', 'FINAL EXIT', 'BEST CONTRACT TO 1:30 CT (OR CLOSE)'].map(h => `<th style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);">${h}</th>`).join('')}</tr></thead><tbody>${recent}</tbody></table></div>
       </div>`;
     }
+    const CN = { prior_wide: 'wide day', prior_middle: 'middle day', prior_narrow: 'narrow day', or_wide: 'wide opening range', or_narrow: 'narrow opening range', vix_under_15: 'VIX under 15', vix_15_20: 'VIX 15 to 20', vix_20_30: 'VIX 20 to 30', vix_over_30: 'VIX over 30', vix_over_20: 'VIX over 20', dd_over_5: 'more than 5% off the high', dd_2_5: '2 to 5% off the high', dd_within_2: 'within 2% of the high' };
+    const unstable = id => (D.findings || []).some(f => f.strategy === id && f.level === 'caution' && /not stable|last 20 trades/.test(f.text));
+    const edges = [], flat = [];
+    for (const s of D.strategies) {
+      if (s.role !== 'trade' || s.n < floor) continue;
+      const ctrl = byId[s.mode === 'A' ? 'A0' : 'B0']; const t = th(s);
+      const e = s.either_side[t], c = ctrl.either_side[t];
+      (sep(e, c) && e.rate > c.rate ? edges : flat).push({ s, e, c, t, ctrl, lift: e.rate - c.rate });
+    }
+    edges.sort((a, b) => b.lift - a.lift);
+    const dirWord = (s, ctrl) => {
+      let best = null;
+      for (const [k, ag] of Object.entries(s.exits)) {
+        if (ag.n < floor) continue;
+        for (const side of ['long', 'short']) {
+          const own = ag[side], base = (ctrl.exits[k] || {})[side];
+          if (base && sep(own, base) && own.rate > base.rate && (!best || own.rate > best.own.rate)) best = { side, own, base };
+        }
+      }
+      return best ? `<b style="color:var(--green);">${best.side === 'long' ? 'Long' : 'Short'} edge</b> <span style="color:var(--text3);">(${f1(best.own.rate)}% vs ${f1(best.base.rate)}%)</span>` : '<span style="color:var(--text3);">No direction</span>';
+    };
+    const peakAt = s => { if (s.mode !== 'A' || s.peak_min_median == null) return ''; const m = 8 * 60 + 30 + s.peak_min_median, h = Math.floor(m / 60); return `move lands ~${h > 12 ? h - 12 : h}:${String(m % 60).padStart(2, '0')} CT`; };
+    const line = ({ s, e, c, t, ctrl }) => `<div onclick="window._slOpen('${s.id}')" style="cursor:pointer;display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(170px,1fr) minmax(120px,0.8fr) minmax(110px,0.7fr);gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid rgba(255,255,255,0.05);font-size:12px;">
+        <div style="color:var(--text);font-weight:700;">${s.entry.map(n => CN[n] || n).join(' + ').replace(/^./, x => x.toUpperCase())}${s.mode === 'B' ? ` <span style="font-weight:400;color:var(--text3);">· hold ${s.hold}</span>` : ''}${unstable(s.id) ? ' <span style="color:var(--red);font-weight:400;" title="The first and second halves of this setup\'s record disagree">⚠ unstable</span>' : ''}</div>
+        <div><b style="color:var(--green);">${f1(e.rate)}%</b> <span style="color:var(--text3);">reach ${t}% · normal ${f1(c.rate)}%</span></div>
+        <div>${dirWord(s, ctrl)}</div>
+        <div style="color:var(--text3);">${peakAt(s) || `${s.n.toLocaleString('en-US')} cases`}</div>
+      </div>`;
+    const dayEdges = edges.filter(x => x.s.mode === 'A'), holdEdges = edges.filter(x => x.s.mode === 'B');
+    const flatLine = flat.length ? `<div style="font-size:12px;color:var(--text2);margin-top:10px;"><b style="color:var(--text3);">No edge over an ordinary day:</b> ${flat.map(({ s }) => s.entry.map(n => CN[n] || n).join(' + ')).join(' · ')}</div>` : '';
+    const group = (title, list) => list.length ? `<div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin:10px 0 2px;">${title}</div>${list.map(line).join('')}` : '';
+    const edgeHtml = `<div class="panel" style="margin-bottom:12px;">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:4px;">⬡ SETUPS THAT MOVE MORE THAN AN ORDINARY DAY — STRONGEST FIRST</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Each line: how often the move reached its target size against an ordinary day, whether either direction won more often, and when the move usually lands.</div>
+      ${group('DAY TRADES — ENTERED AT 9:00 CT, TARGET SIZE 0.75%', dayEdges)}
+      ${group('HOLDS — FROM THE NEXT OPEN, TARGET SIZE 1.5%', holdEdges)}
+      ${edges.length ? '' : '<div style="font-size:12px;color:var(--text2);">None of the setups moves more than an ordinary day on the record so far.</div>'}
+      ${flatLine}
+      <div style="font-size:10px;color:var(--text3);margin-top:8px;">Click a line to open that setup's full record in the evidence below.</div>
+    </div>`;
     el.innerHTML = `
       ${decisionCard(false)}
+      ${edgeHtml}
+      ${evidenceFold('labEvidence', 'SHOW THE EVIDENCE — WHAT IS ARMED, EVERY FINDING, THE FULL SCORECARD', `
       <div class="panel" style="margin-bottom:12px;border-left:4px solid var(--purple);">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--purple);margin-bottom:8px;">⬡ FINDINGS — RECOMPUTED EVERY RUN, DATA THROUGH ${fmtDate(D.as_of).toUpperCase()}</div>
         ${findingsHtml || '<div style="color:var(--text3);font-size:11px;">No strategy has enough trades to score yet.</div>'}
@@ -82,21 +124,29 @@
         <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>${['ID', 'STRATEGY', 'TRADES', 'REACHED THE SIZE TARGET (0.75% DAY / 1.5% HOLD), EITHER SIDE', 'LONG WON AT FINAL EXIT', 'SHORT WON AT FINAL EXIT', 'BEST LONG RULE', 'BEST SHORT RULE', 'RECORD'].map(h => `<th style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);">${h}</th>`).join('')}</tr></thead><tbody>${scoreRows}</tbody></table></div>
         <div style="font-size:10px;color:var(--text3);margin-top:6px;">A0 and B0 are the controls: the same trade on every session. ▲ / ▼ marks a strategy whose size-target rate is separated from its control. Best rule is the target/stop pair with the highest expectancy at n ≥ ${floor}. Strategies live in strategies.json; a change there is scored on the next run.</div>
       </div>
-      ${detail}`;
+      ${detail}`)}`;
   }
   function decisionCard(compact) {
     const D = data(); if (!D || !D.decision) return '';
     const d = D.decision; const holdOk = /CANDIDATE/.test(d.hold); const dayOk = /ONLY IF/.test(d.day);
     const col = holdOk || dayOk ? 'var(--green)' : 'var(--red)';
+    const tone = { go: 'var(--green)', stop: 'var(--red)', info: 'var(--text)' };
+    const rows = (d.rows || []).map(r => `<div style="display:grid;grid-template-columns:minmax(150px,200px) minmax(160px,260px) 1fr;gap:12px;align-items:baseline;padding:7px 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:11px;color:var(--text3);">${r.q}</div>
+        <div style="font-size:14px;font-weight:700;color:${tone[r.tone] || 'var(--text)'};">${r.a}</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.5;">${r.why}</div>
+      </div>`).join('');
+    const reasoning = compact || !d.lines ? '' : evidenceFold('decisionReasoning', 'THE FULL REASONING', d.lines.map(l => `<div style="font-size:12px;color:var(--text2);line-height:1.7;padding:3px 0 3px 8px;border-left:2px solid var(--border);margin-bottom:3px;">${l}</div>`).join(''));
     return `<div class="panel" style="border-left:4px solid ${col};margin-bottom:12px;">
-      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">DECISION FOR THE NEXT SESSION · FROM THE CLOSE OF ${fmtDate(D.as_of).toUpperCase()}</div>
-      <div style="font-family:'Orbitron',monospace;font-size:${compact ? 13 : 16}px;letter-spacing:2px;color:${col};margin-bottom:6px;">${d.verdict}</div>
+      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">THE CALL FOR THE NEXT SESSION · FROM THE CLOSE OF ${fmtDate(D.as_of).toUpperCase()}</div>
+      <div style="font-family:'Orbitron',monospace;font-size:${compact ? 13 : 16}px;letter-spacing:2px;color:${col};margin-bottom:4px;">${d.verdict}</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">${d.context}</div>
-      ${d.lines.map(l => `<div style="font-size:12px;color:var(--text2);line-height:1.7;padding:3px 0 3px 8px;border-left:2px solid var(--border);margin-bottom:3px;">${l}</div>`).join('')}
-      <div style="font-size:10px;color:var(--text3);margin-top:4px;">Every rate is on SPY's move from the entry price against the same trade taken every session; an edge is stated only when the intervals do not overlap. Recomputed nightly from the strategy record.</div>
+      ${rows || d.lines.map(l => `<div style="font-size:12px;color:var(--text2);line-height:1.7;">${l}</div>`).join('')}
+      <div style="font-size:10px;color:var(--text3);margin-top:8px;">"Normal" is the same trade taken on every session. An answer is given only when the two rates are measurably different.</div>
+      ${reasoning}
     </div>`;
   }
   window.renderDecisionCard = decisionCard;
-  window._slOpen = id => { S.open = id; render(); const el = document.getElementById('strategyLabContent'); if (id && el) { const d = el.querySelector('.panel[style*="var(--cyan)"]'); if (d) d.scrollIntoView({ block: 'nearest' }); } };
+  window._slOpen = id => { S.open = id; if (id) { window._folds = window._folds || {}; window._folds.labEvidence = true; } render(); const el = document.getElementById('strategyLabContent'); if (id && el) { const d = el.querySelector('.panel[style*="var(--cyan)"]'); if (d) d.scrollIntoView({ block: 'nearest' }); } };
   window.renderStrategyLab = render;
 })();
