@@ -24,15 +24,17 @@ for (let k = 0; k < 1300; k++) { const d = new Date(Date.parse(last.d) - (1299 -
 global.SMART_DUMB = { available: true, weeks: weeks.length, first: weeks[0].d, last: last.d, lookback_weeks: 156, aaii_weeks: 2000,
   latest: { d: last.d, entry: last.d, institutional: 90, small: 10, spread: 80, lev_idx: 90, asset_idx: 90, nonrept_idx: 10, other_idx: 10, dealer_idx: 50, aaii_idx: 10, lev_net: 1, asset_net: 1, nonrept_net: 1, other_net: 1, dealer_net: 1 },
   categories: [], tests: {}, verdicts: [], series: weeks, daily_px: daily, extremes: { hi: 72.3, lo: 27.7, since: weeks[0].d } };
-let html = ''; global.document = { getElementById: () => ({ set innerHTML(v) { html = v; } }) };
+let html = ''; let width = 1800; global.document = { getElementById: () => ({ clientWidth: width, set innerHTML(v) { html = v; } }) };
 eval(fs.readFileSync('smart_dumb_panel.js', 'utf8').replace(/\r\n/g, '\n'));
 const out = {};
 for (const r of ['6m', 'all']) {
   window._sdRange = r; window.renderSmartDumb();
-  const svg = html.match(/<svg viewBox="0 0 960[\s\S]*?<\/svg>/)[0];
+  const svg = html.match(/<svg viewBox="0 0 \d+[\s\S]*?<\/svg>/)[0];
   const polys = [...svg.matchAll(/<polyline points="([^"]+)"/g)].map(m => m[1].split(' ').length);
-  out[r] = { polys, callouts: [...svg.matchAll(/font-weight="700"[^>]*>([^<]+)</g)].map(m => m[1]), log: /SPY \(log scale\)/.test(html), dashed: (svg.match(/stroke-dasharray/g) || []).length, legend: (html.match(/Last = \d+/g) || []) };
+  const vb = svg.match(/viewBox="0 0 (\d+) (\d+)"/); const labels = [...svg.matchAll(/text-anchor="end" font-size="11"[^>]*>(\d+)</g)].map(m => +m[1]);
+  out[r] = { vbW: +vb[1], widthAttr: /width="\d+" height="\d+"/.test(svg), leftLabels: labels, polys, callouts: [...svg.matchAll(/font-weight="700"[^>]*>([^<]+)</g)].map(m => m[1]), log: /SPY \(log scale\)/.test(html), dashed: (svg.match(/stroke-dasharray/g) || []).length, legend: (html.match(/Last = \d+/g) || []) };
 }
+width = 1000; window._sdRange = '6m'; window.renderSmartDumb(); out.narrow = +html.match(/viewBox="0 0 (\d+)/)[1];
 process.stdout.write(JSON.stringify(out));
 """
 
@@ -62,6 +64,23 @@ class Chart(unittest.TestCase):
     def test_both_extremes_are_drawn_and_the_latest_values_labelled(self):
         self.assertEqual(self.out["6m"]["dashed"], 2)
         self.assertEqual(self.out["6m"]["legend"], ["Last = 90", "Last = 10"])
+
+
+class Layout(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.out = Chart.out if hasattr(Chart, "out") else json.loads(subprocess.run(["node", "-e", HARNESS], capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+
+    def test_the_chart_is_drawn_at_the_panels_real_width_so_text_keeps_its_size(self):
+        self.assertEqual(self.out["6m"]["vbW"], 1770)
+        self.assertEqual(self.out["narrow"], 970)
+        self.assertTrue(self.out["6m"]["widthAttr"])
+
+    def test_the_left_scale_is_fitted_and_always_shows_both_extremes(self):
+        labels = self.out["6m"]["leftLabels"]
+        self.assertIn(72, labels)
+        self.assertIn(28, labels)
+        self.assertEqual(labels, sorted(labels))
 
 
 class Payload(unittest.TestCase):
