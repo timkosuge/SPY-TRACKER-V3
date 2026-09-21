@@ -17,6 +17,7 @@ Fields per record:
   pc  = prev close
 """
 
+from payload_meta import stamp
 import sqlite3, json, math
 from fetch_and_analyze import GAP_THRESHOLD_PCT
 from trading_days import is_trading_day
@@ -114,9 +115,11 @@ def main():
     # Sort newest first (matches existing format)
     records.reverse()
     
+    payload = {"records": records}
+    payload.update(stamp(None))
     with open(OUT_PATH, 'w') as f:
         f.write('const EXPIRY_DATA = ')
-        json.dump(records, f, separators=(',', ':'))
+        json.dump(payload, f, separators=(',', ':'))
         f.write(';\n')
     
     print(f'expiry_data.js: {len(records)} records, {records[-1]["d"]} → {records[0]["d"]}')

@@ -22,8 +22,8 @@ def payload_meta(path):
             s = f.read()
     except OSError:
         return None
-    m = re.search(r'"source_max_date":"([0-9-]+|null)"?', s)
-    g = re.search(r'"generated":"([^"]+)"', s)
+    m = re.search(r'"source_max_date"\s*:\s*"?([0-9-]+|null)"?', s)
+    g = re.search(r'"generated"\s*:\s*"([^"]+)"', s)
     return {"source_max_date": (m.group(1) if m and m.group(1) != "null" else None), "generated": g.group(1) if g else None}
 
 

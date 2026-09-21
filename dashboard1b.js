@@ -1442,7 +1442,7 @@ function renderIntradayPattern(md, sd) {
 
   // Before market open: show yesterday's completed session
   if(!open_||!prevClose) {
-    const P = INTRADAY_PATTERNS;
+    const P = payloadRows(INTRADAY_PATTERNS);
     const yest = P[P.length-1];
     if(!yest) { el.innerHTML='<div class="no-data">No pattern data</div>'; return; }
     const ytMatches = P.filter(p=>p.gt===yest.gt&&p.f3d===yest.f3d);
@@ -1489,7 +1489,7 @@ function renderIntradayPattern(md, sd) {
   const f30dir = cur>open_?'UP':'DOWN';
   const gapFilled = gapType==='GAP_UP'?low<=prevClose:gapType==='GAP_DOWN'?high>=prevClose:null;
   const dayRange = high-low;
-  const P = INTRADAY_PATTERNS;
+  const P = payloadRows(INTRADAY_PATTERNS);
   const matches = P.filter(p=>p.gt===gapType&&p.f3d===f30dir);
   const avg = arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
   const pctFn = (arr,fn)=>arr.length?arr.filter(fn).length/arr.length*100:0;
@@ -1508,7 +1508,7 @@ function renderIntradayPattern(md, sd) {
   // Plain English summary
   const summaryText = `On the ${total} past days that opened ${gapType==='FLAT'?'flat':gapType==='GAP_UP'?'up':'down'} and moved ${f30dir==='UP'?'up':'down'} in the first 30 min, the day continued in that direction ${followThruRate.toFixed(0)}% of the time with an avg range of $${fmt(avgRange,2)}. The most common outcome was ${mostLikely?mostLikely[0].replace('_',' ').toLowerCase():'—'}.`;
 
-  const lastUpdated = INTRADAY_PATTERNS?.[0]?.d || '—';
+  const lastUpdated = payloadRows(INTRADAY_PATTERNS)[0]?.d || '—';
   el.innerHTML = `
     <div>
       <!-- WHAT IS THIS explanation — always visible -->
@@ -1599,7 +1599,7 @@ function renderExpiryBehavior(md) {
   const q = md?.quotes || {}, spy = q['SPY'] || {}, mp = md?.max_pain || [];
   const nearest = mp[0];
   const now = new Date(), dow = now.getDay();
-  const E_ALL = EXPIRY_DATA;
+  const E_ALL = payloadRows(EXPIRY_DATA);
   const E = _expiryLookback === '2026' ? E_ALL.filter(e => e.d.startsWith('2026')) : E_ALL;
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -3554,7 +3554,7 @@ function renderTimeOfDay() {
   }
 
   const T   = TOD_STATS;
-  const ALL = INTRADAY_SESSION_STATS;
+  const ALL = payloadRows(INTRADAY_SESSION_STATS);
   const curYear = new Date().getFullYear();
 
   // ── Filter sessions ────────────────────────────────────────────────────────

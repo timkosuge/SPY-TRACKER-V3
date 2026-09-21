@@ -18,6 +18,7 @@ ET       = pytz.timezone("America/New_York")
 MARKET_CLOSE_CT = (15, 0)
 GAP_THRESHOLD_PCT = 0.25
 from trading_days import nyse_holidays, is_trading_day
+from payload_meta import stamp as payload_stamp
 SESSION_START_ET = 9*60+30
 SESSION_END_ET   = 16*60
 VOLUME_BUCKETS = [
@@ -1617,9 +1618,11 @@ def export_intraday_json(conn):
             ]
         records.append(rec)
 
+    library = {"records": records}
+    library.update(payload_stamp(None))
     with open('intraday_library.js', 'w') as f:
         f.write('const INTRADAY_SESSION_STATS = ')
-        json.dump(records, f)
+        json.dump(library, f)
         f.write(';\n')
     print(f'  intraday_library.js: {len(records)} sessions exported')
 

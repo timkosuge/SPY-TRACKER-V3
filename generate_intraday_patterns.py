@@ -22,6 +22,7 @@ Fields per record:
   pc   = prev_close
 """
 
+from payload_meta import stamp
 import sqlite3, json
 from datetime import date, timedelta
 from collections import defaultdict
@@ -186,9 +187,11 @@ def main():
     
     conn.close()
     
+    payload = {"records": records}
+    payload.update(stamp(None))
     with open(OUT_PATH, 'w') as f:
         f.write('const INTRADAY_PATTERNS = ')
-        json.dump(records, f, separators=(',', ':'))
+        json.dump(payload, f, separators=(',', ':'))
         f.write(';\n')
     
     print(f'intraday_patterns.js: {len(records)} records')

@@ -32,10 +32,11 @@ class FredUnits(unittest.TestCase):
 
 
 class SentimentValidation(unittest.TestCase):
-    def test_reading_must_sum_to_one_hundred(self):
+    def test_a_garbled_reading_is_rejected_and_nothing_is_hand_entered(self):
         with open("fetch_sentiment.py", encoding="utf-8") as f:
             src = f.read()
-        self.assertIn("99 <= total <= 101", src)
+        self.assertIn("90 <= total <= 110", src)
+        self.assertIn("bull + bear > 105", src)
         self.assertNotIn("MANUAL_AAII", src)
 
 

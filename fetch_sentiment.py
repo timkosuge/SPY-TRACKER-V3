@@ -372,11 +372,17 @@ def main():
 
     aaii = fetch_aaii()
     if aaii:
-        vals = [aaii.get(k) for k in ('bullish', 'neutral', 'bearish')]
-        total = sum(v for v in vals if v is not None) if all(v is not None for v in vals) else None
-        if total is None or not (99 <= total <= 101) or any(v < 0 or v > 100 for v in vals):
-            print(f"  AAII: rejected reading that does not sum to 100 ({vals}) — keeping existing.")
+        bull, neu, bear = (aaii.get(k) for k in ('bullish', 'neutral', 'bearish'))
+        if bull is None or bear is None or not (0 <= bull <= 100) or not (0 <= bear <= 100) or bull + bear > 105:
+            print(f"  AAII: rejected reading ({bull}/{neu}/{bear}) — keeping existing.")
             aaii = None
+        else:
+            total = (bull + neu + bear) if neu is not None else None
+            if total is None or not (90 <= total <= 110):
+                aaii['neutral'] = round(100.0 - bull - bear, 1)
+                aaii['neutral_derived'] = True
+                print(f"  AAII: neutral derived as {aaii['neutral']} (scraped {neu}, three figures summed to {total}).")
+            aaii['spread'] = round(bull - bear, 1)
 
     print("=== Fetching COT (E-Mini S&P 500) ===")
     cot = fetch_cot()
