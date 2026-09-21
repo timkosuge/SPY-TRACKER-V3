@@ -6,7 +6,9 @@ move bins, cross table. Lookback x DOW filters.
 """
 import sqlite3, json, statistics
 from payload_meta import stamp
+import pytz
 from datetime import date, datetime, timedelta
+ET = pytz.timezone("America/New_York")
 from collections import defaultdict
 
 DB_PATH  = 'spy_data.db'
@@ -37,7 +39,7 @@ def extract_window(bars, ts0, ts1):
                 squeeze=rng<0.15)
 
 def build_sessions(conn):
-    today_str = date.today().isoformat()
+    today_str = datetime.now(ET).date().isoformat()
     # open/close/gap from daily_ohlcv
     daily = {}
     for date_str, open_p, close_p, prev_close in conn.execute('''
@@ -184,7 +186,7 @@ def main():
     conn.close()
     if not sessions: print('window_stats.js: no sessions'); return
 
-    today   = date.today()
+    today   = datetime.now(ET).date()
     cut_12m = (today - timedelta(days=365)).isoformat()
     cut_ytd = f'{today.year}-01-01'
     LB = {'all': lambda r: True, '12m': lambda r: r['date']>=cut_12m, 'ytd': lambda r: r['date']>=cut_ytd}

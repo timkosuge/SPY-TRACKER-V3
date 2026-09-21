@@ -264,7 +264,7 @@ function phRenderFiltered(sd, opts) {
     const oh=m.oh_pts??m.open_to_high, ol=m.ol_pts??m.open_to_low;
     const hc=m.hc_pts??m.high_to_close, lc=m.lc_pts??m.low_to_close;
     return `<tr>
-    <td>${day.date}</td>
+    <td>${fmtDate(day.date,'short')}</td>
     <td>${fmt(day.open,2)}</td><td class="up">${fmt(day.high,2)}</td><td class="dn">${fmt(day.low,2)}</td>
     <td class="${day.close>=day.open?'up':'dn'}">${fmt(day.close,2)}</td>
     <td>${fmtK(day.volume)}</td>
@@ -752,7 +752,7 @@ function renderVolHistory(sd){
 
   // Raw table
   $('volHistBody').innerHTML=sd.map(day=>{const v=day.volume_analysis||{};return `<tr>
-    <td>${day.date}</td>
+    <td>${fmtDate(day.date,'short')}</td>
     <td>${fmtK(day.volume)}</td>
     <td>${v.open_1h?fmtK(v.open_1h):'—'}</td>
     <td>${v.open_1h_pct?fmt(v.open_1h_pct,1)+'%':'—'}</td>
@@ -832,8 +832,8 @@ function renderWEM(md){
       : 'Live gauge only · remaining days at the current IV · not used for scoring';
     const lbl = $('wemZScoreLabel');
     if (lbl) lbl.textContent = m==='static'
-      ? '⬡ STATIC WEM POSITION — Z-SCORE'
-      : '⬡ WEM POSITION — Z-SCORE';
+      ? '⬡ STATIC WEM POSITION — HALF-RANGE POSITION'
+      : '⬡ WEM POSITION — HALF-RANGE POSITION';
     renderWEM(md);
   };
 
@@ -1157,7 +1157,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
         <div>
           <span style="font-family:'Share Tech Mono',monospace;font-size:34px;font-weight:bold;color:${zColor};">${z>=0?'+':''}${fmt(z,3)}</span>
-          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-left:8px;letter-spacing:2px;">Z-SCORE</span>
+          <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);margin-left:8px;letter-spacing:2px;">HALF-RANGE POSITION</span>
         </div>
         <div style="text-align:right;">
           <div style="font-family:'Orbitron',monospace;font-size:11px;color:${zColor};letter-spacing:3px;">${zLabel}</div>
@@ -1251,7 +1251,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
 
         <!-- BELL CURVE -->
         <text x="${bX}" y="${bY-8}" fill="rgba(255,255,255,0.25)"
-          font-size="9" font-family="Orbitron,monospace">Z-SCORE DISTRIBUTION${isStatic2?' (STATIC)':''}</text>
+          font-size="9" font-family="Orbitron,monospace">HALF-RANGE POSITION DISTRIBUTION${isStatic2?' (STATIC)':''}</text>
         ${shade?`<path d="${shade}" fill="${zColor}" opacity="0.25"/>`:''}
         <path d="${bLine}" fill="none" stroke="${zColor}" stroke-width="1.5" opacity="0.6"/>
         <line x1="${bX}" y1="${bY+bH}" x2="${bX+bW}" y2="${bY+bH}"
@@ -1287,7 +1287,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:8px;">
         ${[
           {l:'FROM MID',         v:(z>=0?'+':'')+'$'+fmt(price2-mid2,2), c:zColor},
-          {l:'% OF RANGE',       v:fmt(Math.abs(z)*100,1)+'%',           c:zColor},
+          {l:'% OF HALF-RANGE',  v:fmt(Math.abs(z)*100,1)+'%',           c:zColor},
           {l:'HIST AVG Z',       v:(avgZ>=0?'+':'')+fmt(avgZ,2),         c:'var(--text2)'},
           {l:'% WKS MORE EXTR',  v:pctBeyond!=null?fmt(pctBeyond,0)+'%':'—', c:'var(--text3)'},
         ].map(s=>`<div style="text-align:center;background:var(--bg3);border-radius:3px;padding:8px;">
@@ -1298,7 +1298,7 @@ ${stats.breach_by_day[d]||0} <span style="font-size:10px;color:var(--text3)">of 
   }
 
   $('wemHistBody').innerHTML=[...wems].reverse().map(w=>{ const ok=(w.static_band_status==='ok'||w.static_band_status==='vix')&&w.static_wem_low!=null; const vix=w.static_band_status==='vix'; return `<tr${ok?'':' style="opacity:0.55"'}>
-    <td>${w.week_start}${ok?(vix?' <span title="VIX-implied band — weekly ATM IV was not captured" style="color:#ffcc00">v</span>':''):' <span title="No static band for this week" style="color:#ff8800">•</span>'}</td>
+    <td>${fmtDate(w.week_start,'short')}${ok?(vix?' <span title="VIX-implied band — weekly ATM IV was not captured" style="color:#ffcc00">v</span>':''):' <span title="No static band for this week" style="color:#ff8800">•</span>'}</td>
     <td>$${fmt(w.friday_close||w.wem_mid,2)}</td>
     <td class="up">${ok?'$'+fmt(w.static_wem_high,2):'—'}</td>
     <td class="dn">${ok?'$'+fmt(w.static_wem_low,2):'—'}</td>
@@ -1323,7 +1323,7 @@ ${w.breach_side||'—'}</td>
 function renderVolume(sd,md){
   if(!sd||!sd.length){$('panel-volume').innerHTML='<div class="no-data">No volume data yet.</div>';return;}
   const day=sd[0],v=day.volume_analysis||{};
-  $('volDate').innerHTML=`<span class="live-dot"></span>VOLUME ANALYSIS — ${day.date}`;
+  $('volDate').innerHTML=`<span class="live-dot"></span>VOLUME ANALYSIS — ${fmtDate(day.date)}`;
   $('volSessionRow').innerHTML=[
     {l:'TOTAL',v:fmtK(day.volume),p:''},
     {l:'OPEN 1H',v:v.open_1h?fmtK(v.open_1h):'—',p:v.open_1h_pct?fmt(v.open_1h_pct,1)+'%':''},
@@ -1882,8 +1882,7 @@ function handleJournalFile(file) {
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
     const dateEl = document.getElementById('journalChartDate');
     if (dateEl && !dateEl.value) {
-      const ct = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-      dateEl.value = ct.toISOString().slice(0,10);
+      dateEl.value = etToday();
     }
   };
   reader.readAsDataURL(file);
@@ -1914,7 +1913,7 @@ window.saveJournalChart = function() {
   if (!_currentChartBase64) return;
   const note  = (document.getElementById('journalNote')?.value || '').trim();
   const tag   = (document.getElementById('journalChartTag')?.value || '').trim();
-  const date  = document.getElementById('journalChartDate')?.value || new Date().toISOString().slice(0,10);
+  const date  = document.getElementById('journalChartDate')?.value || etToday();
   const entry = {
     id:       Date.now(),
     ts:       new Date().toISOString(),
@@ -2965,7 +2964,6 @@ async function renderLiquidity() {
   };
   const chgColor = n => n > 0 ? '#00ff88' : n < 0 ? '#ff3355' : '#ffcc00';
   const chgSign  = n => n > 0 ? '+' : '';
-  const fmtPct   = n => n == null ? '—' : (n > 0 ? '+' : '') + n.toFixed(2) + '%';
 
   const buildHTML = d => {
     const regimeColor = d.regime === 'EASING' ? '#00ff88' :
@@ -3401,7 +3399,7 @@ async function loadCOT() {
     el.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">
-          Report: <span style="color:var(--text2);">${d.report_date||d.date||'—'}</span>
+          Report: <span style="color:var(--text2);">${fmtDate(d.report_date||d.date)}</span>
           ${d.stale?'<span style="color:#ffcc00;margin-left:6px;">(CACHED)</span>':''}
           · OI: <span style="color:var(--text2);">${fmtK(d.oi)}</span>
         </div>
@@ -4239,7 +4237,6 @@ function _renderGapOHLCBlocks(sd, gapDays) {
   if(!sd || sd.length <= 1) return;
   sd = sd.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const $ = id => document.getElementById(id);
-  const fmt = (v,d) => { d = d==null?1:d; return v==null?'--':Number(v).toFixed(d); };
   const gapStatCardsEl = $('gapStatCards');
   const gapSizeChartEl = $('gapSizeChart');
   const gapByDayEl     = $('gapByDayChart');
@@ -4401,7 +4398,7 @@ function _renderGapOHLCBlocks(sd, gapDays) {
         const c = g.dir==='UP'?'#00ff88':'#ff3355';
         const fillC = g.filledSameDay?'#00ff88':'#ff3355';
         return `<tr>
-          <td>${g.date}</td>
+          <td>${fmtDate(g.date,'short')}</td>
           <td style="color:var(--text2);">$${fmt(g.prevClose,2)}</td>
           <td style="color:${c};">$${fmt(g.open,2)}</td>
           <td style="color:${c};font-weight:bold;">${g.gapAmt>=0?'+':''}$${fmt(g.gapAmt,2)}</td>
@@ -5019,7 +5016,6 @@ function _renderMacroHTML(data) {
   const regime = data.regime || {};
   const fmt2 = v => v == null ? '—' : Number(v).toFixed(2);
   const fmt1 = v => v == null ? '—' : Number(v).toFixed(1);
-  const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%';
   const fmtB = v => {
     if (v == null) return '—';
     const abs = Math.abs(v), sign = v < 0 ? '-' : '';
@@ -6163,8 +6159,8 @@ function _renderSovereignHTML(data) {
         const cards = [
           { label: 'BITCOIN', val: btc.price ? '$' + btc.price.toLocaleString('en-US', {maximumFractionDigits:0}) : '—', sub: btc.pct_change != null ? (btc.pct_change > 0 ? '+' : '') + btc.pct_change.toFixed(2) + '% today' : '', color: '#ff8800', note: 'Risk asset + liquidity signal. Inverse to dollar strength.' },
           { label: 'ETHEREUM', val: eth.price ? '$' + eth.price.toLocaleString('en-US', {maximumFractionDigits:0}) : '—', sub: eth.pct_change != null ? (eth.pct_change > 0 ? '+' : '') + eth.pct_change.toFixed(2) + '% today' : '', color: '#8855ff', note: 'Smart contract platform. CBDC rails will likely use similar tech.' },
-          { label: 'TRADE-WEIGHTED DOLLAR', val: dxyData?.latest ? fmt1(dxyData.latest) : '—', sub: dxyData?.trend ? trendArrow(dxyData.trend) + ' ' + dxyData.trend : '', color: '#00ccff', note: 'Broad dollar index vs trading partners. Crypto trades inversely.' },
-          { label: 'USD/CNY', val: S.DEXCHUS?.latest ? fmt2(S.DEXCHUS.latest) : '—', sub: S.DEXCHUS?.trend ? trendArrow(S.DEXCHUS.trend) + ' ' + S.DEXCHUS.trend : '', color: '#ffcc00', note: 'Yuan vs dollar. China\'s currency manipulation tool and UST selling pressure indicator.' },
+          { label: 'TRADE-WEIGHTED DOLLAR', val: dxyData?.latest ? fmt1(dxyData.latest) : '—', sub: dxyData?.trend ? trendArrow(dxyData.trend) + ' ' + labelEnum(dxyData.trend) : '', color: '#00ccff', note: 'Broad dollar index vs trading partners. Crypto trades inversely.' },
+          { label: 'USD/CNY', val: S.DEXCHUS?.latest ? fmt2(S.DEXCHUS.latest) : '—', sub: S.DEXCHUS?.trend ? trendArrow(S.DEXCHUS.trend) + ' ' + labelEnum(S.DEXCHUS.trend) : '', color: '#ffcc00', note: 'Yuan vs dollar. China\'s currency manipulation tool and UST selling pressure indicator.' },
         ];
         return cards.map(c => `
           <div class="panel" style="border-top:2px solid ${c.color};">

@@ -782,8 +782,8 @@ function esRenderReleases(){
     return;
   }
 
-  const today = new Date().toISOString().slice(0,10);
-  const oneYrAgo = new Date(Date.now()-365*24*60*60*1000).toISOString().slice(0,10);
+  const today = etToday();
+  const oneYrAgo = (()=>{const d=new Date(etToday()+'T12:00:00Z'); d.setUTCFullYear(d.getUTCFullYear()-1); return d.toISOString().slice(0,10);})();
   const color = REL_COLORS[_relType];
   const label = REL_LABELS[_relType];
 

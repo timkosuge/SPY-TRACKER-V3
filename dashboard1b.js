@@ -1171,7 +1171,7 @@ function _renderActiveDetail(analogs) {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         <div style="font-family:'Orbitron',monospace;font-size:14px;font-weight:900;color:${a.color};">${a.name.toUpperCase()}</div>
         <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">Score: <span style="color:${a.color};font-size:14px;">${a.score}</span></div>
-        <div style="font-size:11px;color:var(--text3);">r=${a.corr.toFixed(3)} · rmse=${a.rmse.toFixed(2)} · matched ${a.start_date} → ${a.end_date}; projection replays ${a.proj_start_date} → ${a.proj_end_date}${a.overlaps && a.overlaps.length ? ` · shares history with ${a.overlaps.join(', ')}` : ''}</div>
+        <div style="font-size:11px;color:var(--text3);">r=${a.corr.toFixed(3)} · rmse=${a.rmse.toFixed(2)} · matched ${fmtDate(a.start_date,'short')} → ${fmtDate(a.end_date,'short')}; projection replays ${fmtDate(a.proj_start_date,'short')} → ${fmtDate(a.proj_end_date,'short')}${a.overlaps && a.overlaps.length ? ` · shares history with ${a.overlaps.join(', ')}` : ''}</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;">
         ${[
@@ -1194,7 +1194,7 @@ function _renderActiveDetail(analogs) {
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">${lbl}</div>
             <div style="font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:900;color:${pc};">$${spy.toFixed(0)}</div>
             <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${pc};">${pctV>=0?'+':''}${pctV.toFixed(1)}%</div>
-            <div style="font-size:9px;color:var(--text3);margin-top:2px;">${dt}</div>
+            <div style="font-size:9px;color:var(--text3);margin-top:2px;">${fmtDate(dt,'short')}</div>
           </div>`;
         }).join('')}
       </div>
@@ -1417,7 +1417,7 @@ function analogShowProj() {
   const maxRows=Math.max(...vis.map(a=>a.proj.length),0);
   tbody.innerHTML=Array.from({length:Math.min(maxRows,252)},(_,i)=>{
     const day=curDay+i+1;
-    const estDate=vis[0]?.proj[i]?.est_date||'';
+    const estDate=fmtDate(vis[0]?.proj[i]?.est_date||'','short');
     const cols=vis.map(a=>{
       const p=a.proj[i];
       if(!p)return `<td colspan="2" style="padding:5px 6px;text-align:center;color:var(--text3);">—</td>`;
@@ -1462,7 +1462,7 @@ function renderIntradayPattern(md, sd) {
         <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">
           <div style="background:${gtc}15;border:1px solid ${gtc}33;border-top:3px solid ${gtc};border-radius:3px;padding:8px;text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">GAP TYPE</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${gtc};">${yest.gt.replace('_',' ')}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:13px;color:${gtc};">${labelEnum(yest.gt)}</div>
             <div style="font-size:10px;color:${gtc};">${yest.g>=0?'+':''}${yest.g.toFixed(2)}%</div>
           </div>
           <div style="background:${dc}15;border:1px solid ${dc}33;border-top:3px solid ${dc};border-radius:3px;padding:8px;text-align:center;">
@@ -1472,7 +1472,7 @@ function renderIntradayPattern(md, sd) {
           </div>
           <div style="background:${stc}15;border:1px solid ${stc}33;border-top:3px solid ${stc};border-radius:3px;padding:8px;text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">SESSION TYPE</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${stc};">${yest.st.replace('_',' ')}</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:${stc};">${labelEnum(yest.st)}</div>
           </div>
           <div style="background:var(--bg3);border-top:3px solid ${followPct>65?'#00ff88':followPct>50?'#ffcc00':'#ff3355'};border-radius:3px;padding:8px;text-align:center;">
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);margin-bottom:4px;">FOLLOW-THRU</div>
@@ -1533,7 +1533,7 @@ function renderIntradayPattern(md, sd) {
           <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);letter-spacing:1px;margin-bottom:2px;">TODAY'S CONDITIONS ↓</div>
           <div style="padding:8px 12px;background:${gtColor}15;border:1px solid ${gtColor}44;border-left:3px solid ${gtColor};border-radius:3px;">
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">GAP TYPE</div>
-            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${gtColor};">${gapType.replace('_',' ')} ${gapPct>=0?'+':''}${fmt(gapPct,2)}%</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:16px;color:${gtColor};">${labelEnum(gapType)} ${gapPct>=0?'+':''}${fmt(gapPct,2)}%</div>
           </div>
           <div style="padding:8px 12px;background:${dirColor}15;border:1px solid ${dirColor}44;border-left:3px solid ${dirColor};border-radius:3px;">
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">FIRST 30MIN</div>
@@ -1562,7 +1562,7 @@ function renderIntradayPattern(md, sd) {
           </div>
           ${mostLikely?`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
             <span style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text3);">MOST COMMON OUTCOME:</span>
-            <span style="font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);padding:2px 8px;background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);border-radius:3px;">${mostLikely[0].replace('_',' ')}</span>
+            <span style="font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan);padding:2px 8px;background:rgba(0,204,255,0.1);border:1px solid rgba(0,204,255,0.3);border-radius:3px;">${labelEnum(mostLikely[0])}</span>
             <span style="font-size:11px;color:var(--text3);">${((mostLikely[1]/total)*100).toFixed(0)}% of similar past days</span>
           </div>`:''}
           <div style="display:flex;gap:4px;align-items:flex-end;height:36px;">
@@ -1612,7 +1612,6 @@ function renderExpiryBehavior(md) {
   const med    = arr => { if (!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
   const pctFn  = (arr, fn) => arr.length ? arr.filter(fn).length / arr.length * 100 : 0;
   const fmt2   = n => (parseFloat(n)||0).toFixed(2);
-  const fmtPct = (n,d=1) => { const v=parseFloat(n)||0; return (v>=0?'+':'')+v.toFixed(d)+'%'; };
   const clr    = (v, pos='#00ff88', mid='#ffcc00', neg='#ff3355', posThresh=55, negThresh=45) =>
                    v > posThresh ? pos : v < negThresh ? neg : mid;
 
@@ -2005,7 +2004,7 @@ function renderHubEventInsight() {
   const el = $('hubEventInsightContent');
   if(!el) return;
 
-  const today = new Date().toISOString().slice(0,10);
+  const today = etToday();
 
   // ── Collect all upcoming events ──────────────────────────────────────────
   const events = [];
@@ -2409,7 +2408,7 @@ function renderIntradayVolProfile() {
   const curYear = new Date().getFullYear();
   const lbBtns = [
     fbtn('ALL HISTORY', _ivpLookback==='all',  "_ivpSetLookback('all')"),
-    fbtn('12 MONTHS',   _ivpLookback==='12m',  "_ivpSetLookback('12m')"),
+    fbtn('LAST 365 DAYS',   _ivpLookback==='12m',  "_ivpSetLookback('12m')"),
     fbtn(String(curYear), _ivpLookback==='year', "_ivpSetLookback('year')"),
   ].join(' ');
 
@@ -2459,7 +2458,7 @@ function renderIntradayVolProfile() {
         </div>
         <div style="text-align:right;font-size:10px;color:var(--text3);">
           <div>${profile.length} buckets · ~${nSessions} sessions</div>
-          <div style="margin-top:2px;">5-min avg volume · Central Time</div>
+          <div style="margin-top:2px;">5-min avg volume · slots are Eastern session minutes shown in Central</div>
           <div style="margin-top:2px;">bars = % of mid-session vol · trimmed mean (top 10% of sessions in each slot dropped) · open/close 15min excluded</div>
         </div>
       </div>
@@ -2519,7 +2518,7 @@ function renderIntradayVolStats() {
   const S = INTRADAY_VOL_STATS;
   const qs = S.quintile_stats;
   const fmtM = v => v >= 1000 ? (v/1000).toFixed(1)+'B' : v.toFixed(0)+'M';
-  const fmtPct = v => v.toFixed(1)+'%';
+  const fmtPctPlain = v => v==null||isNaN(v)?'—':Number(v).toFixed(1)+'%';
   const hours = [8,9,10,11,12,13,14];
   const hrLbl = h => h < 12 ? h+'am' : (h===12?'12pm':(h-12)+'pm');
 
@@ -2535,11 +2534,11 @@ function renderIntradayVolStats() {
       <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text3);margin-bottom:8px;">${fmtM(q.vol_lo)}–${fmtM(q.vol_hi)} · ${q.n} days</div>
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
         <span style="font-size:10px;color:var(--text3);">Avg range</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${q.color};">${fmtPct(q.avg_range)}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:${q.color};">${fmtPctPlain(q.avg_range)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
         <span style="font-size:10px;color:var(--text3);">Median range</span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">${fmtPct(q.med_range)}</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text2);">${fmtPctPlain(q.med_range)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
         <span style="font-size:10px;color:var(--text3);">Gap fill rate</span>
@@ -2746,7 +2745,7 @@ function renderWindowStats() {
   const fbtn = (lbl, active, fn) =>
     `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
 
-  const lbBtns  = ['all','12m','ytd'].map(v => fbtn(v==='all'?'ALL HISTORY':v==='12m'?'12 MONTHS':String(curYear)+' YTD', St.lb===v, `_wsSetLb('${v}')`)).join(' ');
+  const lbBtns  = ['all','12m','ytd'].map(v => fbtn(v==='all'?'ALL HISTORY':v==='12m'?'LAST 365 DAYS':String(curYear)+' YTD', St.lb===v, `_wsSetLb('${v}')`)).join(' ');
   const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(v => fbtn(v==='all'?'ALL':v.toUpperCase(), St.dow===v, `_wsSetDow('${v}')`)).join(' ');
 
   if (!D || !D.n) {
@@ -3011,7 +3010,7 @@ function renderWindowStats() {
       <em>Day follow %</em> — of all sessions in this filter, what percent did the full day close in the same direction as the window moved. 
       &nbsp;·&nbsp; <em>Reversal rate</em> — how often the window made a big move and then reversed before it closed. 
       &nbsp;·&nbsp; <em>Avg move</em> — average size of the window's net move (open-to-close within the window). 
-      &nbsp;·&nbsp; All times are Central. Based on ${D.n} sessions (${D.date_range}).
+      &nbsp;·&nbsp; Times are Eastern session minutes shown in Central. Based on ${D.n} sessions (${D.date_range}).
     </div>
   </div>`;
 }
@@ -3158,7 +3157,7 @@ function renderGapStats() {
   // Lookback buttons: All Time | 12 Months | per year
   const lbBtns = [
     fbtn('ALL TIME', _gsLookback==='all', "_gsSetLookback('all')"),
-    fbtn('12 MONTHS', _gsLookback==='12m', "_gsSetLookback('12m')"),
+    fbtn('LAST 365 DAYS', _gsLookback==='12m', "_gsSetLookback('12m')"),
     ...availableYears.map(yr => fbtn(yr, _gsLookback===yr, `_gsSetLookback('${yr}')`))
   ].join('');
 
@@ -3616,7 +3615,7 @@ function renderTimeOfDay() {
     `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
 
   const lbBtns = ['all','12m','year'].map(v =>
-    fbtn(v==='all'?'ALL HISTORY':v==='12m'?'12 MONTHS':String(curYear)+' YTD', _todLookback===v, `_todSetLb('${v}')`)
+    fbtn(v==='all'?'ALL HISTORY':v==='12m'?'LAST 365 DAYS':String(curYear)+' YTD', _todLookback===v, `_todSetLb('${v}')`)
   ).join(' ');
   const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(d =>
     fbtn(d==='all'?'ALL DAYS':d.toUpperCase(), _todDow===d, `_todSetDow('${d}')`)
@@ -3985,7 +3984,7 @@ function renderTimeOfDay() {
       <div style="font-size:10px;color:var(--text3);text-align:right;line-height:1.7;">
         <div>${todN} sessions in the selected window · ${todAll.length} total available</div>
         <div>${todRange}</div>
-        <div>1-min intraday bars · Central Time</div>
+        <div>1-min intraday bars · Eastern session, shown in Central</div>
       </div>
     </div>
     ${n < 5 ? `<div style="padding:20px;text-align:center;color:#ff8800;font-family:'Share Tech Mono',monospace;font-size:12px;">⚠ Only ${n} sessions match this filter — results may not be statistically meaningful.</div>` : ''}
@@ -4095,24 +4094,15 @@ function renderSessionVolStats() {
   // ── Tab intro banner ─────────────────────────────────────────────────────────
   const _svIntro = `<div style="background:rgba(0,204,255,0.04);border:1px solid rgba(0,204,255,0.12);border-radius:4px;padding:14px 18px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8;">
     <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">⬡ WHAT IS THIS TAB?</div>
-    <strong style="color:var(--text1);">Session Volume Profile</strong> shows where volume actually traded throughout the day — not just total volume, but <em>where price was</em> when volume happened.
-    High-volume nodes (HVNs) act as magnets and support/resistance. Low-volume nodes are air pockets where price moves fast.
+    <strong style="color:var(--text1);">Session Volatility Profile</strong> shows the average high-to-low range of SPY in each 5-minute slot of the session, in dollars, across every complete session in the sample. It is built from the 1-minute bars' highs and lows; it does not use volume.
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px;font-size:11px;">
       <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid var(--cyan);">
-        <div style="color:var(--cyan);font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">VOLUME AT PRICE</div>
-        The horizontal bar chart showing how much volume traded at each price level. The widest bars are where the market spent the most time and has the most interest.
+        <div style="color:var(--cyan);font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">AVERAGE RANGE BY 5-MINUTE SLOT</div>
+        Each bar is the mean of (high − low) for that slot over the selected sessions. Taller bars are the slots where price typically travels furthest.
       </div>
       <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ffcc00;">
-        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">HIGH VOLUME NODES (HVN)</div>
-        Price levels with unusually high volume concentration. These tend to act as support/resistance and are often where price stalls or reverses. Watch for retests.
-      </div>
-      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #ff8800;">
-        <div style="color:#ff8800;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">LOW VOLUME NODES (LVN)</div>
-        Price gaps in the volume profile — levels where little trading occurred. Price tends to move through these quickly, making them useful for projecting targets.
-      </div>
-      <div style="background:var(--bg2);border-radius:3px;padding:8px 10px;border-left:2px solid #8855ff;">
-        <div style="color:#8855ff;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">POINT OF CONTROL (POC)</div>
-        The single price level with the highest volume for the session. Often acts as a gravitational center — price rotates back to POC when momentum fades.
+        <div style="color:#ffcc00;font-family:'Orbitron',monospace;font-size:8px;margin-bottom:4px;">SAMPLE</div>
+        The count beside each slot is the number of sessions that contributed to it. The lookback and weekday buttons change that sample.
       </div>
     </div>
   </div>`;
@@ -4128,7 +4118,7 @@ function renderSessionVolStats() {
     `<button onclick="${fn}" style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:3px 10px;background:${active?'rgba(0,204,255,0.15)':'var(--bg3)'};border:1px solid ${active?'var(--cyan)':'var(--border)'};border-radius:3px;color:${active?'var(--cyan)':'var(--text2)'};cursor:pointer;">${lbl}</button>`;
 
   const lbBtns = ['all','12m','year'].map(v =>
-    fbtn(v==='all'?'ALL HISTORY':v==='12m'?'12 MONTHS':String(curYear)+' YTD', _svStLookback===v, `_svStSetLb('${v}')`)
+    fbtn(v==='all'?'ALL HISTORY':v==='12m'?'LAST 365 DAYS':String(curYear)+' YTD', _svStLookback===v, `_svStSetLb('${v}')`)
   ).join(' ');
   const dowBtns = ['all','Mon','Tue','Wed','Thu','Fri'].map(d =>
     fbtn(d==='all'?'ALL DAYS':d.toUpperCase(), _svStDow===d, `_svStSetDow('${d}')`)
@@ -4306,7 +4296,7 @@ function renderSessionVolStats() {
 
   // ── PANEL 4: Lookback comparison — canvas line chart ─────────────────────
   const lbKeys = ['all','12m','year'];
-  const lbLabels = { all:'ALL HISTORY', '12m':'12 MONTHS', year:String(curYear)+' YTD' };
+  const lbLabels = { all:'ALL HISTORY', '12m':'LAST 365 DAYS', year:String(curYear)+' YTD' };
   const lbColors = { all:'#8888ff', '12m':'#00ccff', year:'#ff8800' };
   const lbProfiles = {};
   lbKeys.forEach(k => {
@@ -4394,7 +4384,7 @@ function renderSessionVolStats() {
       <div style="font-size:10px;color:var(--text3);text-align:right;line-height:1.6;">
         <div>~${nSessions} sessions · 5-min bars · 1-min source data</div>
         <div>avg range = mean(high−low) per bar · top 10% trimmed</div>
-        <div>All times Central. ET source timestamps converted.</div>
+        <div>Eastern session times shown in Central.</div>
       </div>
     </div>
     ${section('⬡ 5-MIN VOLATILITY PROFILE — AVERAGE RANGE BY TIME OF DAY','var(--cyan)',panel1)}

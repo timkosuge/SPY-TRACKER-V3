@@ -17,7 +17,7 @@ import zipfile
 import csv
 import re
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 SESSION = requests.Session()
 SESSION.headers.update({
@@ -29,6 +29,15 @@ SESSION.headers.update({
 })
 
 NOW_UTC = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def last_thursday_et():
+    """AAII publishes its survey on Thursdays; a scrape with no date on the page is the most recent Thursday in New York."""
+    from zoneinfo import ZoneInfo
+    d = datetime.now(ZoneInfo("America/New_York")).date()
+    while d.weekday() != 3:
+        d = d - timedelta(days=1)
+    return d.isoformat()
 
 
 # ── AAII ───────────────────────────────────────────────────────────────────────
@@ -146,7 +155,7 @@ def fetch_aaii():
                 if 85 <= total <= 115 and bull < 57 and bear < 75 and not is_round:
                     print(f"  AAII (HTML label scrape): bull={bull}% bear={bear}% sum={total:.1f}%")
                     return {
-                        "date":       datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        "date":       last_thursday_et(),
                         "bullish":    bull,
                         "neutral":    neu,
                         "bearish":    bear,
@@ -167,7 +176,7 @@ def fetch_aaii():
                 if 85 <= total <= 115 and b < 57 and br < 75 and n < 60 and not is_round:
                     print(f"  AAII (HTML window scrape): bull={b}% neu={n}% bear={br}% sum={total:.1f}%")
                     return {
-                        "date":       datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        "date":       last_thursday_et(),
                         "bullish":    b,
                         "neutral":    n,
                         "bearish":    br,

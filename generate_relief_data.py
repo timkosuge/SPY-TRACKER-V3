@@ -32,7 +32,9 @@ Output schema per threshold:
 
 import sqlite3, json, statistics
 from payload_meta import stamp
-from datetime import date, timedelta
+import pytz
+from datetime import date, datetime, timedelta
+ET = pytz.timezone("America/New_York")
 
 DB_PATH      = 'spy_data.db'
 OUT_PATH     = 'relief_data.js'
@@ -276,7 +278,7 @@ def main():
 
     meta = {
         'date_range': {'start': dates[0], 'end': dates[-1]},
-        'generated':  date.today().isoformat(),
+        'generated':  datetime.now(ET).date().isoformat(),
     }
 
     output = {'meta': meta, **all_results}
