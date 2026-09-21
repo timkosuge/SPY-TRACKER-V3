@@ -3395,7 +3395,7 @@ function renderBonds(md){
 // ── City Live Cam Easter Egg ──────────────────────────────────────────────────
 function openCityCam(city) {
   const configs = {
-    london:  { label: '🇬🇧 LONDON LIVE',   ytId: 'WKGK_hYnlGE' },
+    london:  { label: '🇬🇧 LONDON LIVE · NOTTING HILL GATE',   channelId: 'UC4-aIBtpNAPqEcMhAyFN6iQ' },
     tokyo:   { label: '🇯🇵 TOKYO LIVE',     ytId: 'dfVK7ld38Ys' },
     newyork: { label: '🗽 NEW YORK LIVE',   ytId: 'VGnFLdQW39A' },
   };
@@ -3426,7 +3426,7 @@ function openCityCam(city) {
       <span style="font-size:9px;letter-spacing:2px;color:var(--cyan);">${cfg.label}</span>
       <button onclick="document.getElementById('${winId}')?.remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text3)'">&#xD7;</button>
     </div>
-    <iframe src="https://www.youtube.com/embed/${cfg.ytId}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1" style="width:100%;height:180px;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+    <iframe src="${cfg.channelId ? `https://www.youtube-nocookie.com/embed/live_stream?channel=${cfg.channelId}` : `https://www.youtube.com/embed/${cfg.ytId}`}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1" style="width:100%;height:180px;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
   `;
 
   // Draggable
