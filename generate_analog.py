@@ -2,20 +2,48 @@
 generate_analog.py — Auto-runs daily in GitHub Actions after fetch_and_analyze.py
 Finds optimal anchor date + top 5 historical analogs, writes analog_data.js
 """
-import sqlite3, math, json
+import sqlite3, math, json, random
+import numpy as np
 from payload_meta import stamp
+from trading_days import add_trading_days
 from datetime import date, timedelta
 
 DB_PATH  = 'spy_data.db'
 OUT_PATH = 'analog_data.js'
 
 def add_td(start, n):
-    d = date.fromisoformat(start)
-    c = 0
-    while c < n:
-        d += timedelta(days=1)
-        if d.weekday() < 5: c += 1
-    return d.isoformat()
+    return add_trading_days(date.fromisoformat(start), n).isoformat()
+
+
+def null_distribution(closes, anc_idx, win, replicates=300, block=21, seed=7):
+    """Best-of-N score and correlation when the current path is replaced by block-bootstrapped SPY returns."""
+    lim = anc_idx - 252
+    starts = [hi for hi in range(0, lim - win) if closes[hi] and closes[hi] != 0]
+    H = np.array([[c / closes[hi] * 100 - 100 for c in closes[hi:hi + win]] for hi in starts], dtype=float)
+    Hc = H - H.mean(axis=1, keepdims=True)
+    Hn = np.sqrt((Hc ** 2).sum(axis=1))
+    logret = np.diff(np.log(np.array(closes[:anc_idx], dtype=float)))
+    rng = random.Random(seed)
+    best_scores, best_corrs = [], []
+    for _ in range(replicates):
+        path = []
+        while len(path) < win - 1:
+            j = rng.randrange(0, len(logret) - block)
+            path.extend(logret[j:j + block])
+        r = np.array(path[:win - 1])
+        p = np.concatenate([[0.0], np.cumsum(r)])
+        cp = (np.exp(p) - 1) * 100
+        cc = cp - cp.mean()
+        cn = math.sqrt((cc ** 2).sum())
+        corr = (Hc @ cc) / (Hn * cn) if cn else np.zeros(len(starts))
+        rm = np.sqrt(((H - cp) ** 2).mean(axis=1))
+        sc = ((corr + 1) / 2) * 100 * 0.6 + np.clip(1 - rm / 5, 0, None) * 100 * 0.4
+        best_scores.append(float(sc.max())); best_corrs.append(float(corr.max()))
+    bs, bc = np.array(best_scores), np.array(best_corrs)
+    return {"n_windows": len(starts), "replicates": replicates, "block": block,
+            "score_mean": round(float(bs.mean()), 2), "score_median": round(float(np.median(bs)), 2), "score_p95": round(float(np.percentile(bs, 95)), 2),
+            "corr_mean": round(float(bc.mean()), 4), "corr_median": round(float(np.median(bc)), 4), "corr_p95": round(float(np.percentile(bc, 95)), 4),
+            "best_scores": bs, "best_corrs": bc}
 
 def pearson(a, b):
     n = len(a)
@@ -141,7 +169,10 @@ def main():
                              'proj_spy':proj[-1]['proj_spy'],'pct_from_now':proj[-1]['pct_from_now'],
                              'label':'~1yr','color':'var(--cyan)'}
 
-        analogs.append({'name':name,'start_date':hd,'end_date':dates[hi+win-1],
+        if 'trough' in ms and ms['trough']['day'] == proj[-1]['day']:
+            ms['trough']['label'] = 'Low at window end'
+        analogs.append({'name':name,'start_date':hd,'end_date':dates[hi+win-1],'hist_idx':hi,
+                        'proj_start_date':proj[0]['ref_date'] if proj else None,'proj_end_date':proj[-1]['ref_date'] if proj else None,
                         'color':colors[idx],'corr':round(co,4),'rmse':round(rm,4),
                         'score':sc,'anchor_price':round(h_anc,2),
                         'hist':hist,'proj':proj[:252],'milestones':ms})
@@ -150,9 +181,20 @@ def main():
     cur_data = [{'day':i+1,'date':dates[anc_idx+i],'close':round(closes[anc_idx+i],2),
                  'pct':round(cp_pct[i],4)} for i in range(win)]
 
+    for a in analogs:
+        a['overlaps'] = [b['name'] for b in analogs if b is not a and b['hist_idx'] < a['hist_idx'] + win + 252 and a['hist_idx'] < b['hist_idx'] + win + 252]
+
     def cons(td):
         ps = [a['proj'][td-1]['proj_spy'] for a in analogs if len(a['proj'])>=td]
         return round(sum(ps)/len(ps),2) if ps else 0
+    def spread(td):
+        ps = [a['proj'][td-1]['proj_spy'] for a in analogs if len(a['proj'])>=td]
+        return (round(min(ps),2), round(max(ps),2), len(ps)) if ps else (None, None, 0)
+
+    null = null_distribution(closes, anc_idx, win)
+    top = distinct[0]
+    null['p_score'] = round(float((null.pop('best_scores') >= top[0]).mean()), 3)
+    null['p_corr'] = round(float((null.pop('best_corrs') >= top[3]).mean()), 3)
 
     out = {
         'generated': today, 'method': 'optimal_anchor_auto',
@@ -161,8 +203,10 @@ def main():
                     'current_date':today,'current_price':round(cur_px,2),
                     'current_day':win,'current_pct':round(cp_pct[-1],4),'data':cur_data},
         'analogs': analogs,
-        'consensus': {k:{'price':cons(td),'est_date':add_td(today,td)}
-                      for k,td in [('30d',30),('60d',60),('90d',90),('120d',120)]}
+        'consensus': {k:{'price':cons(td),'low':spread(td)[0],'high':spread(td)[1],'members':spread(td)[2],'est_date':add_td(today,td),'trading_days':td}
+                      for k,td in [('30d',30),('60d',60),('90d',90),('120d',120)]},
+        'null': null,
+        'score_weights': {'corr': 0.6, 'rmse': 0.4},
     }
 
     with open(OUT_PATH,'w') as f:

@@ -47,12 +47,26 @@
     return data;
   }
 
+  function nyseHolidays(y){
+    const iso=d=>d.toISOString().slice(0,10), mk=(m,d)=>new Date(Date.UTC(y,m-1,d));
+    const obs=d=>{const w=d.getUTCDay();return w===6?new Date(d.getTime()-864e5):w===0?new Date(d.getTime()+864e5):d;};
+    const nth=(m,wd,n)=>{const d=mk(m,1);d.setUTCDate(1+((wd-d.getUTCDay()+7)%7)+7*(n-1));return d;};
+    const last=(m,wd)=>{const d=new Date(Date.UTC(y,m,0));d.setUTCDate(d.getUTCDate()-((d.getUTCDay()-wd+7)%7));return d;};
+    const a=y%19,b=Math.floor(y/100),c=y%100,d2=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d2-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+    const easter=mk(Math.floor((h+l-7*m+114)/31),((h+l-7*m+114)%31)+1);
+    const set=new Set([iso(mk(1,1).getUTCDay()===0?mk(1,2):mk(1,1)),iso(nth(1,1,3)),iso(nth(2,1,3)),iso(new Date(easter.getTime()-2*864e5)),iso(last(5,1)),iso(obs(mk(7,4))),iso(nth(9,1,1)),iso(nth(11,4,4)),iso(obs(mk(12,25)))]);
+    if(y>=2022) set.add(iso(obs(mk(6,19))));
+    ['2001-09-11','2001-09-12','2001-09-13','2001-09-14','2004-06-11','2007-01-02','2012-10-29','2012-10-30','2018-12-05','2025-01-09'].forEach(x=>{if(x.startsWith(String(y)))set.add(x);});
+    return set;
+  }
+  function isTradingDay(d){const w=d.getUTCDay();return w!==0&&w!==6&&!nyseHolidays(d.getUTCFullYear()).has(d.toISOString().slice(0,10));}
   function tradingDaysSince(dateStr) {
-    const start=new Date(dateStr+'T12:00:00'),end=new Date();
-    let count=0; const cur=new Date(start); cur.setDate(cur.getDate()+1);
-    while(cur<=end){const d=cur.getDay();if(d!==0&&d!==6)count++;cur.setDate(cur.getDate()+1);}
+    const cur=new Date(dateStr+'T12:00:00Z'),end=new Date();
+    let count=0; cur.setUTCDate(cur.getUTCDate()+1);
+    while(cur<=end){if(isTradingDay(cur))count++;cur.setUTCDate(cur.getUTCDate()+1);}
     return count;
   }
+  window.isTradingDay = isTradingDay; window.nyseHolidays = nyseHolidays;
 
   function computeRev15(data) {
     let up_rev=0,up_hold=0,dn_rev=0,dn_hold=0;

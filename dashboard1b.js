@@ -1063,18 +1063,11 @@ function renderAnalog() {
   if(!D) return;
   window._analogData = D;
 
-  // Convert corr (−1…1) and rmse to a 0–100% match score
-  // Score = 50% from corr (mapped 0→100%) + 50% from rmse (inverted, capped at 5)
-  const score = a => {
-    const corrScore = ((a.corr + 1) / 2) * 100;          // −1→0%  1→100%
-    const rmseScore = Math.max(0, (1 - a.rmse / 5)) * 100; // 0→100%, 5+ → 0%
-    return Math.round(corrScore * 0.6 + rmseScore * 0.4);
-  };
-
-  const analogs = D.analogs.map(a => ({...a, score: score(a)}));
+  const analogs = D.analogs.map(a => ({...a, score: Math.round(a.score)}));
   const best = [...analogs].sort((a,b) => b.score - a.score)[0];
 
-  _analogActive = null; // default all on
+  _analogActive = null;
+  const _anc = document.getElementById('analogAnchorDate'); if (_anc && D.optimal_anchor) _anc.textContent = new Date(D.optimal_anchor.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + ' at $' + D.optimal_anchor.price.toFixed(2);
 
   _renderBossPanel(best, analogs);
   _renderToggles(analogs);
@@ -1101,11 +1094,13 @@ function _renderBossPanel(best, analogs) {
       <div style="width:${barW}%;height:100%;background:linear-gradient(90deg,${best.color}88,${best.color});border-radius:5px;transition:width 0.6s;"></div>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);">
-      <span>0%</span><span style="color:${best.color};font-family:'Share Tech Mono',monospace;font-size:12px;">${best.score}% MATCH</span><span>100%</span>
+      <span>0</span><span style="color:${best.color};font-family:'Share Tech Mono',monospace;font-size:12px;">SCORE ${best.score} / 100</span><span>100</span>
     </div>`;
 
-  scoreEl.textContent = `r=${best.corr.toFixed(3)} · rmse=${best.rmse.toFixed(2)} · score ${best.score}%`;
+  const N = window._analogData?.null;
+  scoreEl.textContent = `r=${best.corr.toFixed(3)} · rmse=${best.rmse.toFixed(2)} · score = 60% correlation + 40% path distance`;
   scoreEl.style.color = best.color;
+  if (N) scoreEl.insertAdjacentHTML('afterend', `<div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.6;">Best of ${N.n_windows.toLocaleString()} windows against ${N.replicates} bootstrapped noise paths: score mean ${N.score_mean}, 95th percentile ${N.score_p95}; correlation median ${N.corr_median}. This match's score is exceeded by noise ${(N.p_score*100).toFixed(0)}% of the time and its correlation ${(N.p_corr*100).toFixed(0)}% of the time.</div>`);
 
   // Show all scores ranked
   const ranked = [...analogs].sort((a,b) => b.score - a.score);
@@ -1116,7 +1111,7 @@ function _renderBossPanel(best, analogs) {
       <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;">
         <div style="width:${a.score}%;height:100%;background:${a.color};border-radius:3px;"></div>
       </div>
-      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${a.color};min-width:32px;text-align:right;">${a.score}%</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:${a.color};min-width:32px;text-align:right;">${a.score}</span>
     </div>`).join('');
 }
 
@@ -1138,21 +1133,17 @@ function _renderToggles(analogs) {
       ${a.name.replace(' Analog','')}
     </button>`).join('');
 
-  // Top stat cards — consensus + current
-  const top4 = analogs.filter(a => !a.name.includes('2008'));
-  const c30 = top4.map(a=>a.proj[29]?.proj_spy||0).filter(Boolean);
-  const c60 = top4.map(a=>a.proj[59]?.proj_spy||0).filter(Boolean);
-  const c90 = top4.map(a=>a.proj[89]?.proj_spy||0).filter(Boolean);
-  const avg = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
-  const pct = (p,base) => ((p/base-1)*100);
+  const C = D.consensus || {};
+  const fmtD = iso => iso ? new Date(iso+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+  const consCard = (k, lbl) => { const c = C[k]; if (!c || !c.price) return {l:lbl, v:'—', sub:'', c:'#00ff88'};
+    const p = (c.price/curPrice-1)*100;
+    return {l:lbl, v:`$${c.price.toFixed(0)}`, sub:`${p>=0?'+':''}${p.toFixed(1)}% · mean of ${c.members} · range $${c.low.toFixed(0)}–$${c.high.toFixed(0)} · ${fmtD(c.est_date)}`, c: p>=0?'#00ff88':'#ff3355'}; };
 
   cardsEl.innerHTML = [
-    {l:'CURRENT SPY',   v:`$${curPrice.toFixed(2)}`,           sub:`Day ${D.current.current_day} · ${D.current.current_date}`, c:'var(--cyan)'},
-    {l:'CONSENSUS 30d', v:`$${avg(c30).toFixed(0)}`,           sub:`${pct(avg(c30),curPrice)>=0?'+':''}${pct(avg(c30),curPrice).toFixed(1)}% · ${top4[0].proj[29]?.est_date}`, c:pct(avg(c30),curPrice)>=0?'#00ff88':'#ff3355'},
-    {l:'CONSENSUS 60d', v:`$${avg(c60).toFixed(0)}`,           sub:`${pct(avg(c60),curPrice)>=0?'+':''}${pct(avg(c60),curPrice).toFixed(1)}% · ${top4[0].proj[59]?.est_date}`, c:pct(avg(c60),curPrice)>=0?'#00ff88':'#ff3355'},
-    {l:'CONSENSUS 90d', v:`$${avg(c90).toFixed(0)}`,           sub:`${pct(avg(c90),curPrice)>=0?'+':''}${pct(avg(c90),curPrice).toFixed(1)}% · ${top4[0].proj[89]?.est_date}`, c:pct(avg(c90),curPrice)>=0?'#00ff88':'#ff3355'},
-    {l:'BEAR CASE (2008)',v:`$${analogs.find(a=>a.name.includes('2008'))?.proj[59]?.proj_spy.toFixed(0)||'—'}`,
-     sub:`60d if 2008 repeats`, c:'#ff3355'},
+    {l:'CURRENT SPY',   v:`$${curPrice.toFixed(2)}`,           sub:`Day ${D.current.current_day} · ${fmtD(D.current.current_date)}`, c:'var(--cyan)'},
+    consCard('30d', 'CONSENSUS · 30 TRADING DAYS'),
+    consCard('60d', 'CONSENSUS · 60 TRADING DAYS'),
+    consCard('90d', 'CONSENSUS · 90 TRADING DAYS'),
   ].map(c=>`<div class="panel" style="text-align:center;border-top:3px solid ${c.c};padding:8px;">
     <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:5px;">${c.l}</div>
     <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:900;color:${c.c};">${c.v}</div>
@@ -1179,17 +1170,17 @@ function _renderActiveDetail(analogs) {
     <div style="background:${a.color}11;border:1px solid ${a.color}44;border-left:4px solid ${a.color};border-radius:4px;padding:12px;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         <div style="font-family:'Orbitron',monospace;font-size:14px;font-weight:900;color:${a.color};">${a.name.toUpperCase()}</div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">Match Score: <span style="color:${a.color};font-size:14px;">${a.score}%</span></div>
-        <div style="font-size:11px;color:var(--text3);">r=${a.corr.toFixed(3)} · rmse=${a.rmse.toFixed(2)}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">Score: <span style="color:${a.color};font-size:14px;">${a.score}</span></div>
+        <div style="font-size:11px;color:var(--text3);">r=${a.corr.toFixed(3)} · rmse=${a.rmse.toFixed(2)} · matched ${a.start_date} → ${a.end_date}; projection replays ${a.proj_start_date} → ${a.proj_end_date}${a.overlaps && a.overlaps.length ? ` · shares history with ${a.overlaps.join(', ')}` : ''}</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;">
         ${[
-          ['30 DAYS',  p30,  top4Date(a,29)],
-          ['60 DAYS',  p60,  top4Date(a,59)],
-          ['90 DAYS',  p90,  top4Date(a,89)],
+          ['30 TRADING DAYS',  p30,  top4Date(a,29)],
+          ['60 TRADING DAYS',  p60,  top4Date(a,59)],
+          ['90 TRADING DAYS',  p90,  top4Date(a,89)],
           ['PEAK',     a.milestones.peak,   null],
-          ['TROUGH',   a.milestones.trough, null],
-          ['~1 YEAR',  a.milestones.yearend,null],
+          [(a.milestones.trough && a.milestones.trough.label === 'Low at window end') ? 'LOW AT WINDOW END' : 'TROUGH AFTER PEAK',   a.milestones.trough, null],
+          ['252 TRADING DAYS',  a.milestones.yearend,null],
         ].map(([lbl, p, d]) => {
           if(!p) return `<div style="background:var(--bg3);border-radius:3px;padding:8px;text-align:center;opacity:0.4;">
             <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text3);">${lbl}</div>
@@ -1253,11 +1244,7 @@ function analogToggleAll() {
   _analogTableMode === 'hist' ? analogShowHist() : analogShowProj();
 }
 
-function _analogScore(a) {
-  const corrScore = ((a.corr + 1) / 2) * 100;
-  const rmseScore = Math.max(0, (1 - a.rmse / 5)) * 100;
-  return Math.round(corrScore * 0.6 + rmseScore * 0.4);
-}
+function _analogScore(a) { return Math.round(a.score); }
 
 function _renderAnalogChart(D, analogs) {
   const chartEl = $('analogChart');
@@ -1278,7 +1265,7 @@ function _renderAnalogChart(D, analogs) {
     const pad={l:56,r:16,t:24,b:50};
     const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
     const curDay=D.current.current_day;
-    const totalDays=curDay+220;
+    const totalDays=curDay+252;
 
     // Scale
     const allPcts=[...D.current.data.map(d=>d.pct)];
@@ -1428,7 +1415,7 @@ function analogShowProj() {
   </tr>`;
 
   const maxRows=Math.max(...vis.map(a=>a.proj.length),0);
-  tbody.innerHTML=Array.from({length:Math.min(maxRows,220)},(_,i)=>{
+  tbody.innerHTML=Array.from({length:Math.min(maxRows,252)},(_,i)=>{
     const day=curDay+i+1;
     const estDate=vis[0]?.proj[i]?.est_date||'';
     const cols=vis.map(a=>{

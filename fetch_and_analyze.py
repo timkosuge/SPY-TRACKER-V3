@@ -17,6 +17,7 @@ CT       = pytz.timezone("America/Chicago")
 ET       = pytz.timezone("America/New_York")
 MARKET_CLOSE_CT = (15, 0)
 GAP_THRESHOLD_PCT = 0.25
+from trading_days import nyse_holidays, is_trading_day
 SESSION_START_ET = 9*60+30
 SESSION_END_ET   = 16*60
 VOLUME_BUCKETS = [
@@ -672,14 +673,7 @@ def fetch_spy_options_yf_fallback():
 # US market holiday Fridays — market is CLOSED these days.
 # Add future dates as needed. The Thursday short-week WEM lock
 # ONLY fires when tomorrow (Friday) is in this set.
-HOLIDAY_FRIDAYS = {
-    '2025-04-18',  # Good Friday 2025
-    '2026-04-03',  # Good Friday 2026
-    '2027-03-26',  # Good Friday 2027
-    '2028-04-14',  # Good Friday 2028
-    '2029-03-30',  # Good Friday 2029
-    '2030-04-19',  # Good Friday 2030
-}
+HOLIDAY_FRIDAYS = {d.isoformat() for y in range(2000, 2041) for d in nyse_holidays(y) if d.weekday() == 4}
 
 def _get_vix_iv():
     """Fetch current VIX as decimal IV. Returns None on failure."""
@@ -1594,7 +1588,7 @@ def get_trading_days_to_process(conn):
     candidates = []
     for i in range(10):
         d = today - timedelta(days=i)
-        if d.weekday() < 5:  # Mon–Fri only
+        if is_trading_day(d):
             candidates.append(d)
 
     # Get dates already in the DB with complete data
@@ -2244,14 +2238,14 @@ def main():
             candidate_1m = []
             for i in range(8):
                 d = today - _td2(days=i)
-                if d.weekday() < 5:
+                if is_trading_day(d):
                     candidate_1m.append(d.strftime("%Y-%m-%d"))
 
             # Dates to try for 5m (last 60 calendar days of trading days)
             candidate_5m = []
             for i in range(65):
                 d = today - _td2(days=i)
-                if d.weekday() < 5:
+                if is_trading_day(d):
                     candidate_5m.append(d.strftime("%Y-%m-%d"))
 
             # Only fetch if bars not already in DB for that date
