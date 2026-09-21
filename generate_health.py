@@ -12,7 +12,7 @@ ET = pytz.timezone("America/New_York")
 DB_PATH = "spy_data.db"
 OUTPUT = "health.json"
 PAYLOADS = ["analog_data.js", "decline_data.js", "edge_stats_data.js", "expiry_data.js", "gap_stats.js", "intraday_library.js",
-            "intraday_patterns.js", "intraday_vol_profile.js", "intraday_vol_stats.js", "large_gap_stats.js", "relief_data.js",
+            "intraday_patterns.js", "intraday_vol_profile.js", "intraday_vol_stats.js", "large_gap_stats.js", "relief_data.js", "cot_data.js",
             "session_vol_profile.js", "tod_stats.js", "window_stats.js"]
 
 

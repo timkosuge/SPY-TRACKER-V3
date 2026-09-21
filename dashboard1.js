@@ -76,6 +76,7 @@ function _switchPanelOnly(id) {
   if(id==='strategy-lab') { if(typeof renderStrategyLab==='function') renderStrategyLab(); }
   if(id==='clock') { if(typeof renderClockSessions==='function') renderClockSessions(); }
   if(id==='options-env') { if(typeof renderOptionsEnv==='function') renderOptionsEnv(); }
+  if(id==='sentiment') { if(typeof renderCotPositioning==='function') renderCotPositioning(); }
   if(id==='intraday') { if(typeof window._intradaySetLookback==='function' || typeof renderIntraday==='function') setTimeout(()=>{ if(typeof window._intradaySetLookback==='function') window._intradaySetLookback(window._svpLookback||'all'); else if(typeof renderIntraday==='function') renderIntraday(); },50); }
   if(id==='intraday-volume') { setTimeout(()=>{ renderIntradayVolProfile(); renderIntradayVolStats(); }, 50); }
   if(id==='intraday-windows') { setTimeout(()=>{ if(typeof renderWindowStats==='function') renderWindowStats(); }, 50); }
