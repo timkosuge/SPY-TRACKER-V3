@@ -32,11 +32,11 @@ NOW_UTC = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 AAII_FULL_SERIES = []
 
 
-def last_thursday_et():
-    """AAII publishes its survey on Thursdays; a scrape with no date on the page is the most recent Thursday in New York."""
+def last_survey_wednesday_et():
+    """AAII's survey week ends Wednesday; a scrape with no date on the page is the most recent Wednesday in New York."""
     from zoneinfo import ZoneInfo
     d = datetime.now(ZoneInfo("America/New_York")).date()
-    while d.weekday() != 3:
+    while d.weekday() != 2:
         d = d - timedelta(days=1)
     return d.isoformat()
 
@@ -139,7 +139,7 @@ def fetch_aaii():
     except Exception as e:
         print(f"  AAII XLS failed: {e}")
 
-    # Method 3 — AAII HTML scrape (fragile, last resort)
+    # Method 3 — AAII HTML page scrape
     try:
         r = SESSION.get(
             "https://www.aaii.com/sentimentsurvey",
@@ -148,60 +148,35 @@ def fetch_aaii():
         )
         if r.status_code == 200:
             text = r.text
-            # Strategy 1: Look for the survey results table near "Bullish" "Neutral" "Bearish" labels
-            # The actual survey data appears near these keywords in the page
-            bull, neu, bear = None, None, None
-
-            # Try to find percentages near "Bullish" label in the survey section
-            m_bull = re.search(r'Bullish[^<]{0,200}?(\d{1,2}\.\d)\s*%', text, re.S | re.I)
-            m_neu  = re.search(r'Neutral[^<]{0,200}?(\d{1,2}\.\d)\s*%', text, re.S | re.I)
-            m_bear = re.search(r'Bearish[^<]{0,200}?(\d{1,2}\.\d)\s*%', text, re.S | re.I)
-
-            if m_bull and m_neu and m_bear:
-                bull = float(m_bull.group(1))
-                neu  = float(m_neu.group(1))
-                bear = float(m_bear.group(1))
-                total = bull + neu + bear
-                # Validate: must sum near 100 and be plausible
-                # Extra sanity: reject suspiciously round numbers and impossible extremes
-                is_round = (bull % 10 == 0 and neu % 10 == 0 and bear % 10 == 0)
-                if 85 <= total <= 115 and bull < 57 and bear < 75 and not is_round:
-                    print(f"  AAII (HTML label scrape): bull={bull}% bear={bear}% sum={total:.1f}%")
+            found = {}
+            for key, cls in (("bullish", "bull"), ("neutral", "neut"), ("bearish", "bear")):
+                m = re.search(r'ssv2-snum\s+' + cls + r'"[^>]*>\s*([\d.]+)\s*%', text)
+                if m:
+                    found[key] = float(m.group(1))
+            if len(found) == 3:
+                total = sum(found.values())
+                if 99 <= total <= 101:
+                    m_date = re.search(r"Week ending[^<]{0,30}([A-Z][a-z]+ \d{1,2},? \d{4})", text)
+                    try:
+                        date_str = datetime.strptime(m_date.group(1).replace(",", ""), "%B %d %Y").date().isoformat() if m_date else last_survey_wednesday_et()
+                    except ValueError:
+                        date_str = last_survey_wednesday_et()
+                    print(f"  AAII (HTML): bull={found['bullish']}% neu={found['neutral']}% bear={found['bearish']}% sum={total:.1f}% week ending {date_str}")
                     return {
-                        "date":       last_thursday_et(),
-                        "bullish":    bull,
-                        "neutral":    neu,
-                        "bearish":    bear,
-                        "spread":     round(bull - bear, 2),
+                        "date":       date_str,
+                        "bullish":    found["bullish"],
+                        "neutral":    found["neutral"],
+                        "bearish":    found["bearish"],
+                        "spread":     round(found["bullish"] - found["bearish"], 2),
                         "avg_bullish": 37.5,
                         "avg_bearish": 31.0,
                         "source":     "aaii_html",
                     }
-                else:
-                    print(f"  AAII HTML label scrape: values failed validation ({bull}/{neu}/{bear}, sum={total:.1f}) — skipping")
-
-            # Strategy 2: find a block of 3 consecutive plausible percentages
-            matches = re.findall(r'(\d{1,2}\.\d)\s*%', text)
-            for i in range(len(matches) - 2):
-                b, n, br = float(matches[i]), float(matches[i+1]), float(matches[i+2])
-                total = b + n + br
-                is_round = (b % 10 == 0 and n % 10 == 0 and br % 10 == 0)
-                if 85 <= total <= 115 and b < 57 and br < 75 and n < 60 and not is_round:
-                    print(f"  AAII (HTML window scrape): bull={b}% neu={n}% bear={br}% sum={total:.1f}%")
-                    return {
-                        "date":       last_thursday_et(),
-                        "bullish":    b,
-                        "neutral":    n,
-                        "bearish":    br,
-                        "spread":     round(b - br, 2),
-                        "avg_bullish": 37.5,
-                        "avg_bearish": 31.0,
-                        "source":     "aaii_html",
-                    }
-            print("  AAII HTML: no valid triplet found in page")
+                print(f"  AAII HTML: figures do not sum to 100 ({found}, sum={total:.1f}) — skipping")
+            else:
+                print(f"  AAII HTML: the page's survey markers were not found ({len(found)} of 3)")
     except Exception as e:
         print(f"  AAII HTML scrape failed: {e}")
-
     print("  AAII: all methods failed, no update.")
     return None
 
@@ -372,17 +347,13 @@ def main():
 
     aaii = fetch_aaii()
     if aaii:
-        bull, neu, bear = (aaii.get(k) for k in ('bullish', 'neutral', 'bearish'))
-        if bull is None or bear is None or not (0 <= bull <= 100) or not (0 <= bear <= 100) or bull + bear > 105:
-            print(f"  AAII: rejected reading ({bull}/{neu}/{bear}) — keeping existing.")
+        vals = [aaii.get(k) for k in ('bullish', 'neutral', 'bearish')]
+        total = sum(v for v in vals if v is not None) if all(v is not None for v in vals) else None
+        if total is None or not (99 <= total <= 101) or any(v < 0 or v > 100 for v in vals):
+            print(f"  AAII: rejected reading that does not sum to 100 ({vals}) — keeping existing.")
             aaii = None
         else:
-            total = (bull + neu + bear) if neu is not None else None
-            if total is None or not (90 <= total <= 110):
-                aaii['neutral'] = round(100.0 - bull - bear, 1)
-                aaii['neutral_derived'] = True
-                print(f"  AAII: neutral derived as {aaii['neutral']} (scraped {neu}, three figures summed to {total}).")
-            aaii['spread'] = round(bull - bear, 1)
+            aaii['spread'] = round(vals[0] - vals[2], 1)
 
     print("=== Fetching COT (E-Mini S&P 500) ===")
     cot = fetch_cot()
