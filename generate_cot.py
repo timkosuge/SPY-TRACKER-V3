@@ -113,7 +113,7 @@ def build(conn):
 
     series = [{"d": w["report_date"], "oi": w["open_interest"], **{c + "_net": w[c + "_net"] for c, _ in CATEGORIES}} for w in weeks]
     return {"available": True, "weeks": len(weeks), "first": weeks[0]["report_date"], "last": latest["report_date"],
-            "latest": {"report_date": latest["report_date"], "open_interest": latest["open_interest"], "entry_date": latest.get("entry_date")},
+            "latest": {"report_date": latest["report_date"], "open_interest": latest["open_interest"], "entry_date": first_tradeable(latest["report_date"]).isoformat()},
             "standing": standing, "tests": tests, "series": series, "horizons": HORIZONS, "floor": FLOOR}
 
 

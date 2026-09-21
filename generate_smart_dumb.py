@@ -141,7 +141,7 @@ def build(conn):
 
     series = [{"d": r["d"], "inst": r["institutional"], "small": r["small"], "spread": r["spread"], "px": closes.get(r.get("entry"))} for r in rows]
     return {"available": True, "weeks": len(rows), "first": rows[0]["d"], "last": latest["d"], "lookback_weeks": LOOKBACK,
-            "latest": {k: latest.get(k) for k in ("d", "entry", "institutional", "small", "spread", "aaii_idx")} | {c + "_idx": latest[c + "_idx"] for c in order} | {c + "_net": latest[c + "_net"] for c in order},
+            "latest": {k: latest.get(k) for k in ("d", "institutional", "small", "spread", "aaii_idx")} | {"entry": first_tradeable(latest["d"], 6).isoformat()} | {c + "_idx": latest[c + "_idx"] for c in order} | {c + "_net": latest[c + "_net"] for c in order},
             "categories": [{"key": k, "label": l, "side": s} for k, l, s in CATEGORIES],
             "aaii_weeks": len(aaii_idx), "tests": tests, "series": series, "horizons": HORIZONS, "floor": FLOOR}
 
