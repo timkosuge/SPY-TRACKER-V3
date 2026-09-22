@@ -13,7 +13,7 @@ Stats computed:
   - % of days where first 30min contains HOD or LOD
 """
 import sqlite3, json, os
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 from datetime import datetime
 
 DB_PATH = "spy_data.db"
@@ -53,7 +53,7 @@ def main():
 
     dates = [r[0] for r in c.execute(
         "SELECT DISTINCT date FROM intraday_bars ORDER BY date"
-    ).fetchall()]
+    ).fetchall() if session_closed(r[0])]
 
     print(f"Processing {len(dates)} days of intraday bars...")
 

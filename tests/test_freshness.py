@@ -5,6 +5,7 @@ import sqlite3
 import unittest
 
 import fetch_and_analyze as fa
+import payload_meta
 
 
 def has_database():
@@ -45,7 +46,7 @@ class Stamps(unittest.TestCase):
     def test_every_stamped_payload_matches_the_database(self):
         conn = sqlite3.connect("spy_data.db")
         self.addCleanup(conn.close)
-        mx = conn.execute("SELECT MAX(date) FROM daily_ohlcv WHERE close IS NOT NULL").fetchone()[0]
+        mx = payload_meta.last_closed_date(conn)
         for f in self.OWNED + self.PIPELINE:
             with open(f, encoding="utf-8") as fh:
                 s = fh.read()

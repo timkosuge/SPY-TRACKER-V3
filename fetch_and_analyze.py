@@ -5,7 +5,7 @@ Fetches: SPY OHLCV + intraday, market quotes, options data (via yfinance),
 """
 
 import os
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 import sys, sqlite3, requests, json, math
 from datetime import datetime, date, timedelta
 import pytz
@@ -788,10 +788,13 @@ def store_futures_bars(conn):
 
 
 def set_next_week_static_wem(conn, friday_date_str, atm_iv):
+    if not session_closed(friday_date_str):
+        print(f"  Static WEM for the week after {friday_date_str} waits for that session's close")
+        return
     try:
         friday   = datetime.strptime(friday_date_str, "%Y-%m-%d").date()
-        next_mon = friday + timedelta(days=3)
-        next_fri = friday + timedelta(days=7)
+        next_mon = friday + timedelta(days=7 - friday.weekday())
+        next_fri = next_mon + timedelta(days=4)
         week_start = next_mon.strftime("%Y-%m-%d")
         week_end   = next_fri.strftime("%Y-%m-%d")
 
@@ -878,6 +881,40 @@ def score_week(conn, week_start, week_end, prev_close, settled):
            closed_inside=?, breach=?, breach_side=?, breach_amount=?, breach_day=?, breach_intraweek=? WHERE week_start=?""",
         (week_open, week_high, week_low, week_close, weekly_gap, gap_filled, gap_fill_day,
          closed_inside, breach, breach_side, breach_amount, breach_day, breach_intraweek, week_start))
+
+
+def repair_offcenter_static_bands(conn, today):
+    c = conn.cursor()
+    rows = c.execute("""SELECT week_start, week_end, friday_close, static_wem_high, static_wem_low FROM weekly_em
+                        WHERE static_band_status='ok' AND friday_close IS NOT NULL
+                        AND static_wem_high IS NOT NULL AND static_wem_low IS NOT NULL""").fetchall()
+    for ws, we, fc, hi, lo in rows:
+        if abs((hi + lo) / 2 - fc) <= 0.015:
+            continue
+        prev = c.execute("SELECT date FROM daily_ohlcv WHERE date<? AND close IS NOT NULL ORDER BY date DESC LIMIT 1", (ws,)).fetchone()
+        iv = vix_close_on(prev[0]) if prev else None
+        if not iv:
+            RUN_ERRORS.append(f"static WEM repair {ws}: no VIX close for {prev[0] if prev else 'the prior session'}")
+            continue
+        half = expected_move(fc, iv, 7)
+        conn.execute("""UPDATE weekly_em SET static_wem_high=?, static_wem_low=?, static_wem_range=?, static_wem_iv=?,
+                        static_band_status='vix' WHERE week_start=?""",
+                     (round(fc + half, 2), round(fc - half, 2), round(half * 2, 2), iv, ws))
+        if we < today.strftime("%Y-%m-%d"):
+            score_week(conn, ws, we, fc, settled=True)
+        conn.commit()
+        print(f"  Static WEM {ws} rebuilt on the {prev[0]} close {round(fc, 2)} from VIX {iv*100:.2f}% (was centered {round((hi + lo) / 2, 2)})")
+
+
+def lock_missed_static_band(conn, today):
+    monday = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
+    row = conn.execute("SELECT static_wem_high FROM weekly_em WHERE week_start=?", (monday,)).fetchone()
+    if row and row[0] is not None:
+        return
+    prev = conn.execute("SELECT date FROM daily_ohlcv WHERE date<? AND close IS NOT NULL ORDER BY date DESC LIMIT 1", (monday,)).fetchone()
+    if prev and session_closed(prev[0]):
+        print(f"  Week of {monday} has no static WEM — locking from the {prev[0]} close")
+        set_next_week_static_wem(conn, prev[0], atm_iv=None)
 
 
 def rescore_settled_weeks(conn, today):
@@ -1466,7 +1503,7 @@ def export_intraday_json(conn):
 
     dates = [r[0] for r in c.execute(
         'SELECT date FROM intraday_bars GROUP BY date HAVING COUNT(*) >= 380 ORDER BY date DESC'
-    ).fetchall()]
+    ).fetchall() if session_closed(r[0])]
 
     if not dates:
         print("  intraday_library.js: no intraday_bars data yet")
@@ -2217,6 +2254,8 @@ def main():
             print(f"  Using live ATM IV: {atm_iv_live*100:.2f}%")
         else:
             print("  No ATM IV from options — will use VIX fallback")
+        repair_offcenter_static_bands(conn, today)
+        lock_missed_static_band(conn, today)
         rescore_settled_weeks(conn, today)
         try:
             compute_weekly_em(conn, ref_str, atm_iv_override=atm_iv_live)

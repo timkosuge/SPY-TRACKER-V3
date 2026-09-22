@@ -5,7 +5,7 @@ Full pattern breakdown: gap context, day direction at entry, reversal/continuati
 move bins, cross table. Lookback x DOW filters.
 """
 import sqlite3, json, statistics
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 import pytz
 from datetime import date, datetime, timedelta
 ET = pytz.timezone("America/New_York")
@@ -39,7 +39,6 @@ def extract_window(bars, ts0, ts1):
                 squeeze=rng<0.15)
 
 def build_sessions(conn):
-    today_str = datetime.now(ET).date().isoformat()
     # open/close/gap from daily_ohlcv
     daily = {}
     for date_str, open_p, close_p, prev_close in conn.execute('''
@@ -47,7 +46,7 @@ def build_sessions(conn):
                LAG(d.close) OVER (ORDER BY d.date) AS prev_close
         FROM daily_ohlcv d ORDER BY d.date
     ''').fetchall():
-        if not open_p or not close_p: continue
+        if not open_p or not close_p or not session_closed(date_str): continue
         gap = (open_p - prev_close) / prev_close * 100 if prev_close else 0
         cat = 'GAP_UP' if gap > GAP_THRESH else ('GAP_DOWN' if gap < -GAP_THRESH else 'FLAT')
         daily[date_str] = dict(open=open_p, close=close_p, gap_pct=round(gap,3), gap_cat=cat)
@@ -66,7 +65,7 @@ def build_sessions(conn):
 
     sessions = []
     for date_str, bars in sorted(day_bars.items()):
-        if date_str == today_str or date_str not in daily or len(bars) < 380: continue
+        if not session_closed(date_str) or date_str not in daily or len(bars) < 380: continue
         d = daily[date_str]
         open_p = d['open']; close_p = d['close']
         w1 = extract_window(bars, W1_START, W1_END)

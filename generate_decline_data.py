@@ -5,7 +5,7 @@ Counts decline events from any 20-day rolling peak (matches original 156-event c
 """
 
 import sqlite3, json
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 from datetime import date
 
 DB_PATH = 'spy_data.db'
@@ -18,6 +18,7 @@ def main():
     rows = conn.execute(
         'SELECT date, close FROM daily_ohlcv WHERE close IS NOT NULL ORDER BY date ASC'
     ).fetchall()
+    rows = [r for r in rows if session_closed(r[0])]
     conn.close()
     
     if not rows:

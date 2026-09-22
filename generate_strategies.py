@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 
 import pytz
 
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 from stats_helpers import percentile, wilson
 from generate_range_filter import DD_BUCKETS, VIX_BUCKETS, bucket, classify, daily_rows, quartiles, vix_closes, year_before
 
@@ -60,6 +60,8 @@ def intraday_paths(conn, exits):
         return {}
     out = {}
     for (d,) in conn.execute("SELECT date FROM intraday_bars GROUP BY date HAVING COUNT(*) >= 380"):
+        if not session_closed(d):
+            continue
         bars = conn.execute("SELECT timestamp, open, high, low, close FROM intraday_bars WHERE date=? AND high IS NOT NULL AND low IS NOT NULL ORDER BY timestamp", (d,)).fetchall()
         ts = {b[0]: b for b in bars}
         if ENTRY_BAR not in ts:

@@ -3,6 +3,8 @@ import sqlite3
 from calendar import monthrange
 from datetime import date, timedelta
 
+from payload_meta import session_closed
+
 DB_PATH = "spy_data.db"
 HEADER = ["DATE", "OPEN", "HIGH", "LOW", "CLOSE", "VOL", "Return_%", "True_Range", "Avg_Daily_Vol", "Trading_Days"]
 
@@ -42,6 +44,7 @@ def build(conn, cutoff=None):
     if cutoff:
         q += f" AND date <= '{cutoff}'"
     rows = conn.execute(q + " ORDER BY date").fetchall()
+    rows = [r for r in rows if session_closed(r[0])]
     return {
         "data/SPY_weekly.csv": period_rows(rows, week_key, lambda k: k),
         "data/SPY_monthly.csv": period_rows(rows, month_key, month_end),

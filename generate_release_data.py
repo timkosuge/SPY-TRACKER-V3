@@ -3,6 +3,8 @@ import json
 import sqlite3
 from datetime import datetime
 
+from payload_meta import session_closed
+
 DB_PATH = "spy_data.db"
 REGISTRY = {"cpi": "release_dates/cpi_dates.csv", "nfp": "release_dates/nfp_dates.csv", "fomc": "release_dates/fomc_dates.csv"}
 
@@ -45,6 +47,7 @@ def build(conn, cutoff=None):
     if cutoff:
         q += f" AND date <= '{cutoff}'"
     rows = conn.execute(q + " ORDER BY date").fetchall()
+    rows = [r for r in rows if session_closed(r[0])]
     dates = [r[0] for r in rows]
     idx = {d: i for i, d in enumerate(dates)}
     last = dates[-1]

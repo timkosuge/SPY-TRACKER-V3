@@ -31,7 +31,7 @@ Output schema per threshold:
 """
 
 import sqlite3, json, statistics
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 import pytz
 from datetime import date, datetime, timedelta
 ET = pytz.timezone("America/New_York")
@@ -82,6 +82,7 @@ def main():
         'SELECT date, open, high, low, close FROM daily_ohlcv '
         'WHERE close IS NOT NULL ORDER BY date ASC'
     ).fetchall()
+    rows = [r for r in rows if session_closed(r[0])]
     conn.close()
 
     if not rows:

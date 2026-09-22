@@ -11,7 +11,7 @@ from datetime import date, datetime
 
 import pytz
 
-from payload_meta import stamp
+from payload_meta import SESSION_CLOSE_MIN, session_closed, stamp
 from stats_helpers import percentile, wilson
 from trading_days import add_trading_days
 
@@ -57,14 +57,6 @@ def classify(v, q):
     return "wide" if v >= q["q75"] else "narrow" if v <= q["q25"] else "middle"
 
 
-SESSION_CLOSE_MIN = 16 * 60
-
-
-def session_closed(day, now=None):
-    now = now or datetime.now(ET)
-    return day < now.date() or (day == now.date() and now.hour * 60 + now.minute >= SESSION_CLOSE_MIN)
-
-
 def daily_rows(conn, now=None):
     rows = conn.execute("SELECT date, open, high, low, close FROM daily_ohlcv WHERE open IS NOT NULL AND high IS NOT NULL AND low IS NOT NULL AND close IS NOT NULL ORDER BY date").fetchall()
     return [r for r in rows if session_closed(date.fromisoformat(r[0]), now)]
@@ -88,7 +80,7 @@ def intraday_sessions(conn):
     if not conn.execute("SELECT name FROM sqlite_master WHERE name='intraday_bars'").fetchone():
         return {}
     out = {}
-    dates = [r[0] for r in conn.execute("SELECT date FROM intraday_bars GROUP BY date HAVING COUNT(*) >= 380")]
+    dates = [r[0] for r in conn.execute("SELECT date FROM intraday_bars GROUP BY date HAVING COUNT(*) >= 380") if session_closed(r[0])]
     for d in dates:
         bars = conn.execute("SELECT timestamp, open, high, low, close FROM intraday_bars WHERE date=? AND high IS NOT NULL AND low IS NOT NULL ORDER BY timestamp", (d,)).fetchall()
         if len(bars) < 380:

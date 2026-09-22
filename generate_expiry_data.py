@@ -17,7 +17,7 @@ Fields per record:
   pc  = prev close
 """
 
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 import sqlite3, json, math
 from fetch_and_analyze import GAP_THRESHOLD_PCT
 from trading_days import is_trading_day
@@ -45,6 +45,7 @@ def main():
     rows = conn.execute(
         'SELECT date, open, high, low, close, volume FROM daily_ohlcv ORDER BY date ASC'
     ).fetchall()
+    rows = [r for r in rows if session_closed(r[0])]
     
     if not rows:
         print('No data in DB')

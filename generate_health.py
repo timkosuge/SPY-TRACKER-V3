@@ -6,6 +6,7 @@ from datetime import datetime
 import pytz
 
 from fetch_and_analyze import measurement_dates_needing_recompute
+from payload_meta import last_closed_date, session_closed
 from trading_days import is_trading_day
 
 ET = pytz.timezone("America/New_York")
@@ -31,7 +32,7 @@ def main():
     conn = sqlite3.connect(DB_PATH)
     now = datetime.now(ET)
     rows = []
-    d, c = conn.execute("SELECT date, close FROM daily_ohlcv ORDER BY date DESC LIMIT 1").fetchone()
+    d, c = next((r for r in conn.execute("SELECT date, close FROM daily_ohlcv ORDER BY date DESC LIMIT 5") if session_closed(r[0], now)), (None, None))
     rows.append({"name": "Daily close", "value": f"{d} close {'present' if c is not None else 'NULL'}", "ok": c is not None, "detail": "newest daily_ohlcv row"})
     ib = conn.execute("SELECT date, COUNT(*) FROM intraday_bars WHERE date=(SELECT MAX(date) FROM intraday_bars)").fetchone()
     if ib and ib[0]:
@@ -39,7 +40,7 @@ def main():
         rows.append({"name": "Intraday bars", "value": f"{ib[0]} · {ib[1]} of {expected} bars", "ok": ib[1] >= 380, "detail": "newest session in intraday_bars against a full 390-minute session"})
     else:
         rows.append({"name": "Intraday bars", "value": "none", "ok": False, "detail": "no rows in intraday_bars"})
-    mx = conn.execute("SELECT MAX(date) FROM daily_ohlcv WHERE close IS NOT NULL").fetchone()[0]
+    mx = last_closed_date(conn, now)
     stale = []
     for p in PAYLOADS:
         m = payload_meta(p)

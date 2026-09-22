@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 
 import pytz
 
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 from stats_helpers import percentile, wilson
 
 ET = pytz.timezone("America/New_York")
@@ -55,7 +55,7 @@ def realized(closes, window):
 
 
 def build(conn):
-    rows = conn.execute("SELECT date, open, high, low, close FROM daily_ohlcv WHERE close IS NOT NULL AND high IS NOT NULL ORDER BY date").fetchall()
+    rows = [r for r in conn.execute("SELECT date, open, high, low, close FROM daily_ohlcv WHERE close IS NOT NULL AND high IS NOT NULL ORDER BY date") if session_closed(r[0])]
     closes = [r[4] for r in rows]
     dates = [r[0] for r in rows]
     idx = {d: i for i, d in enumerate(dates)}

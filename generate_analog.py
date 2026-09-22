@@ -4,7 +4,7 @@ Finds optimal anchor date + top 5 historical analogs, writes analog_data.js
 """
 import sqlite3, math, json, random
 import numpy as np
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 from trading_days import add_trading_days
 from datetime import date, timedelta
 
@@ -65,7 +65,7 @@ def main():
     conn = sqlite3.connect(DB_PATH)
     cur  = conn.cursor()
     cur.execute('SELECT date, open, high, low, close, volume FROM daily_ohlcv ORDER BY date')
-    rows   = cur.fetchall()
+    rows   = [r for r in cur.fetchall() if session_closed(r[0])]
     conn.close()
 
     rows   = [r for r in rows if r[4] is not None]  # drop rows with null close

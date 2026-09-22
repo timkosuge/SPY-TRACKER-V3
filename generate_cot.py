@@ -8,7 +8,7 @@ import json
 import sqlite3
 from datetime import date, timedelta
 
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 from stats_helpers import percentile, wilson
 from trading_days import add_trading_days, is_trading_day
 
@@ -63,7 +63,7 @@ def build(conn):
                 rec["chg_" + cat + "_net"] = rec[cat + "_net"] - p[cat + "_net"]
         weeks.append(rec)
 
-    closes = dict(conn.execute("SELECT date, close FROM daily_ohlcv WHERE close IS NOT NULL"))
+    closes = dict(r for r in conn.execute("SELECT date, close FROM daily_ohlcv WHERE close IS NOT NULL") if session_closed(r[0]))
     dates = sorted(closes)
     idx = {d: i for i, d in enumerate(dates)}
     for w in weeks:

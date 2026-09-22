@@ -22,7 +22,7 @@ Fields per record:
   pc   = prev_close
 """
 
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 import sqlite3, json
 from datetime import date, timedelta
 from collections import defaultdict
@@ -56,6 +56,8 @@ def main():
     # Pull all daily OHLCV
     daily = {}
     for row in conn.execute('SELECT date, open, high, low, close FROM daily_ohlcv').fetchall():
+        if not session_closed(row[0]):
+            continue
         daily[row[0]] = {'o': row[1], 'h': row[2], 'l': row[3], 'c': row[4]}
     
     # Sorted dates for prev_close lookup
@@ -68,7 +70,7 @@ def main():
     # Get all dates with intraday bars
     bar_dates = [r[0] for r in conn.execute(
         'SELECT date FROM intraday_bars GROUP BY date HAVING COUNT(*) >= 380 ORDER BY date DESC'
-    ).fetchall()]
+    ).fetchall() if session_closed(r[0])]
     
     records = []
     for d_str in bar_dates:

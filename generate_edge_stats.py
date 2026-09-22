@@ -4,6 +4,8 @@ import sqlite3
 import statistics as st
 from datetime import date, datetime, timedelta
 
+from payload_meta import session_closed
+
 DB_PATH = "spy_data.db"
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
@@ -25,6 +27,7 @@ def load_daily(conn, cutoff=None):
     if cutoff:
         q += f" AND date <= '{cutoff}'"
     rows = conn.execute(q + " ORDER BY date").fetchall()
+    rows = [r for r in rows if session_closed(r[0])]
     out = []
     for i, (d, o, h, l, c, v) in enumerate(rows):
         pc = rows[i - 1][4] if i else None

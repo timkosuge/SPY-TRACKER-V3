@@ -11,7 +11,7 @@ import math
 import sqlite3
 from datetime import date, timedelta
 
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 from stats_helpers import percentile, wilson
 from trading_days import add_trading_days
 
@@ -64,7 +64,7 @@ def build(conn):
     if len(cot) < LOOKBACK:
         return {"available": False, "reason": f"{len(cot)} reports; the index needs {LOOKBACK}"}
     aaii = {r[0]: r[1] for r in conn.execute("SELECT week_end, spread FROM aaii_weekly ORDER BY week_end")} if "aaii_weekly" in have else {}
-    closes = dict(conn.execute("SELECT date, close FROM daily_ohlcv WHERE close IS NOT NULL"))
+    closes = dict(r for r in conn.execute("SELECT date, close FROM daily_ohlcv WHERE close IS NOT NULL") if session_closed(r[0]))
     dates = sorted(closes)
     idx = {d: i for i, d in enumerate(dates)}
 

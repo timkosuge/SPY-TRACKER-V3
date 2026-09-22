@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 
 import pytz
 
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 from stats_helpers import percentile, wilson
 
 ET = pytz.timezone("America/New_York")
@@ -67,7 +67,7 @@ def daily_tests(conn):
 
 
 def session_tests(conn):
-    dates = [r[0] for r in conn.execute("SELECT date FROM intraday_bars GROUP BY date HAVING COUNT(*) >= 380")]
+    dates = [r[0] for r in conn.execute("SELECT date FROM intraday_bars GROUP BY date HAVING COUNT(*) >= 380") if session_closed(r[0])]
     slots = {i: {"rng": [], "vshare": [], "absmv": []} for i in range(13)}
     lc = []; ctrl_pairs = {m: [] for m in (90, 150, 180, 210, 240, 270, 300, 330)}
     mon_pairs = []; fri_pm = {}; first_half = {}

@@ -12,7 +12,7 @@ from datetime import date, datetime
 import pytz
 
 from conditions import public_registry
-from payload_meta import stamp
+from payload_meta import session_closed, stamp
 from stats_helpers import wilson
 from generate_expiry_data import monthly_opex_date
 
@@ -39,6 +39,7 @@ def load_release_dates():
 
 def build_frame(conn):
     rows = conn.execute("SELECT date, open, high, low, close FROM daily_ohlcv WHERE open IS NOT NULL AND close IS NOT NULL AND high IS NOT NULL AND low IS NOT NULL ORDER BY date").fetchall()
+    rows = [r for r in rows if session_closed(r[0])]
     wem = {}
     for ws, we, hi, lo in conn.execute("SELECT week_start, week_end, static_wem_high, static_wem_low FROM weekly_em WHERE static_wem_high IS NOT NULL AND static_wem_low IS NOT NULL"):
         wem[(ws, we)] = (hi, lo)

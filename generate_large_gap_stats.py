@@ -2,6 +2,8 @@ import json
 import sqlite3
 from datetime import datetime
 
+from payload_meta import last_closed_date, session_closed
+
 DB_PATH = "spy_data.db"
 THRESHOLDS = [1.0, 1.5, 2.0, 3.0]
 DOW = ["Mon", "Tue", "Wed", "Thu", "Fri"]
@@ -13,6 +15,7 @@ def load_sessions(conn, cutoff=None):
     if cutoff:
         q += f" AND date <= '{cutoff}'"
     rows = conn.execute(q + " ORDER BY date").fetchall()
+    rows = [r for r in rows if session_closed(r[0])]
     out = []
     for i in range(1, len(rows)):
         d, o, h, l, c, v = rows[i]
@@ -85,7 +88,7 @@ def main():
     conn = sqlite3.connect(DB_PATH)
     data = build(conn)
     data["generated"] = datetime.now().astimezone().isoformat(timespec="seconds")
-    data["source_max_date"] = conn.execute("SELECT MAX(date) FROM daily_ohlcv WHERE close IS NOT NULL").fetchone()[0]
+    data["source_max_date"] = last_closed_date(conn)
     with open("large_gap_stats.js", "w") as f:
         f.write("const LARGE_GAP_STATS = " + json.dumps(data) + ";\n")
     print(f"large_gap_stats.js: {data['overall']['total_sessions']} sessions through {data['overall']['date_range']['to']}")
