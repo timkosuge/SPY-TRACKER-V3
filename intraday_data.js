@@ -56,7 +56,7 @@
     const easter=mk(Math.floor((h+l-7*m+114)/31),((h+l-7*m+114)%31)+1);
     const set=new Set([iso(mk(1,1).getUTCDay()===0?mk(1,2):mk(1,1)),iso(nth(1,1,3)),iso(nth(2,1,3)),iso(new Date(easter.getTime()-2*864e5)),iso(last(5,1)),iso(obs(mk(7,4))),iso(nth(9,1,1)),iso(nth(11,4,4)),iso(obs(mk(12,25)))]);
     if(y>=2022) set.add(iso(obs(mk(6,19))));
-    ['2001-09-11','2001-09-12','2001-09-13','2001-09-14','2004-06-11','2007-01-02','2012-10-29','2012-10-30','2018-12-05','2025-01-09'].forEach(x=>{if(x.startsWith(String(y)))set.add(x);});
+    const SPECIAL=['2001-09-11','2001-09-12','2001-09-13','2001-09-14','2004-06-11','2007-01-02','2012-10-29','2012-10-30','2018-12-05','2025-01-09']; SPECIAL.forEach(x=>{if(x.startsWith(String(y)))set.add(x);});
     return set;
   }
   function isTradingDay(d){const w=d.getUTCDay();return w!==0&&w!==6&&!nyseHolidays(d.getUTCFullYear()).has(d.toISOString().slice(0,10));}

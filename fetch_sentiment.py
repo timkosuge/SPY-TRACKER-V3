@@ -111,8 +111,7 @@ def fetch_aaii():
                     "neutral":    latest["neutral"],
                     "bearish":    latest["bearish"],
                     "spread":     latest["spread"],
-                    "avg_bullish": 37.5,
-                    "avg_bearish": 31.0,
+                    **long_run_averages(weeks),
                     "source":     "aaii_xls",
                 }
             print("  AAII spreadsheet: no usable rows parsed")
@@ -150,8 +149,6 @@ def fetch_aaii():
                         "neutral":    found["neutral"],
                         "bearish":    found["bearish"],
                         "spread":     round(found["bullish"] - found["bearish"], 2),
-                        "avg_bullish": 37.5,
-                        "avg_bearish": 31.0,
                         "source":     "aaii_html",
                     }
                 print(f"  AAII HTML: figures do not sum to 100 ({found}, sum={total:.1f}) — skipping")
@@ -249,6 +246,15 @@ def fetch_cot():
     return out
 
 
+def long_run_averages(weeks):
+    rows = [w for w in weeks if all(w.get(k) is not None for k in ("bullish", "neutral", "bearish"))]
+    if not rows:
+        return {}
+    mean = lambda k: round(sum(w[k] for w in rows) / len(rows), 1)
+    return {"avg_bullish": mean("bullish"), "avg_neutral": mean("neutral"), "avg_bearish": mean("bearish"),
+            "avg_weeks": len(rows), "avg_from": rows[0]["date"], "avg_through": rows[-1]["date"]}
+
+
 def store_aaii_weeks(weeks, db_path="spy_data.db"):
     """Upsert every survey week into aaii_weekly; the table is the site's own history."""
     if not weeks:
@@ -329,6 +335,9 @@ def main():
             aaii = None
         else:
             aaii['spread'] = round(vals[0] - vals[2], 1)
+            if "avg_bullish" not in aaii:
+                prev = existing.get("aaii") or {}
+                aaii.update({k: prev[k] for k in ("avg_bullish", "avg_neutral", "avg_bearish", "avg_weeks", "avg_from", "avg_through") if k in prev})
 
     print("=== Fetching COT (E-Mini S&P 500) ===")
     cot_weeks = fetch_cot_weeks()

@@ -2442,54 +2442,14 @@ async function generateEventImpact(md, sd) {
   if (!el) return;
   try {
     const today = new Date(); today.setHours(0,0,0,0);
-    const todayStr = today.toISOString().slice(0,10);
-
-    // Re-use the same nthWeekdayDate logic inline
-    function _nthWD(year, month, weekday, n) {
-      const d = new Date(year, month, 1); let count = 0;
-      for (let i = 0; i < 31; i++) {
-        if (d.getMonth() !== month) break;
-        if (d.getDay() === weekday) { count++; if (count === n) return d.toISOString().slice(0,10); }
-        d.setDate(d.getDate() + 1);
-      }
-      return null;
-    }
-
-    // Build dynamic CPI/NFP — use RELEASE_DATA.upcoming if available, else algorithmic fallback
-    const dynEvents = [];
-    const upcomingCpi = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.cpi) || [];
-    const upcomingNfp = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.nfp) || [];
-    const futureCpi = upcomingCpi.filter(d => d >= todayStr), futureNfp = upcomingNfp.filter(d => d >= todayStr);
-    if (futureCpi.length || futureNfp.length) {
-      futureCpi.forEach(d => dynEvents.push({ name: 'CPI', dates: [d] }));
-      futureNfp.forEach(d => dynEvents.push({ name: 'NFP', dates: [d] }));
-    } else {
-      for (let offset = 0; offset <= 4; offset++) {
-        const d = new Date(today); d.setMonth(d.getMonth() + offset);
-        const y = d.getFullYear(), m = d.getMonth();
-        const cpi = _nthWD(y, m, 3, 2);
-        const nfp = _nthWD(y, m, 5, 1);
-        if (cpi && cpi >= todayStr) dynEvents.push({ name: 'CPI', dates: [cpi] });
-        if (nfp && nfp >= todayStr) dynEvents.push({ name: 'NFP', dates: [nfp] });
-      }
-    }
-
-    const knownEarnings = [
-      {name:'TSLA ER',  dates:['2026-04-21','2026-07-20','2026-10-19']},
-      {name:'GOOGL ER', dates:['2026-04-28','2026-07-27','2026-10-26']},
-      {name:'MSFT ER',  dates:['2026-04-29','2026-07-28','2026-10-27']},
-      {name:'META ER',  dates:['2026-04-29','2026-07-28','2026-10-27']},
-      {name:'AAPL ER',  dates:['2026-04-30','2026-07-30','2026-10-29']},
-      {name:'AMZN ER',  dates:['2026-05-01','2026-07-30','2026-10-29']},
-      {name:'NVDA ER',  dates:['2026-05-28','2026-08-27','2026-11-19']},
-    ];
-
-    const fomcDates = ['2026-04-29','2026-06-17','2026-07-29','2026-09-16','2026-10-28','2026-12-16','2027-01-27'];
-
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+    const upcomingOf = k => ((typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.[k]) || []).filter(d => d >= todayStr);
+    const earnings = (typeof EARNINGS_DATA !== 'undefined' ? payloadRows(EARNINGS_DATA) : []).filter(r => r.date >= todayStr);
     const events = [
-      ...dynEvents,
-      ...knownEarnings,
-      { name: 'FOMC', dates: fomcDates.filter(d => d >= todayStr) },
+      { name: 'CPI', dates: upcomingOf('cpi') },
+      { name: 'NFP', dates: upcomingOf('nfp') },
+      { name: 'FOMC', dates: upcomingOf('fomc') },
+      ...earnings.map(r => ({ name: `${r.symbol} ER${r.estimated ? ' (estimated date)' : ''}`, dates: [r.date] })),
     ];
     const upcoming = events.flatMap(e => e.dates.map(d => ({
       name: e.name,
@@ -2549,108 +2509,25 @@ async function renderKeyEvents() {
 
   const typeColors = { FOMC:'#8855ff', CPI:'#ff8800', NFP:'#00ccff', EARNINGS:'#ffcc00' };
 
-  // ── Dynamic event date computation — never goes stale ─────────────────────
-  // Computes approximate release dates algorithmically for any future month.
-  // CPI  = 2nd Wednesday of the month (reporting prior month)
-  // NFP  = 1st Friday of the month
-  // These match the actual BLS schedule ~95% of the time.
-  function nthWeekdayDate(year, month, weekday, n) {
-    // weekday: 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat; n: 1-based
-    const d = new Date(year, month, 1);
-    let count = 0;
-    for (let i = 0; i < 31; i++) {
-      if (d.getMonth() !== month) break;
-      if (d.getDay() === weekday) { count++; if (count === n) return d.toISOString().slice(0,10); }
-      d.setDate(d.getDate() + 1);
-    }
-    return null;
-  }
-
-  function computeCpiNfpDates(monthsAhead = 9) {
-    const today = new Date(); today.setHours(0,0,0,0);
-    const todayStr = today.toISOString().slice(0,10);
-    const result = [];
-    // Prefer RELEASE_DATA.upcoming which has actual BLS-published dates
-    const upcomingCpi = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.cpi) || [];
-    const upcomingNfp = (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.nfp) || [];
-    const futureCpi = upcomingCpi.filter(d => d >= todayStr), futureNfp = upcomingNfp.filter(d => d >= todayStr);
-    if (futureCpi.length || futureNfp.length) {
-      futureCpi.forEach(d => result.push({ name: 'CPI REPORT',       date: d, type: 'CPI', icon: '📊' }));
-      futureNfp.forEach(d => result.push({ name: 'NONFARM PAYROLLS', date: d, type: 'NFP', icon: '💼' }));
-    } else {
-      // Algorithmic fallback (less accurate — CPI is not always 2nd Wednesday)
-      for (let offset = 0; offset <= monthsAhead; offset++) {
-        const d = new Date(today); d.setMonth(d.getMonth() + offset);
-        const y = d.getFullYear(), m = d.getMonth();
-        const cpi = nthWeekdayDate(y, m, 3, 2);
-        const nfp = nthWeekdayDate(y, m, 5, 1);
-        if (cpi && cpi >= todayStr) result.push({ name: 'CPI REPORT',       date: cpi, type: 'CPI', icon: '📊' });
-        if (nfp && nfp >= todayStr) result.push({ name: 'NONFARM PAYROLLS', date: nfp, type: 'NFP', icon: '💼' });
-      }
-    }
-    return result;
-  }
-
-  // ── Earnings: known upcoming cycle + algorithmic next-quarter fallback ──────
-  // Known Q1 2026 earnings (April/May report season). After these pass the
-  // algorithmic fallback below kicks in — MAG7 typically reports in:
-  //   Q1 results → late April / early May
-  //   Q2 results → late July / early August
-  //   Q3 results → late October / early November
-  //   Q4 results → late January / early February
-  const KNOWN_EARNINGS = [
-    { name: 'TSLA EARNINGS',  date: '2026-04-21', type: 'EARNINGS', icon: '⚡' },
-    { name: 'GOOGL EARNINGS', date: '2026-04-28', type: 'EARNINGS', icon: '🔍' },
-    { name: 'MSFT EARNINGS',  date: '2026-04-29', type: 'EARNINGS', icon: '💻' },
-    { name: 'META EARNINGS',  date: '2026-04-29', type: 'EARNINGS', icon: '📱' },
-    { name: 'AAPL EARNINGS',  date: '2026-04-30', type: 'EARNINGS', icon: '🍎' },
-    { name: 'AMZN EARNINGS',  date: '2026-05-01', type: 'EARNINGS', icon: '📦' },
-    { name: 'NVDA EARNINGS',  date: '2026-05-28', type: 'EARNINGS', icon: '🎮' },
-    // Q2 2026 season — approx dates (update when confirmed)
-    { name: 'TSLA EARNINGS',  date: '2026-07-20', type: 'EARNINGS', icon: '⚡' },
-    { name: 'GOOGL EARNINGS', date: '2026-07-27', type: 'EARNINGS', icon: '🔍' },
-    { name: 'MSFT EARNINGS',  date: '2026-07-28', type: 'EARNINGS', icon: '💻' },
-    { name: 'META EARNINGS',  date: '2026-07-28', type: 'EARNINGS', icon: '📱' },
-    { name: 'AAPL EARNINGS',  date: '2026-07-30', type: 'EARNINGS', icon: '🍎' },
-    { name: 'AMZN EARNINGS',  date: '2026-07-30', type: 'EARNINGS', icon: '📦' },
-    { name: 'NVDA EARNINGS',  date: '2026-08-27', type: 'EARNINGS', icon: '🎮' },
-    // Q3 2026 season — approx dates
-    { name: 'TSLA EARNINGS',  date: '2026-10-19', type: 'EARNINGS', icon: '⚡' },
-    { name: 'GOOGL EARNINGS', date: '2026-10-26', type: 'EARNINGS', icon: '🔍' },
-    { name: 'MSFT EARNINGS',  date: '2026-10-27', type: 'EARNINGS', icon: '💻' },
-    { name: 'META EARNINGS',  date: '2026-10-27', type: 'EARNINGS', icon: '📱' },
-    { name: 'AAPL EARNINGS',  date: '2026-10-29', type: 'EARNINGS', icon: '🍎' },
-    { name: 'AMZN EARNINGS',  date: '2026-10-29', type: 'EARNINGS', icon: '📦' },
-    { name: 'NVDA EARNINGS',  date: '2026-11-19', type: 'EARNINGS', icon: '🎮' },
-  ];
-
-  // ── Build full events list ──────────────────────────────────────────────────
-  const today0 = new Date(); today0.setHours(0,0,0,0);
-  const todayStr0 = today0.toISOString().slice(0,10);
-
+  const upcomingOf = k => (typeof RELEASE_DATA !== 'undefined' && RELEASE_DATA?.upcoming?.[k]) || [];
+  const EARN_ICON = { TSLA: '⚡', GOOGL: '🔍', MSFT: '💻', META: '📱', AAPL: '🍎', AMZN: '📦', NVDA: '🎮' };
+  const todayStr0 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
   let events = [
-    ...computeCpiNfpDates(9),
-    ...KNOWN_EARNINGS.filter(e => e.date >= todayStr0),
-  ];
+    ...upcomingOf('cpi').map(d => ({ name: 'CPI REPORT', date: d, type: 'CPI', icon: '📊' })),
+    ...upcomingOf('nfp').map(d => ({ name: 'NONFARM PAYROLLS', date: d, type: 'NFP', icon: '💼' })),
+    ...upcomingOf('fomc').map(d => ({ name: 'FOMC DECISION', date: d, type: 'FOMC', icon: '🏦' })),
+    ...(typeof EARNINGS_DATA !== 'undefined' ? payloadRows(EARNINGS_DATA) : []).map(r => ({ name: `${r.symbol} EARNINGS`, date: r.date, type: 'EARNINGS', icon: EARN_ICON[r.symbol] || '', estimated: r.estimated })),
+  ].filter(e => e.date >= todayStr0);
 
-  // ── FOMC: try live fetch, fall back to known 2026 schedule ─────────────────
   try {
     const r = await fetch('/fomc?t=' + Date.now());
     if (r.ok) {
       const data = await r.json();
-      if (data.meetings && data.meetings.length > 0) {
-        data.meetings.forEach(m => {
-          events.push({ name: 'FOMC DECISION', date: m.date, type: 'FOMC', icon: '🏦' });
-        });
-      }
+      (data.meetings || []).forEach(m => {
+        if (!events.some(e => e.type === 'FOMC' && e.date === m.date)) events.push({ name: 'FOMC DECISION', date: m.date, type: 'FOMC', icon: '🏦' });
+      });
     }
-  } catch(e) {
-    // Known 2026 + approx 2027 Q1 schedule
-    ['2026-04-29','2026-06-17','2026-07-29','2026-09-16','2026-10-28','2026-12-16',
-     '2027-01-27','2027-03-17'].forEach(d => {
-      if (d >= todayStr0) events.push({ name: 'FOMC DECISION', date: d, type: 'FOMC', icon: '🏦' });
-    });
-  }
+  } catch (e) {}
 
   // Filter future, sort by date
   const upcoming = events
@@ -2690,7 +2567,7 @@ async function renderKeyEvents() {
         <span style="font-size:16px;">${e.icon}</span>
         <div>
           <div style="font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:${c};">${ticker}</div>
-          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">${dateStr}</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text3);">${dateStr}${e.estimated ? ' · Estimated' : ''}</div>
         </div>
       </div>
       <div style="font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;color:${uc};">${e.days}d</div>
@@ -3273,7 +3150,8 @@ async function loadAAII() {
     if (bull == null || bear == null || neu == null) throw new Error('no reading in the response');
     const spread = bull - bear;
     const spreadColor = spread > 0 ? '#00ff88' : spread < 0 ? '#ff3355' : '#ffcc00';
-    const avgBull = d.avg_bullish || 37.5, avgBear = d.avg_bearish || 31.0;
+    const avgSince = d.avg_from ? ' since ' + d.avg_from.slice(0, 4) : '';
+    const avgLine = v => v != null ? '<div style="font-size:12px;color:var(--text3);margin-top:4px">avg ' + fmt(v, 1) + '%' + avgSince + '</div>' : '';
     const age = d.age_days != null ? d.age_days : (d.date ? Math.floor((Date.now() - new Date(d.date.slice(0,10)+'T12:00:00').getTime())/86400000) : null);
     const staleNote = (d.stale || (age != null && age > 14)) ? ` <span style="color:#ffcc00;">(${age} days old)</span>` : '';
     const srcNote = d.source ? ` · source ${d.source}` : '';
@@ -3282,15 +3160,15 @@ async function loadAAII() {
       +'<div style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:12px;text-align:center;">'
       +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#00ff88;margin-bottom:6px;letter-spacing:1px;">BULLISH</div>'
       +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#00ff88">'+fmt(bull,1)+'%</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg '+avgBull+'%</div></div>'
+      +avgLine(d.avg_bullish)+'</div>'
       +'<div style="background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.3);border-radius:4px;padding:12px;text-align:center;">'
       +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#ffcc00;margin-bottom:6px;letter-spacing:1px;">NEUTRAL</div>'
       +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#ffcc00">'+fmt(neu,1)+'%</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg 31.5%</div></div>'
+      +avgLine(d.avg_neutral)+'</div>'
       +'<div style="background:rgba(255,51,85,0.08);border:1px solid rgba(255,51,85,0.3);border-radius:4px;padding:12px;text-align:center;">'
       +'<div style="font-family:\'Orbitron\',monospace;font-size:10px;color:#ff3355;margin-bottom:6px;letter-spacing:1px;">BEARISH</div>'
       +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:32px;font-weight:bold;color:#ff3355">'+fmt(bear,1)+'%</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px">avg '+avgBear+'%</div></div></div>'
+      +avgLine(d.avg_bearish)+'</div></div>'
       +'<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;display:flex;justify-content:space-between;align-items:center;">'
       +'<div><div style="font-family:\'Orbitron\',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;">BULL-BEAR SPREAD</div>'
       +'<div style="font-family:\'Share Tech Mono\',monospace;font-size:28px;font-weight:bold;color:'+spreadColor+'">'+(spread>0?'+':'')+fmt(spread,1)+'%</div></div>'
@@ -3369,11 +3247,12 @@ function renderAAIIChart(data) {
       + '<circle cx="' + x(n - 1).toFixed(1) + '" cy="' + y(last.bull - last.bear).toFixed(1) + '" r="3" fill="#00ccff"/>';
     legend = '<span style="color:#00ccff;">━ Bullish minus bearish</span><span style="color:rgba(0,204,255,0.6);">- - Average over this range ' + (avg >= 0 ? '+' : '') + avg.toFixed(1) + '</span><span style="color:var(--text2);">Latest ' + (last.bull - last.bear >= 0 ? '+' : '') + (last.bull - last.bear).toFixed(1) + ' (' + fmtDate(last.d) + ')</span>';
   } else {
-    const avgY = y(37.5).toFixed(1);
+    const bullAvg = rows.reduce((a, r) => a + r.bull, 0) / n;
+    const avgY = y(bullAvg).toFixed(1);
     body = '<line x1="' + P.l + '" x2="' + (P.l + cW) + '" y1="' + avgY + '" y2="' + avgY + '" stroke="rgba(0,255,136,0.25)" stroke-dasharray="4,3"/>'
       + poly(r => r.bull, '#00ff88', 2) + (rows.every(r => r.neu != null) ? poly(r => r.neu, '#ffcc00', 2) : '') + poly(r => r.bear, '#ff3355', 2)
       + ['bull', 'neu', 'bear'].map(k2 => last[k2] == null ? '' : '<circle cx="' + x(n - 1).toFixed(1) + '" cy="' + y(last[k2]).toFixed(1) + '" r="3" fill="' + { bull: '#00ff88', neu: '#ffcc00', bear: '#ff3355' }[k2] + '"/>').join('');
-    legend = '<span style="color:#00ff88;">⬤ Bullish ' + fmt(last.bull, 1) + '%</span><span style="color:#ffcc00;">⬤ Neutral ' + (last.neu != null ? fmt(last.neu, 1) + '%' : '—') + '</span><span style="color:#ff3355;">⬤ Bearish ' + fmt(last.bear, 1) + '%</span><span style="color:rgba(0,255,136,0.6);">- - Long-run bullish average 37.5%</span>';
+    legend = '<span style="color:#00ff88;">⬤ Bullish ' + fmt(last.bull, 1) + '%</span><span style="color:#ffcc00;">⬤ Neutral ' + (last.neu != null ? fmt(last.neu, 1) + '%' : '—') + '</span><span style="color:#ff3355;">⬤ Bearish ' + fmt(last.bear, 1) + '%</span><span style="color:rgba(0,255,136,0.6);">- - Bullish average over this range ' + bullAvg.toFixed(1) + '%</span>';
   }
   const btns = AAII_RANGES.map(r => '<button onclick="window._aaiiRange=\'' + r[0] + '\';renderAAIIChart()" style="font-family:\'Orbitron\',monospace;font-size:8px;letter-spacing:1px;padding:3px 8px;margin-right:4px;cursor:pointer;background:' + (r[0] === range[0] ? 'var(--cyan)' : 'var(--bg3)') + ';color:' + (r[0] === range[0] ? 'var(--bg)' : 'var(--text3)') + ';border:1px solid var(--border);">' + r[1] + '</button>').join('');
   el.innerHTML = '<div style="margin-bottom:6px;">' + btns + '</div>'

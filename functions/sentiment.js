@@ -6,13 +6,19 @@
  *  2. sentiment_data.json (committed to repo by GitHub Actions weekly)
  *  3. AAII XLS direct download (live attempt)
  *  4. AAII HTML scrape (live attempt)
- *  5. Static hardcoded fallback (last resort, clearly labeled)
+ *  5. Nothing: answers 503 with available false
  */
 
 const CORS = {
   'Cache-Control': 'no-store, no-cache, must-revalidate',
   'Content-Type': 'application/json',
 };
+
+function pickAverages(a) {
+  const out = {};
+  for (const k of ['avg_bullish', 'avg_neutral', 'avg_bearish', 'avg_weeks', 'avg_from', 'avg_through']) if (a && a[k] != null) out[k] = a[k];
+  return out;
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: CORS });
@@ -71,6 +77,17 @@ export async function onRequestPost(context) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
+  let pipeline = null;
+  try {
+    const r = await fetch(`${new URL(request.url).origin}/sentiment_data.json?t=${Date.now()}`, {
+      cf: { cacheEverything: false },
+      headers: { 'Cache-Control': 'no-cache, no-store' },
+    });
+    if (r.ok) pipeline = await r.json();
+  } catch (e) {
+    console.warn('sentiment.js: sentiment_data.json fetch failed:', e.message);
+  }
+  const avg = pickAverages(pipeline?.aaii);
 
   // ── 1. D1 override (set via dashboard UI) ─────────────────────────────────
   try {
@@ -86,8 +103,7 @@ export async function onRequestGet(context) {
           neutral:     row.neutral,
           bearish:     row.bearish,
           spread:      row.spread,
-          avg_bullish: 37.5,
-          avg_bearish: 31.0,
+          ...avg,
           stale:       !(ageDays < 8),
           source:      'manual_override',
           updated:     row.updated_at,
@@ -98,39 +114,20 @@ export async function onRequestGet(context) {
     console.warn('sentiment.js: D1 check failed:', e.message);
   }
 
-  // ── 2. sentiment_data.json via same-origin fetch ───────────────────────────
-  // Cloudflare Pages serves static assets at the same origin — fetch it directly.
-  try {
-    const base = new URL(request.url).origin;
-    const r = await fetch(`${base}/sentiment_data.json?t=${Date.now()}`, {
-      cf: { cacheEverything: false },
-      headers: { 'Cache-Control': 'no-cache, no-store' },
+  // ── 2. sentiment_data.json (written by the pipeline) ───────────────────────
+  const aaii = pipeline?.aaii;
+  if (aaii && typeof aaii.bullish === 'number' && typeof aaii.bearish === 'number') {
+    return json({
+      date:        aaii.date,
+      bullish:     aaii.bullish,
+      neutral:     aaii.neutral,
+      bearish:     aaii.bearish,
+      spread:      aaii.spread,
+      ...avg,
+      stale:       aaii.stale ?? false,
+      source:      aaii.source,
+      updated:     pipeline.updated,
     });
-    if (r.ok) {
-      const data = await r.json();
-      const aaii = data?.aaii;
-      if (
-        aaii &&
-        typeof aaii.bullish === 'number' &&
-        typeof aaii.bearish === 'number'
-      ) {
-        console.log(`sentiment.js: served from sentiment_data.json (${aaii.source})`);
-        return json({
-          date:        aaii.date,
-          bullish:     aaii.bullish,
-          neutral:     aaii.neutral,
-          bearish:     aaii.bearish,
-          spread:      aaii.spread,
-          avg_bullish: aaii.avg_bullish ?? 37.5,
-          avg_bearish: aaii.avg_bearish ?? 31.0,
-          stale:       aaii.stale ?? false,
-          source:      aaii.source,
-          updated:     data.updated,
-        });
-      }
-    }
-  } catch (e) {
-    console.warn('sentiment.js: sentiment_data.json fetch failed:', e.message);
   }
 
   // ── 2. AAII XLS direct download ───────────────────────────────────────────
@@ -157,8 +154,7 @@ export async function onRequestGet(context) {
               neutral:     Math.round(neu  * 100) / 100,
               bearish:     Math.round(bear * 100) / 100,
               spread:      Math.round((bull - bear) * 100) / 100,
-              avg_bullish: 37.5,
-              avg_bearish: 31.0,
+              ...avg,
               source:      'aaii_xls_live',
             });
           }
@@ -185,26 +181,17 @@ export async function onRequestGet(context) {
           neutral:     neu,
           bearish:     bear,
           spread:      Math.round((bull - bear) * 100) / 100,
-          avg_bullish: 37.5,
-          avg_bearish: 31.0,
+          ...avg,
           source:      'aaii_html_live',
         });
       }
     }
   } catch (e) {}
 
-  // ── 4. Static fallback ────────────────────────────────────────────────────
-  // Update this manually if the GitHub Actions job fails for multiple weeks.
   return json({
-    date:        '2026-03-27',
-    bullish:     21.5,
-    neutral:     26.3,
-    bearish:     52.2,
-    spread:      -30.7,
-    avg_bullish: 37.5,
-    avg_bearish: 31.0,
-    stale:       true,
-    source:      'static_fallback',
-    note:        'All live sources failed. Run fetch_sentiment.py to update.',
-  });
+    available: false,
+    stale:     true,
+    source:    'none',
+    note:      'Every AAII source failed on this request: the pipeline file, the AAII spreadsheet and the AAII page.',
+  }, 503);
 }

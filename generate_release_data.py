@@ -30,7 +30,7 @@ def event_record(rows, idx, dates, d, note):
     p = rows[i - 1]
     o, h, l, c = r[1], r[2], r[3], r[4]
     return {
-        "date": d, "year": int(d[:4]), "notes": note, "is_emergency": "emergency" in note.lower(),
+        "date": d, "year": int(d[:4]), "notes": note, "is_unscheduled": "unscheduled" in note.lower(),
         "gap": round((o - p[4]) / p[4] * 100, 3),
         "day_ret": round((c - p[4]) / p[4] * 100, 3),
         "oc_ret": round((c - o) / o * 100, 3),

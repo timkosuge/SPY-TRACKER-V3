@@ -73,6 +73,12 @@ jobs:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
         run: python fetch_and_analyze.py
 
+      - name: Fetch release dates and earnings dates
+        if: steps.clock.outputs.close == 'true'
+        run: |
+          python fetch_release_dates.py
+          python fetch_earnings.py
+
       - name: Generate analog data
         if: steps.clock.outputs.close == 'true'
         run: python generate_analog.py
@@ -181,7 +187,8 @@ jobs:
                      session_vol_profile.js intraday_vol_profile.js intraday_vol_stats.js \
                      large_gap_stats.js release_data.js edge_stats_data.js \
                      data/SPY_weekly.csv data/SPY_monthly.csv data/SPY_yearly.csv \
-                     breadth_data.json tic_holdings.js health.json chains_data.js range_filter.js strategies_data.js strategies.json clock_data.js options_env.js cot_data.js smart_dumb.js margin_data.js
+                     breadth_data.json tic_holdings.js health.json chains_data.js range_filter.js strategies_data.js strategies.json clock_data.js options_env.js cot_data.js smart_dumb.js margin_data.js \
+                     earnings_data.js release_dates/cpi_dates.csv release_dates/nfp_dates.csv release_dates/fomc_dates.csv
           if git diff --staged --quiet; then
             echo "No payload changes"
             exit 0

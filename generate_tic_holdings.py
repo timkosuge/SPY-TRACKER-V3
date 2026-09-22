@@ -5,8 +5,8 @@ import urllib.request
 from payload_meta import stamp
 
 SOURCES = [
+    "https://ticdata.treasury.gov/resource-center/data-chart-center/tic/Documents/slt_table5.txt",
     "https://ticdata.treasury.gov/resource-center/data-chart-center/tic/Documents/mfhhis01.txt",
-    "https://ticdata.treasury.gov/resource-center/data-chart-center/tic/Documents/mfh.txt",
 ]
 OUTPUT = "tic_holdings.js"
 COUNTRIES = {"Japan": "japan", "China, Mainland": "china", "United Kingdom": "uk", "Grand Total": "total"}
@@ -26,6 +26,20 @@ def parse(text):
     i = 0
     while i < len(lines):
         cells = [c.strip() for c in re.split(r"\t|\s{2,}", lines[i]) if c.strip()]
+        if len(cells) > 1 and cells[0] == "Country" and all(re.fullmatch(r"\d{4}-\d{2}", c) for c in cells[1:]):
+            periods = cells[1:]
+            j = i + 1
+            while j < len(lines) and lines[j].strip():
+                row = [c.strip().strip('"') for c in lines[j].split("\t")]
+                if row and row[0] in COUNTRIES:
+                    for p, v in zip(periods, row[1:1 + len(periods)]):
+                        try:
+                            out[COUNTRIES[row[0]]].setdefault(p, float(v.replace(",", "")))
+                        except ValueError:
+                            pass
+                j += 1
+            i = j
+            continue
         if cells and all(c in MONTHS for c in cells):
             ycells = [c.strip() for c in re.split(r"\t|\s{2,}", lines[i + 1]) if c.strip()]
             years = [c for c in ycells if re.fullmatch(r"\d{4}", c)]

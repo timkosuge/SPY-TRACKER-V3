@@ -2,6 +2,7 @@
 // Fetches SPY options chain from CBOE and computes GEX + max pain live
 // Available any time CBOE serves data (market hours + extended)
 // Returns: { gex: {..., bar: {...}}, max_pain: [...], pcr_vol, pcr_oi, atm_iv, spot, updated }
+import { nyseHolidays } from './_nyse.js';
 
 function normalizeIV(value) {
   const iv = Number(value);
@@ -397,14 +398,10 @@ export async function onRequest(context) {
       return { exp, dte, callWall, putWall, topCalls, topPuts };
     };
 
-    // US market holidays - Good Friday dates (no expiry, market closed)
-    // When 3rd Friday is Good Friday, monthly opex rolls to preceding Thursday.
-    const GOOD_FRIDAYS = new Set([
-      '2025-04-18', '2026-04-03', '2027-03-26', '2028-04-14',
-      '2029-04-18', '2030-04-19', '2031-04-11', '2032-04-02',
-    ]);
+    const isHoliday = dateStr => nyseHolidays(Number(dateStr.slice(0, 4))).has(dateStr);
 
-    // Monthly opex: 3rd Friday of month; rolls to Thursday if that Friday is Good Friday
+
+    // Monthly opex: 3rd Friday of month; rolls to Thursday if that Friday is an exchange holiday
     const getMonthlyOpex = (year, month) => {
       let fridayCount = 0;
       for (let day = 1; day <= 31; day++) {
@@ -414,7 +411,7 @@ export async function onRequest(context) {
           fridayCount++;
           if (fridayCount === 3) {
             const dateStr = d.toISOString().slice(0, 10);
-            if (GOOD_FRIDAYS.has(dateStr)) {
+            if (isHoliday(dateStr)) {
               return new Date(Date.UTC(year, month, day - 1)).toISOString().slice(0, 10);
             }
             return dateStr;
@@ -446,8 +443,8 @@ export async function onRequest(context) {
     // Today's 0DTE
     const todayWalls = expiries.includes(todayStr) ? buildWalls(todayStr) : null;
 
-    // Upcoming expiries — skip Good Fridays, pick: nearest weekly Fri + monthlies + fill to 4
-    const upcomingAll = expiries.filter(exp => exp > todayStr && !GOOD_FRIDAYS.has(exp)).sort();
+    // Upcoming expiries — skip exchange holidays, pick: nearest weekly Fri + monthlies + fill to 4
+    const upcomingAll = expiries.filter(exp => exp > todayStr && !isHoliday(exp)).sort();
     const cardExps = [];
     let nearestWeeklyAdded = false;
     const seenMonthly = new Set();

@@ -655,7 +655,7 @@ function esRenderHolidays(){
   const h=ES().holidays, s=ES().santa, base=ES().baseline||{}, avg=base.weekly||0, avgDaily=base.daily||0;
   const sw=h.short_week||{}, asw=h.after_short_week||{};
   document.getElementById('es-sw-cards').innerHTML=`
-    <div class="es-card"><div class="es-card-label">SHORT WEEK AVG RETURN</div><div class="es-card-val ${(sw.avg||0)>=0?'up':'dn'}">${(sw.avg||0)>=0?'+':''}${esN(sw.avg)}%</div><div class="es-card-sub">vs +0.21% full week avg</div></div>
+    <div class="es-card"><div class="es-card-label">SHORT WEEK AVG RETURN</div><div class="es-card-val ${(sw.avg||0)>=0?'up':'dn'}">${(sw.avg||0)>=0?'+':''}${esN(sw.avg)}%</div><div class="es-card-sub">vs ${avg>=0?'+':''}${esN(avg)}% full week avg</div></div>
     <div class="es-card"><div class="es-card-label">SHORT WEEK WIN RATE</div><div class="es-card-val ${(sw.win_rate||0)>=60?'up':'neu'}">${esN(sw.win_rate,1)}%</div><div class="es-card-sub">${sw.count||0} short weeks sampled</div></div>
     <div class="es-card"><div class="es-card-label">SHORT WEEK EDGE</div><div class="es-card-val ${((sw.avg||0)-avg)>=0?'up':'dn'}">${((sw.avg||0)-avg)>=0?'+':''}${esN((sw.avg||0)-avg)}%</div><div class="es-card-sub">vs average full week</div></div>
     <div class="es-card"><div class="es-card-label">WEEK AFTER SHORT WEEK</div><div class="es-card-val ${(asw.avg||0)>=0?'up':'dn'}">${(asw.avg||0)>=0?'+':''}${esN(asw.avg)}%</div><div class="es-card-sub">${esN(asw.win_rate,1)}% WR · ${asw.count||0} weeks</div></div>`;

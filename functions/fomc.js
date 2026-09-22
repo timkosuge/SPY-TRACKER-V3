@@ -11,8 +11,9 @@ function parseFedCalendar(html) {
     while ((r = rowRe.exec(y[2])) !== null) {
       const monthText = r[1].replace(/<[^>]+>/g, '').trim();
       const dayText = r[2].replace(/<[^>]+>/g, '').trim();
-      const monthName = monthText.split('/').pop().trim();
-      const month = MONTHS.indexOf(monthName) + 1;
+      const monthKey = monthText.split('/').pop().trim().slice(0, 3).toLowerCase();
+      const month = MONTHS.findIndex(m => m.slice(0, 3).toLowerCase() === monthKey) + 1;
+      if (/notation|cancel/i.test(dayText)) continue;
       const days = dayText.replace('*', '').split('-').map(s => parseInt(s, 10)).filter(n => !isNaN(n));
       if (!month || !days.length) continue;
       const day = days[days.length - 1];
