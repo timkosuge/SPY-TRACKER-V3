@@ -33,8 +33,8 @@
   }
 
   function getData() {
-    if(typeof INTRADAY_SESSION_STATS==='undefined'||!INTRADAY_SESSION_STATS.length) return null;
-    return INTRADAY_SESSION_STATS;
+    const rows = typeof INTRADAY_SESSION_STATS==='undefined' ? [] : payloadRows(INTRADAY_SESSION_STATS);
+    return rows.length ? rows : null;
   }
 
   function applyFilters(raw) {
@@ -598,13 +598,14 @@
     let dateRange = T.date_range;
 
     if (lookback === '2026' && typeof INTRADAY_SESSION_STATS !== 'undefined') {
-      const allDays = INTRADAY_SESSION_STATS.length;
-      const yearDays = INTRADAY_SESSION_STATS.filter(d => d.date && d.date.startsWith('2026')).length;
+      const sessionRows = payloadRows(INTRADAY_SESSION_STATS);
+      const allDays = sessionRows.length;
+      const yearDays = sessionRows.filter(d => d.date && d.date.startsWith('2026')).length;
       if (allDays > 0) {
         yearScale = yearDays / allDays;
         filteredDays = yearDays;
         // Build date range from filtered set
-        const yr26 = INTRADAY_SESSION_STATS.filter(d => d.date && d.date.startsWith('2026'));
+        const yr26 = sessionRows.filter(d => d.date && d.date.startsWith('2026'));
         if (yr26.length) {
           const sorted = yr26.map(d => d.date).sort();
           dateRange = { start: sorted[0], end: sorted[sorted.length - 1] };

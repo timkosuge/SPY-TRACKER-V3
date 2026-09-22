@@ -28,7 +28,7 @@ function switchGroupTab(group, firstTab) {
   // Reset subtab active states
   if(grp) {
     grp.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
-    grp.querySelector('.subtab')?.classList.add('active');
+    (grp.querySelector(`.subtab[onclick*="('${firstTab}',"]`) || grp.querySelector('.subtab'))?.classList.add('active');
   }
   // Switch to first tab of group
   try { window.scrollTo(0,0); document.documentElement.scrollTop=0; document.body.scrollTop=0; } catch(e){}
@@ -299,7 +299,6 @@ function renderHub(md,sd){
     return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
   };
 
-  { const _hd = $('hubDecision'); if (_hd && typeof window.renderDecisionCard === 'function') _hd.innerHTML = window.renderDecisionCard(true); }
   $('hubDayTracker').innerHTML=`
     <div class="panel" style="border-left:4px solid ${sessionColor};">
       <div style="display:grid;grid-template-columns:auto auto auto 1fr auto auto auto;gap:16px;align-items:center;">
@@ -1138,6 +1137,8 @@ function renderDesk(md,sd){
 
     <!-- HEADER ROW 2: Key price levels — all update live via updateLevelBar() -->
     <div id="deskLevelBar" style="display:grid;grid-template-columns:repeat(8,1fr);gap:1px;margin-bottom:8px;background:var(--border);border:1px solid var(--border);border-radius:3px;overflow:hidden;font-family:'Share Tech Mono',monospace;"></div>
+
+    ${typeof window.renderDecisionCard === 'function' ? window.renderDecisionCard(true) : ''}
 
     <!-- PRICE PANEL: Equal cells,  L→R -->
     <div class="panel" style="margin-bottom:10px;">

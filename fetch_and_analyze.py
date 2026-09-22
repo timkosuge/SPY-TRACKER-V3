@@ -1683,6 +1683,14 @@ def get_trading_days_to_process(conn):
 
 
 
+def library_sessions(path='intraday_library.js'):
+    with open(path, encoding='utf-8') as f:
+        body = f.read().split('=', 1)[1].strip().rstrip(';')
+    data = json.loads(body)
+    rows = data['records'] if isinstance(data, dict) else data
+    return {d['date']: d for d in rows}
+
+
 def export_gap_stats(conn):
     """Compute gap stats from PH of prev day + FH of next day. Writes gap_stats.js."""
     import json, re, statistics
@@ -1691,11 +1699,11 @@ def export_gap_stats(conn):
 
     c=conn.cursor()
     try:
-        with open('intraday_library.js') as f: raw=f.read()
-        match=re.search(r'const INTRADAY_SESSION_STATS = (\[.*?\]);',raw,re.DOTALL)
-        if not match: print("  gap_stats.js: library not ready"); return
-        sessions={d['date']: d for d in json.loads(match.group(1))}
-    except Exception as e: print(f"  gap_stats.js: {e}"); return
+        sessions = library_sessions()
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        print(f"  gap_stats.js: {e}")
+        RUN_ERRORS.append(f"gap_stats.js: intraday library unreadable: {e}")
+        return
 
     c.execute("SELECT date,timestamp,open,high,low,close,volume FROM intraday_bars WHERE timestamp>='09:30' AND timestamp<'16:00' ORDER BY date,timestamp")
     day_bars=defaultdict(list)
@@ -1845,17 +1853,11 @@ def export_intraday_vol_stats(conn):
 
     c = conn.cursor()
 
-    # Load session stats from intraday_library.js
     try:
-        with open('intraday_library.js') as f:
-            raw = f.read()
-        match = re.search(r'const INTRADAY_SESSION_STATS = (\[.*?\]);', raw, re.DOTALL)
-        if not match:
-            print("  intraday_vol_stats.js: intraday_library.js not ready")
-            return
-        sessions = {d['date']: d for d in json.loads(match.group(1))}
-    except Exception as e:
-        print(f"  intraday_vol_stats.js: could not read session stats: {e}")
+        sessions = library_sessions()
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        print(f"  intraday_vol_stats.js: {e}")
+        RUN_ERRORS.append(f"intraday_vol_stats.js: intraday library unreadable: {e}")
         return
 
     c.execute("SELECT date, SUM(volume) as vol FROM intraday_bars GROUP BY date")

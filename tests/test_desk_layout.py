@@ -72,6 +72,21 @@ class Order(unittest.TestCase):
         with open(name, encoding="utf-8") as f:
             return f.read().replace("\r\n", "\n")
 
+    def test_opening_a_menu_group_highlights_the_tab_it_opens(self):
+        s = self.read("dashboard1.js")
+        fn = s[s.index("function switchGroupTab("):s.index("function switchGroupSub(")]
+        self.assertIn("grp.querySelector(`.subtab[onclick*=\"('${firstTab}',\"]`)", fn)
+
+    def test_the_call_is_on_the_trading_desk_dashboard_not_the_market_hub(self):
+        hub = self.read("index.html")
+        hub = hub[hub.index('id="panel-hub"'):]
+        hub = hub[:hub.index('class="tab-panel"')]
+        self.assertNotIn("hubDecision", hub + self.read("dashboard1.js"))
+        s = self.read("dashboard1.js")
+        desk = s[s.index("function renderDesk("):]
+        self.assertLess(desk.index('id="deskLevelBar"'), desk.index("renderDecisionCard(true)"))
+        self.assertLess(desk.index("renderDecisionCard(true)"), desk.index("<!-- PRICE PANEL"))
+
     def test_the_range_filter_shows_the_call_and_the_live_steps_before_the_fold(self):
         s = self.read("range_filter_panel.js")
         page = s[s.index("el.innerHTML = `"):]
