@@ -24,14 +24,14 @@ jobs:
         id: clock
         run: |
           MANUAL="${{ github.event_name == 'workflow_dispatch' }}"
+          SCHEDULE="${{ github.event.schedule }}"
           NOW=$(TZ=America/New_York date +%H%M)
           DOW=$(TZ=America/New_York date +%u)
           RUN=false; CLOSE=false
+          if [ "$DOW" -le 5 ] && [ "$NOW" -ge 0925 ]; then RUN=true; fi
+          if [ "$SCHEDULE" = "0 14,15 * * 1-5" ] && { [ "$NOW" -lt 0955 ] || [ "$NOW" -gt 1005 ]; }; then RUN=false; fi
+          if [ "$RUN" = "true" ] && [ "$NOW" -ge 1605 ]; then CLOSE=true; fi
           if [ "$MANUAL" = "true" ]; then RUN=true; CLOSE=true; fi
-          if [ "$DOW" -le 5 ] && [ "$NOW" -ge 0925 ] && [ "$NOW" -le 1700 ]; then RUN=true; fi
-          MIN=$(TZ=America/New_York date +%M)
-          if [ "$MANUAL" != "true" ] && [ "$MIN" -lt 15 ] && { [ "$NOW" -lt 0955 ] || [ "$NOW" -gt 1005 ]; }; then RUN=false; fi
-          if [ "$NOW" -ge 1605 ]; then CLOSE=true; fi
           echo "run=$RUN" >> "$GITHUB_OUTPUT"
           echo "close=$CLOSE" >> "$GITHUB_OUTPUT"
           echo "New York $NOW, weekday $DOW, run=$RUN close=$CLOSE"

@@ -63,6 +63,16 @@
       "role": "avoid"
     },
     {
+      "id": "A6",
+      "name": "Any narrow opening range",
+      "mode": "A",
+      "entry": [
+        "or_narrow"
+      ],
+      "note": "The opening range alone, the narrow side of A4.",
+      "role": "avoid"
+    },
+    {
       "id": "B0",
       "name": "Every session, hold 3 (control)",
       "mode": "B",

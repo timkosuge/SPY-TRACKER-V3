@@ -57,8 +57,17 @@ def classify(v, q):
     return "wide" if v >= q["q75"] else "narrow" if v <= q["q25"] else "middle"
 
 
-def daily_rows(conn):
-    return conn.execute("SELECT date, open, high, low, close FROM daily_ohlcv WHERE open IS NOT NULL AND high IS NOT NULL AND low IS NOT NULL AND close IS NOT NULL ORDER BY date").fetchall()
+SESSION_CLOSE_MIN = 16 * 60
+
+
+def session_closed(day, now=None):
+    now = now or datetime.now(ET)
+    return day < now.date() or (day == now.date() and now.hour * 60 + now.minute >= SESSION_CLOSE_MIN)
+
+
+def daily_rows(conn, now=None):
+    rows = conn.execute("SELECT date, open, high, low, close FROM daily_ohlcv WHERE open IS NOT NULL AND high IS NOT NULL AND low IS NOT NULL AND close IS NOT NULL ORDER BY date").fetchall()
+    return [r for r in rows if session_closed(date.fromisoformat(r[0]), now)]
 
 
 def vix_closes(conn):
