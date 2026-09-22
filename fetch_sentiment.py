@@ -225,7 +225,7 @@ def fetch_cot_weeks():
             print(f"  COT archive {year} failed: {e}")
     weeks = [dict(report_date=d, **v) for d, v in sorted(out.items())]
     if weeks:
-        print(f"  COT archive: {len(weeks)} reports, {weeks[0]['report_date']} → {weeks[-1]['report_date']}")
+        print(f"  COT archive: {len(weeks)} reports, {weeks[0]['report_date']} -> {weeks[-1]['report_date']}")
     return weeks
 
 
@@ -397,17 +397,17 @@ def main():
         if not block or age is None or age > max_age:
             stale.append(f"{label} is {age if age is not None else 'un'}dated{'' if age is None else f' {age} days old'} (allowed {max_age})")
 
-    print(f"\n✓ sentiment_data.json written ({NOW_UTC})")
+    print(f"\nOK sentiment_data.json written ({NOW_UTC})")
     if output["aaii"]:
         a = output["aaii"]
-        print(f"  AAII  → bull={a.get('bullish')}%  bear={a.get('bearish')}%  spread={a.get('spread')}  [{a.get('source')}]")
+        print(f"  AAII  -> bull={a.get('bullish')}%  bear={a.get('bearish')}%  spread={a.get('spread')}  [{a.get('source')}]")
     if output["cot"]:
         c = output["cot"]
         net = c.get("lev_net", c.get("nc_net"))
-        print(f"  COT   → report {c.get('report_date')}  leveraged/non-commercial net={net}  [{c.get('source')}]")
+        print(f"  COT   -> report {c.get('report_date')}  leveraged/non-commercial net={net}  [{c.get('source')}]")
 
     if stale:
-        print("\n✗ sentiment sources are stale: " + "; ".join(stale))
+        print("\nFAILED sentiment sources are stale: " + "; ".join(stale))
         raise SystemExit(1)
 
 

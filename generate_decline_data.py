@@ -118,7 +118,7 @@ def main():
         json.dump(output, f, separators=(',', ':'))
         f.write(';\n')
     
-    print(f'decline_data.js: {total_events} events, {dates[0]} → {dates[-1]}')
+    print(f'decline_data.js: {total_events} events, {dates[0]} -> {dates[-1]}')
 
 if __name__ == '__main__':
     main()

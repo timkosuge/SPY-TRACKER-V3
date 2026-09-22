@@ -232,7 +232,7 @@ def main():
     with open(OUTPUT, "w") as f:
         f.write("const RANGE_FILTER = " + json.dumps(out, separators=(",", ":")) + ";\n")
     ww = table_a["wide/wide"]; cellkey = f"{today_vix_b}|{today_dd_b}|{today_class}"; tc = table_b_cells["3y"].get(cellkey, {}).get("3")
-    print(f"{OUTPUT}: as of {rows[-1][0]}, latest session {today_class} ({out['latest_session']['range_pct']}%), VIX {today_vix} ({today_vix_b}), drawdown {today_dd:.2f}% ({today_dd_b}); today's 3y cell {cellkey}: n={tc['n'] if tc else 0}; wide/wide n={ww['n']} ≥0.75% {ww['ge_075']['rate']}% holds={ww['stability']['holds']}")
+    print(f"{OUTPUT}: as of {rows[-1][0]}, latest session {today_class} ({out['latest_session']['range_pct']}%), VIX {today_vix} ({today_vix_b}), drawdown {today_dd:.2f}% ({today_dd_b}); today's 3y cell {cellkey}: n={tc['n'] if tc else 0}; wide/wide n={ww['n']} >=0.75% {ww['ge_075']['rate']}% holds={ww['stability']['holds']}")
 
 
 if __name__ == "__main__":

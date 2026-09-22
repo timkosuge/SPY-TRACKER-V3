@@ -197,7 +197,7 @@ def main():
     print(f'intraday_patterns.js: {len(records)} records')
     if records:
         dates = sorted(r['d'] for r in records)
-        print(f'  Range: {dates[0]} → {dates[-1]}')
+        print(f'  Range: {dates[0]} -> {dates[-1]}')
 
 if __name__ == '__main__':
     main()

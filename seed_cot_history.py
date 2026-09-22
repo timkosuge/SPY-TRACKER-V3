@@ -71,7 +71,7 @@ def main():
     conn.commit()
     n, first, last = conn.execute("SELECT COUNT(*), MIN(report_date), MAX(report_date) FROM cot_weekly").fetchone()
     conn.close()
-    print(f"cot_weekly: {len(rows)} rows read, table now holds {n} reports, {first} → {last}")
+    print(f"cot_weekly: {len(rows)} rows read, table now holds {n} reports, {first} -> {last}")
 
 
 if __name__ == "__main__":

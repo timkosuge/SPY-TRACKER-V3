@@ -195,7 +195,7 @@ def main():
         f.write("const SMART_DUMB = " + json.dumps(out, separators=(",", ":")) + ";\n")
     if out.get("available"):
         L = out["latest"]
-        print(f"{OUTPUT}: {out['weeks']} reports {out['first']} → {out['last']}; institutions {L['institutional']}, small traders {L['small']}, gap {L['spread']:+}; {out['aaii_weeks']} survey weeks")
+        print(f"{OUTPUT}: {out['weeks']} reports {out['first']} -> {out['last']}; institutions {L['institutional']}, small traders {L['small']}, gap {L['spread']:+}; {out['aaii_weeks']} survey weeks")
         for v in out["verdicts"]:
             print(f"  [{v['level']:7s}] {v['text'][:150]}")
     else:

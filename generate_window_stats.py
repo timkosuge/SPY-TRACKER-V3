@@ -219,7 +219,7 @@ def main():
     d=output.get('all',{})
     if d:
         w1s=d['w1']['summary']; w2s=d['w2']['summary']
-        print(f"window_stats.js: {len(sessions)} sessions {sessions[0]['date']} → {sessions[-1]['date']}")
+        print(f"window_stats.js: {len(sessions)} sessions {sessions[0]['date']} -> {sessions[-1]['date']}")
         print(f"  W1 avg={w1s['avg_move']:+.3f}% range={w1s["avg_move"]:.3f}% rev={w1s['reversal_pct']}% day_follow={w1s['day_follow_pct']}%")
         print(f"  W2 avg={w2s['avg_move']:+.3f}% range={w2s["avg_move"]:.3f}% rev={w2s['reversal_pct']}% day_follow={w2s['day_follow_pct']}%")
         rel=d['relationship']

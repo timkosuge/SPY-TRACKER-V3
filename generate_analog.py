@@ -216,7 +216,7 @@ def main():
         f.write(';\n')
 
     sz = len(json.dumps(out))
-    print(f"\n✓ {OUT_PATH}: {sz//1024}KB")
+    print(f"\nOK {OUT_PATH}: {sz//1024}KB")
     print(f"Consensus: 30d=${cons(30):.2f} | 60d=${cons(60):.2f} | 90d=${cons(90):.2f}")
 
 if __name__ == '__main__':

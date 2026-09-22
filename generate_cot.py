@@ -151,7 +151,7 @@ def main():
         f.write("const COT_DATA = " + json.dumps(out, separators=(",", ":")) + ";\n")
     if out.get("available"):
         s = out["standing"]
-        print(f"{OUTPUT}: {out['weeks']} reports {out['first']} → {out['last']}; dealer net {s['dealer']['net']:+,} ({s['dealer']['percentile']['all']:.0f}th pct), leveraged {s['lev']['net']:+,} ({s['lev']['percentile']['all']:.0f}th pct)")
+        print(f"{OUTPUT}: {out['weeks']} reports {out['first']} -> {out['last']}; dealer net {s['dealer']['net']:+,} ({s['dealer']['percentile']['all']:.0f}th pct), leveraged {s['lev']['net']:+,} ({s['lev']['percentile']['all']:.0f}th pct)")
         for v in out["verdicts"]:
             print(f"  [{v['level']:7s}] {v['text'][:130]}")
     else:

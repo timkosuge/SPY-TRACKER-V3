@@ -218,7 +218,7 @@ def compute_measurements(conn, target_date):
          pct(otpo,prev[0]) if prev else None, pct(ctpc,prev[3]) if prev else None,
          pct(htph,prev[1]) if prev else None, pct(ltpl,prev[2]) if prev else None))
     conn.commit()
-    print(f"Measurements: O→C={otc:+.2f} ({pct(otc,o):+.2f}%) Range={rng:.2f}")
+    print(f"Measurements: O->C={otc:+.2f} ({pct(otc,o):+.2f}%) Range={rng:.2f}")
 
 def store_intraday_and_volume(conn, target_date, bars):
     if not bars: print("No intraday bars."); return
@@ -1294,7 +1294,7 @@ def print_summary(conn, target_date):
     row = c.execute("SELECT * FROM daily_measurements WHERE date=?", (target_date,)).fetchone()
     va  = c.execute("SELECT * FROM volume_analysis WHERE date=?", (target_date,)).fetchone()
     print(f"\n{'='*60}\n  SPY {target_date}\n{'='*60}")
-    if row: print(f"  O→C: {row[1]:+.4f} ({row[11]:+.2f}%)  Range: {row[6]:.4f} ({row[16]:.2f}%)")
+    if row: print(f"  O->C: {row[1]:+.4f} ({row[11]:+.2f}%)  Range: {row[6]:.4f} ({row[16]:.2f}%)")
     if va:  print(f"  Vol: {va[1]:,}  Peak: {va[11]:,}@{va[9]}  HVN: ${va[12]}")
     print('='*60)
 
@@ -2116,7 +2116,7 @@ def main():
         print(f"\nDays to process: {dates_to_process if dates_to_process else 'none (all up to date)'}")
 
         # ── Step 2: yfinance OHLC backfill — cheap, no API key, gets everything ─
-        print("\n── Daily OHLC Backfill (yfinance) ───────────────────────────")
+        print("\n-- Daily OHLC Backfill (yfinance) ---------------------------")
         try:
             import yfinance as yf
             spy_yf = yf.Ticker("SPY")
@@ -2158,7 +2158,7 @@ def main():
         dates_to_process = get_trading_days_to_process(conn)
 
         # ── Step 3: Polygon intraday for any day still missing volume_analysis ─
-        print("\n── Intraday / HVN (Polygon) ─────────────────────────────────")
+        print("\n-- Intraday / HVN (Polygon) ---------------------------------")
         # Collect all dates missing volume analysis (not just today)
         intraday_cutoff = (today - timedelta(days=25)).strftime("%Y-%m-%d")
         need_intraday = [r[0] for r in conn.execute(
@@ -2174,11 +2174,11 @@ def main():
                     bars = get_intraday_bars(d_str)
                     if bars:
                         store_intraday_and_volume(conn, d_str, bars)
-                        print(f"  ✓ {d_str}: {len(bars)} bars")
+                        print(f"  OK {d_str}: {len(bars)} bars")
                     else:
                         print(f"  – {d_str}: no bars returned (market may still be open or holiday)")
                 except Exception as e:
-                    print(f"  ✗ {d_str}: {e}")
+                    print(f"  FAILED {d_str}: {e}")
                     RUN_ERRORS.append(f"intraday {d_str}: {e}")
         else:
             print("  All volume analysis up to date")
@@ -2198,7 +2198,7 @@ def main():
         if ref.weekday() == 6: ref -= timedelta(days=2)
         ref_str = ref.strftime("%Y-%m-%d")
 
-        print("\n── Options Data ─────────────────────────────────────────────")
+        print("\n-- Options Data ---------------------------------------------")
         options_data = fetch_spy_options_cboe()
         try:
             store_option_chain(conn, options_data, ref_str)
@@ -2211,7 +2211,7 @@ def main():
             print("  CBOE unavailable, falling back to yfinance options...")
             options_data = fetch_spy_options_yf_fallback()
 
-        print("\n── Weekly Expected Move ─────────────────────────────────────")
+        print("\n-- Weekly Expected Move -------------------------------------")
         atm_iv_live = options_data.get("atm_iv") if options_data else None
         if atm_iv_live:
             print(f"  Using live ATM IV: {atm_iv_live*100:.2f}%")
@@ -2244,7 +2244,7 @@ def main():
             else:
                 print(f"  Thursday — not a short week (Friday {next_friday_str} is a trading day), skipping WEM lock.")
 
-        print("\n── JSON Export ──────────────────────────────────────────────")
+        print("\n-- JSON Export ----------------------------------------------")
         try:
             export_spy_json(conn)
         except Exception as e:
@@ -2256,7 +2256,7 @@ def main():
             print(f"  market_data.json error: {e}")
 
         # ── Step 5: Intraday 1m + 5m accumulation ────────────────────────────
-        print("\n── Intraday 1m / 5m Accumulation ───────────────────────────")
+        print("\n-- Intraday 1m / 5m Accumulation ---------------------------")
         # Determine which recent trading days are missing intraday data
         # 1m: only fetch last 7 calendar days (yfinance limit)
         # 5m: fetch last 60 calendar days (yfinance limit)

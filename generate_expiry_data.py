@@ -122,7 +122,7 @@ def main():
         json.dump(payload, f, separators=(',', ':'))
         f.write(';\n')
     
-    print(f'expiry_data.js: {len(records)} records, {records[-1]["d"]} → {records[0]["d"]}')
+    print(f'expiry_data.js: {len(records)} records, {records[-1]["d"]} -> {records[0]["d"]}')
 
 if __name__ == '__main__':
     main()

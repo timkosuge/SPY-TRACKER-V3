@@ -293,7 +293,7 @@ def main():
         k = str(t)
         if k in all_results and all_results[k].get('count'):
             d = all_results[k]
-            print(f"≥{t}%: {d['count']} events | avg bounce {d['avg_bounce_pct']}% "
+            print(f">={t}%: {d['count']} events | avg bounce {d['avg_bounce_pct']}% "
                   f"(med {d['med_bounce_pct']}%) | avg {d['avg_days_bounce']}d | "
                   f"failed {d['failed_pct']}% | sustained {d['sustained_pct']}%")
     print(f'Written: {OUT_PATH}')

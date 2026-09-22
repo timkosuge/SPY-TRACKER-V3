@@ -448,7 +448,7 @@ def main():
         f.write("const STRATEGIES_DATA = " + json.dumps(out, separators=(",", ":")) + ";\n")
     for r in results:
         e = r["exits"].get("1330") or r["exits"].get("3") or {}
-        print(f"  {r['id']} {r['name'][:44]:44s} n={r['n']:4d}  long {e.get('long', {}).get('rate')}%  short {e.get('short', {}).get('rate')}%  either≥0.75% {r['either_side']['0.75']['rate']}%")
+        print(f"  {r['id']} {r['name'][:44]:44s} n={r['n']:4d}  long {e.get('long', {}).get('rate')}%  short {e.get('short', {}).get('rate')}%  either>=0.75% {r['either_side']['0.75']['rate']}%")
     print(f"{OUTPUT}: {len(results)} strategies, chains {'from ' + chain_first if have_chains else 'not yet captured'}, armed for {latest}: B {armed_b}, A pending OR {armed_a_pending}")
 
 

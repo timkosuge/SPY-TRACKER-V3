@@ -109,6 +109,6 @@ if __name__ == "__main__":
         with open(sys.argv[2], "rb") as f:
             rows = parse_workbook(f.read())
         write_history_csv(rows)
-        print(f"{HISTORY_CSV}: {len(rows)} months, {rows[0][0]} → {rows[-1][0]}")
+        print(f"{HISTORY_CSV}: {len(rows)} months, {rows[0][0]} -> {rows[-1][0]}")
     else:
         main()
