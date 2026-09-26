@@ -16349,6 +16349,18 @@
    "chg_lev_net": 47961,
    "other_net": 127,
    "nonrept_net": 91270
+  },
+  {
+   "report_date": "2026-09-22",
+   "source": "cftc_fin_zip",
+   "dealer_net": -634203,
+   "chg_dealer_net": 68735,
+   "asset_net": 934455,
+   "chg_asset_net": 29771,
+   "lev_net": -375574,
+   "chg_lev_net": -82431,
+   "other_net": -29026,
+   "nonrept_net": 104348
   }
  ]
 }
