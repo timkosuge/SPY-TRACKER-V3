@@ -16335,6 +16335,14 @@
    "bearish": 48.1,
    "spread": -15.4,
    "source": "aaii_xls"
+  },
+  {
+   "date": "2026-09-30",
+   "bullish": 34.6,
+   "neutral": 18.9,
+   "bearish": 46.5,
+   "spread": -11.9,
+   "source": "aaii_xls"
   }
  ],
  "cot": [
