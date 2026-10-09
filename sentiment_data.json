@@ -1,19 +1,19 @@
 {
-  "updated": "2026-10-03T02:56:14Z",
+  "updated": "2026-10-09T10:20:17Z",
   "aaii": {
-    "date": "2026-09-30",
-    "bullish": 34.6,
-    "neutral": 18.9,
-    "bearish": 46.5,
-    "spread": -11.9,
+    "date": "2026-10-07",
+    "bullish": 40.3,
+    "neutral": 20.8,
+    "bearish": 39.0,
+    "spread": 1.3,
     "avg_bullish": 37.6,
     "avg_neutral": 31.0,
     "avg_bearish": 31.4,
-    "avg_weeks": 2043,
+    "avg_weeks": 2044,
     "avg_from": "1987-07-22",
-    "avg_through": "2026-09-30",
+    "avg_through": "2026-10-07",
     "source": "aaii_xls",
-    "age_days": 3,
+    "age_days": 2,
     "stale": false
   },
   "cot": {
@@ -40,7 +40,7 @@
     "nonrept_s": 139645,
     "nonrept_net": 107218,
     "chg_nonrept_net": 2870,
-    "age_days": 4,
+    "age_days": 10,
     "stale": false
   }
 }
