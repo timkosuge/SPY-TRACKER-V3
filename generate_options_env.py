@@ -107,6 +107,19 @@ def build(conn):
                     "typical_move_priced_pct": round(today_vix / math.sqrt(252) * MEDIAN_ABS_NORMAL, 3) if today_vix else None,
                     "delivered_daily_move_pct": round(percentile([abs(closes[i] / closes[i - 1] - 1) * 100 for i in range(len(closes) - 20, len(closes))], 0.5), 3)}
 
+    # the spread day by day over the window the verdict is measured against
+    hist = []
+    for i, d in enumerate(dates):
+        if d < y3 or d not in vix or i < 21:
+            continue
+        tr = realized(closes[:i + 1], 20)
+        if tr is None:
+            continue
+        hist.append({"d": d, "s": round(vix[d] - tr, 2)})
+    out["history"] = {"days": hist,
+                      "cheap_at_or_below": round(percentile(spreads_3y, 0.25), 2) if spreads_3y else None,
+                      "expensive_at_or_above": round(percentile(spreads_3y, 0.75), 2) if spreads_3y else None}
+
     # does the spread at decision time say anything about the premium that follows
     sub = [r for r in recs if r["date"] >= "2010-01-01"]
     if sub:

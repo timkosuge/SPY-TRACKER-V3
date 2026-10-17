@@ -70,3 +70,33 @@ class Build(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+class SpreadHistory(Build):
+    def test_history_runs_to_the_last_session(self):
+        conn = self.frame(16.0, 0.003)
+        o = O.build(conn)
+        h = o["history"]
+        self.assertGreater(len(h["days"]), 50)
+        self.assertEqual(h["days"][-1]["d"], o["as_of"])
+
+    def test_history_carries_only_the_date_and_the_spread(self):
+        o = O.build(self.frame(16.0, 0.003))
+        self.assertEqual(sorted(o["history"]["days"][0].keys()), ["d", "s"])
+
+    def test_history_days_are_in_order(self):
+        o = O.build(self.frame(16.0, 0.003))
+        ds = [r["d"] for r in o["history"]["days"]]
+        self.assertEqual(ds, sorted(ds))
+
+    def test_the_cheap_band_sits_below_the_expensive_band(self):
+        o = O.build(self.frame(16.0, 0.003))
+        h = o["history"]
+        self.assertLessEqual(h["cheap_at_or_below"], h["expensive_at_or_above"])
+
+    def test_the_spread_matches_implied_minus_trailing_realized(self):
+        conn = self.frame(16.0, 0.003)
+        o = O.build(conn)
+        last = o["history"]["days"][-1]
+        self.assertAlmostEqual(last["s"], o["today"]["spread"], places=2)

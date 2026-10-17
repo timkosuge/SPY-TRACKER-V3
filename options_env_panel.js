@@ -5,6 +5,63 @@
   const sgn = v => v == null ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(2);
   const rc = r => (!r || !r.n) ? '—' : `<span style="font-family:'Share Tech Mono',monospace;color:var(--text);">${f1(r.rate)}%</span> <span style="font-size:9px;color:var(--text3);">${f1(r.lo)}–${f1(r.hi)} · n=${r.n.toLocaleString()}</span>`;
   const th = h => `<th style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);">${h}</th>`;
+  const CHEAP = 'var(--green)', FAIR = 'var(--yellow)', RICH = 'var(--red)';
+
+  function gauge(T) {
+    const p = T && T.spread_percentile_3y;
+    if (p == null) return '';
+    const W = 620, H = 74, L = 10, R = 10, bW = W - L - R, bY = 30, bH = 16;
+    const x = v => L + bW * v / 100;
+    const zone = (a, b, col) => `<rect x="${x(a).toFixed(1)}" y="${bY}" width="${(x(b) - x(a)).toFixed(1)}" height="${bH}" fill="${col}" opacity="0.28"/>`;
+    const txt = (xx, yy, s, anchor, col, size) => `<text x="${xx.toFixed(1)}" y="${yy.toFixed(1)}" text-anchor="${anchor}" font-size="${size || 10}" fill="${col || 'var(--text3)'}" font-family="Share Tech Mono,monospace">${s}</text>`;
+    const nx = x(Math.max(0, Math.min(100, p)));
+    const col = p >= 75 ? RICH : p <= 25 ? CHEAP : FAIR;
+    let g = zone(0, 25, CHEAP) + zone(25, 75, FAIR) + zone(75, 100, RICH);
+    g += `<rect x="${L}" y="${bY}" width="${bW}" height="${bH}" fill="none" stroke="var(--border)"/>`;
+    [25, 75].forEach(v => { g += `<line x1="${x(v).toFixed(1)}" x2="${x(v).toFixed(1)}" y1="${bY}" y2="${bY + bH}" stroke="rgba(255,255,255,0.45)" stroke-dasharray="4,3"/>`; });
+    g += `<polygon points="${nx.toFixed(1)},${bY - 3} ${(nx - 6).toFixed(1)},${bY - 13} ${(nx + 6).toFixed(1)},${bY - 13}" fill="${col}"/>`;
+    g += `<line x1="${nx.toFixed(1)}" x2="${nx.toFixed(1)}" y1="${bY}" y2="${bY + bH}" stroke="${col}" stroke-width="2"/>`;
+    g += txt(nx, bY - 17, `${f1(p)}th`, nx < 60 ? 'start' : nx > W - 60 ? 'end' : 'middle', col, 12);
+    g += txt(L, bY + bH + 14, 'CHEAP', 'start', CHEAP) + txt(L + bW / 2, bY + bH + 14, 'FAIRLY PRICED', 'middle', FAIR) + txt(W - R, bY + bH + 14, 'EXPENSIVE', 'end', RICH);
+    return `<div style="margin:10px 0 4px;"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg></div>`;
+  }
+
+  function history(D) {
+    const h = D && D.history, days = h && h.days;
+    if (!days || days.length < 30) return '';
+    const W = 620, H = 168, L = 44, R = 10, T0 = 10, B = 22;
+    const cW = W - L - R, cH = H - T0 - B;
+    const vals = days.map(r => r.s);
+    const srt = [...vals].sort((a, b) => a - b);
+    const q = f => srt[Math.min(srt.length - 1, Math.max(0, Math.round(f * (srt.length - 1))))];
+    const pad = (q(0.99) - q(0.01)) * 0.12 || 1;
+    const lo = Math.min(q(0.01) - pad, h.cheap_at_or_below), hi = Math.max(q(0.99) + pad, h.expensive_at_or_above);
+    const clamped = vals.filter(v => v < lo || v > hi).length;
+    const cl = v => Math.max(lo, Math.min(hi, v));
+    const y = v => T0 + cH - (cl(v) - lo) / ((hi - lo) || 1) * cH;
+    const x = i => L + cW * i / ((days.length - 1) || 1);
+    const txt = (xx, yy, s, anchor, col) => `<text x="${xx.toFixed(1)}" y="${yy.toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="${col || 'var(--text3)'}" font-family="Share Tech Mono,monospace">${s}</text>`;
+    let g = `<rect x="${L}" y="${T0}" width="${cW}" height="${cH}" fill="rgba(255,255,255,0.015)"/>`;
+    if (h.expensive_at_or_above != null) g += `<rect x="${L}" y="${T0}" width="${cW}" height="${(y(h.expensive_at_or_above) - T0).toFixed(1)}" fill="var(--red)" opacity="0.07"/>`;
+    if (h.cheap_at_or_below != null) g += `<rect x="${L}" y="${y(h.cheap_at_or_below).toFixed(1)}" width="${cW}" height="${(T0 + cH - y(h.cheap_at_or_below)).toFixed(1)}" fill="var(--green)" opacity="0.07"/>`;
+    [[h.expensive_at_or_above, RICH, 'EXPENSIVE'], [h.cheap_at_or_below, CHEAP, 'CHEAP']].forEach(([v, col, lab]) => {
+      if (v == null) return;
+      g += `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${col}" stroke-dasharray="5,4" opacity="0.8"/>`;
+      g += txt(L + 4, y(v) + (lab === 'EXPENSIVE' ? -4 : 11), `${lab} ${(v >= 0 ? '+' : '')}${v.toFixed(1)}`, 'start', col);
+    });
+    if (lo < 0 && hi > 0) g += `<line x1="${L}" x2="${W - R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="rgba(255,255,255,0.18)"/>`;
+    [hi, (hi + lo) / 2, lo].forEach(v => { g += txt(L - 5, y(v) + 4, (v >= 0 ? '+' : '') + v.toFixed(1), 'end'); });
+    g += `<polyline points="${days.map((r, i) => `${x(i).toFixed(1)},${y(r.s).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--cyan)" stroke-width="1.4" stroke-linejoin="round"/>`;
+    const last = days[days.length - 1];
+    g += `<circle cx="${x(days.length - 1).toFixed(1)}" cy="${y(last.s).toFixed(1)}" r="3.2" fill="${last.s >= h.expensive_at_or_above ? RICH : last.s <= h.cheap_at_or_below ? CHEAP : FAIR}"/>`;
+    [0, Math.floor((days.length - 1) / 2), days.length - 1].forEach((i, k) => {
+      const lab = new Date(days[i].d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+      g += txt(x(i), H - 6, lab, k === 0 ? 'start' : k === 2 ? 'end' : 'middle');
+    });
+    return `<div style="margin:2px 0 8px;">
+      <div style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);margin-bottom:2px;">WHAT OPTIONS CHARGE ABOVE WHAT SPY DELIVERS · LAST THREE YEARS · POINTS${clamped ? ` · ${clamped} DAY${clamped === 1 ? '' : 'S'} BEYOND THE SCALE` : ''}</div>
+      <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg></div>`;
+  }
   function render() {
     const el = document.getElementById('optionsEnvContent'); if (!el) return;
     const D = data();
@@ -33,6 +90,8 @@
       <div class="panel" style="border-left:4px solid ${vcol};margin-bottom:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">THE OPTIONS ENVIRONMENT · CLOSE OF ${fmtDate(D.as_of).toUpperCase()}</div>
         <div style="font-family:'Orbitron',monospace;font-size:16px;letter-spacing:2px;color:${vcol};margin-bottom:6px;">${vtext}</div>
+        ${gauge(T)}
+        ${history(D)}
         ${rows || (D.verdicts || []).filter(v => v.level === 'finding').map(v => `<div style="font-size:12px;color:var(--text2);line-height:1.7;padding:3px 0;">${v.text}</div>`).join('')}
         <div style="font-size:10px;color:var(--text3);margin-top:8px;">Expensive or cheap is today's gap between what options charge and what SPY has delivered, placed against the last three years: top quarter is expensive, bottom quarter is cheap.</div>
       </div>
