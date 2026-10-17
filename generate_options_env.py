@@ -28,6 +28,8 @@ GRID_STRIKES = 7
 GRID_MAX_DTE = 14
 GRID_STALE_MULTIPLE = 3
 GRID_BANDS = [25, 35, 50, 70]
+SHORT_DTE = 5
+SHORT_STRIKES = 2
 VIX_BUCKETS = [("under 15", 0, 15), ("15 to 20", 15, 20), ("20 to 30", 20, 30), ("over 30", 30, 1e9)]
 
 
@@ -155,6 +157,22 @@ def build_grid(crows, spot, session_date, hourly_dollars):
     return out
 
 
+def short_dated_summary(grid, hourly_dollars):
+    """What the contracts a day trader uses actually cost: the median break-even near the money and close to expiry."""
+    if not grid or not hourly_dollars:
+        return None
+    cells = [c for side in ("calls", "puts") for r in grid.get(side, [])
+             if r["days"] <= SHORT_DTE for c in r["cells"][:SHORT_STRIKES + 1] if c is not None]
+    if not cells:
+        return None
+    med = percentile(cells, 0.5)
+    share = med / (hourly_dollars * 100) * 100
+    return {"median_breakeven_cents": round(med), "share_of_hour_pct": round(share, 1),
+            "band": next((i for i, b in enumerate(GRID_BANDS) if share <= b), len(GRID_BANDS)),
+            "max_days": SHORT_DTE, "max_strikes": SHORT_STRIKES, "n": len(cells),
+            "low_cents": min(cells), "high_cents": max(cells)}
+
+
 def build(conn):
     rows = [r for r in conn.execute("SELECT date, open, high, low, close FROM daily_ohlcv WHERE close IS NOT NULL AND high IS NOT NULL ORDER BY date") if session_closed(r[0])]
     closes = [r[4] for r in rows]
@@ -223,7 +241,7 @@ def build(conn):
         tr = realized(closes[:i + 1], 20)
         if tr is None:
             continue
-        hist.append({"d": d, "s": round(vix[d] - tr, 2)})
+        hist.append({"d": d, "s": round(vix[d] - tr, 2), "i": round(vix[d], 2), "r": round(tr, 2)})
     out["history"] = {"days": hist,
                       "cheap_at_or_below": round(percentile(spreads_3y, 0.25), 2) if spreads_3y else None,
                       "expensive_at_or_above": round(percentile(spreads_3y, 0.75), 2) if spreads_3y else None}
@@ -291,6 +309,7 @@ def build(conn):
         out["grid"] = build_grid(crows, chain["spot"], crows[0][9], hourly)
     else:
         out["grid"] = None
+    out["today"]["short_dated"] = short_dated_summary(out.get("grid"), hourly)
     near = chain.get("nearest_expiry_days")
     be = (chain.get("breakeven_cents_per_hour") or {}).get(near)
     if hourly and be:
@@ -310,7 +329,7 @@ def verdicts(o):
             hi = max(cells.items(), key=lambda kv: kv[1]["median_premium"]); lo = min(cells.items(), key=lambda kv: kv[1]["median_premium"])
             V.append({"level": "finding", "topic": "The premium by regime", "text": f"The overcharge is largest when volatility is already high: a median {hi[1]['median_premium']:+.2f} points with VIX {hi[0]} against {lo[1]['median_premium']:+.2f} with VIX {lo[0]}. High volatility is not a discount for a buyer; it is the most expensive state."})
     if t.get("verdict"):
-        V.append({"level": "finding", "topic": "Where today sits", "text": f"Contracts are {t['verdict']} right now: 30-day implied {t['implied_30d']:.2f} against {t['realized_20d']:.2f} realized over the last 20 sessions — a spread of {t['spread']:+.2f} points, the {t['spread_percentile_3y']:.0f}th percentile of the last three years. Implied volatility itself is at the {t['implied_percentile_3y']:.0f}th percentile."})
+        V.append({"level": "finding", "topic": "Where today sits", "text": f"The 30-day index is {t['verdict']} right now: implied {t['implied_30d']:.2f} against {t['realized_20d']:.2f} realized over the last 20 sessions — a spread of {t['spread']:+.2f} points, the {t['spread_percentile_3y']:.0f}th percentile of the last three years. Implied volatility itself is at the {t['implied_percentile_3y']:.0f}th percentile."})
         V.append({"level": "info", "topic": "What is priced against what moves", "text": f"At {t['implied_30d']:.2f} implied, the typical session is priced to move {t['typical_move_priced_pct']:.2f}% (one standard deviation is {t['expected_daily_move_pct']:.2f}%); the typical session over the last 20 moved {t['delivered_daily_move_pct']:.2f}%. Measured on highs and lows rather than closes, the last 20 sessions ran at {t['realized_20d_high_low']:.2f}."})
     if t.get("term_shape") and o.get("term_structure", {}).get(t["term_shape"]):
         ts = o["term_structure"][t["term_shape"]]
@@ -340,21 +359,34 @@ def verdicts(o):
 
 
 def answer_rows(o):
+    sd = o["today"].get("short_dated")
+    lead = []
+    if sd:
+        word = ["cheap", "inexpensive", "fairly priced", "expensive", "very expensive"][sd["band"]]
+        hourly = (o.get("cost_to_hold") or {}).get("typical_hourly_move_dollars")
+        lead.append({"q": f"What does a {sd['max_days']}-day contract cost to hold?", "a": f"{word.capitalize()}, {sd['median_breakeven_cents']}c an hour",
+                     "tone": "stop" if sd["band"] >= 3 else "go" if sd["band"] <= 1 else "info",
+                     "why": f"At the money to {sd['max_strikes']} dollars out, {sd['max_days']} days to expiry or less, SPY has to travel a median {sd['median_breakeven_cents']} cents your way in an hour to cover decay and spread"
+                            + (f", against a typical hour's {round(hourly * 100)} cents of travel." if hourly else ".")})
+    return lead + _index_rows(o)
+
+
+def _index_rows(o):
     """The page's questions, each as a short answer and the one figure behind it."""
     R = []
     t = o["today"]; p = o["premium"]
     if t.get("verdict"):
         a = {"expensive": "Expensive", "cheap": "Cheap", "ordinary": "Fairly priced"}[t["verdict"]]
-        R.append({"q": "Are contracts expensive right now?", "a": a, "tone": {"expensive": "stop", "cheap": "go"}.get(t["verdict"], "info"),
+        R.append({"q": "Is 30-day index volatility expensive?", "a": a, "tone": {"expensive": "stop", "cheap": "go"}.get(t["verdict"], "info"),
                   "why": f"The market charges {t['implied_30d']:.2f} for the next 30 days; the last 20 sessions delivered {t['realized_20d']:.2f}. That gap of {t['spread']:+.2f} sits at the {t['spread_percentile_3y']:.0f}th percentile of the last three years."})
     if t.get("typical_move_priced_pct") and t.get("delivered_daily_move_pct") is not None:
         ratio = t["delivered_daily_move_pct"] / t["typical_move_priced_pct"]
         a = "Much less than priced" if ratio < 0.6 else "Less than priced" if ratio < 0.85 else "More than priced" if ratio > 1.15 else "About as priced"
-        R.append({"q": "Is SPY moving a lot?", "a": a, "tone": "info",
+        R.append({"q": "Is SPY moving as much as the index prices?", "a": a, "tone": "info",
                   "why": f"Options price the typical session to move {t['typical_move_priced_pct']:.2f}%; the typical session over the last 20 moved {t['delivered_daily_move_pct']:.2f}%."})
     b = p.get("2010_on")
     if b:
-        R.append({"q": "What does a buyer start against?", "a": f"About {b['median_premium']:.1f} points of overcharge", "tone": "stop",
+        R.append({"q": "What has the 30-day index overcharged by?", "a": f"About {b['median_premium']:.1f} points", "tone": "stop",
                   "why": f"Since 2010, implied volatility was higher than the volatility that followed on {b['overcharged' if 'overcharged' in b else 'overpriced']['rate']:.0f}% of {b['n']:,} sessions."})
     bv = {k: v for k, v in (p.get("by_vix") or {}).items() if v}
     if t.get("implied_30d") is not None and bv:

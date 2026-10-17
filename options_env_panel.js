@@ -26,7 +26,9 @@
     g += `<line x1="${nx.toFixed(1)}" x2="${nx.toFixed(1)}" y1="${bY}" y2="${bY + bH}" stroke="${col}" stroke-width="2"/>`;
     g += txt(nx, bY - 17, `${f1(p)}th`, nx < 60 ? 'start' : nx > W - 60 ? 'end' : 'middle', col, 12);
     g += txt(L, bY + bH + 14, 'CHEAP', 'start', CHEAP) + txt(L + bW / 2, bY + bH + 14, 'FAIRLY PRICED', 'middle', FAIR) + txt(W - R, bY + bH + 14, 'EXPENSIVE', 'end', RICH);
-    return `<div style="margin:10px 0 4px;"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg></div>`;
+    return `<div style="margin:10px 0 4px;">
+      <div style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);margin-bottom:2px;">30-DAY INDEX VOLATILITY AGAINST ITS LAST THREE YEARS — NOT THE CONTRACTS ABOVE</div>
+      <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg></div>`;
   }
 
   const OE_WINS = [['3Y', '3 YEARS', null], ['3M', '3 MONTHS', 63], ['1M', '1 MONTH', 21], ['1W', '1 WEEK', 5]];
@@ -37,22 +39,24 @@
     const win = OE_WINS.find(w => w[0] === window._oeWin) || OE_WINS[0];
     const days = win[2] ? all.slice(-Math.min(win[2], all.length)) : all;
     if (days.length < 2) return '';
+    const both = window._oeMode === 'both' && days.some(r => r.i != null);
+    const modes = [['gap', 'THE GAP'], ['both', 'COST vs MOVEMENT']].map(m => `<button onclick="window._oeMode='${m[0]}';renderOptionsEnv()" style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;padding:3px 8px;margin-right:4px;cursor:pointer;background:${(m[0] === 'both') === both ? 'var(--cyan)' : 'var(--bg3)'};color:${(m[0] === 'both') === both ? 'var(--bg)' : 'var(--text3)'};border:1px solid var(--border);">${m[1]}</button>`).join('');
     const btns = OE_WINS.filter(w => !w[2] || all.length > w[2]).map(w => `<button onclick="window._oeWin='${w[0]}';renderOptionsEnv()" style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;padding:3px 8px;margin-right:4px;cursor:pointer;background:${w[0] === win[0] ? 'var(--cyan)' : 'var(--bg3)'};color:${w[0] === win[0] ? 'var(--bg)' : 'var(--text3)'};border:1px solid var(--border);">${w[0]}</button>`).join('');
     const W = 620, H = 168, L = 44, R = 10, T0 = 10, B = 22;
     const cW = W - L - R, cH = H - T0 - B;
-    const vals = days.map(r => r.s);
+    const vals = both ? days.flatMap(r => [r.i, r.r]).filter(v => v != null) : days.map(r => r.s);
     const srt = [...vals].sort((a, b) => a - b);
     const q = f => srt[Math.min(srt.length - 1, Math.max(0, Math.round(f * (srt.length - 1))))];
     const pad = (q(0.99) - q(0.01)) * 0.12 || 1;
-    const lo = win[2] ? q(0.01) - pad : Math.min(q(0.01) - pad, h.cheap_at_or_below);
-    const hi = win[2] ? q(0.99) + pad : Math.max(q(0.99) + pad, h.expensive_at_or_above);
+    const lo = (both || win[2]) ? q(0.01) - pad : Math.min(q(0.01) - pad, h.cheap_at_or_below);
+    const hi = (both || win[2]) ? q(0.99) + pad : Math.max(q(0.99) + pad, h.expensive_at_or_above);
     const clamped = vals.filter(v => v < lo || v > hi).length;
     const cl = v => Math.max(lo, Math.min(hi, v));
     const y = v => T0 + cH - (cl(v) - lo) / ((hi - lo) || 1) * cH;
     const x = i => L + cW * i / ((days.length - 1) || 1);
     const txt = (xx, yy, s, anchor, col) => `<text x="${xx.toFixed(1)}" y="${yy.toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="${col || 'var(--text3)'}" font-family="Share Tech Mono,monospace">${s}</text>`;
-    const vis = v => v != null && v >= lo && v <= hi;
-    const above = h.expensive_at_or_above != null && lo > h.expensive_at_or_above;
+    const vis = v => !both && v != null && v >= lo && v <= hi;
+    const above = !both && h.expensive_at_or_above != null && lo > h.expensive_at_or_above;
     let g = `<rect x="${L}" y="${T0}" width="${cW}" height="${cH}" fill="rgba(255,255,255,0.015)"/>`;
     if (above) g += `<rect x="${L}" y="${T0}" width="${cW}" height="${cH}" fill="var(--red)" opacity="0.07"/>`;
     if (vis(h.expensive_at_or_above)) g += `<rect x="${L}" y="${T0}" width="${cW}" height="${(y(h.expensive_at_or_above) - T0).toFixed(1)}" fill="var(--red)" opacity="0.07"/>`;
@@ -64,10 +68,22 @@
     });
     if (lo < 0 && hi > 0) g += `<line x1="${L}" x2="${W - R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="rgba(255,255,255,0.18)"/>`;
     [hi, (hi + lo) / 2, lo].forEach(v => { g += txt(L - 5, y(v) + 4, (v >= 0 ? '+' : '') + v.toFixed(1), 'end'); });
-    g += `<polyline points="${days.map((r, i) => `${x(i).toFixed(1)},${y(r.s).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--cyan)" stroke-width="1.4" stroke-linejoin="round"/>`;
     const last = days[days.length - 1];
-    g += `<circle cx="${x(days.length - 1).toFixed(1)}" cy="${y(last.s).toFixed(1)}" r="3.2" fill="${last.s >= h.expensive_at_or_above ? RICH : last.s <= h.cheap_at_or_below ? CHEAP : FAIR}"/>`;
-    if (days.length <= 25) days.forEach((r, i) => { g += `<circle cx="${x(i).toFixed(1)}" cy="${y(r.s).toFixed(1)}" r="1.9" fill="var(--cyan)" opacity="0.75"/>`; });
+    if (!both) {
+      g += `<polyline points="${days.map((r, i) => `${x(i).toFixed(1)},${y(r.s).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--cyan)" stroke-width="1.4" stroke-linejoin="round"/>`;
+      g += `<circle cx="${x(days.length - 1).toFixed(1)}" cy="${y(last.s).toFixed(1)}" r="3.2" fill="${last.s >= h.expensive_at_or_above ? RICH : last.s <= h.cheap_at_or_below ? CHEAP : FAIR}"/>`;
+    }
+    if (both) {
+      const band = days.map((r, i) => `${x(i).toFixed(1)},${y(r.i).toFixed(1)}`).join(' ') + ' ' +
+                   days.map((r, i) => `${x(days.length - 1 - i).toFixed(1)},${y(days[days.length - 1 - i].r).toFixed(1)}`).join(' ');
+      g += `<polygon points="${band}" fill="var(--red)" opacity="0.13"/>`;
+      g += `<polyline points="${days.map((r, i) => `${x(i).toFixed(1)},${y(r.i).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--red)" stroke-width="1.4" stroke-linejoin="round"/>`;
+      g += `<polyline points="${days.map((r, i) => `${x(i).toFixed(1)},${y(r.r).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--cyan)" stroke-width="1.4" stroke-linejoin="round"/>`;
+      const last = days[days.length - 1];
+      g += txt(W - R - 2, y(last.i) - 5, `WHAT OPTIONS CHARGE ${f1(last.i)}`, 'end', 'var(--red)');
+      g += txt(W - R - 2, y(last.r) + 13, `WHAT SPY DELIVERS ${f1(last.r)}`, 'end', 'var(--cyan)');
+    }
+    if (!both && days.length <= 25) days.forEach((r, i) => { g += `<circle cx="${x(i).toFixed(1)}" cy="${y(r.s).toFixed(1)}" r="1.9" fill="var(--cyan)" opacity="0.75"/>`; });
     const dfmt = days.length > 70 ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' };
     [0, Math.floor((days.length - 1) / 2), days.length - 1].forEach((i, k) => {
       const lab = new Date(days[i].d + 'T00:00:00Z').toLocaleDateString('en-US', { ...dfmt, timeZone: 'UTC' });
@@ -75,11 +91,11 @@
     });
     return `<div style="margin:2px 0 8px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:3px;">
-        <div style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">WHAT OPTIONS CHARGE ABOVE WHAT SPY DELIVERS · LAST ${win[1]} · ${days.length} SESSIONS${clamped ? ` · ${clamped} DAY${clamped === 1 ? '' : 'S'} BEYOND THE SCALE` : ''}</div>
-        <div style="flex:none;">${btns}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">${both ? 'WHAT OPTIONS CHARGE AGAINST WHAT SPY DELIVERS' : 'WHAT OPTIONS CHARGE ABOVE WHAT SPY DELIVERS'} · 30-DAY INDEX · LAST ${win[1]} · ${days.length} SESSIONS${clamped ? ` · ${clamped} DAY${clamped === 1 ? '' : 'S'} BEYOND THE SCALE` : ''}</div>
+        <div style="flex:none;">${modes}${btns}</div>
       </div>
       <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg>
-      <div style="font-size:9px;color:var(--text3);margin-top:3px;">The cheap and expensive lines are the three-year quartiles, so they mean the same thing at every zoom.${above ? ` Every session in this window sits above the expensive line (+${h.expensive_at_or_above.toFixed(1)}), which is why it is off the bottom of the scale.` : ''}</div></div>`;
+      <div style="font-size:9px;color:var(--text3);margin-top:3px;">${both ? 'The shaded band is the gap between them. It widens when what options charge rises faster than what SPY delivers, and closes when SPY catches up or the charge falls. ' : ''}The cheap and expensive lines are the three-year quartiles, so they mean the same thing at every zoom.${above ? ` Every session in this window sits above the expensive line (+${h.expensive_at_or_above.toFixed(1)}), which is why it is off the bottom of the scale.` : ''}</div></div>`;
   }
     const inkOn = hex => {
     const v = i => { const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
@@ -135,8 +151,13 @@
     const T = D.today; const floor = D.floor;
     const C2 = D.cost_to_hold || {};
     const H = { ...C2, breakeven: (C2.breakeven_cents_per_hour || {})[C2.nearest_expiry_days] };
-    const vcol = T.verdict === 'expensive' ? 'var(--red)' : T.verdict === 'cheap' ? 'var(--green)' : 'var(--yellow)';
-    const vtext = T.verdict === 'expensive' ? 'CONTRACTS ARE EXPENSIVE' : T.verdict === 'cheap' ? 'CONTRACTS ARE CHEAP' : 'CONTRACTS ARE FAIRLY PRICED';
+    const SD = T.short_dated;
+    const SD_WORD = ['CHEAP', 'INEXPENSIVE', 'FAIRLY PRICED', 'EXPENSIVE', 'VERY EXPENSIVE'];
+    const ixcol = T.verdict === 'expensive' ? 'var(--red)' : T.verdict === 'cheap' ? 'var(--green)' : 'var(--yellow)';
+    const vcol = SD ? GRID_COLORS[SD.band][0] : ixcol;
+    const vtext = SD
+      ? `CONTRACTS UNDER ${SD.max_days} DAYS ARE ${SD_WORD[SD.band]} TO HOLD`
+      : (T.verdict === 'expensive' ? '30-DAY INDEX VOLATILITY IS EXPENSIVE' : T.verdict === 'cheap' ? '30-DAY INDEX VOLATILITY IS CHEAP' : '30-DAY INDEX VOLATILITY IS FAIRLY PRICED');
     const verd = (D.verdicts || []).map(v => { const [lab, col] = LEVEL[v.level] || LEVEL.info; return `<div style="padding:4px 0 4px 8px;border-left:2px solid ${col};margin-bottom:5px;"><span style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:${col};">${lab}</span> <span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text);margin-left:6px;">${v.topic.toUpperCase()}</span><div style="font-size:12px;color:var(--text2);line-height:1.7;margin-top:2px;">${v.text}</div></div>`; }).join('');
     const P = D.premium || {}; const bv = P.by_vix || {};
     const premRows = [['Since 2010', P['2010_on']], ['Last 3 years', P['3y']], ['All history', P.all]].filter(x => x[1]).map(([lab, b]) => `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:5px 8px;color:var(--text);">${lab}</td><td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;color:var(--text3);">${b.n.toLocaleString()}</td><td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;color:${b.median_premium > 0 ? 'var(--red)' : 'var(--green)'};">${sgn(b.median_premium)} pts</td><td style="padding:5px 8px;">${rc(b.overpriced)}</td><td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;color:var(--text2);">${f2(b.median_implied)}</td><td style="padding:5px 8px;font-family:'Share Tech Mono',monospace;color:var(--text2);">${f2(b.median_realized_after)}</td></tr>`).join('');
@@ -161,7 +182,7 @@
         ${gauge(T)}
         ${history(D)}
         ${rows || (D.verdicts || []).filter(v => v.level === 'finding').map(v => `<div style="font-size:12px;color:var(--text2);line-height:1.7;padding:3px 0;">${v.text}</div>`).join('')}
-        <div style="font-size:10px;color:var(--text3);margin-top:8px;">Expensive or cheap is today's gap between what options charge and what SPY has delivered, placed against the last three years: top quarter is expensive, bottom quarter is cheap.</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:8px;">Everything in this section is the 30-day index: today's gap between what it charges and what SPY has delivered, placed against the last three years, where the top quarter is expensive and the bottom quarter cheap. The headline above prices the short-dated contracts instead, and the two can disagree.</div>
       </div>
       ${unsupported.length ? `<div class="panel" style="margin-bottom:12px;border-left:4px solid var(--red);"><div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--red);margin-bottom:6px;">⬡ TESTED AND NOT SUPPORTED</div>${unsupported.map(v => `<div style="font-size:12px;color:var(--text2);padding:2px 0;"><span style="color:var(--red);">✕</span> ${v.headline || v.text} <span style="color:var(--text3);font-size:11px;">${v.headline ? (v.why || '') : ''}</span></div>`).join('')}</div>` : ''}
       ${evidenceFold('oeEvidence', 'SHOW THE EVIDENCE — THE MEASURES, EVERY FINDING, EVERY TABLE', `
@@ -169,6 +190,7 @@
         <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">THE OPTIONS ENVIRONMENT · CLOSE OF ${fmtDate(D.as_of).toUpperCase()}</div>
         <div style="font-family:'Orbitron',monospace;font-size:16px;letter-spacing:2px;color:${vcol};margin-bottom:6px;">${vtext}</div>
         <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px;">
+          ${SD ? tile('AT THE MONEY, A FEW DAYS OUT', `${SD.median_breakeven_cents}¢ an hour`, `${SD.low_cents}–${SD.high_cents}¢ across ${SD.n} contracts, against a typical hour's ${H.typical_hourly_move_dollars ? Math.round(H.typical_hourly_move_dollars * 100) : '—'}¢`, vcol) : ''}
           ${tile('PRICED TO MOVE, A TYPICAL SESSION', dol(T.priced_dollars), `VIX ${f2(T.implied_30d)}, above ${f0(T.implied_percentile_3y)}% of the last three years`)}
           ${tile('ACTUALLY MOVED, LAST 20 SESSIONS', dol(T.delivered_dollars), 'the middle session, close to close')}
           ${tile('PAID FOR AND NOT DELIVERED', T.gap_dollars == null ? '—' : `${dol(T.gap_dollars)} a day`, `a wider gap than ${f0(T.spread_percentile_3y)}% of the last three years`, vcol)}
@@ -176,7 +198,7 @@
             ? tile('IF YOU HOLD AN HOUR, SPY MUST MOVE', '—', 'needs a chain capture')
             : tile('IF YOU HOLD AN HOUR, SPY MUST MOVE', `${Math.round(H.breakeven)}¢ your way`, `${H.nearest_expiry_days} days to expiry, at the money${H.typical_hourly_move_dollars ? `. A typical hour moves ${Math.round(H.typical_hourly_move_dollars * 100)}¢` : ''}`)}
         </div>
-        <div style="font-size:10px;color:var(--text3);">Priced to move is what the option market charges for a middle-of-the-road session; actually moved is what SPY delivered on one. The gap between them is what a buyer pays for and has not been getting, and its place in the last three years is what makes contracts expensive or cheap here: the top quarter is expensive, the bottom quarter is cheap. Break-even is a day's decay spread across the ${f1(H.session_hours || 6.5)}-hour session, divided by the contract's delta. It is where SPY has to be when you sell against where it was when you bought, in the direction you are positioned; the path in between does not matter. Hold longer and it scales with the time held.</div>
+        <div style="font-size:10px;color:var(--text3);">${SD ? `The headline is the contracts a day trade actually uses: at the money to ${SD.max_strikes} dollars out, ${SD.max_days} days to expiry or less. Everything below it is the 30-day index, which is a strip across every strike and is carried by out-of-the-money put protection — on this capture the ${T.implied_30d && T.implied_30d > 15 ? 'index reads ' + f2(T.implied_30d) + ' while the at-the-money contract three days out is priced near 11' : 'two differ'}. Both are true; they price different things. ` : ''}Priced to move is what the option market charges for a middle-of-the-road session; actually moved is what SPY delivered on one. The gap between them is what a buyer pays for and has not been getting, and its place in the last three years is what makes contracts expensive or cheap here: the top quarter is expensive, the bottom quarter is cheap. Break-even is a day's decay spread across the ${f1(H.session_hours || 6.5)}-hour session, divided by the contract's delta. It is where SPY has to be when you sell against where it was when you bought, in the direction you are positioned; the path in between does not matter. Hold longer and it scales with the time held.</div>
       </div>
       ${grid(D)}
       <div class="panel" style="margin-bottom:12px;border-left:4px solid var(--purple);">

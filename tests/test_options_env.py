@@ -81,9 +81,13 @@ class SpreadHistory(Build):
         self.assertGreater(len(h["days"]), 50)
         self.assertEqual(h["days"][-1]["d"], o["as_of"])
 
-    def test_history_carries_only_the_date_and_the_spread(self):
+    def test_history_carries_the_date_the_spread_and_its_two_sides(self):
         o = O.build(self.frame(16.0, 0.003))
-        self.assertEqual(sorted(o["history"]["days"][0].keys()), ["d", "s"])
+        self.assertEqual(sorted(o["history"]["days"][0].keys()), ["d", "i", "r", "s"])
+
+    def test_the_spread_is_what_is_charged_less_what_was_delivered(self):
+        d = O.build(self.frame(16.0, 0.003))["history"]["days"][-1]
+        self.assertAlmostEqual(d["s"], d["i"] - d["r"], places=2)
 
     def test_history_days_are_in_order(self):
         o = O.build(self.frame(16.0, 0.003))

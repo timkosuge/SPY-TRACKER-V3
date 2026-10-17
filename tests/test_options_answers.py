@@ -25,7 +25,7 @@ class Answers(unittest.TestCase):
 
     def test_the_typical_priced_move_is_the_median_not_one_standard_deviation(self):
         self.assertAlmostEqual(O.MEDIAN_ABS_NORMAL, 0.6745, places=4)
-        r = self.rows()["Is SPY moving a lot?"]
+        r = self.rows()["Is SPY moving as much as the index prices?"]
         self.assertEqual(r["a"], "Less than priced")
         self.assertIn("0.63%", r["why"])
         self.assertNotIn("0.93%", r["why"])
@@ -42,10 +42,18 @@ class Answers(unittest.TestCase):
         self.assertIn("contracts 5 to 9 days out, 2 to 4% from spot, at 13.2%", r["why"])
         self.assertNotIn("|", r["why"])
 
-    def test_verdict_words_match_between_the_card_and_the_line(self):
-        self.assertEqual(self.rows()["Are contracts expensive right now?"]["a"], "Fairly priced")
+    def test_the_index_line_names_the_index_rather_than_contracts(self):
+        self.assertEqual(self.rows()["Is 30-day index volatility expensive?"]["a"], "Fairly priced")
         with open("options_env_panel.js", encoding="utf-8") as f:
-            self.assertIn("CONTRACTS ARE FAIRLY PRICED", f.read())
+            panel = f.read()
+        self.assertIn("30-DAY INDEX VOLATILITY IS", panel)
+        self.assertNotIn("CONTRACTS ARE FAIRLY PRICED", panel)
+
+    def test_the_headline_prices_short_dated_contracts_not_the_index(self):
+        with open("options_env_panel.js", encoding="utf-8") as f:
+            panel = f.read()
+        self.assertIn("CONTRACTS UNDER ${SD.max_days} DAYS ARE ${SD_WORD[SD.band]} TO HOLD", panel)
+        self.assertIn("NOT THE CONTRACTS ABOVE", panel)
 
     def test_no_chain_is_said_plainly(self):
         r = self.rows(env(chain={"available": False}))["What does it cost to trade?"]
