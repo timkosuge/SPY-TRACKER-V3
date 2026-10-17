@@ -157,3 +157,55 @@ class CostToHold(Build):
         self.assertAlmostEqual(t["priced_dollars"], t["close"] * t["typical_move_priced_pct"] / 100, places=1)
         self.assertAlmostEqual(t["delivered_dollars"], t["close"] * t["delivered_daily_move_pct"] / 100, places=1)
         self.assertAlmostEqual(t["gap_dollars"], t["priced_dollars"] - t["delivered_dollars"], places=1)
+
+
+class Grid(Build):
+    def chain(self, spread=0.02, stale_strike=None):
+        conn = self.frame(16.0, 0.003)
+        conn.execute("CREATE TABLE option_chain (captured_at TEXT, session_date TEXT, spot REAL, expiry TEXT, cp TEXT, strike REAL, bid REAL, ask REAL, iv REAL, open_interest INTEGER, volume INTEGER, gamma REAL)")
+        rows = []
+        for expiry in ("2026-04-30", "2026-05-02"):
+            for cp in ("C", "P"):
+                for k in range(93, 108):
+                    s = 1.00 if k == stale_strike else spread
+                    rows.append(("2026-04-28T12:00:00-04:00", "2026-04-28", 100.0, expiry, cp, float(k), 1.00, 1.00 + s, 0.15, 500, 10, 0.01))
+        conn.executemany("INSERT INTO option_chain VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        return conn
+
+    def test_price_is_intrinsic_once_there_is_no_time_left(self):
+        self.assertAlmostEqual(O.bs_price(105.0, 100.0, 0.2, 0, True), 5.0)
+        self.assertAlmostEqual(O.bs_price(105.0, 100.0, 0.2, 0, False), 0.0)
+
+    def test_a_longer_hold_needs_a_bigger_move(self):
+        one = O.breakeven_move(100.0, 100.0, 0.15, 5, True, 0.02)
+        four = O.breakeven_move(100.0, 100.0, 0.15, 5, True, 0.02, hours=4)
+        self.assertGreater(four, one)
+
+    def test_a_wider_spread_needs_a_bigger_move(self):
+        tight = O.breakeven_move(100.0, 100.0, 0.15, 5, True, 0.02)
+        wide = O.breakeven_move(100.0, 100.0, 0.15, 5, True, 0.20)
+        self.assertGreater(wide, tight)
+
+    def test_the_grid_carries_only_the_side_a_directional_buyer_would_use(self):
+        g = O.build(self.chain())["grid"]
+        self.assertEqual(len(g["calls"][0]["cells"]), O.GRID_STRIKES + 1)
+        self.assertEqual(len(g["puts"][0]["cells"]), O.GRID_STRIKES + 1)
+        self.assertTrue(all(c is None or c > 0 for r in g["calls"] for c in r["cells"]))
+
+    def test_further_from_the_money_costs_more(self):
+        g = O.build(self.chain())["grid"]
+        cells = [c for c in g["calls"][0]["cells"] if c is not None]
+        self.assertGreater(cells[-1], cells[0])
+
+    def test_a_stale_quote_is_left_blank_rather_than_coloured_expensive(self):
+        g = O.build(self.chain(stale_strike=103))["grid"]
+        self.assertGreater(g["stale"], 0)
+        self.assertIsNone(g["calls"][0]["cells"][3])
+
+    def test_the_grid_is_absent_without_a_chain(self):
+        self.assertIsNone(O.build(self.frame(16.0, 0.003))["grid"])
+
+    def test_the_bands_span_cheap_to_very_expensive_as_implied_rises(self):
+        shares = [O.breakeven_move(763.25, 763.0, iv, 3, True, 0.02) / 0.74 * 100 for iv in (0.11, 0.35)]
+        self.assertLess(shares[0], O.GRID_BANDS[1])
+        self.assertGreater(shares[1], O.GRID_BANDS[-1])

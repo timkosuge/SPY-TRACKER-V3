@@ -24,6 +24,10 @@ MEDIAN_ABS_NORMAL = 0.6745
 SESSION_HOURS = 6.5
 ATM_WITHIN = 1.0
 HOUR_WINDOWS_FROM = 60
+GRID_STRIKES = 7
+GRID_MAX_DTE = 14
+GRID_STALE_MULTIPLE = 3
+GRID_BANDS = [25, 35, 50, 70]
 VIX_BUCKETS = [("under 15", 0, 15), ("15 to 20", 15, 20), ("20 to 30", 20, 30), ("over 30", 30, 1e9)]
 
 
@@ -83,6 +87,72 @@ def hourly_breakeven(crows, spot, session_date):
             continue
         out.setdefault(days, []).append(-g[1] / (365 * SESSION_HOURS) / abs(g[0]) * 100)
     return {d: round(percentile(v, 0.5), 1) for d, v in sorted(out.items()) if v}
+
+
+def bs_price(spot, strike, iv, years, call):
+    """Black-Scholes price at a zero rate; intrinsic value once there is no time left."""
+    if years <= 0:
+        return max(0.0, (spot - strike) if call else (strike - spot))
+    rt = iv * math.sqrt(years)
+    d1 = (math.log(spot / strike) + 0.5 * iv * iv * years) / rt
+    nc = lambda x: 0.5 * (1 + math.erf(x / math.sqrt(2)))
+    return spot * nc(d1) - strike * nc(d1 - rt) if call else strike * nc(rt - d1) - spot * nc(-d1)
+
+
+def breakeven_move(spot, strike, iv, days, call, spread, hours=1.0):
+    """Dollars SPY must travel in the held direction over `hours` for the contract to return its cost and its spread."""
+    if days <= 0 or iv <= 0:
+        return None
+    target = bs_price(spot, strike, iv, days / 365.0, call) + spread
+    later = (days - hours / SESSION_HOURS) / 365.0
+    lo, hi = 0.0, spot * 0.1
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if bs_price(spot + mid if call else spot - mid, strike, iv, later, call) < target:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def build_grid(crows, spot, session_date, hourly_dollars):
+    """Break-even move for each expiry and strike a directional buyer would use: calls at and above spot, puts at and below."""
+    atm = round(spot)
+    live = []
+    for expiry, cp, strike, bid, ask, iv, *_ in crows:
+        if not iv or not bid or not ask or ask <= 0:
+            continue
+        off = int(round(strike - atm))
+        days = (date.fromisoformat(expiry) - date.fromisoformat(session_date)).days
+        if abs(off) > GRID_STRIKES or not 0 < days <= GRID_MAX_DTE:
+            continue
+        if (cp == "C" and off < 0) or (cp == "P" and off > 0):
+            continue
+        live.append({"days": days, "expiry": expiry, "off": off, "cp": cp, "strike": strike, "iv": iv, "spread": ask - bid})
+    if not live:
+        return None
+    wide = {}
+    for d in {x["days"] for x in live}:
+        wide[d] = percentile([x["spread"] for x in live if x["days"] == d], 0.5) * GRID_STALE_MULTIPLE
+    out = {"atm_strike": atm, "spot": round(spot, 2), "bands": GRID_BANDS, "max_strikes": GRID_STRIKES,
+           "hourly_move_cents": round(hourly_dollars * 100) if hourly_dollars else None, "stale": 0}
+    for side, cp, sign in (("calls", "C", 1), ("puts", "P", -1)):
+        rows_out = []
+        for d in sorted({x["days"] for x in live}):
+            cells = []
+            for n in range(GRID_STRIKES + 1):
+                m = [x for x in live if x["days"] == d and x["cp"] == cp and x["off"] == n * sign]
+                if not m or m[0]["spread"] > wide[d]:
+                    out["stale"] += 1 if m else 0
+                    cells.append(None)
+                    continue
+                x = m[0]
+                be = breakeven_move(spot, x["strike"], x["iv"], d, cp == "C", x["spread"])
+                cells.append(round(be * 100) if be is not None else None)
+            if any(c is not None for c in cells):
+                rows_out.append({"days": d, "expiry": [x["expiry"] for x in live if x["days"] == d][0], "cells": cells})
+        out[side] = rows_out
+    return out
 
 
 def build(conn):
@@ -217,6 +287,10 @@ def build(conn):
                            "breakeven_cents_per_hour": chain.get("breakeven_cents_per_hour"),
                            "nearest_expiry_days": chain.get("nearest_expiry_days"),
                            "session_hours": SESSION_HOURS}
+    if chain.get("available") and chain.get("spot"):
+        out["grid"] = build_grid(crows, chain["spot"], crows[0][9], hourly)
+    else:
+        out["grid"] = None
     near = chain.get("nearest_expiry_days")
     be = (chain.get("breakeven_cents_per_hour") or {}).get(near)
     if hourly and be:

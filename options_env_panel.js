@@ -81,6 +81,49 @@
       <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg>
       <div style="font-size:9px;color:var(--text3);margin-top:3px;">The cheap and expensive lines are the three-year quartiles, so they mean the same thing at every zoom.${above ? ` Every session in this window sits above the expensive line (+${h.expensive_at_or_above.toFixed(1)}), which is why it is off the bottom of the scale.` : ''}</div></div>`;
   }
+  const GRID_COLORS = [['#00e08a', 'VERY CHEAP'], ['#9ad94a', 'CHEAP'], ['#ffcc00', 'FAIR'], ['#ff9933', 'EXPENSIVE'], ['#ff3355', 'VERY EXPENSIVE']];
+
+  function gridBand(cents, hourly, bands) {
+    if (cents == null || !hourly) return null;
+    const share = cents / hourly * 100;
+    for (let i = 0; i < bands.length; i++) if (share <= bands[i]) return i;
+    return bands.length;
+  }
+
+  function gridSide(G, side, label) {
+    const rows = G[side] || [];
+    if (!rows.length) return '';
+    const sign = side === 'calls' ? 1 : -1;
+    const cols = rows[0].cells.length;
+    const head = ['DAYS TO EXPIRY'].concat([...Array(cols).keys()].map(n => n === 0 ? 'AT THE MONEY' : (n * sign > 0 ? '+' : '') + (n * sign)));
+    const body = rows.map(r => `<tr><td style="padding:4px 7px;font-family:'Share Tech Mono',monospace;color:var(--text2);white-space:nowrap;">${r.days}</td>${r.cells.map(c => {
+      const b = gridBand(c, G.hourly_move_cents, G.bands);
+      if (c == null || b == null) return `<td style="padding:4px 7px;text-align:center;color:var(--text3);">—</td>`;
+      const col = GRID_COLORS[b][0];
+      return `<td style="padding:4px 7px;text-align:center;background:${col}2e;border-left:2px solid ${col};font-family:'Share Tech Mono',monospace;color:var(--text);white-space:nowrap;">${c}¢</td>`;
+    }).join('')}</tr>`).join('');
+    return `<div style="margin-bottom:10px;">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:3px;">${label}</div>
+      <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:11px;min-width:420px;"><thead><tr>${head.map(th).join('')}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+  }
+
+  function grid(D) {
+    const G = D && D.grid;
+    if (!G || !G.hourly_move_cents) return '';
+    const key = GRID_COLORS.map(([col, lab], i) => {
+      const lo = i === 0 ? 0 : G.bands[i - 1], hi = i < G.bands.length ? G.bands[i] : null;
+      const cents = v => Math.round(v / 100 * G.hourly_move_cents);
+      return `<span style="display:inline-block;margin-right:12px;white-space:nowrap;"><span style="display:inline-block;width:9px;height:9px;background:${col};margin-right:4px;"></span><span style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">${lab}</span> <span style="font-size:9px;color:var(--text3);">${hi ? `under ${cents(hi)}¢` : `over ${cents(G.bands[G.bands.length - 1])}¢`}</span></span>`;
+    }).join('');
+    return `<div class="panel" style="margin-bottom:12px;border-left:4px solid var(--cyan);">
+      <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:3px;">⬡ WHAT EACH CONTRACT NEEDS FROM SPY IN AN HOUR</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:8px;">Cents SPY has to travel in the direction you are holding, within one hour, for the contract to pay back its decay and its spread. Columns are dollars from the ${G.atm_strike} strike. Color is that cost against a typical hour's ${G.hourly_move_cents}¢ of travel${G.stale ? `; ${G.stale} contract${G.stale === 1 ? '' : 's'} left blank for a stale quote` : ''}.</div>
+      <div style="margin-bottom:9px;">${key}</div>
+      ${gridSide(G, 'calls', 'CALLS — BUYING A MOVE UP')}
+      ${gridSide(G, 'puts', 'PUTS — BUYING A MOVE DOWN')}
+    </div>`;
+  }
+
   function render() {
     const el = document.getElementById('optionsEnvContent'); if (!el) return;
     const D = data();
@@ -131,6 +174,7 @@
         </div>
         <div style="font-size:10px;color:var(--text3);">Priced to move is what the option market charges for a middle-of-the-road session; actually moved is what SPY delivered on one. The gap between them is what a buyer pays for and has not been getting, and its place in the last three years is what makes contracts expensive or cheap here: the top quarter is expensive, the bottom quarter is cheap. Break-even is a day's decay spread across the ${f1(H.session_hours || 6.5)}-hour session, divided by the contract's delta. It is where SPY has to be when you sell against where it was when you bought, in the direction you are positioned; the path in between does not matter. Hold longer and it scales with the time held.</div>
       </div>
+      ${grid(D)}
       <div class="panel" style="margin-bottom:12px;border-left:4px solid var(--purple);">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--purple);margin-bottom:8px;">⬡ WHAT THIS MEANS — RECOMPUTED EVERY RUN</div>
         ${verd}
