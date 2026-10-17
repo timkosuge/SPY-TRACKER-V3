@@ -100,3 +100,60 @@ class SpreadHistory(Build):
         o = O.build(conn)
         last = o["history"]["days"][-1]
         self.assertAlmostEqual(last["s"], o["today"]["spread"], places=2)
+
+
+class CostToHold(Build):
+    def test_at_the_money_delta_is_about_half_and_theta_is_negative(self):
+        from stats_helpers import delta_theta
+        d, t = delta_theta(100.0, 100.0, 0.20, 30 / 365.0, True)
+        self.assertAlmostEqual(d, 0.5, places=1)
+        self.assertLess(t, 0)
+        dp, tp = delta_theta(100.0, 100.0, 0.20, 30 / 365.0, False)
+        self.assertAlmostEqual(dp, -0.5, places=1)
+        self.assertAlmostEqual(t, tp, places=6)
+
+    def test_delta_theta_refuses_a_contract_with_no_time_or_no_volatility(self):
+        from stats_helpers import delta_theta
+        self.assertIsNone(delta_theta(100.0, 100.0, 0.20, 0, True))
+        self.assertIsNone(delta_theta(100.0, 100.0, 0.0, 0.1, True))
+
+    def chain_conn(self):
+        conn = self.frame(16.0, 0.003)
+        conn.execute("CREATE TABLE option_chain (captured_at TEXT, session_date TEXT, spot REAL, expiry TEXT, cp TEXT, strike REAL, bid REAL, ask REAL, iv REAL, open_interest INTEGER, volume INTEGER, gamma REAL)")
+        rows = []
+        for expiry in ("2026-04-30", "2026-05-28"):
+            for cp in ("C", "P"):
+                for k in (100.0, 100.5):
+                    rows += [("2026-04-28T12:00:00-04:00", "2026-04-28", 100.0, expiry, cp, k, 1.00, 1.10, 0.15, 500, 10, 0.01)] * 3
+        conn.executemany("INSERT INTO option_chain VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        return conn
+
+    def test_breakeven_is_reported_in_cents_for_each_expiry(self):
+        o = O.build(self.chain_conn())
+        be = o["cost_to_hold"]["breakeven_cents_per_hour"]
+        self.assertEqual(sorted(be), [2, 30])
+        self.assertTrue(all(v > 0 for v in be.values()))
+
+    def test_the_nearer_expiry_costs_more_per_hour_to_hold(self):
+        be = O.build(self.chain_conn())["cost_to_hold"]["breakeven_cents_per_hour"]
+        self.assertGreater(be[2], be[30])
+
+    def test_the_nearest_expiry_is_the_one_reported(self):
+        c = O.build(self.chain_conn())["cost_to_hold"]
+        self.assertEqual(c["nearest_expiry_days"], 2)
+
+    def test_cost_to_hold_survives_a_database_with_no_minute_bars(self):
+        c = O.build(self.chain_conn())["cost_to_hold"]
+        self.assertIsNone(c["typical_hourly_move_dollars"])
+        self.assertIsNone(c.get("share_of_hour_eaten_pct"))
+
+    def test_cost_to_hold_is_present_without_a_chain(self):
+        c = O.build(self.frame(16.0, 0.003))["cost_to_hold"]
+        self.assertIsNone(c["breakeven_cents_per_hour"])
+        self.assertIsNone(c["nearest_expiry_days"])
+
+    def test_the_headline_dollars_are_the_close_times_the_percentages(self):
+        t = O.build(self.frame(16.0, 0.003))["today"]
+        self.assertAlmostEqual(t["priced_dollars"], t["close"] * t["typical_move_priced_pct"] / 100, places=1)
+        self.assertAlmostEqual(t["delivered_dollars"], t["close"] * t["delivered_daily_move_pct"] / 100, places=1)
+        self.assertAlmostEqual(t["gap_dollars"], t["priced_dollars"] - t["delivered_dollars"], places=1)

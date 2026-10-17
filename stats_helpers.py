@@ -20,3 +20,13 @@ def percentile(values, q):
     pos = (len(s) - 1) * q
     lo, hi = int(math.floor(pos)), int(math.ceil(pos))
     return s[lo] + (s[hi] - s[lo]) * (pos - lo)
+
+
+def delta_theta(spot, strike, iv, years, call):
+    """Black-Scholes delta and theta per year at a zero rate; None when the contract has no time or no volatility."""
+    if years <= 0 or iv <= 0 or spot <= 0 or strike <= 0:
+        return None
+    d1 = (math.log(spot / strike) + 0.5 * iv * iv * years) / (iv * math.sqrt(years))
+    pdf = math.exp(-d1 * d1 / 2) / math.sqrt(2 * math.pi)
+    cdf = 0.5 * (1 + math.erf(d1 / math.sqrt(2)))
+    return (cdf if call else cdf - 1), -spot * pdf * iv / (2 * math.sqrt(years))

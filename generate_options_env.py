@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 import pytz
 
 from payload_meta import session_closed, stamp
-from stats_helpers import percentile, wilson
+from stats_helpers import delta_theta, percentile, wilson
 
 ET = pytz.timezone("America/New_York")
 DB_PATH = "spy_data.db"
@@ -21,6 +21,9 @@ OUTPUT = "options_env.js"
 FLOOR = 30
 FORWARD = 21
 MEDIAN_ABS_NORMAL = 0.6745
+SESSION_HOURS = 6.5
+ATM_WITHIN = 1.0
+HOUR_WINDOWS_FROM = 60
 VIX_BUCKETS = [("under 15", 0, 15), ("15 to 20", 15, 20), ("20 to 30", 20, 30), ("over 30", 30, 1e9)]
 
 
@@ -52,6 +55,34 @@ def realized(closes, window):
     m = sum(lr) / len(lr)
     var = sum((x - m) ** 2 for x in lr) / (len(lr) - 1) if len(lr) > 1 else 0
     return math.sqrt(var) * math.sqrt(252) * 100
+
+
+def typical_hourly_move(conn, sessions=HOUR_WINDOWS_FROM):
+    """Median dollars SPY travels in an hour, measured from the minute bars; None without them."""
+    if not conn.execute("SELECT name FROM sqlite_master WHERE name='intraday_1m'").fetchone():
+        return None
+    days = [r[0] for r in conn.execute("SELECT DISTINCT date FROM intraday_1m ORDER BY date DESC LIMIT ?", (sessions,))]
+    if not days:
+        return None
+    moves = []
+    for d in days:
+        p = [r[0] for r in conn.execute("SELECT close FROM intraday_1m WHERE date=? ORDER BY time", (d,))]
+        moves += [abs(p[i + 60] - p[i]) for i in range(0, len(p) - 60, 15)]
+    return percentile(moves, 0.5) if moves else None
+
+
+def hourly_breakeven(crows, spot, session_date):
+    """Cents SPY must travel in an hour for an at-the-money contract to offset a session's worth of decay, by days to expiry."""
+    out = {}
+    for expiry, cp, strike, bid, ask, iv, *_ in crows:
+        if not iv or abs(strike - spot) > ATM_WITHIN:
+            continue
+        days = (date.fromisoformat(expiry) - date.fromisoformat(session_date)).days
+        g = delta_theta(spot, strike, iv, days / 365.0, cp == "C")
+        if not g or not g[0]:
+            continue
+        out.setdefault(days, []).append(-g[1] / (365 * SESSION_HOURS) / abs(g[0]) * 100)
+    return {d: round(percentile(v, 0.5), 1) for d, v in sorted(out.items()) if v}
 
 
 def build(conn):
@@ -106,6 +137,13 @@ def build(conn):
                     "expected_daily_move_pct": round(today_vix / math.sqrt(252), 3) if today_vix else None,
                     "typical_move_priced_pct": round(today_vix / math.sqrt(252) * MEDIAN_ABS_NORMAL, 3) if today_vix else None,
                     "delivered_daily_move_pct": round(percentile([abs(closes[i] / closes[i - 1] - 1) * 100 for i in range(len(closes) - 20, len(closes))], 0.5), 3)}
+    priced_pct = out["today"]["typical_move_priced_pct"]
+    delivered_pct = out["today"]["delivered_daily_move_pct"]
+    out["today"]["close"] = round(closes[-1], 2)
+    out["today"]["priced_dollars"] = round(closes[-1] * priced_pct / 100, 2) if priced_pct else None
+    out["today"]["delivered_dollars"] = round(closes[-1] * delivered_pct / 100, 2) if delivered_pct else None
+    if priced_pct and delivered_pct:
+        out["today"]["gap_dollars"] = round(closes[-1] * (priced_pct - delivered_pct) / 100, 2)
 
     # the spread day by day over the window the verdict is measured against
     hist = []
@@ -169,7 +207,20 @@ def build(conn):
                      "buckets": {k: {"n": len(v), "median_spread_pct": round(percentile([x["spread_pct"] for x in v], 0.5), 1), "median_mid": round(percentile([x["mid"] for x in v], 0.5), 2),
                                      "median_iv": round(percentile([x["iv"] for x in v if x["iv"]], 0.5) * 100, 1) if any(x["iv"] for x in v) else None,
                                      "median_open_interest": round(percentile([x["oi"] for x in v], 0.5))} for k, v in sorted(buckets.items()) if len(v) >= 5}}
+            if spot:
+                by_dte = hourly_breakeven(crows, spot, crows[0][9])
+                chain["breakeven_cents_per_hour"] = by_dte
+                chain["nearest_expiry_days"] = min(by_dte) if by_dte else None
     out["chain"] = chain
+    hourly = typical_hourly_move(conn)
+    out["cost_to_hold"] = {"typical_hourly_move_dollars": round(hourly, 2) if hourly else None,
+                           "breakeven_cents_per_hour": chain.get("breakeven_cents_per_hour"),
+                           "nearest_expiry_days": chain.get("nearest_expiry_days"),
+                           "session_hours": SESSION_HOURS}
+    near = chain.get("nearest_expiry_days")
+    be = (chain.get("breakeven_cents_per_hour") or {}).get(near)
+    if hourly and be:
+        out["cost_to_hold"]["share_of_hour_eaten_pct"] = round(be / (hourly * 100) * 100, 1)
     return out
 
 

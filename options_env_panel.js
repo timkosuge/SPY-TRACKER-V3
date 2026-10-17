@@ -2,6 +2,9 @@
   const data = () => (typeof OPTIONS_ENV !== 'undefined') ? OPTIONS_ENV : null;
   const LEVEL = { finding: ['FINDING', 'var(--green)'], none: ['NOT SUPPORTED', 'var(--red)'], info: ['NOTE', 'var(--cyan)'] };
   const f1 = v => v == null ? '—' : Number(v).toFixed(1), f2 = v => v == null ? '—' : Number(v).toFixed(2);
+  const f0 = v => v == null ? '—' : Math.round(Number(v));
+  const dol = v => v == null ? '—' : '$' + Number(v).toFixed(2);
+  const tile = (label, value, note, col) => `<div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">${label}</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${col || 'var(--text)'};">${value}</span><div style="font-size:10px;color:var(--text3);max-width:235px;line-height:1.4;">${note}</div></div>`;
   const sgn = v => v == null ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(2);
   const rc = r => (!r || !r.n) ? '—' : `<span style="font-family:'Share Tech Mono',monospace;color:var(--text);">${f1(r.rate)}%</span> <span style="font-size:9px;color:var(--text3);">${f1(r.lo)}–${f1(r.hi)} · n=${r.n.toLocaleString()}</span>`;
   const th = h => `<th style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);">${h}</th>`;
@@ -31,8 +34,6 @@
   function history(D) {
     const h = D && D.history, all = h && h.days;
     if (!all || all.length < 30) return '';
-    // the bands are always the three-year quartiles, so cheap and expensive mean
-    // the same thing at every zoom; only the window of plotted days changes
     const win = OE_WINS.find(w => w[0] === window._oeWin) || OE_WINS[0];
     const days = win[2] ? all.slice(-Math.min(win[2], all.length)) : all;
     if (days.length < 2) return '';
@@ -43,8 +44,6 @@
     const srt = [...vals].sort((a, b) => a - b);
     const q = f => srt[Math.min(srt.length - 1, Math.max(0, Math.round(f * (srt.length - 1))))];
     const pad = (q(0.99) - q(0.01)) * 0.12 || 1;
-    // the full window is scaled to hold both bands; a zoomed window follows its own
-    // data, or a week spent above the expensive line would flatten into a top sliver
     const lo = win[2] ? q(0.01) - pad : Math.min(q(0.01) - pad, h.cheap_at_or_below);
     const hi = win[2] ? q(0.99) + pad : Math.max(q(0.99) + pad, h.expensive_at_or_above);
     const clamped = vals.filter(v => v < lo || v > hi).length;
@@ -52,8 +51,6 @@
     const y = v => T0 + cH - (cl(v) - lo) / ((hi - lo) || 1) * cH;
     const x = i => L + cW * i / ((days.length - 1) || 1);
     const txt = (xx, yy, s, anchor, col) => `<text x="${xx.toFixed(1)}" y="${yy.toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="${col || 'var(--text3)'}" font-family="Share Tech Mono,monospace">${s}</text>`;
-    // a band outside the plotted range is not drawn at all: clamped to the edge it
-    // would read as a line the series touches
     const vis = v => v != null && v >= lo && v <= hi;
     const above = h.expensive_at_or_above != null && lo > h.expensive_at_or_above;
     let g = `<rect x="${L}" y="${T0}" width="${cW}" height="${cH}" fill="rgba(255,255,255,0.015)"/>`;
@@ -70,7 +67,6 @@
     g += `<polyline points="${days.map((r, i) => `${x(i).toFixed(1)},${y(r.s).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--cyan)" stroke-width="1.4" stroke-linejoin="round"/>`;
     const last = days[days.length - 1];
     g += `<circle cx="${x(days.length - 1).toFixed(1)}" cy="${y(last.s).toFixed(1)}" r="3.2" fill="${last.s >= h.expensive_at_or_above ? RICH : last.s <= h.cheap_at_or_below ? CHEAP : FAIR}"/>`;
-    // a week or a month of points is sparse enough to mark each day
     if (days.length <= 25) days.forEach((r, i) => { g += `<circle cx="${x(i).toFixed(1)}" cy="${y(r.s).toFixed(1)}" r="1.9" fill="var(--cyan)" opacity="0.75"/>`; });
     const dfmt = days.length > 70 ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' };
     [0, Math.floor((days.length - 1) / 2), days.length - 1].forEach((i, k) => {
@@ -90,6 +86,8 @@
     const D = data();
     if (!D) { el.innerHTML = '<div class="no-data">options_env.js is not loaded yet — it is written by the daily pipeline.</div>'; return; }
     const T = D.today; const floor = D.floor;
+    const C2 = D.cost_to_hold || {};
+    const H = { ...C2, breakeven: (C2.breakeven_cents_per_hour || {})[C2.nearest_expiry_days] };
     const vcol = T.verdict === 'expensive' ? 'var(--red)' : T.verdict === 'cheap' ? 'var(--green)' : 'var(--yellow)';
     const vtext = T.verdict === 'expensive' ? 'CONTRACTS ARE EXPENSIVE' : T.verdict === 'cheap' ? 'CONTRACTS ARE CHEAP' : 'CONTRACTS ARE FAIRLY PRICED';
     const verd = (D.verdicts || []).map(v => { const [lab, col] = LEVEL[v.level] || LEVEL.info; return `<div style="padding:4px 0 4px 8px;border-left:2px solid ${col};margin-bottom:5px;"><span style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:${col};">${lab}</span> <span style="font-family:'Orbitron',monospace;font-size:8px;color:var(--text);margin-left:6px;">${v.topic.toUpperCase()}</span><div style="font-size:12px;color:var(--text2);line-height:1.7;margin-top:2px;">${v.text}</div></div>`; }).join('');
@@ -124,12 +122,14 @@
         <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">THE OPTIONS ENVIRONMENT · CLOSE OF ${fmtDate(D.as_of).toUpperCase()}</div>
         <div style="font-family:'Orbitron',monospace;font-size:16px;letter-spacing:2px;color:${vcol};margin-bottom:6px;">${vtext}</div>
         <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px;">
-          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">30-DAY IMPLIED (VIX)</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--text);">${f2(T.implied_30d)}</span> <span style="font-size:10px;color:var(--text3);">${f1(T.implied_percentile_3y)}th pct, 3 yr</span></div>
-          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">REALIZED, LAST 20 SESSIONS</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--text);">${f2(T.realized_20d)}</span> <span style="font-size:10px;color:var(--text3);">5-session ${f2(T.realized_5d)} · high-low ${f2(T.realized_20d_high_low)}</span></div>
-          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">WHAT IS CHARGED ABOVE WHAT IS DELIVERED</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:${vcol};">${sgn(T.spread)} pts</span> <span style="font-size:10px;color:var(--text3);">${f1(T.spread_percentile_3y)}th pct, 3 yr</span></div>
-          <div><span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text3);">TYPICAL SESSION: PRICED vs DELIVERED</span><br><span style="font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--text);">${f2(T.typical_move_priced_pct != null ? T.typical_move_priced_pct : T.expected_daily_move_pct)}%</span> <span style="font-size:10px;color:var(--text3);">against ${f2(T.delivered_daily_move_pct)}% median</span></div>
+          ${tile('PRICED TO MOVE, A TYPICAL SESSION', dol(T.priced_dollars), `VIX ${f2(T.implied_30d)}, above ${f0(T.implied_percentile_3y)}% of the last three years`)}
+          ${tile('ACTUALLY MOVED, LAST 20 SESSIONS', dol(T.delivered_dollars), 'the middle session, close to close')}
+          ${tile('PAID FOR AND NOT DELIVERED', T.gap_dollars == null ? '—' : `${dol(T.gap_dollars)} a day`, `a wider gap than ${f0(T.spread_percentile_3y)}% of the last three years`, vcol)}
+          ${H.breakeven == null
+            ? tile('TO BREAK EVEN, SPY MUST MOVE', '—', 'needs a chain capture')
+            : tile('TO BREAK EVEN, SPY MUST MOVE', `${Math.round(H.breakeven)}¢ an hour`, `${H.nearest_expiry_days} days to expiry, at the money${H.typical_hourly_move_dollars ? `. A typical hour moves ${Math.round(H.typical_hourly_move_dollars * 100)}¢` : ''}`)}
         </div>
-        <div style="font-size:10px;color:var(--text3);">Expensive or cheap is this spread's place in the last three years: at or above the 75th percentile is expensive, at or below the 25th is cheap. Implied volatility is the 30-day index; realized is annualized from closes, with the high-low estimate beside it.</div>
+        <div style="font-size:10px;color:var(--text3);">Priced to move is what the option market charges for a middle-of-the-road session; actually moved is what SPY delivered on one. The gap between them is what a buyer pays for and has not been getting, and its place in the last three years is what makes contracts expensive or cheap here: the top quarter is expensive, the bottom quarter is cheap. Break-even is a day's decay spread across the ${f1(H.session_hours || 6.5)}-hour session, divided by the contract's delta — the move that leaves a holder even after an hour.</div>
       </div>
       <div class="panel" style="margin-bottom:12px;border-left:4px solid var(--purple);">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--purple);margin-bottom:8px;">⬡ WHAT THIS MEANS — RECOMPUTED EVERY RUN</div>
