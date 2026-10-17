@@ -17,6 +17,9 @@ CT       = pytz.timezone("America/Chicago")
 ET       = pytz.timezone("America/New_York")
 MARKET_CLOSE_CT = (15, 0)
 GAP_THRESHOLD_PCT = 0.25
+CHAIN_STRIKE_PCT = 10.0
+CHAIN_MAX_DTE = 90
+CHAIN_KEEP_SESSIONS = 20
 from trading_days import nyse_holidays, is_trading_day
 from payload_meta import stamp as payload_stamp
 SESSION_START_ET = 9*60+30
@@ -521,6 +524,29 @@ def fetch_spy_options_cboe():
         return {}
 
 
+def chain_row_in_band(strike, expiry_iso, spot, session_date):
+    """Strike within CHAIN_STRIKE_PCT of spot and expiry no further out than CHAIN_MAX_DTE."""
+    if not spot:
+        return False
+    if not (spot * (1 - CHAIN_STRIKE_PCT / 100) <= float(strike) <= spot * (1 + CHAIN_STRIKE_PCT / 100)):
+        return False
+    horizon = date.fromisoformat(session_date) + timedelta(days=CHAIN_MAX_DTE)
+    return date.fromisoformat(expiry_iso) <= horizon
+
+
+def prune_option_chain(conn, keep_sessions=CHAIN_KEEP_SESSIONS):
+    """Drop captures older than the most recent keep_sessions session dates."""
+    kept = [r[0] for r in conn.execute(
+        "SELECT DISTINCT session_date FROM option_chain ORDER BY session_date DESC LIMIT ?", (keep_sessions,))]
+    if len(kept) < keep_sessions:
+        return 0
+    cur = conn.execute("DELETE FROM option_chain WHERE session_date < ?", (min(kept),))
+    conn.commit()
+    if cur.rowcount:
+        print(f"  option_chain: pruned {cur.rowcount} rows before {min(kept)}")
+    return cur.rowcount
+
+
 def store_option_chain(conn, options_data, session_date):
     """Persist the parsed CBOE chain as returned: strike, expiry, side, bid, ask, IV, open interest, volume, gamma."""
     chain = (options_data or {}).get("chain") or []
@@ -529,10 +555,15 @@ def store_option_chain(conn, options_data, session_date):
     captured_at = datetime.now(ET).isoformat(timespec="seconds")
     spot = float(options_data.get("spot") or 0)
     rows = [(captured_at, session_date, spot, o["exp"].isoformat(), o["cp"], float(o["strike"]),
-             o["bid"], o["ask"], o["iv"], o["oi"], o["vol"], o["gamma"]) for o in chain]
+             o["bid"], o["ask"], o["iv"], o["oi"], o["vol"], o["gamma"]) for o in chain
+            if chain_row_in_band(o["strike"], o["exp"].isoformat(), spot, session_date)]
+    if not rows:
+        print(f"  option_chain: no contracts within {CHAIN_STRIKE_PCT}% of spot inside {CHAIN_MAX_DTE} days")
+        return 0
     conn.executemany("INSERT OR IGNORE INTO option_chain VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
     conn.commit()
-    print(f"  option_chain: {len(rows)} contracts stored at {captured_at}")
+    print(f"  option_chain: {len(rows)} of {len(chain)} contracts stored at {captured_at}")
+    prune_option_chain(conn)
     return len(rows)
 
 

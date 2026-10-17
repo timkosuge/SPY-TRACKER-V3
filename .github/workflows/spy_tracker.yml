@@ -170,6 +170,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch --depth=1 origin data
+          python -c "import sqlite3; c=sqlite3.connect('spy_data.db'); c.execute('VACUUM'); c.close()"
+          SIZE=$(stat -c%s spy_data.db)
+          echo "spy_data.db $((SIZE/1048576)) MiB"
+          if [ "$SIZE" -gt 99614720 ]; then
+            echo "spy_data.db is $((SIZE/1048576)) MiB; GitHub rejects any file over 100 MiB."
+            echo "Lower CHAIN_KEEP_SESSIONS or CHAIN_STRIKE_PCT in fetch_and_analyze.py."
+            exit 1
+          fi
           BLOB=$(git hash-object -w spy_data.db)
           TREE=$(printf '100644 blob %s\tspy_data.db\n' "$BLOB" | git mktree)
           COMMIT=$(git commit-tree "$TREE" -p FETCH_HEAD -m "Auto: spy_data.db $(TZ=America/Chicago date +'%Y-%m-%d %H:%M %Z')")
