@@ -77,20 +77,6 @@ def typical_hourly_move(conn, sessions=HOUR_WINDOWS_FROM):
     return percentile(moves, 0.5) if moves else None
 
 
-def hourly_breakeven(crows, spot, session_date):
-    """Cents SPY must travel in an hour for an at-the-money contract to offset a session's worth of decay, by days to expiry."""
-    out = {}
-    for expiry, cp, strike, bid, ask, iv, *_ in crows:
-        if not iv or abs(strike - spot) > ATM_WITHIN:
-            continue
-        days = (date.fromisoformat(expiry) - date.fromisoformat(session_date)).days
-        g = delta_theta(spot, strike, iv, days / 365.0, cp == "C")
-        if not g or not g[0]:
-            continue
-        out.setdefault(days, []).append(-g[1] / (365 * SESSION_HOURS) / abs(g[0]) * 100)
-    return {d: round(percentile(v, 0.5), 1) for d, v in sorted(out.items()) if v}
-
-
 def bs_price(spot, strike, iv, years, call):
     """Black-Scholes price at a zero rate; intrinsic value once there is no time left."""
     if years <= 0:
@@ -155,6 +141,18 @@ def build_grid(crows, spot, session_date, hourly_dollars):
                 rows_out.append({"days": d, "expiry": [x["expiry"] for x in live if x["days"] == d][0], "cells": cells})
         out[side] = rows_out
     return out
+
+
+def atm_by_expiry(grid):
+    """The at-the-money break-even for each expiry, taken from the grid so one calculation serves the whole page."""
+    if not grid:
+        return None
+    out = {}
+    for side in ("calls", "puts"):
+        for r in grid.get(side, []):
+            if r["cells"] and r["cells"][0] is not None:
+                out.setdefault(r["days"], []).append(r["cells"][0])
+    return {d: round(percentile(v, 0.5)) for d, v in sorted(out.items()) if v}
 
 
 def short_dated_summary(grid, hourly_dollars):
@@ -294,26 +292,31 @@ def build(conn):
                      "buckets": {k: {"n": len(v), "median_spread_pct": round(percentile([x["spread_pct"] for x in v], 0.5), 1), "median_mid": round(percentile([x["mid"] for x in v], 0.5), 2),
                                      "median_iv": round(percentile([x["iv"] for x in v if x["iv"]], 0.5) * 100, 1) if any(x["iv"] for x in v) else None,
                                      "median_open_interest": round(percentile([x["oi"] for x in v], 0.5))} for k, v in sorted(buckets.items()) if len(v) >= 5}}
-            if spot:
-                by_dte = hourly_breakeven(crows, spot, crows[0][9])
-                chain["breakeven_cents_per_hour"] = by_dte
-                chain["nearest_expiry_days"] = min(by_dte) if by_dte else None
+            chain["captured_stamp"] = capture_stamp(latest)
     out["chain"] = chain
     hourly = typical_hourly_move(conn)
+    out["grid"] = build_grid(crows, chain["spot"], crows[0][9], hourly) if (chain.get("available") and chain.get("spot")) else None
+    be_by_dte = atm_by_expiry(out["grid"])
+    near = min(be_by_dte) if be_by_dte else None
     out["cost_to_hold"] = {"typical_hourly_move_dollars": round(hourly, 2) if hourly else None,
-                           "breakeven_cents_per_hour": chain.get("breakeven_cents_per_hour"),
-                           "nearest_expiry_days": chain.get("nearest_expiry_days"),
+                           "breakeven_cents_per_hour": be_by_dte, "nearest_expiry_days": near,
                            "session_hours": SESSION_HOURS}
-    if chain.get("available") and chain.get("spot"):
-        out["grid"] = build_grid(crows, chain["spot"], crows[0][9], hourly)
-    else:
-        out["grid"] = None
-    out["today"]["short_dated"] = short_dated_summary(out.get("grid"), hourly)
-    near = chain.get("nearest_expiry_days")
-    be = (chain.get("breakeven_cents_per_hour") or {}).get(near)
+    out["today"]["short_dated"] = short_dated_summary(out["grid"], hourly)
+    be = (be_by_dte or {}).get(near)
     if hourly and be:
         out["cost_to_hold"]["share_of_hour_eaten_pct"] = round(be / (hourly * 100) * 100, 1)
     return out
+
+
+def capture_stamp(iso):
+    """The chain capture time as a reader sees dates: October 17, 2026 at 11:10 AM CT."""
+    if not iso:
+        return None
+    try:
+        t = datetime.fromisoformat(iso).astimezone(pytz.timezone("America/Chicago"))
+    except ValueError:
+        return None
+    return f"{t.strftime('%B')} {t.day}, {t.year} at {t.strftime('%-I:%M %p')} CT"
 
 
 def money(dollars, pct):
@@ -356,7 +359,7 @@ def verdicts(o):
         atm = c["buckets"].get("2 to 4|at the money") or c["buckets"].get("5 to 9|at the money")
         wide = max(c["buckets"].items(), key=lambda kv: kv[1]["median_spread_pct"])
         if atm:
-            V.append({"level": "finding", "topic": "What it costs to get in and out", "text": f"From the chain captured {c.get('captured_at', '')[:16].replace('T', ' ')}, an at-the-money contract 2 to 9 days from expiry cost {atm['median_spread_pct']:.1f}% of its own price to cross the bid-ask spread, measured across {atm['n']:,} contracts. The widest corner is contracts {wide[0].split('|')[0]} days from expiry and {wide[0].split('|')[1]} away from the current price, at {wide[1]['median_spread_pct']:.1f}%. That is the round-trip cost paid before the trade is right or wrong."})
+            V.append({"level": "finding", "topic": "What it costs to get in and out", "text": f"From the chain captured {c.get('captured_stamp') or 'at the last run'}, an at-the-money contract 2 to 9 days from expiry cost {atm['median_spread_pct']:.1f}% of its own price to cross the bid-ask spread, measured across {atm['n']:,} contracts. The widest corner is contracts {wide[0].split('|')[0]} days from expiry and {wide[0].split('|')[1]} away from the current price, at {wide[1]['median_spread_pct']:.1f}%. That is the round-trip cost paid before the trade is right or wrong."})
     else:
         V.append({"level": "info", "topic": "The chain", "text": "Chain pricing appears once the option chain has been captured; capture runs with every pipeline run."})
     return V
@@ -415,7 +418,7 @@ def _index_rows(o):
         wide_words = f"contracts {wd} days out, {wx if wx == 'at the money' else wx + ' from spot'}"
         if atm:
             R.append({"q": "What does it cost to get in and out?", "a": f"{atm['median_spread_pct']:.1f}% of the contract's price", "tone": "info",
-                      "why": f"The bid-ask spread at the money, 2 to 9 days from expiry, across {atm['n']:,} contracts in the chain captured {c.get('captured_at', '')[:16].replace('T', ' ')}. The widest corner is {wide_words}, at {wide[1]['median_spread_pct']:.1f}%."})
+                      "why": f"The bid-ask spread at the money, 2 to 9 days from expiry, across {atm['n']:,} contracts in the chain captured {c.get('captured_stamp') or 'at the last run'}. The widest corner is {wide_words}, at {wide[1]['median_spread_pct']:.1f}%."})
     else:
         R.append({"q": "What does it cost to get in and out?", "a": "No chain captured yet", "tone": "info", "why": "The bid-ask spread by strike and expiry appears once the option chain has been captured. Capture runs with every pipeline run."})
     w = o.get("weekly_range") or {}

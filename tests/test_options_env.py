@@ -125,7 +125,7 @@ class CostToHold(Build):
         conn = self.frame(16.0, 0.003)
         conn.execute("CREATE TABLE option_chain (captured_at TEXT, session_date TEXT, spot REAL, expiry TEXT, cp TEXT, strike REAL, bid REAL, ask REAL, iv REAL, open_interest INTEGER, volume INTEGER, gamma REAL)")
         rows = []
-        for expiry in ("2026-04-30", "2026-05-28"):
+        for expiry in ("2026-04-30", "2026-05-08", "2026-06-28"):
             for cp in ("C", "P"):
                 for k in (100.0, 100.5):
                     rows += [("2026-04-28T12:00:00-04:00", "2026-04-28", 100.0, expiry, cp, k, 1.00, 1.10, 0.15, 500, 10, 0.01)] * 3
@@ -135,12 +135,25 @@ class CostToHold(Build):
     def test_breakeven_is_reported_in_cents_for_each_expiry(self):
         o = O.build(self.chain_conn())
         be = o["cost_to_hold"]["breakeven_cents_per_hour"]
-        self.assertEqual(sorted(be), [2, 30])
+        self.assertEqual(sorted(be), [2, 10])
         self.assertTrue(all(v > 0 for v in be.values()))
+
+    def test_expiries_past_the_grid_window_are_left_out(self):
+        be = O.build(self.chain_conn())["cost_to_hold"]["breakeven_cents_per_hour"]
+        self.assertNotIn(61, be)
+        self.assertTrue(all(d <= O.GRID_MAX_DTE for d in be))
+
+    def test_the_whole_page_reads_one_breakeven_calculation(self):
+        o = O.build(self.chain_conn())
+        be = o["cost_to_hold"]["breakeven_cents_per_hour"]
+        near = o["cost_to_hold"]["nearest_expiry_days"]
+        row = next(r for r in o["grid"]["calls"] if r["days"] == near)
+        put = next(r for r in o["grid"]["puts"] if r["days"] == near)
+        self.assertEqual(be[near], round(O.percentile([row["cells"][0], put["cells"][0]], 0.5)))
 
     def test_the_nearer_expiry_costs_more_per_hour_to_hold(self):
         be = O.build(self.chain_conn())["cost_to_hold"]["breakeven_cents_per_hour"]
-        self.assertGreater(be[2], be[30])
+        self.assertGreater(be[2], be[10])
 
     def test_the_nearest_expiry_is_the_one_reported(self):
         c = O.build(self.chain_conn())["cost_to_hold"]
@@ -213,3 +226,10 @@ class Grid(Build):
         shares = [O.breakeven_move(763.25, 763.0, iv, 3, True, 0.02) / 0.74 * 100 for iv in (0.11, 0.35)]
         self.assertLess(shares[0], O.GRID_BANDS[1])
         self.assertGreater(shares[1], O.GRID_BANDS[-1])
+
+
+class OneCalculation(unittest.TestCase):
+    def test_there_is_no_second_breakeven_implementation(self):
+        self.assertFalse(hasattr(O, "hourly_breakeven"))
+        with open("generate_options_env.py", encoding="utf-8") as f:
+            self.assertEqual(f.read().count("def breakeven_move("), 1)

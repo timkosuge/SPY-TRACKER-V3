@@ -137,7 +137,7 @@
     }).join('');
     return `<div class="panel" style="margin-bottom:12px;border-left:4px solid var(--cyan);">
       <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:3px;">⬡ WHAT EACH CONTRACT NEEDS FROM SPY IN AN HOUR</div>
-      <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:8px;">Each cell is the cents SPY has to travel in the direction you are holding, within one hour, for that contract to pay back its decay and its bid-ask spread. Rows are days to expiry. Columns are dollars away from the ${G.atm_strike} strike, which is the one nearest SPY's ${dol(G.spot)}. Calls are shown at and above that strike and puts at and below, because those are the ones a directional buyer uses. Color compares the cost to a typical hour's ${G.hourly_move_cents}¢ of travel, on fixed thresholds, so a calm board reads green and an expensive one reads red${G.stale ? `. ${G.stale} contract${G.stale === 1 ? ' is' : 's are'} left blank because the quote was more than three times its expiry's usual bid-ask spread, which means a stale quote rather than an expensive contract` : ''}.${D.chain && D.chain.captured_at ? ` Chain captured ${D.chain.captured_at.slice(0, 16).replace('T', ' ')}.` : ''}</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:8px;">Each cell is the cents SPY has to travel in the direction you are holding, within one hour, for that contract to pay back its decay and its bid-ask spread. Rows are days to expiry. Columns are dollars away from the ${G.atm_strike} strike, which is the one nearest SPY's ${dol(G.spot)}. Calls are shown at and above that strike and puts at and below, because those are the ones a directional buyer uses. Color compares the cost to a typical hour's ${G.hourly_move_cents}¢ of travel, on fixed thresholds, so a calm board reads green and an expensive one reads red${G.stale ? `. ${G.stale} contract${G.stale === 1 ? ' is' : 's are'} left blank because the quote was more than three times its expiry's usual bid-ask spread, which means a stale quote rather than an expensive contract` : ''}.${D.chain && D.chain.captured_stamp ? ` Chain captured ${D.chain.captured_stamp}.` : ''}</div>
       <div style="margin-bottom:9px;">${key}</div>
       ${gridSide(G, 'calls', 'CALLS — BUYING A MOVE UP')}
       ${gridSide(G, 'puts', 'PUTS — BUYING A MOVE DOWN')}
@@ -169,17 +169,23 @@
     const chainTable = C.available && C.buckets ? `<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>${['DAYS TO EXPIRY \\ DISTANCE FROM SPOT', ...DIST].map(th).join('')}</tr></thead><tbody>${DTE.map(dt => `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:5px 8px;color:var(--text);">${dt}</td>${DIST.map(ds => { const b = C.buckets[`${dt}|${ds}`]; return `<td style="padding:5px 8px;">${b ? `<span style="font-family:'Share Tech Mono',monospace;color:${b.median_spread_pct > 10 ? 'var(--red)' : b.median_spread_pct > 4 ? 'var(--yellow)' : 'var(--green)'};">${f1(b.median_spread_pct)}%</span><div style="font-size:9px;color:var(--text3);">mid $${f2(b.median_mid)} · IV ${f1(b.median_iv)}% · OI ${b.median_open_interest.toLocaleString()}</div>` : '<span style="color:var(--text3);">—</span>'}</td>`; }).join('')}</tr>`).join('')}</tbody></table>` : `<div style="font-size:11px;color:var(--text3);">No chain captured yet. Every pipeline run stores the full CBOE chain; this table fills on the first capture.</div>`;
     const W = D.weekly_range || {};
     const tone = { go: 'var(--green)', stop: 'var(--red)', info: 'var(--text)' };
-    const rows = (D.rows || []).map(r => `<div style="display:grid;grid-template-columns:minmax(170px,240px) minmax(150px,240px) 1fr;gap:12px;align-items:baseline;padding:7px 0;border-top:1px solid rgba(255,255,255,0.05);">
+    const rows = (D.rows || []).map(r => `<div class="oe-row" style="display:grid;grid-template-columns:minmax(170px,240px) minmax(150px,240px) 1fr;gap:12px;align-items:baseline;padding:7px 0;border-top:1px solid rgba(255,255,255,0.05);">
         <div style="font-size:11px;color:var(--text3);">${r.q}</div>
         <div style="font-size:14px;font-weight:700;color:${tone[r.tone] || 'var(--text)'};">${r.a}</div>
         <div style="font-size:11px;color:var(--text2);line-height:1.5;">${r.why}</div>
       </div>`).join('');
     const unsupported = (D.verdicts || []).filter(v => v.level === 'none');
     el.innerHTML = `
+      <style>
+        @media (max-width: 620px) {
+          #optionsEnvContent .oe-row { grid-template-columns: 1fr !important; gap: 2px !important; }
+          #optionsEnvContent svg { width: 100% !important; height: auto !important; }
+        }
+      </style>
       <div class="panel" style="border-left:4px solid ${vcol};margin-bottom:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">THE OPTIONS ENVIRONMENT · CLOSE OF ${fmtDate(D.as_of).toUpperCase()}</div>
         <div style="font-family:'Orbitron',monospace;font-size:16px;letter-spacing:2px;color:${vcol};margin-bottom:6px;">${vtext}</div>
-        ${SD ? `<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:8px;">Measured on the ${SD.n} contracts at the money to ${SD.max_strikes} dollars from it, ${SD.max_days} days to expiry or less, in the chain captured ${(D.chain && D.chain.captured_at || '').slice(0, 16).replace('T', ' ')}. The middle one needs SPY to travel ${SD.median_breakeven_cents}¢ in your direction within an hour to cover its decay and its bid-ask spread; the range across all ${SD.n} is ${SD.low_cents}¢ to ${SD.high_cents}¢. A typical hour has moved SPY ${H.typical_hourly_move_dollars ? Math.round(H.typical_hourly_move_dollars * 100) + '¢' : 'an unmeasured amount'}, measured over the last 60 sessions of one-minute bars.</div>` : ''}
+        ${SD ? `<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:8px;">Measured on the ${SD.n} contracts at the money to ${SD.max_strikes} dollars from it, ${SD.max_days} days to expiry or less, in the chain captured ${(D.chain && D.chain.captured_stamp) || 'the last run'}. The middle one needs SPY to travel ${SD.median_breakeven_cents}¢ in your direction within an hour to cover its decay and its bid-ask spread; the range across all ${SD.n} is ${SD.low_cents}¢ to ${SD.high_cents}¢. A typical hour has moved SPY ${H.typical_hourly_move_dollars ? Math.round(H.typical_hourly_move_dollars * 100) + '¢' : 'an unmeasured amount'}, measured over the last 60 sessions of one-minute bars.</div>` : ''}
         ${gauge(T)}
         ${history(D)}
         ${rows || (D.verdicts || []).filter(v => v.level === 'finding').map(v => `<div style="font-size:12px;color:var(--text2);line-height:1.7;padding:3px 0;">${v.text}</div>`).join('')}
@@ -188,16 +194,13 @@
       ${unsupported.length ? `<div class="panel" style="margin-bottom:12px;border-left:4px solid var(--red);"><div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--red);margin-bottom:6px;">⬡ TESTED AND NOT SUPPORTED</div>${unsupported.map(v => `<div style="font-size:12px;color:var(--text2);padding:2px 0;"><span style="color:var(--red);">✕</span> ${v.headline || v.text} <span style="color:var(--text3);font-size:11px;">${v.headline ? (v.why || '') : ''}</span></div>`).join('')}</div>` : ''}
       ${evidenceFold('oeEvidence', 'SHOW THE EVIDENCE — THE MEASURES, EVERY FINDING, EVERY TABLE', `
       <div class="panel" style="border-left:4px solid ${vcol};margin-bottom:12px;">
-        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">THE OPTIONS ENVIRONMENT · CLOSE OF ${fmtDate(D.as_of).toUpperCase()}</div>
-        <div style="font-family:'Orbitron',monospace;font-size:16px;letter-spacing:2px;color:${vcol};margin-bottom:6px;">${vtext}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">THE NUMBERS BEHIND THE HEADLINE · CLOSE OF ${fmtDate(D.as_of).toUpperCase()}</div>
+        <div style="font-family:'Orbitron',monospace;font-size:16px;letter-spacing:2px;color:${vcol};margin-bottom:6px;">THE SAME READING, WITH EVERY MEASURE BEHIND IT</div>
         <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px;">
           ${SD ? tile('AT THE MONEY, A FEW DAYS OUT', `${SD.median_breakeven_cents}¢ an hour`, `${SD.low_cents}–${SD.high_cents}¢ across ${SD.n} contracts, against a typical hour's ${H.typical_hourly_move_dollars ? Math.round(H.typical_hourly_move_dollars * 100) : '—'}¢`, vcol) : ''}
           ${tile('PRICED TO MOVE, A TYPICAL SESSION', dol(T.priced_dollars), `VIX ${f2(T.implied_30d)}, above ${f0(T.implied_percentile_3y)}% of the last three years`)}
           ${tile('ACTUALLY MOVED, LAST 20 SESSIONS', dol(T.delivered_dollars), 'the middle session, close to close')}
-          ${tile('PAID FOR AND NOT DELIVERED', T.gap_dollars == null ? '—' : `${dol(T.gap_dollars)} a day`, `a wider gap than ${f0(T.spread_percentile_3y)}% of the last three years`, vcol)}
-          ${H.breakeven == null
-            ? tile('IF YOU HOLD AN HOUR, SPY MUST MOVE', '—', 'needs a chain capture')
-            : tile('IF YOU HOLD AN HOUR, SPY MUST MOVE', `${Math.round(H.breakeven)}¢ your way`, `${H.nearest_expiry_days} days to expiry, at the money${H.typical_hourly_move_dollars ? `. A typical hour moves ${Math.round(H.typical_hourly_move_dollars * 100)}¢` : ''}`)}
+          ${tile('PAID FOR AND NOT DELIVERED', T.gap_dollars == null ? '—' : `${dol(T.gap_dollars)} a day`, `a wider gap than ${f0(T.spread_percentile_3y)}% of the last three years`, ixcol)}
         </div>
         <div style="font-size:10px;color:var(--text3);line-height:1.6;">
           <div style="margin-bottom:5px;"><b style="color:var(--text2);">What a volatility point is.</b> Volatility is quoted as a percent per year. The index at ${f2(T.implied_30d)} means the market is pricing SPY to move about ${f2(T.expected_daily_move_pct)}% on a bigger-than-usual day. One point is worth about $${(T.close / Math.sqrt(252) / 100).toFixed(2)} of daily movement at today's price of $${f2(T.close)}.</div>
@@ -220,7 +223,7 @@
       <div class="panel" style="margin-bottom:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ THE INDEX READ AT THREE LENGTHS — 9-DAY ${f2(T.term && T.term.vix9d)} · 30-DAY ${f2(T.term && T.term.vix)} · 3-MONTH ${f2(T.term && T.term.vix3m)} · HOW MUCH THE INDEX ITSELF MOVES (VVIX) ${f2(T.term && T.term.vvix)}</div>
         <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>${['SHAPE', 'SESSIONS', 'MIDDLE CASE, POINTS CHARGED ABOVE DELIVERED', 'SHARE WHERE CHARGED BEAT DELIVERED', 'MIDDLE CASE DELIVERED AFTER'].map(th).join('')}</tr></thead><tbody>${tsRows || `<tr><td colspan="5" style="padding:6px 8px;color:var(--text3);">Scored at ${floor} sessions per shape.</td></tr>`}</tbody></table></div>
-        <div style="font-size:10px;color:var(--text3);margin-top:6px;">Inverted means the 9-day index sits above the 3-month — near-term fear priced above the horizon. Flat is within one point. Upward is the ordinary state.</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;">Upward means the 3-month index sits above the 9-day, which is the ordinary state. Inverted means the 9-day sits above the 3-month, so the market is charging more for the next two weeks than for the next quarter. Flat means the three readings sit within one point of each other.</div>
       </div>
       <div class="panel" style="margin-bottom:12px;">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:8px;">⬡ WHAT THE CHAIN CHARGES TO TRADE — MEDIAN BID-ASK SPREAD AS A PERCENT OF THE CONTRACT'S OWN PRICE</div>
