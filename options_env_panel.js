@@ -126,10 +126,10 @@
           ${tile('ACTUALLY MOVED, LAST 20 SESSIONS', dol(T.delivered_dollars), 'the middle session, close to close')}
           ${tile('PAID FOR AND NOT DELIVERED', T.gap_dollars == null ? '—' : `${dol(T.gap_dollars)} a day`, `a wider gap than ${f0(T.spread_percentile_3y)}% of the last three years`, vcol)}
           ${H.breakeven == null
-            ? tile('TO BREAK EVEN, SPY MUST MOVE', '—', 'needs a chain capture')
-            : tile('TO BREAK EVEN, SPY MUST MOVE', `${Math.round(H.breakeven)}¢ an hour`, `${H.nearest_expiry_days} days to expiry, at the money${H.typical_hourly_move_dollars ? `. A typical hour moves ${Math.round(H.typical_hourly_move_dollars * 100)}¢` : ''}`)}
+            ? tile('IF YOU HOLD AN HOUR, SPY MUST MOVE', '—', 'needs a chain capture')
+            : tile('IF YOU HOLD AN HOUR, SPY MUST MOVE', `${Math.round(H.breakeven)}¢ your way`, `${H.nearest_expiry_days} days to expiry, at the money${H.typical_hourly_move_dollars ? `. A typical hour moves ${Math.round(H.typical_hourly_move_dollars * 100)}¢` : ''}`)}
         </div>
-        <div style="font-size:10px;color:var(--text3);">Priced to move is what the option market charges for a middle-of-the-road session; actually moved is what SPY delivered on one. The gap between them is what a buyer pays for and has not been getting, and its place in the last three years is what makes contracts expensive or cheap here: the top quarter is expensive, the bottom quarter is cheap. Break-even is a day's decay spread across the ${f1(H.session_hours || 6.5)}-hour session, divided by the contract's delta — the move that leaves a holder even after an hour.</div>
+        <div style="font-size:10px;color:var(--text3);">Priced to move is what the option market charges for a middle-of-the-road session; actually moved is what SPY delivered on one. The gap between them is what a buyer pays for and has not been getting, and its place in the last three years is what makes contracts expensive or cheap here: the top quarter is expensive, the bottom quarter is cheap. Break-even is a day's decay spread across the ${f1(H.session_hours || 6.5)}-hour session, divided by the contract's delta. It is where SPY has to be when you sell against where it was when you bought, in the direction you are positioned; the path in between does not matter. Hold longer and it scales with the time held.</div>
       </div>
       <div class="panel" style="margin-bottom:12px;border-left:4px solid var(--purple);">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--purple);margin-bottom:8px;">⬡ WHAT THIS MEANS — RECOMPUTED EVERY RUN</div>
