@@ -64,7 +64,7 @@ class Build(unittest.TestCase):
         conn = self.frame(30.0, 0.001)
         v = O.verdicts(O.build(conn))
         topics = [x["topic"] for x in v]
-        self.assertIn("What optionality costs", topics)
+        self.assertIn("How often the index charges more than SPY delivers", topics)
         self.assertTrue(any("Chain pricing appears once" in x["text"] for x in v))
 
 

@@ -230,8 +230,7 @@ def build(conn):
     out["today"]["close"] = round(closes[-1], 2)
     out["today"]["priced_dollars"] = round(closes[-1] * priced_pct / 100, 2) if priced_pct else None
     out["today"]["delivered_dollars"] = round(closes[-1] * delivered_pct / 100, 2) if delivered_pct else None
-    if priced_pct and delivered_pct:
-        out["today"]["gap_dollars"] = round(closes[-1] * (priced_pct - delivered_pct) / 100, 2)
+    out["today"]["gap_dollars"] = round(closes[-1] * (priced_pct - delivered_pct) / 100, 2) if (priced_pct and delivered_pct) else None
 
     # the spread day by day over the window the verdict is measured against
     hist = []
@@ -317,34 +316,39 @@ def build(conn):
     return out
 
 
+def money(dollars, pct):
+    """A dollar figure when the price was available, otherwise the percentage it would have come from."""
+    return f"${dollars:.2f}" if dollars is not None else (f"{pct:.2f}%" if pct is not None else "an unmeasured amount")
+
+
 def verdicts(o):
     V = []
     t = o["today"]; p = o["premium"]
     if p.get("2010_on"):
         b = p["2010_on"]
-        V.append({"level": "finding", "topic": "What optionality costs", "text": f"Thirty-day implied volatility has exceeded the volatility that followed on {b['overpriced']['rate']}% of {b['n']:,} sessions since 2010 ({b['overpriced']['lo']}–{b['overpriced']['hi']}), by a median of {b['median_premium']:+.2f} points: {b['median_implied']:.1f} charged against {b['median_realized_after']:.1f} delivered. Buying premium starts behind by that much on a typical day."})
+        V.append({"level": "finding", "topic": "How often the index charges more than SPY delivers", "text": f"On {b['overpriced']['rate']}% of {b['n']:,} sessions since 2010, the 30-day index was higher than the movement SPY went on to deliver over the following {FORWARD} sessions. Allowing for sample size, the true rate is between {b['overpriced']['lo']}% and {b['overpriced']['hi']}%. The middle case was {b['median_premium']:.2f} points too high: {b['median_implied']:.1f} charged against {b['median_realized_after']:.1f} delivered. A buyer of those contracts started that far behind."})
     if p.get("by_vix"):
         cells = {k: v for k, v in p["by_vix"].items() if v}
         if len(cells) >= 2:
             hi = max(cells.items(), key=lambda kv: kv[1]["median_premium"]); lo = min(cells.items(), key=lambda kv: kv[1]["median_premium"])
-            V.append({"level": "finding", "topic": "The premium by regime", "text": f"The overcharge is largest when volatility is already high: a median {hi[1]['median_premium']:+.2f} points with VIX {hi[0]} against {lo[1]['median_premium']:+.2f} with VIX {lo[0]}. High volatility is not a discount for a buyer; it is the most expensive state."})
+            V.append({"level": "finding", "topic": "Whether a high VIX makes contracts cheaper", "text": f"It does not. The index ran furthest above what SPY delivered when volatility was already high: {hi[1]['median_premium']:.2f} points too high with VIX {hi[0]} ({hi[1]['n']:,} sessions), against {lo[1]['median_premium']:.2f} points with VIX {lo[0]} ({lo[1]['n']:,} sessions). A high VIX is the most expensive state to buy in, not a discount."})
     if t.get("verdict"):
-        V.append({"level": "finding", "topic": "Where today sits", "text": f"The 30-day index is {t['verdict']} right now: implied {t['implied_30d']:.2f} against {t['realized_20d']:.2f} realized over the last 20 sessions — a spread of {t['spread']:+.2f} points, the {t['spread_percentile_3y']:.0f}th percentile of the last three years. Implied volatility itself is at the {t['implied_percentile_3y']:.0f}th percentile."})
-        V.append({"level": "info", "topic": "What is priced against what moves", "text": f"At {t['implied_30d']:.2f} implied, the typical session is priced to move {t['typical_move_priced_pct']:.2f}% (one standard deviation is {t['expected_daily_move_pct']:.2f}%); the typical session over the last 20 moved {t['delivered_daily_move_pct']:.2f}%. Measured on highs and lows rather than closes, the last 20 sessions ran at {t['realized_20d_high_low']:.2f}."})
+        V.append({"level": "finding", "topic": "Where today's reading sits", "text": f"The 30-day index is charging {t['implied_30d']:.2f} against the {t['realized_20d']:.2f} SPY actually delivered over the last 20 sessions, a difference of {t['spread']:.2f} points. That difference is wider than on {t['spread_percentile_3y']:.0f}% of the {len(o['history']['days']):,} sessions in the last three years. The index on its own is higher than on {t['implied_percentile_3y']:.0f}% of them."})
+        V.append({"level": "info", "topic": "What the index prices a session to move", "text": f"At {t['implied_30d']:.2f}, the index prices a middle-of-the-road session at {t['typical_move_priced_pct']:.2f}%, which is {money(t['priced_dollars'], t['typical_move_priced_pct'])} at today's price of ${t['close']:.2f}. The middle session over the last 20 moved {t['delivered_daily_move_pct']:.2f}%, or {money(t['delivered_dollars'], t['delivered_daily_move_pct'])}. Measuring each session's high against its low instead of close against close, the last 20 ran at {t['realized_20d_high_low']:.2f}."})
     if t.get("term_shape") and o.get("term_structure", {}).get(t["term_shape"]):
         ts = o["term_structure"][t["term_shape"]]
         others = {k: v for k, v in o["term_structure"].items() if k != t["term_shape"]}
-        cmp = "; ".join(f"{k}: {v['median_premium']:+.2f} over {v['n']:,}" for k, v in others.items())
-        V.append({"level": "finding", "topic": "Term structure", "text": f"The curve is {t['term_shape']} today — 9-day {t['term'].get('vix9d')}, 30-day {t['term'].get('vix')}, 3-month {t['term'].get('vix3m')}. That shape has been followed by a median premium of {ts['median_premium']:+.2f} points over {ts['n']:,} sessions, with realized volatility of {ts['median_realized_after']:.1f} after. Other shapes: {cmp}."})
+        cmp = "; ".join(f"{k}, {v['median_premium']:.2f} points too high over {v['n']:,} sessions" for k, v in others.items())
+        V.append({"level": "finding", "topic": "Whether near and far expiries are priced differently", "text": f"Today they are {t['term_shape']}: 9-day {t['term'].get('vix9d')}, 30-day {t['term'].get('vix')}, 3-month {t['term'].get('vix3m')}. On the {ts['n']:,} past sessions with this same shape, the 30-day index ended up {ts['median_premium']:.2f} points above what SPY delivered over the following {FORWARD} sessions, which came in at {ts['median_realized_after']:.1f}. The other shapes: {cmp}."})
     if o.get("spread_predicts"):
         sp = o["spread_predicts"]
         gap = sp["top_quartile_median_premium"] - sp["bottom_quartile_median_premium"]
-        V.append({"level": "none" if abs(gap) < 1.0 else "finding", "topic": "Does today's spread predict tomorrow's",
-                  "headline": "Today's gap does not predict the overcharge that follows." if abs(gap) < 1.0 else "Today's gap predicts the overcharge that follows.",
-                  "why": f"Widest gaps were followed by {sp['top_quartile_median_premium']:+.2f} points, narrowest by {sp['bottom_quartile_median_premium']:+.2f}.", "text": f"When implied ran furthest above trailing realized, the premium that followed was a median {sp['top_quartile_median_premium']:+.2f} points ({sp['n_top']:,} sessions); when it ran closest, {sp['bottom_quartile_median_premium']:+.2f} ({sp['n_bottom']:,}). " + ("The spread you can see does not tell you much about the overcharge that follows." if abs(gap) < 1.0 else "The spread carries information about the premium that follows.")})
+        V.append({"level": "none" if abs(gap) < 1.0 else "finding", "topic": "Whether today's difference predicts the next 21 sessions",
+                  "headline": "Today's difference does not predict how far the index will run above delivered movement." if abs(gap) < 1.0 else "Today's difference predicts how far the index will run above delivered movement.",
+                  "why": f"The widest quarter was followed by {sp['top_quartile_median_premium']:.2f} points, the narrowest by {sp['bottom_quartile_median_premium']:.2f} — {abs(gap):.2f} points apart.", "text": f"Sessions since 2010 were sorted by how wide the difference was that day and split into quarters. The widest quarter ({sp['n_top']:,} sessions) was followed by the index running {sp['top_quartile_median_premium']:.2f} points above delivered movement; the narrowest quarter ({sp['n_bottom']:,} sessions), {sp['bottom_quartile_median_premium']:.2f} points. " + ("Those are {:.2f} points apart, too close together to act on.".format(abs(gap)) if abs(gap) < 1.0 else "Those are {:.2f} points apart, a difference worth acting on.".format(abs(gap)))})
     w = o.get("weekly_range") or {}
     if w.get("n", 0) >= FLOOR:
-        V.append({"level": "info", "topic": "The weekly expected move", "text": f"The static weekly range has held on {w['held']['rate']}% of {w['n']} weeks ({w['held']['lo']}–{w['held']['hi']}). When it broke high the median overshoot was {w['median_overshoot_high']:.2f}%; low, {w['median_overshoot_low']:.2f}%."})
+        V.append({"level": "info", "topic": "Whether the weekly expected range holds", "text": f"The range is locked at each Friday's close and never revised. It has contained the whole of the following week on {w['held']['rate']}% of {w['n']} weeks; allowing for sample size, the true rate is between {w['held']['lo']}% and {w['held']['hi']}%. When price did break out, it ran a middle case of {w['median_overshoot_high']:.2f}% past the top, or {w['median_overshoot_low']:.2f}% past the bottom."})
     elif w.get("n"):
         V.append({"level": "info", "topic": "The weekly expected move", "text": f"{w['n']} scored weeks; the range record is reported at {FLOOR}."})
     c = o.get("chain") or {}
@@ -352,7 +356,7 @@ def verdicts(o):
         atm = c["buckets"].get("2 to 4|at the money") or c["buckets"].get("5 to 9|at the money")
         wide = max(c["buckets"].items(), key=lambda kv: kv[1]["median_spread_pct"])
         if atm:
-            V.append({"level": "finding", "topic": "What the chain charges to trade", "text": f"At the last capture, an at-the-money contract 2 to 9 days out cost a median {atm['median_spread_pct']:.1f}% of its own price to cross the spread. The widest corner of the chain is {wide[0].replace('|', ', ')} at {wide[1]['median_spread_pct']:.1f}% — that is the round-trip cost before the trade is right or wrong."})
+            V.append({"level": "finding", "topic": "What it costs to get in and out", "text": f"From the chain captured {c.get('captured_at', '')[:16].replace('T', ' ')}, an at-the-money contract 2 to 9 days from expiry cost {atm['median_spread_pct']:.1f}% of its own price to cross the bid-ask spread, measured across {atm['n']:,} contracts. The widest corner is contracts {wide[0].split('|')[0]} days from expiry and {wide[0].split('|')[1]} away from the current price, at {wide[1]['median_spread_pct']:.1f}%. That is the round-trip cost paid before the trade is right or wrong."})
     else:
         V.append({"level": "info", "topic": "The chain", "text": "Chain pricing appears once the option chain has been captured; capture runs with every pipeline run."})
     return V
@@ -377,32 +381,32 @@ def _index_rows(o):
     t = o["today"]; p = o["premium"]
     if t.get("verdict"):
         a = {"expensive": "Expensive", "cheap": "Cheap", "ordinary": "Fairly priced"}[t["verdict"]]
-        R.append({"q": "Is 30-day index volatility expensive?", "a": a, "tone": {"expensive": "stop", "cheap": "go"}.get(t["verdict"], "info"),
-                  "why": f"The market charges {t['implied_30d']:.2f} for the next 30 days; the last 20 sessions delivered {t['realized_20d']:.2f}. That gap of {t['spread']:+.2f} sits at the {t['spread_percentile_3y']:.0f}th percentile of the last three years."})
+        R.append({"q": "Is the 30-day index expensive?", "a": a, "tone": {"expensive": "stop", "cheap": "go"}.get(t["verdict"], "info"),
+                  "why": f"The index prices a middle session at {money(t['priced_dollars'], t['typical_move_priced_pct'])} of movement; the last 20 sessions delivered {money(t['delivered_dollars'], t['delivered_daily_move_pct'])}. That difference is wider than on {t['spread_percentile_3y']:.0f}% of the last three years of sessions."})
     if t.get("typical_move_priced_pct") and t.get("delivered_daily_move_pct") is not None:
         ratio = t["delivered_daily_move_pct"] / t["typical_move_priced_pct"]
         a = "Much less than priced" if ratio < 0.6 else "Less than priced" if ratio < 0.85 else "More than priced" if ratio > 1.15 else "About as priced"
-        R.append({"q": "Is SPY moving as much as the index prices?", "a": a, "tone": "info",
-                  "why": f"Options price the typical session to move {t['typical_move_priced_pct']:.2f}%; the typical session over the last 20 moved {t['delivered_daily_move_pct']:.2f}%."})
+        R.append({"q": "Is SPY moving as much as the index is charging for?", "a": a, "tone": "info",
+                  "why": f"The index prices a middle session to move {t['typical_move_priced_pct']:.2f}%, or {money(t['priced_dollars'], None)}. The middle session over the last 20 moved {t['delivered_daily_move_pct']:.2f}%, or {money(t['delivered_dollars'], None)}."})
     b = p.get("2010_on")
     if b:
-        R.append({"q": "What has the 30-day index overcharged by?", "a": f"About {b['median_premium']:.1f} points", "tone": "stop",
-                  "why": f"Since 2010, implied volatility was higher than the volatility that followed on {b['overcharged' if 'overcharged' in b else 'overpriced']['rate']:.0f}% of {b['n']:,} sessions."})
+        R.append({"q": "How often has the index charged more than SPY delivered?", "a": f"{b['overpriced']['rate']:.0f}% of sessions", "tone": "stop",
+                  "why": f"Measured on {b['n']:,} sessions since 2010: the 30-day index against the movement SPY delivered over the following {FORWARD} sessions. The middle case was {b['median_premium']:.1f} points too high, which is about ${t['close'] * b['median_premium'] / 100 / (252 ** 0.5):.2f} of daily movement at today's price."})
     bv = {k: v for k, v in (p.get("by_vix") or {}).items() if v}
     if t.get("implied_30d") is not None and bv:
         now = next((k for k, lo, hi in VIX_BUCKETS if lo <= t["implied_30d"] < hi), None)
         lo_k = min(bv, key=lambda k: bv[k]["median_premium"]); hi_k = max(bv, key=lambda k: bv[k]["median_premium"])
         if now in bv:
-            a = "The least overcharged regime" if now == lo_k else "The most overcharged regime" if now == hi_k else "A middle regime"
+            a = "The cheapest level to buy in" if now == lo_k else "The most expensive level to buy in" if now == hi_k else "A middle level"
             others = [k for k in (lo_k, hi_k) if k != now]
-            R.append({"q": f"Does VIX {now} change that?", "a": a, "tone": "go" if now == lo_k else "stop" if now == hi_k else "info",
-                      "why": f"The overcharge has been {bv[now]['median_premium']:+.2f} points with VIX {now}" + "".join(f", against {bv[k]['median_premium']:+.2f} with VIX {k}" for k in others) + "."})
+            R.append({"q": f"Does today's VIX of {t['implied_30d']:.2f} change that?", "a": a, "tone": "go" if now == lo_k else "stop" if now == hi_k else "info",
+                      "why": f"With VIX {now}, the index has run {bv[now]['median_premium']:.2f} points above delivered movement across {bv[now]['n']:,} sessions" + "".join(f"; with VIX {k}, {bv[k]['median_premium']:.2f} points across {bv[k]['n']:,}" for k in others) + "."})
     ts = (o.get("term_structure") or {}).get(t.get("term_shape") or "")
     if t.get("term_shape"):
         shape = {"upward": "Upward, the normal shape", "flat": "Flat", "inverted": "Inverted, near-term fear"}[t["term_shape"]]
         tm = t.get("term") or {}
-        R.append({"q": "What is the volatility curve saying?", "a": shape, "tone": "stop" if t["term_shape"] == "inverted" else "info",
-                  "why": f"9-day {tm.get('vix9d')}, 30-day {tm.get('vix')}, 3-month {tm.get('vix3m')}." + (f" After this shape the overcharge has been {ts['median_premium']:+.2f} points." if ts else "")})
+        R.append({"q": "Are near and far expiries priced differently?", "a": shape, "tone": "stop" if t["term_shape"] == "inverted" else "info",
+                  "why": f"The index read at three lengths: 9-day {tm.get('vix9d')}, 30-day {tm.get('vix')}, 3-month {tm.get('vix3m')}." + (f" On the {ts['n']:,} past sessions shaped this way, the index ran {ts['median_premium']:.2f} points above what SPY then delivered." if ts else "")})
     c = o.get("chain") or {}
     if c.get("available") and c.get("buckets"):
         atm = c["buckets"].get("2 to 4|at the money") or c["buckets"].get("5 to 9|at the money")
@@ -410,14 +414,14 @@ def _index_rows(o):
         wd, wx = wide[0].split("|")
         wide_words = f"contracts {wd} days out, {wx if wx == 'at the money' else wx + ' from spot'}"
         if atm:
-            R.append({"q": "What does it cost to trade?", "a": f"{atm['median_spread_pct']:.1f}% at the money", "tone": "info",
-                      "why": f"The bid-ask spread as a share of the contract's price, 2 to 9 days out. The most expensive to cross is {wide_words}, at {wide[1]['median_spread_pct']:.1f}%."})
+            R.append({"q": "What does it cost to get in and out?", "a": f"{atm['median_spread_pct']:.1f}% of the contract's price", "tone": "info",
+                      "why": f"The bid-ask spread at the money, 2 to 9 days from expiry, across {atm['n']:,} contracts in the chain captured {c.get('captured_at', '')[:16].replace('T', ' ')}. The widest corner is {wide_words}, at {wide[1]['median_spread_pct']:.1f}%."})
     else:
-        R.append({"q": "What does it cost to trade?", "a": "No chain captured yet", "tone": "info", "why": "The bid-ask spread by strike and expiry appears once the option chain has been captured."})
+        R.append({"q": "What does it cost to get in and out?", "a": "No chain captured yet", "tone": "info", "why": "The bid-ask spread by strike and expiry appears once the option chain has been captured. Capture runs with every pipeline run."})
     w = o.get("weekly_range") or {}
     if w.get("n", 0) >= FLOOR:
-        R.append({"q": "Does the weekly expected move hold?", "a": f"{w['held']['rate']:.0f}% of weeks", "tone": "info",
-                  "why": f"Over {w['n']} weeks. When it broke, price ran a median {w['median_overshoot_high']:.2f}% past the top or {w['median_overshoot_low']:.2f}% past the bottom."})
+        R.append({"q": "Does the weekly expected range hold?", "a": f"{w['held']['rate']:.0f}% of {w['n']} weeks", "tone": "info",
+                  "why": f"The range is locked at each Friday's close and never revised. On the weeks it broke, price ran a middle case of {w['median_overshoot_high']:.2f}% past the top or {w['median_overshoot_low']:.2f}% past the bottom."})
     return R
 
 
