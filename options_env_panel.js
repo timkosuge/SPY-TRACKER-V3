@@ -26,26 +26,42 @@
     return `<div style="margin:10px 0 4px;"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg></div>`;
   }
 
+  const OE_WINS = [['3Y', '3 YEARS', null], ['3M', '3 MONTHS', 63], ['1M', '1 MONTH', 21], ['1W', '1 WEEK', 5]];
+
   function history(D) {
-    const h = D && D.history, days = h && h.days;
-    if (!days || days.length < 30) return '';
+    const h = D && D.history, all = h && h.days;
+    if (!all || all.length < 30) return '';
+    // the bands are always the three-year quartiles, so cheap and expensive mean
+    // the same thing at every zoom; only the window of plotted days changes
+    const win = OE_WINS.find(w => w[0] === window._oeWin) || OE_WINS[0];
+    const days = win[2] ? all.slice(-Math.min(win[2], all.length)) : all;
+    if (days.length < 2) return '';
+    const btns = OE_WINS.filter(w => !w[2] || all.length > w[2]).map(w => `<button onclick="window._oeWin='${w[0]}';renderOptionsEnv()" style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;padding:3px 8px;margin-right:4px;cursor:pointer;background:${w[0] === win[0] ? 'var(--cyan)' : 'var(--bg3)'};color:${w[0] === win[0] ? 'var(--bg)' : 'var(--text3)'};border:1px solid var(--border);">${w[0]}</button>`).join('');
     const W = 620, H = 168, L = 44, R = 10, T0 = 10, B = 22;
     const cW = W - L - R, cH = H - T0 - B;
     const vals = days.map(r => r.s);
     const srt = [...vals].sort((a, b) => a - b);
     const q = f => srt[Math.min(srt.length - 1, Math.max(0, Math.round(f * (srt.length - 1))))];
     const pad = (q(0.99) - q(0.01)) * 0.12 || 1;
-    const lo = Math.min(q(0.01) - pad, h.cheap_at_or_below), hi = Math.max(q(0.99) + pad, h.expensive_at_or_above);
+    // the full window is scaled to hold both bands; a zoomed window follows its own
+    // data, or a week spent above the expensive line would flatten into a top sliver
+    const lo = win[2] ? q(0.01) - pad : Math.min(q(0.01) - pad, h.cheap_at_or_below);
+    const hi = win[2] ? q(0.99) + pad : Math.max(q(0.99) + pad, h.expensive_at_or_above);
     const clamped = vals.filter(v => v < lo || v > hi).length;
     const cl = v => Math.max(lo, Math.min(hi, v));
     const y = v => T0 + cH - (cl(v) - lo) / ((hi - lo) || 1) * cH;
     const x = i => L + cW * i / ((days.length - 1) || 1);
     const txt = (xx, yy, s, anchor, col) => `<text x="${xx.toFixed(1)}" y="${yy.toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="${col || 'var(--text3)'}" font-family="Share Tech Mono,monospace">${s}</text>`;
+    // a band outside the plotted range is not drawn at all: clamped to the edge it
+    // would read as a line the series touches
+    const vis = v => v != null && v >= lo && v <= hi;
+    const above = h.expensive_at_or_above != null && lo > h.expensive_at_or_above;
     let g = `<rect x="${L}" y="${T0}" width="${cW}" height="${cH}" fill="rgba(255,255,255,0.015)"/>`;
-    if (h.expensive_at_or_above != null) g += `<rect x="${L}" y="${T0}" width="${cW}" height="${(y(h.expensive_at_or_above) - T0).toFixed(1)}" fill="var(--red)" opacity="0.07"/>`;
-    if (h.cheap_at_or_below != null) g += `<rect x="${L}" y="${y(h.cheap_at_or_below).toFixed(1)}" width="${cW}" height="${(T0 + cH - y(h.cheap_at_or_below)).toFixed(1)}" fill="var(--green)" opacity="0.07"/>`;
+    if (above) g += `<rect x="${L}" y="${T0}" width="${cW}" height="${cH}" fill="var(--red)" opacity="0.07"/>`;
+    if (vis(h.expensive_at_or_above)) g += `<rect x="${L}" y="${T0}" width="${cW}" height="${(y(h.expensive_at_or_above) - T0).toFixed(1)}" fill="var(--red)" opacity="0.07"/>`;
+    if (vis(h.cheap_at_or_below)) g += `<rect x="${L}" y="${y(h.cheap_at_or_below).toFixed(1)}" width="${cW}" height="${(T0 + cH - y(h.cheap_at_or_below)).toFixed(1)}" fill="var(--green)" opacity="0.07"/>`;
     [[h.expensive_at_or_above, RICH, 'EXPENSIVE'], [h.cheap_at_or_below, CHEAP, 'CHEAP']].forEach(([v, col, lab]) => {
-      if (v == null) return;
+      if (!vis(v)) return;
       g += `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${col}" stroke-dasharray="5,4" opacity="0.8"/>`;
       g += txt(L + 4, y(v) + (lab === 'EXPENSIVE' ? -4 : 11), `${lab} ${(v >= 0 ? '+' : '')}${v.toFixed(1)}`, 'start', col);
     });
@@ -54,13 +70,20 @@
     g += `<polyline points="${days.map((r, i) => `${x(i).toFixed(1)},${y(r.s).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--cyan)" stroke-width="1.4" stroke-linejoin="round"/>`;
     const last = days[days.length - 1];
     g += `<circle cx="${x(days.length - 1).toFixed(1)}" cy="${y(last.s).toFixed(1)}" r="3.2" fill="${last.s >= h.expensive_at_or_above ? RICH : last.s <= h.cheap_at_or_below ? CHEAP : FAIR}"/>`;
+    // a week or a month of points is sparse enough to mark each day
+    if (days.length <= 25) days.forEach((r, i) => { g += `<circle cx="${x(i).toFixed(1)}" cy="${y(r.s).toFixed(1)}" r="1.9" fill="var(--cyan)" opacity="0.75"/>`; });
+    const dfmt = days.length > 70 ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' };
     [0, Math.floor((days.length - 1) / 2), days.length - 1].forEach((i, k) => {
-      const lab = new Date(days[i].d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+      const lab = new Date(days[i].d + 'T00:00:00Z').toLocaleDateString('en-US', { ...dfmt, timeZone: 'UTC' });
       g += txt(x(i), H - 6, lab, k === 0 ? 'start' : k === 2 ? 'end' : 'middle');
     });
     return `<div style="margin:2px 0 8px;">
-      <div style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);margin-bottom:2px;">WHAT OPTIONS CHARGE ABOVE WHAT SPY DELIVERS · LAST THREE YEARS · POINTS${clamped ? ` · ${clamped} DAY${clamped === 1 ? '' : 'S'} BEYOND THE SCALE` : ''}</div>
-      <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg></div>`;
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:3px;">
+        <div style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">WHAT OPTIONS CHARGE ABOVE WHAT SPY DELIVERS · LAST ${win[1]} · ${days.length} SESSIONS${clamped ? ` · ${clamped} DAY${clamped === 1 ? '' : 'S'} BEYOND THE SCALE` : ''}</div>
+        <div style="flex:none;">${btns}</div>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg>
+      <div style="font-size:9px;color:var(--text3);margin-top:3px;">The cheap and expensive lines are the three-year quartiles, so they mean the same thing at every zoom.${above ? ` Every session in this window sits above the expensive line (+${h.expensive_at_or_above.toFixed(1)}), which is why it is off the bottom of the scale.` : ''}</div></div>`;
   }
   function render() {
     const el = document.getElementById('optionsEnvContent'); if (!el) return;
