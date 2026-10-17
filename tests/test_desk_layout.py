@@ -16,14 +16,18 @@ class DecisionRows(unittest.TestCase):
         d = G.decide(results, [], today, ["B0", "B5"], ["A0", "A4", "A5"], 760.0, [{"id": "close", "label": "Close"}])
         rows = {x["q"]: x for x in d["rows"]}
         self.assertEqual(rows["Hold 3 sessions?"]["a"], "No")
-        self.assertEqual(rows["Day trade?"]["a"], "Only if the 9:00 CT range is wide")
+        self.assertEqual(rows["Day trade?"]["a"], "Only if the first 30 minutes run wide")
         self.assertEqual(rows["If the range is narrow?"]["a"], "Stay out")
         self.assertEqual(rows["Which direction?"]["a"], "No edge either way")
         self.assertEqual(rows["When does the move land?"]["a"], "Around 12:30 CT")
         for x in d["rows"]:
             self.assertIn(x["tone"], ("go", "stop", "info"))
             self.assertLessEqual(len(x["a"]), 40, x)
-        self.assertIn("Normal: 35%", rows["Day trade?"]["why"])
+        why = rows["Day trade?"]["why"]
+        self.assertIn("against 35% of sessions picked at random", why)
+        self.assertIn("8:30 and 9:00 CT", why)
+        for x in d["rows"]:
+            self.assertNotIn("Normal:", x["why"])
 
 
 class ClockHeadlines(unittest.TestCase):

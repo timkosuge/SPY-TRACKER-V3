@@ -87,12 +87,12 @@
       }
       return best ? `<b style="color:var(--green);">${best.side === 'long' ? 'Long' : 'Short'} edge</b> <span style="color:var(--text3);">(${f1(best.own.rate)}% vs ${f1(best.base.rate)}%)</span>` : '<span style="color:var(--text3);">No direction</span>';
     };
-    const peakAt = s => { if (s.mode !== 'A' || s.peak_min_median == null) return ''; const m = 8 * 60 + 30 + s.peak_min_median, h = Math.floor(m / 60); return `move lands ~${h > 12 ? h - 12 : h}:${String(m % 60).padStart(2, '0')} CT`; };
+    const peakAt = s => { if (s.mode !== 'A' || s.peak_min_median == null) return ''; const m = 8 * 60 + 30 + s.peak_min_median, h = Math.floor(m / 60); return `biggest move lands ~${h > 12 ? h - 12 : h}:${String(m % 60).padStart(2, '0')} CT`; };
     const line = ({ s, e, c, t, ctrl }) => `<div onclick="window._slOpen('${s.id}')" style="cursor:pointer;display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(170px,1fr) minmax(120px,0.8fr) minmax(110px,0.7fr);gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid rgba(255,255,255,0.05);font-size:12px;">
         <div style="color:var(--text);font-weight:700;">${s.entry.map(n => CN[n] || n).join(' + ').replace(/^./, x => x.toUpperCase())}${s.mode === 'B' ? ` <span style="font-weight:400;color:var(--text3);">· hold ${s.hold}</span>` : ''}${unstable(s.id) ? ' <span style="color:var(--red);font-weight:400;" title="The first and second halves of this setup\'s record disagree">⚠ unstable</span>' : ''}</div>
-        <div><b style="color:var(--green);">${f1(e.rate)}%</b> <span style="color:var(--text3);">reach ${t}% · normal ${f1(c.rate)}%</span></div>
+        <div><b style="color:var(--green);">${f1(e.rate)}%</b> <span style="color:var(--text3);">moved ${t}% or more · ${f1(c.rate)}% on any session</span></div>
         <div>${dirWord(s, ctrl)}</div>
-        <div style="color:var(--text3);">${peakAt(s) || `${s.n.toLocaleString('en-US')} cases`}</div>
+        <div style="color:var(--text3);">${peakAt(s) || `${s.n.toLocaleString('en-US')} past sessions`}</div>
       </div>`;
     const dayEdges = edges.filter(x => x.s.mode === 'A'), holdEdges = edges.filter(x => x.s.mode === 'B');
     const flatLine = flat.length ? `<div style="font-size:12px;color:var(--text2);margin-top:10px;"><b style="color:var(--text3);">No edge over an ordinary day:</b> ${flat.map(({ s }) => s.entry.map(n => CN[n] || n).join(' + ')).join(' · ')}</div>` : '';
@@ -113,7 +113,7 @@
       <div class="panel" style="margin-bottom:12px;border-left:4px solid var(--purple);">
         <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--purple);margin-bottom:8px;">⬡ FINDINGS — RECOMPUTED EVERY RUN, DATA THROUGH ${fmtDate(D.as_of).toUpperCase()}</div>
         ${findingsHtml || '<div style="color:var(--text3);font-size:11px;">No strategy has enough trades to score yet.</div>'}
-        <div style="font-size:10px;color:var(--text3);margin-top:4px;">A finding is stated only when the 95% Wilson intervals do not overlap. "No separation" means the strategy did not beat taking the same trade every session on that measure. A caution means the strategy's own record disagrees with itself. Every figure is on SPY's move from the entry price; option returns are measured separately per trade where the chain was captured.</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;">A finding is stated only when the two rates are far enough apart that the sample can tell them apart, allowing for how many trades it holds. "No separation" means the setup did no better than taking the same trade on every session. A caution means the strategy's own record disagrees with itself. Every figure is on SPY's move from the entry price; option returns are measured separately per trade where the chain was captured.</div>
       </div>
       <div class="panel" style="margin-bottom:12px;border-left:4px solid ${armed.length ? 'var(--green)' : 'var(--text3)'};">
         <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">ARMED FOR THE NEXT SESSION — FROM THE CLOSE OF ${fmtDate(T.date).toUpperCase()}: ${T.prior_class ? T.prior_class.toUpperCase() : '—'} DAY · VIX ${T.vix != null ? T.vix.toFixed(2) : '—'} (${T.vix_bucket || '—'}) · ${T.dd_bucket ? T.dd_bucket.toUpperCase() : '—'} OF THE 20-SESSION HIGH</div>
@@ -128,7 +128,7 @@
   }
   function decisionCard(compact) {
     const D = data(); if (!D || !D.decision) return '';
-    const d = D.decision; const holdOk = /CANDIDATE/.test(d.hold); const dayOk = /ONLY IF/.test(d.day);
+    const d = D.decision; const holdOk = /WORTH IT/.test(d.hold); const dayOk = /ONLY IF/.test(d.day);
     const col = holdOk || dayOk ? 'var(--green)' : 'var(--red)';
     const tone = { go: 'var(--green)', stop: 'var(--red)', info: 'var(--text)' };
     const rows = (d.rows || []).map(r => `<div style="display:grid;grid-template-columns:minmax(150px,200px) minmax(160px,260px) 1fr;gap:12px;align-items:baseline;padding:7px 0;border-top:1px solid rgba(255,255,255,0.05);">
@@ -142,7 +142,7 @@
       <div style="font-family:'Orbitron',monospace;font-size:${compact ? 13 : 16}px;letter-spacing:2px;color:${col};margin-bottom:4px;">${d.verdict}</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">${d.context}</div>
       ${rows || d.lines.map(l => `<div style="font-size:12px;color:var(--text2);line-height:1.7;">${l}</div>`).join('')}
-      <div style="font-size:10px;color:var(--text3);margin-top:8px;">"Normal" is the same trade taken on every session. An answer is given only when the two rates are measurably different.</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:8px;">A session picked at random means the same trade taken on every session in the record, with no condition attached. An answer appears above only when the two rates are far enough apart that the sample can tell them apart.</div>
       ${reasoning}
     </div>`;
   }

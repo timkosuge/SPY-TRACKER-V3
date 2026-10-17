@@ -92,7 +92,7 @@ class NarrowSide(unittest.TestCase):
         today = {"prior_class": "middle", "vix": 15.01, "vix_bucket": "15 to 20", "dd_bucket": "within 2%"}
         d = G.decide(results, [], today, ["B0"], ["A0", "A4", "A6"], 773.0, [{"id": "close", "label": "Close"}])
         rows = {x["q"]: x for x in d["rows"]}
-        self.assertEqual(rows["Day trade?"]["a"], "Only if the 9:00 CT range is wide")
+        self.assertEqual(rows["Day trade?"]["a"], "Only if the first 30 minutes run wide")
         self.assertEqual(rows["If the range is narrow?"]["a"], "Stay out")
         self.assertIn("15% of 166", rows["If the range is narrow?"]["why"])
 
