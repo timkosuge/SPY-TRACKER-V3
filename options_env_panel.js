@@ -81,6 +81,10 @@
       <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto;display:block;">${g}</svg>
       <div style="font-size:9px;color:var(--text3);margin-top:3px;">The cheap and expensive lines are the three-year quartiles, so they mean the same thing at every zoom.${above ? ` Every session in this window sits above the expensive line (+${h.expensive_at_or_above.toFixed(1)}), which is why it is off the bottom of the scale.` : ''}</div></div>`;
   }
+    const inkOn = hex => {
+    const v = i => { const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    return 0.2126 * v(0) + 0.7152 * v(1) + 0.0722 * v(2) > 0.4 ? '#0b0f1a' : '#ffffff';
+  };
   const GRID_COLORS = [['#00e08a', 'VERY CHEAP'], ['#9ad94a', 'CHEAP'], ['#ffcc00', 'FAIR'], ['#ff9933', 'EXPENSIVE'], ['#ff3355', 'VERY EXPENSIVE']];
 
   function gridBand(cents, hourly, bands) {
@@ -95,12 +99,12 @@
     if (!rows.length) return '';
     const sign = side === 'calls' ? 1 : -1;
     const cols = rows[0].cells.length;
-    const head = ['DAYS TO EXPIRY'].concat([...Array(cols).keys()].map(n => n === 0 ? 'AT THE MONEY' : (n * sign > 0 ? '+' : '') + (n * sign)));
+    const head = ['DAYS'].concat([...Array(cols).keys()].map(n => n === 0 ? 'ATM' : (n * sign > 0 ? '+' : '') + (n * sign)));
     const body = rows.map(r => `<tr><td style="padding:4px 7px;font-family:'Share Tech Mono',monospace;color:var(--text2);white-space:nowrap;">${r.days}</td>${r.cells.map(c => {
       const b = gridBand(c, G.hourly_move_cents, G.bands);
       if (c == null || b == null) return `<td style="padding:4px 7px;text-align:center;color:var(--text3);">—</td>`;
       const col = GRID_COLORS[b][0];
-      return `<td style="padding:4px 7px;text-align:center;background:${col}2e;border-left:2px solid ${col};font-family:'Share Tech Mono',monospace;color:var(--text);white-space:nowrap;">${c}¢</td>`;
+      return `<td style="padding:5px 7px;text-align:center;background:${col};font-family:'Share Tech Mono',monospace;color:${inkOn(col)};white-space:nowrap;">${c}¢</td>`;
     }).join('')}</tr>`).join('');
     return `<div style="margin-bottom:10px;">
       <div style="font-family:'Orbitron',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);margin-bottom:3px;">${label}</div>
@@ -113,7 +117,7 @@
     const key = GRID_COLORS.map(([col, lab], i) => {
       const lo = i === 0 ? 0 : G.bands[i - 1], hi = i < G.bands.length ? G.bands[i] : null;
       const cents = v => Math.round(v / 100 * G.hourly_move_cents);
-      return `<span style="display:inline-block;margin-right:12px;white-space:nowrap;"><span style="display:inline-block;width:9px;height:9px;background:${col};margin-right:4px;"></span><span style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">${lab}</span> <span style="font-size:9px;color:var(--text3);">${hi ? `under ${cents(hi)}¢` : `over ${cents(G.bands[G.bands.length - 1])}¢`}</span></span>`;
+      return `<span style="display:inline-block;margin-right:12px;white-space:nowrap;"><span style="display:inline-block;width:11px;height:11px;background:${col};margin-right:4px;vertical-align:-1px;"></span><span style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1px;color:var(--text3);">${lab}</span> <span style="font-size:9px;color:var(--text3);">${hi ? `under ${cents(hi)}¢` : `over ${cents(G.bands[G.bands.length - 1])}¢`}</span></span>`;
     }).join('');
     return `<div class="panel" style="margin-bottom:12px;border-left:4px solid var(--cyan);">
       <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--cyan);margin-bottom:3px;">⬡ WHAT EACH CONTRACT NEEDS FROM SPY IN AN HOUR</div>
