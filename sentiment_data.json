@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-17T02:09:57Z",
+  "updated": "2026-10-19T18:28:49Z",
   "aaii": {
     "date": "2026-10-14",
     "bullish": 38.7,
@@ -13,7 +13,7 @@
     "avg_from": "1987-07-22",
     "avg_through": "2026-10-14",
     "source": "aaii_xls",
-    "age_days": 3,
+    "age_days": 5,
     "stale": false
   },
   "cot": {
@@ -40,7 +40,7 @@
     "nonrept_s": 137681,
     "nonrept_net": 106328,
     "chg_nonrept_net": -4677,
-    "age_days": 4,
+    "age_days": 6,
     "stale": false
   }
 }
