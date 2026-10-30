@@ -1,16 +1,16 @@
 {
- "date": "2026-10-29",
+ "date": "2026-10-30",
  "universe": "S&P 500 constituents",
  "issues": 501,
- "advancing": 406,
- "declining": 95,
+ "advancing": 228,
+ "declining": 273,
  "unchanged": 0,
- "up_volume": 2126595074,
- "down_volume": 1213019278,
- "new_highs": 19,
- "new_lows": 6,
- "pct_above_50d": 65.1,
- "pct_above_200d": 62.7,
- "generated": "2026-10-29T19:31:19-04:00",
- "source_max_date": "2026-10-29"
+ "up_volume": 1416751807,
+ "down_volume": 2876304920,
+ "new_highs": 42,
+ "new_lows": 5,
+ "pct_above_50d": 60.5,
+ "pct_above_200d": 58.5,
+ "generated": "2026-10-30T19:08:27-04:00",
+ "source_max_date": "2026-10-30"
 }
